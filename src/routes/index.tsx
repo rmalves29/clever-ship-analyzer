@@ -64,13 +64,15 @@ function Index() {
             <div>
               <h1 className="text-2xl font-bold tracking-tight">CRM Analytics</h1>
               <p className="text-sm text-muted-foreground">
-                Análise da base • {data.periodLabel} • atualizado às {format(analyzedAt, "HH:mm", { locale: ptBR })}
+                Análise da base • {data.periodLabel}
               </p>
             </div>
           </div>
-          <span className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground">
-            <Store className="size-3.5" /> Dados de exemplo — Shopify não conectada
-          </span>
+          <div className="flex flex-col items-end gap-2">
+            <span className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground">
+              <Store className="size-3.5" /> Shopify: Integrado
+            </span>
+          </div>
         </header>
 
         <div className="mt-6">

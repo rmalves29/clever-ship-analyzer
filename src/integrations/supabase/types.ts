@@ -14,7 +14,267 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      shopify_customers: {
+        Row: {
+          city: string | null
+          country: string | null
+          created_at: string
+          email: string | null
+          first_name: string | null
+          id: string
+          last_name: string | null
+          phone: string | null
+          province: string | null
+          updated_at: string
+        }
+        Insert: {
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          email?: string | null
+          first_name?: string | null
+          id: string
+          last_name?: string | null
+          phone?: string | null
+          province?: string | null
+          updated_at?: string
+        }
+        Update: {
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          email?: string | null
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          phone?: string | null
+          province?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      shopify_fulfillments: {
+        Row: {
+          created_at: string | null
+          id: string
+          order_id: string | null
+          raw_data: Json | null
+          status: string | null
+          tracking_company: string | null
+          tracking_number: string | null
+          tracking_url: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id: string
+          order_id?: string | null
+          raw_data?: Json | null
+          status?: string | null
+          tracking_company?: string | null
+          tracking_number?: string | null
+          tracking_url?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          order_id?: string | null
+          raw_data?: Json | null
+          status?: string | null
+          tracking_company?: string | null
+          tracking_number?: string | null
+          tracking_url?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_fulfillments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopify_order_items: {
+        Row: {
+          id: string
+          order_id: string | null
+          price: number | null
+          product_id: string | null
+          quantity: number | null
+          sku: string | null
+          title: string | null
+          total_discount: number | null
+          variant_id: string | null
+          variant_title: string | null
+        }
+        Insert: {
+          id: string
+          order_id?: string | null
+          price?: number | null
+          product_id?: string | null
+          quantity?: number | null
+          sku?: string | null
+          title?: string | null
+          total_discount?: number | null
+          variant_id?: string | null
+          variant_title?: string | null
+        }
+        Update: {
+          id?: string
+          order_id?: string | null
+          price?: number | null
+          product_id?: string | null
+          quantity?: number | null
+          sku?: string | null
+          title?: string | null
+          total_discount?: number | null
+          variant_id?: string | null
+          variant_title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopify_orders: {
+        Row: {
+          city: string | null
+          country: string | null
+          created_at: string
+          currency_code: string | null
+          customer_id: string | null
+          email: string | null
+          financial_status: string | null
+          fulfillment_status: string | null
+          id: string
+          landing_site: string | null
+          order_number: string
+          phone: string | null
+          processed_at: string | null
+          province: string | null
+          raw_data: Json | null
+          referring_site: string | null
+          source_name: string | null
+          subtotal_price: number | null
+          total_discounts: number | null
+          total_price: number
+          total_shipping_price: number | null
+          total_tax: number | null
+          updated_at: string
+        }
+        Insert: {
+          city?: string | null
+          country?: string | null
+          created_at: string
+          currency_code?: string | null
+          customer_id?: string | null
+          email?: string | null
+          financial_status?: string | null
+          fulfillment_status?: string | null
+          id: string
+          landing_site?: string | null
+          order_number: string
+          phone?: string | null
+          processed_at?: string | null
+          province?: string | null
+          raw_data?: Json | null
+          referring_site?: string | null
+          source_name?: string | null
+          subtotal_price?: number | null
+          total_discounts?: number | null
+          total_price: number
+          total_shipping_price?: number | null
+          total_tax?: number | null
+          updated_at: string
+        }
+        Update: {
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          currency_code?: string | null
+          customer_id?: string | null
+          email?: string | null
+          financial_status?: string | null
+          fulfillment_status?: string | null
+          id?: string
+          landing_site?: string | null
+          order_number?: string
+          phone?: string | null
+          processed_at?: string | null
+          province?: string | null
+          raw_data?: Json | null
+          referring_site?: string | null
+          source_name?: string | null
+          subtotal_price?: number | null
+          total_discounts?: number | null
+          total_price?: number
+          total_shipping_price?: number | null
+          total_tax?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_settings: {
+        Row: {
+          created_at: string
+          id: string
+          last_imported_order_at: string | null
+          last_sync_at: string | null
+          last_sync_error: string | null
+          shopify_admin_access_token: string | null
+          shopify_client_id: string | null
+          shopify_client_secret: string | null
+          shopify_store_domain: string
+          sync_status: string | null
+          total_orders_imported: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_imported_order_at?: string | null
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          shopify_admin_access_token?: string | null
+          shopify_client_id?: string | null
+          shopify_client_secret?: string | null
+          shopify_store_domain: string
+          sync_status?: string | null
+          total_orders_imported?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_imported_order_at?: string | null
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          shopify_admin_access_token?: string | null
+          shopify_client_id?: string | null
+          shopify_client_secret?: string | null
+          shopify_store_domain?: string
+          sync_status?: string | null
+          total_orders_imported?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

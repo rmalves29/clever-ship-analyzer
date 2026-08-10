@@ -1,15 +1,17 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Sparkles, Store } from "lucide-react";
+import { Sparkles, Store, Settings } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { KpiCard } from "@/components/crm/KpiCard";
 import { PeriodFilter } from "@/components/crm/PeriodFilter";
 import { ExecutiveSummary } from "@/components/crm/ExecutiveSummary";
 import { AnalysisGrid } from "@/components/crm/AnalysisGrid";
 import { SuggestedActions } from "@/components/crm/SuggestedActions";
+import { Button } from "@/components/ui/button";
+
 import { getDashboardData, type PeriodKey } from "@/lib/crm-mock";
 
 export const Route = createFileRoute("/")({
@@ -69,9 +71,16 @@ function Index() {
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <span className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground">
-              <Store className="size-3.5" /> Shopify: Integrado
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                <Store className="size-3.5" /> Shopify: Integrado
+              </span>
+              <Button variant="outline" size="icon" asChild className="size-8 rounded-full">
+                <Link to="/configuracoes">
+                  <Settings className="size-4" />
+                </Link>
+              </Button>
+            </div>
           </div>
         </header>
 

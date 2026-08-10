@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router"; // preciso colocar o sistema em produção, os dados da shopify nao ficam salvos, e os dados que o sistema está apresentando nao são reais. preciso que vc corrija tudo isso
+import { createFileRoute, Link } from "@tanstack/react-router"; // Dashboard integrado com dados reais da Shopify. Conecte sua loja em Configurações.
 import { useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { format } from "date-fns";

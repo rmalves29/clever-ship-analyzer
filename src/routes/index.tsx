@@ -146,6 +146,11 @@ function Index() {
           <SuggestedActions reguas={data.reguas} acoes={data.acoes} />
         </div>
 
+        {isShopifyLoading && (
+          <div className="mb-4 text-center text-xs text-muted-foreground animate-pulse">
+            Carregando dados reais da Shopify...
+          </div>
+        )}
         <footer className="mt-10 pb-6 text-center text-xs text-muted-foreground">
           Legenda do semáforo: <span className="text-critical">vermelho crítico</span> ·{" "}
           <span className="text-warning">amarelo regular</span> · <span className="text-success">verde dentro da meta</span>

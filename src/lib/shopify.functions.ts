@@ -12,13 +12,19 @@ export const getShopifyAdminCredentials = createServerFn({ method: "GET" })
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     
+    // Use maybeSingle instead of single to handle empty state gracefully
     const { data: settings, error } = await supabaseAdmin
       .from("store_settings")
       .select("*")
-      .single();
+      .maybeSingle();
 
-    if (error || !settings) {
-      throw new Error("SHOP_NOT_FOUND: Store settings not found in database.");
+    if (error) {
+      console.error("Database error fetching store settings:", error);
+      throw new Error("DB_ERROR: Failed to fetch store settings.");
+    }
+
+    if (!settings) {
+      throw new Error("SHOP_NOT_FOUND: Store settings not found in database. Please configure them first.");
     }
 
     const { 

@@ -99,7 +99,7 @@ function Configuracoes() {
 
       const { error } = await supabase
         .from("store_settings")
-        .upsert(payload);
+        .upsert(payload, { onConflict: 'shopify_store_domain' });
 
       if (error) throw error;
       toast.success("Configurações salvas com sucesso!");

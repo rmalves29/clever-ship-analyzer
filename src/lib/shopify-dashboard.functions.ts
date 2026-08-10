@@ -40,7 +40,6 @@ export const getShopifyDashboardData = createServerFn({ method: "POST" })
     const startISO = start.toISOString();
     const endISO = end.toISOString();
 
-    // Queries to calculate metrics
     const { data: orders } = await supabaseAdmin
       .from("shopify_orders")
       .select("*")
@@ -50,7 +49,6 @@ export const getShopifyDashboardData = createServerFn({ method: "POST" })
 
     if (!orders) return { kpis: [], chartData: [] };
 
-    // Valid orders for finance (excluding full refunds)
     const validOrders = orders.filter(o => o.financial_status !== "REFUNDED");
     
     const faturamento = validOrders.reduce((acc, o) => acc + Number(o.total_price), 0);
@@ -59,23 +57,21 @@ export const getShopifyDashboardData = createServerFn({ method: "POST" })
     
     const uniqueCustomers = new Set(validOrders.map(o => o.customer_id)).size;
 
-    // Shipping metrics
     const { data: fulfillments } = await supabaseAdmin
       .from("shopify_fulfillments")
-      .select("*, shopify_orders(processed_at)")
+      .select("*, shopify_orders!inner(processed_at)")
       .gte("created_at", startISO)
       .lte("created_at", endISO);
 
-    const pedidosEnviados = fulfillments?.length || 0;
+    const pedidosEnviadosCount = fulfillments?.length || 0;
     
-    // Calculate average send time
     let totalSendTimeHours = 0;
     let countWithTime = 0;
 
     fulfillments?.forEach(f => {
-      const orderProcessedAt = (f.shopify_orders as any)?.processed_at;
-      if (orderProcessedAt) {
-        const diff = new Date(f.created_at).getTime() - new Date(orderProcessedAt).getTime();
+      const order = f.shopify_orders as any;
+      if (order && order.processed_at) {
+        const diff = new Date(f.created_at || "").getTime() - new Date(order.processed_at).getTime();
         totalSendTimeHours += diff / (1000 * 60 * 60);
         countWithTime++;
       }
@@ -88,8 +84,7 @@ export const getShopifyDashboardData = createServerFn({ method: "POST" })
       numPedidos,
       ticketMedio,
       uniqueCustomers,
-      pedidosEnviados,
+      pedidosEnviadosCount,
       tempoMedioEnvioDias,
-      // ... other metrics requested
     };
   });

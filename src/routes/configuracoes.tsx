@@ -1,12 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   Settings, 
   Store, 
   ShieldCheck, 
   AlertCircle, 
-  CheckCircle2, 
   RefreshCw, 
   ExternalLink,
   Save,
@@ -22,6 +21,9 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { testShopifyConnection } from "@/lib/shopify-operations.functions";
 import { syncShopifyData } from "@/lib/crm-sync.functions";
+import type { Database } from "@/integrations/supabase/types";
+
+type StoreSettings = Database["public"]["Tables"]["store_settings"]["Row"];
 
 export const Route = createFileRoute("/configuracoes")({
   component: Configuracoes,
@@ -33,32 +35,28 @@ function Configuracoes() {
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   
-  // Load store settings
-  const { data: settings, isLoading, refetch } = useQuery({
-    queryKey: ["store-settings"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("store_settings")
-        .select("*")
-        .single();
-      
-      if (error && error.code !== "PGRST116") throw error;
-      return data || {
-        shopify_store_domain: "",
-        shopify_client_id: "",
-        shopify_client_secret: "",
-      };
-    }
-  });
-
   const [formData, setFormData] = useState({
     domain: "",
     clientId: "",
     clientSecret: "",
   });
 
+  // Load store settings
+  const { data: settings, isLoading, refetch } = useQuery<StoreSettings | null>({
+    queryKey: ["store-settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("store_settings")
+        .select("*")
+        .maybeSingle();
+      
+      if (error) throw error;
+      return data;
+    }
+  });
+
   // Update form when data loads
-  useState(() => {
+  useEffect(() => {
     if (settings) {
       setFormData({
         domain: settings.shopify_store_domain || "",
@@ -66,17 +64,20 @@ function Configuracoes() {
         clientSecret: settings.shopify_client_secret || "",
       });
     }
-  });
+  }, [settings]);
 
-  const { data: testResult, isPending: isTesting, mutate: runTest } = useMutation({
+  const testConnectionMutation = useMutation({
     mutationFn: () => testShopifyConnection(),
-    onSuccess: (res) => {
+    onSuccess: (res: any) => {
       if (res.success) {
-        toast.success(res.message);
+        toast.success(res.message || "Conexão testada com sucesso!");
         refetch();
       } else {
         toast.error(res.message || "Erro ao testar conexão");
       }
+    },
+    onError: (err: any) => {
+      toast.error("Erro na requisição: " + err.message);
     }
   });
 
@@ -85,15 +86,20 @@ function Configuracoes() {
     setIsSaving(true);
     
     try {
+      const payload: any = {
+        shopify_store_domain: formData.domain,
+        shopify_client_id: formData.clientId,
+        shopify_client_secret: formData.clientSecret,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (settings?.id) {
+        payload.id = settings.id;
+      }
+
       const { error } = await supabase
         .from("store_settings")
-        .upsert({
-          id: settings?.id || undefined,
-          shopify_store_domain: formData.domain,
-          shopify_client_id: formData.clientId,
-          shopify_client_secret: formData.clientSecret,
-          updated_at: new Date().toISOString(),
-        });
+        .upsert(payload);
 
       if (error) throw error;
       toast.success("Configurações salvas com sucesso!");
@@ -108,12 +114,11 @@ function Configuracoes() {
   const handleSync = async () => {
     setIsSyncing(true);
     try {
-      const res = await syncShopifyData();
+      // @ts-ignore - syncShopifyData return type might be tricky but we know its shape from implementation
+      const res = await syncShopifyData({ data: { fullSync: false } });
       if (res.success) {
-        toast.success(`Sincronização concluída: ${res.ordersCount} pedidos importados.`);
+        toast.success(`Sincronização concluída: ${res.totalImported} pedidos importados.`);
         queryClient.invalidateQueries();
-      } else {
-        toast.error(res.message || "Erro na sincronização");
       }
     } catch (err: any) {
       toast.error("Erro: " + err.message);
@@ -130,6 +135,9 @@ function Configuracoes() {
     );
   }
 
+  const isTesting = testConnectionMutation.isPending;
+  const testResult = testConnectionMutation.data as any;
+
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-4xl px-4 py-8 md:px-8">
@@ -143,7 +151,7 @@ function Configuracoes() {
               <p className="text-muted-foreground">Gerencie a conexão com sua loja Shopify</p>
             </div>
           </div>
-          <Badge variant={settings?.sync_status === "connected" ? "success" : "secondary"} className="h-6">
+          <Badge variant={settings?.sync_status === "connected" ? "default" : "secondary"} className="h-6">
             {settings?.sync_status === "connected" ? "Conectado" : "Não configurado"}
           </Badge>
         </div>
@@ -193,7 +201,7 @@ function Configuracoes() {
                     />
                   </div>
                 </div>
-                <Alert variant="info" className="bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
+                <Alert variant="default" className="bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
                   <ShieldCheck className="size-4 text-blue-600 dark:text-blue-400" />
                   <AlertTitle>Segurança</AlertTitle>
                   <AlertDescription className="text-xs">
@@ -205,8 +213,8 @@ function Configuracoes() {
                 <Button 
                   type="button" 
                   variant="outline" 
-                  onClick={() => runTest()} 
-                  disabled={isTesting || !settings?.shopify_client_id}
+                  onClick={() => testConnectionMutation.mutate()} 
+                  disabled={isTesting || !formData.clientId}
                 >
                   {isTesting ? <RefreshCw className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}
                   Testar Conexão

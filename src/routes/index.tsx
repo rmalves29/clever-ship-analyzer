@@ -13,6 +13,9 @@ import { SuggestedActions } from "@/components/crm/SuggestedActions";
 import { Button } from "@/components/ui/button";
 
 import { getDashboardData, type PeriodKey } from "@/lib/crm-mock";
+import { getShopifyDashboardData } from "@/lib/shopify-dashboard.functions";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/")({
   head: () => ({

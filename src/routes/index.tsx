@@ -42,12 +42,42 @@ function Index() {
   const [loading, setLoading] = useState(false);
   const [analyzedAt, setAnalyzedAt] = useState(() => new Date());
 
+  const getShopifyData = useServerFn(getShopifyDashboardData);
+
+  const { data: shopifyData, isLoading: isShopifyLoading } = useQuery({
+    queryKey: ["shopify-dashboard", period, range?.from, range?.to],
+    queryFn: () => getShopifyData({ 
+      data: { 
+        period, 
+        range: range?.from ? { 
+          from: range.from.toISOString(), 
+          to: range.to?.toISOString() 
+        } : undefined 
+      } 
+    }),
+  });
+
   const customLabel =
     range?.from && range?.to
       ? `${format(range.from, "dd/MM/yyyy", { locale: ptBR })} – ${format(range.to, "dd/MM/yyyy", { locale: ptBR })}`
       : undefined;
 
-  const data = useMemo(() => getDashboardData(period, customLabel), [period, customLabel]);
+  const mockData = useMemo(() => getDashboardData(period, customLabel), [period, customLabel]);
+
+  // Merge shopify data into dashboard data
+  const data = useMemo(() => {
+    if (!shopifyData || !shopifyData.numPedidos) return mockData;
+
+    const mergedKpis = mockData.kpis.map(kpi => {
+      if (kpi.id === "clientes") return { ...kpi, value: String(shopifyData.uniqueCustomers) };
+      if (kpi.id === "ticket") return { ...kpi, value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(shopifyData.ticketMedio) };
+      if (kpi.id === "pedidos-enviados") return { ...kpi, value: String(shopifyData.pedidosEnviadosCount) };
+      if (kpi.id === "tempo-envio") return { ...kpi, value: `${shopifyData.tempoMedioEnvioDias.toFixed(1)} dias` };
+      return kpi;
+    });
+
+    return { ...mockData, kpis: mergedKpis };
+  }, [mockData, shopifyData]);
 
   const refresh = () => {
     setLoading(true);

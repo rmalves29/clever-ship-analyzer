@@ -1,10 +1,7 @@
-import { createServerFn } from "@tanstack/react-router";
+import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { supabase } from "@/integrations/supabase/client";
 
 // In-memory cache for access tokens
-// Note: In a real production edge environment, you'd use a more persistent cache like Redis or a database table
-// But for this implementation, we'll fetch from store_settings or re-auth if needed.
 const TOKEN_CACHE: Record<string, { token: string; expiresAt: number }> = {};
 
 /**
@@ -13,9 +10,6 @@ const TOKEN_CACHE: Record<string, { token: string; expiresAt: number }> = {};
  */
 export const getShopifyAdminCredentials = createServerFn({ method: "GET" })
   .handler(async () => {
-    // 1. Read store_settings from Supabase
-    // We use the service role client here because this is a server-side internal utility 
-    // that needs to access sensitive client_secret/tokens.
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     
     const { data: settings, error } = await supabaseAdmin
@@ -35,21 +29,22 @@ export const getShopifyAdminCredentials = createServerFn({ method: "GET" })
     } = settings;
 
     if (!shop) throw new Error("INVALID_STORE: shopify_store_domain is missing.");
+    
+    // Fallback logic
     if (!clientId || !clientSecret) {
-      // Fallback to legacy token if present and looks like shpat_
       if (legacyToken?.startsWith("shpat_")) {
         return { domain: shop, accessToken: legacyToken };
       }
       throw new Error("INVALID_CLIENT_CREDENTIALS: Shopify Client ID or Secret is missing.");
     }
 
-    // 2. Check cache
+    // Check cache
     const cached = TOKEN_CACHE[shop];
-    if (cached && cached.expiresAt > Date.now() + 60000) { // 1 min buffer
+    if (cached && cached.expiresAt > Date.now() + 60000) {
       return { domain: shop, accessToken: cached.token };
     }
 
-    // 3. Official client_credentials flow
+    // Official client_credentials flow
     const tokenUrl = `https://${shop}/admin/oauth/access_token`;
     const params = new URLSearchParams();
     params.append("grant_type", "client_credentials");
@@ -70,11 +65,10 @@ export const getShopifyAdminCredentials = createServerFn({ method: "GET" })
       throw new Error("INVALID_CLIENT_CREDENTIALS: Failed to authenticate with Shopify.");
     }
 
-    const data = await response.json();
+    const data = await response.json() as { access_token: string; expires_in: number };
     const accessToken = data.access_token;
-    const expiresIn = data.expires_in; // usually 0 or seconds
+    const expiresIn = data.expires_in;
 
-    // 4. Cache it (if expiresIn is provided, otherwise default to 24h)
     const duration = expiresIn > 0 ? expiresIn * 1000 : 24 * 60 * 60 * 1000;
     TOKEN_CACHE[shop] = {
       token: accessToken,
@@ -84,15 +78,18 @@ export const getShopifyAdminCredentials = createServerFn({ method: "GET" })
     return { domain: shop, accessToken };
   });
 
+const shopifyQuerySchema = z.object({
+  query: z.string(),
+  variables: z.record(z.any()).optional(),
+});
+
 /**
  * Executes a GraphQL query against Shopify Admin API.
  */
 export const shopifyQuery = createServerFn({ method: "POST" })
-  .input(z.object({
-    query: z.string(),
-    variables: z.record(z.any()).optional(),
-  }))
-  .handler(async ({ data: { query, variables } }) => {
+  .validator((data: unknown) => shopifyQuerySchema.parse(data))
+  .handler(async ({ data }) => {
+    const { query, variables } = data;
     const { domain, accessToken } = await getShopifyAdminCredentials();
 
     const url = `https://${domain}/admin/api/2024-07/graphql.json`;
@@ -116,7 +113,7 @@ export const shopifyQuery = createServerFn({ method: "POST" })
       throw new Error(`INVALID_QUERY: Shopify API returned ${response.status}`);
     }
 
-    const result = await response.json();
+    const result = await response.json() as { data?: any; errors?: any[] };
     if (result.errors) {
       console.error("GraphQL Errors:", result.errors);
       throw new Error("INVALID_QUERY: GraphQL returned errors.");

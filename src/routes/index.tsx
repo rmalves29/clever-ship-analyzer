@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router"; // os dados ainda estão fictícios, parece q o sistema nao conectou no shopify
 import { useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { format } from "date-fns";

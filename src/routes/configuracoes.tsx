@@ -86,25 +86,36 @@ function Configuracoes() {
     setIsSaving(true);
     
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
       const payload: any = {
         shopify_store_domain: formData.domain,
         shopify_client_id: formData.clientId,
         shopify_client_secret: formData.clientSecret,
         updated_at: new Date().toISOString(),
+        user_id: user?.id // Ensure ownership if table allows
       };
 
       if (settings?.id) {
         payload.id = settings.id;
       }
 
-      const { error } = await supabase
+      console.log("Upserting settings:", payload);
+      const { data, error } = await supabase
         .from("store_settings")
-        .upsert(payload, { onConflict: 'shopify_store_domain' });
+        .upsert(payload, { onConflict: 'shopify_store_domain' })
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase upsert error:", error);
+        throw error;
+      }
+      
+      console.log("Upsert result:", data);
       toast.success("Configurações salvas com sucesso!");
       refetch();
     } catch (err: any) {
+      console.error("Save catch block:", err);
       toast.error("Erro ao salvar: " + err.message);
     } finally {
       setIsSaving(false);

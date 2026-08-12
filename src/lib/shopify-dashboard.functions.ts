@@ -47,7 +47,7 @@ export const getShopifyDashboardData = createServerFn({ method: "POST" })
       .lte("processed_at", endISO)
       .neq("financial_status", "VOIDED");
 
-    if (!orders) return { kpis: [], chartData: [] };
+    if (!orders) throw new Error("Falha ao ler pedidos");
 
     const validOrders = orders.filter(o => o.financial_status !== "REFUNDED");
     

@@ -62,6 +62,7 @@ export const syncShopifyData = createServerFn({ method: "POST" })
   .validator((data: unknown) => syncInput.parse(data))
   .handler(async ({ data: { fullSync } }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { shopifyGraphQL } = await import("./shopify.server");
 
     const { data: settings } = await supabaseAdmin
       .from("store_settings")

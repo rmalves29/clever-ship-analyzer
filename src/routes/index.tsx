@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Sparkles, Store, Settings } from "lucide-react";
+import { Sparkles, Store, Settings, RefreshCw } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { KpiCard } from "@/components/crm/KpiCard";
 import { PeriodFilter } from "@/components/crm/PeriodFilter";
@@ -14,7 +14,9 @@ import { Button } from "@/components/ui/button";
 
 import { getDashboardData, type PeriodKey } from "@/lib/crm-mock";
 import { getShopifyDashboardData } from "@/lib/shopify-dashboard.functions";
-import { useQuery } from "@tanstack/react-query";
+import { syncShopifyData } from "@/lib/crm-sync.functions";
+import { toast } from "sonner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/")({
@@ -74,12 +76,45 @@ function Index() {
       if (kpi.id === "ltv") return { ...kpi, value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(shopifyData.uniqueCustomers ? shopifyData.faturamento / shopifyData.uniqueCustomers : 0) };
       if (kpi.id === "pedidos-enviados") return { ...kpi, value: String(shopifyData.pedidosEnviadosCount) };
       if (kpi.id === "produtos-enviados") return { ...kpi, value: String(shopifyData.produtosEnviadosCount) };
-      if (kpi.id === "tempo-envio") return { ...kpi, value: `${shopifyData.tempoMedioEnvioDias.toFixed(1)} dias` };
+      if (kpi.id === "tempo-envio") {
+        const horas = shopifyData.tempoMedioEnvioHoras ?? 0;
+        const amostra = shopifyData.tempoMedioEnvioAmostra ?? 0;
+        const value =
+          amostra === 0
+            ? "—"
+            : horas < 1
+              ? `${Math.max(1, Math.round(horas * 60))} min`
+              : horas < 24
+                ? `${horas.toFixed(1)} h`
+                : `${(horas / 24).toFixed(1)} dias`;
+        return {
+          ...kpi,
+          value,
+          hint: amostra === 0 ? "Sem envios com rastreio no período" : `Base: ${amostra} pedido(s) enviados`,
+        };
+      }
       return kpi;
     });
 
     return { ...mockData, kpis: mergedKpis };
   }, [mockData, shopifyData]);
+
+  const queryClient = useQueryClient();
+  const runSync = useServerFn(syncShopifyData);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSync = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await runSync({ data: { fullSync: false } });
+      toast.success(`Sincronização concluída: ${res.totalImported} pedido(s) atualizados.`);
+      await queryClient.invalidateQueries();
+    } catch (err: any) {
+      toast.error("Erro ao sincronizar: " + (err?.message ?? "falha desconhecida"));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const refresh = () => {
     setLoading(true);
@@ -110,6 +145,10 @@ function Index() {
               <span className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground">
                 <Store className="size-3.5" /> Shopify: Integrado
               </span>
+              <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing} className="h-8 gap-2">
+                <RefreshCw className={`size-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+                {isSyncing ? "Sincronizando..." : "Sincronizar Shopify"}
+              </Button>
               <Button variant="outline" size="icon" asChild className="size-8 rounded-full">
                 <Link to="/configuracoes">
                   <Settings className="size-4" />

@@ -101,6 +101,169 @@ export const getShopifyDashboardData = createServerFn({ method: "POST" })
     const tempoMedioEnvioHoras = countWithTime > 0 ? totalSendTimeHours / countWithTime : 0;
     const tempoMedioEnvioDias = tempoMedioEnvioHoras / 24;
 
+    // ---------- Cohort analytics (histórico completo até o fim do período) ----------
+    const { data: allOrders } = await supabaseAdmin
+      .from("shopify_orders")
+      .select("customer_id, total_price, processed_at, created_at, province")
+      .lte("processed_at", endISO)
+      .neq("financial_status", "VOIDED");
+
+    type CustomerAgg = { dates: number[]; total: number; province: string | null };
+    const byCustomer = new Map<string, CustomerAgg>();
+    for (const o of allOrders ?? []) {
+      const key = o.customer_id;
+      if (!key) continue;
+      const at = new Date(o.processed_at ?? o.created_at).getTime();
+      const agg = byCustomer.get(key) ?? { dates: [], total: 0, province: o.province ?? null };
+      agg.dates.push(at);
+      agg.total += Number(o.total_price ?? 0);
+      if (!agg.province && o.province) agg.province = o.province;
+      byCustomer.set(key, agg);
+    }
+    const customers = Array.from(byCustomer.values()).map((c) => ({
+      ...c,
+      dates: c.dates.sort((a, b) => a - b),
+      count: c.dates.length,
+    }));
+    const totalCustomers = customers.length;
+    const pct = (n: number) => (totalCustomers > 0 ? (n / totalCustomers) * 100 : 0);
+
+    const buckets = [
+      { name: "1x", match: (n: number) => n === 1 },
+      { name: "2x", match: (n: number) => n === 2 },
+      { name: "3x", match: (n: number) => n === 3 },
+      { name: "4x+", match: (n: number) => n >= 4 },
+    ];
+
+    const frequencia = buckets.map((b) => ({
+      name: b.name,
+      value: Number(pct(customers.filter((c) => b.match(c.count)).length).toFixed(1)),
+    }));
+
+    const clv = buckets.map((b) => {
+      const group = customers.filter((c) => b.match(c.count));
+      const avg = group.length ? group.reduce((a, c) => a + c.total, 0) / group.length : 0;
+      return { name: b.name, value: Number(avg.toFixed(2)) };
+    });
+
+    const ticketRecorrencia = buckets.map((b, i) => {
+      const group = customers.filter((c) => b.match(c.count));
+      const ticket = group.length
+        ? group.reduce((a, c) => a + c.total, 0) / group.reduce((a, c) => a + c.count, 0)
+        : 0;
+      return { label: `${b.name} compra${i === 0 ? "" : "s"}`, clientes: group.length, ticket: Number(ticket.toFixed(2)), delta: null as number | null };
+    });
+    for (let i = 1; i < ticketRecorrencia.length; i++) {
+      const prev = ticketRecorrencia[i - 1]!.ticket;
+      const cur = ticketRecorrencia[i]!;
+      cur.delta = prev > 0 ? Number((((cur.ticket - prev) / prev) * 100).toFixed(1)) : null;
+    }
+
+    // Base por faixa de ticket (pedidos do período)
+    const faixas = [
+      { name: "< R$100", max: 100 },
+      { name: "R$100-200", max: 200 },
+      { name: "R$200-400", max: 400 },
+      { name: "R$400-800", max: 800 },
+      { name: "R$800+", max: Infinity },
+    ];
+    const faixaTicket = faixas.map((f, i) => {
+      const min = i === 0 ? 0 : faixas[i - 1]!.max;
+      const n = validOrders.filter((o) => Number(o.total_price) >= min && Number(o.total_price) < f.max).length;
+      return { name: f.name, value: Number((numPedidos > 0 ? (n / numPedidos) * 100 : 0).toFixed(1)) };
+    });
+
+    // Top 5 regiões que recompram (% da base total por UF com 2+ compras)
+    const repeatByProvince = new Map<string, number>();
+    for (const c of customers) {
+      if (c.count < 2 || !c.province) continue;
+      repeatByProvince.set(c.province, (repeatByProvince.get(c.province) ?? 0) + 1);
+    }
+    const regioes = Array.from(repeatByProvince.entries())
+      .map(([name, n]) => ({ name, value: Number(pct(n).toFixed(1)) }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+
+    // Curva de churn: % que não fez a próxima compra
+    const churn = [1, 2, 3].map((n) => {
+      const reached = customers.filter((c) => c.count >= n).length;
+      const advanced = customers.filter((c) => c.count >= n + 1).length;
+      return {
+        name: `Após ${n}ª compra`,
+        value: Number((reached > 0 ? ((reached - advanced) / reached) * 100 : 0).toFixed(1)),
+      };
+    });
+
+    // Tempo entre 1ª e 2ª compra
+    const gapsDias = customers
+      .filter((c) => c.count >= 2)
+      .map((c) => (c.dates[1]! - c.dates[0]!) / 86_400_000);
+    const gapBuckets = [
+      { name: "<15d", match: (d: number) => d < 15 },
+      { name: "16-60d", match: (d: number) => d >= 15 && d <= 60 },
+      { name: "61-90d", match: (d: number) => d > 60 && d <= 90 },
+      { name: "90d+", match: (d: number) => d > 90 },
+    ];
+    const tempoEntreCompras = gapBuckets.map((b) => ({
+      name: b.name,
+      value: Number(
+        (gapsDias.length ? (gapsDias.filter(b.match).length / gapsDias.length) * 100 : 0).toFixed(1),
+      ),
+    }));
+
+    // Curva de recompra: % acumulada de clientes que recompraram até X semanas
+    const curvaRecompra = [4, 8, 12, 9999].map((weeks, i) => {
+      const labels = ["Semana 1-4", "Semana 5-8", "Semana 9-12", "Semana 13+"];
+      const n = gapsDias.filter((d) => d <= weeks * 7).length;
+      return {
+        name: labels[i]!,
+        value: Number((gapsDias.length ? (n / gapsDias.length) * 100 : 0).toFixed(1)),
+      };
+    });
+
+    // Operação de envio por dia da semana (no período)
+    const diasLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+    const perDay = new Map<number, { pedidos: Set<string>; horas: number[] }>();
+    for (const f of fulfillments ?? []) {
+      if (!f.order_id || !f.created_at) continue;
+      const d = toZonedTime(new Date(f.created_at), TZ).getDay();
+      const slot = perDay.get(d) ?? { pedidos: new Set<string>(), horas: [] };
+      slot.pedidos.add(f.order_id);
+      const processedAt = (f.shopify_orders as any)?.processed_at ?? null;
+      if (processedAt) {
+        slot.horas.push((new Date(f.created_at).getTime() - new Date(processedAt).getTime()) / 3_600_000);
+      }
+      perDay.set(d, slot);
+    }
+    const itemsByOrder = new Map<string, number>();
+    if (shippedOrderIds.length > 0) {
+      const { data: allItems } = await supabaseAdmin
+        .from("shopify_order_items")
+        .select("quantity, order_id")
+        .in("order_id", shippedOrderIds);
+      for (const it of allItems ?? []) {
+        if (!it.order_id) continue;
+        itemsByOrder.set(it.order_id, (itemsByOrder.get(it.order_id) ?? 0) + (it.quantity ?? 0));
+      }
+    }
+    const enviosPorDia = [1, 2, 3, 4, 5, 6, 0].map((d) => {
+      const slot = perDay.get(d);
+      const pedidosIds = Array.from(slot?.pedidos ?? []);
+      const horas = slot?.horas ?? [];
+      return {
+        dia: diasLabels[d]!,
+        pedidos: pedidosIds.length,
+        produtos: pedidosIds.reduce((a, id) => a + (itemsByOrder.get(id) ?? 0), 0),
+        tempoMedio: Number(
+          (horas.length ? horas.reduce((a, h) => a + h, 0) / horas.length / 24 : 0).toFixed(2),
+        ),
+      };
+    });
+
+    const taxaRecompra = Number(
+      (totalCustomers > 0 ? (customers.filter((c) => c.count >= 2).length / totalCustomers) * 100 : 0).toFixed(2),
+    );
+
     return {
       faturamento,
       numPedidos,
@@ -111,5 +274,16 @@ export const getShopifyDashboardData = createServerFn({ method: "POST" })
       tempoMedioEnvioDias,
       tempoMedioEnvioHoras,
       tempoMedioEnvioAmostra: countWithTime,
+      taxaRecompra,
+      totalClientesBase: totalCustomers,
+      frequencia,
+      clv,
+      ticketRecorrencia,
+      faixaTicket,
+      regioes,
+      churn,
+      tempoEntreCompras,
+      curvaRecompra,
+      enviosPorDia,
     };
   });

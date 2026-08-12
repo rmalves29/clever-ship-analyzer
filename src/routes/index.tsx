@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Sparkles, Store, Settings } from "lucide-react";
+import { Sparkles, Store, Settings, RefreshCw } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { KpiCard } from "@/components/crm/KpiCard";
 import { PeriodFilter } from "@/components/crm/PeriodFilter";
@@ -14,7 +14,9 @@ import { Button } from "@/components/ui/button";
 
 import { getDashboardData, type PeriodKey } from "@/lib/crm-mock";
 import { getShopifyDashboardData } from "@/lib/shopify-dashboard.functions";
-import { useQuery } from "@tanstack/react-query";
+import { syncShopifyData } from "@/lib/crm-sync.functions";
+import { toast } from "sonner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/")({

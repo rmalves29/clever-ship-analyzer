@@ -69,9 +69,11 @@ function Index() {
     if (!shopifyData || !shopifyData.numPedidos) return mockData;
 
     const mergedKpis = mockData.kpis.map(kpi => {
-      if (kpi.id === "clientes") return { ...kpi, value: String(shopifyData.uniqueCustomers) };
+      if (kpi.id === "clientes") return { ...kpi, value: String(shopifyData.uniqueCustomers), hint: `${shopifyData.numPedidos} pedidos` };
       if (kpi.id === "ticket") return { ...kpi, value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(shopifyData.ticketMedio) };
+      if (kpi.id === "ltv") return { ...kpi, value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(shopifyData.uniqueCustomers ? shopifyData.faturamento / shopifyData.uniqueCustomers : 0) };
       if (kpi.id === "pedidos-enviados") return { ...kpi, value: String(shopifyData.pedidosEnviadosCount) };
+      if (kpi.id === "produtos-enviados") return { ...kpi, value: String(shopifyData.produtosEnviadosCount) };
       if (kpi.id === "tempo-envio") return { ...kpi, value: `${shopifyData.tempoMedioEnvioDias.toFixed(1)} dias` };
       return kpi;
     });

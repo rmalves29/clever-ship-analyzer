@@ -98,7 +98,8 @@ export const getShopifyDashboardData = createServerFn({ method: "POST" })
       countWithTime++;
     });
 
-    const tempoMedioEnvioDias = countWithTime > 0 ? totalSendTimeHours / countWithTime / 24 : 0;
+    const tempoMedioEnvioHoras = countWithTime > 0 ? totalSendTimeHours / countWithTime : 0;
+    const tempoMedioEnvioDias = tempoMedioEnvioHoras / 24;
 
     return {
       faturamento,
@@ -108,5 +109,7 @@ export const getShopifyDashboardData = createServerFn({ method: "POST" })
       pedidosEnviadosCount,
       produtosEnviadosCount,
       tempoMedioEnvioDias,
+      tempoMedioEnvioHoras,
+      tempoMedioEnvioAmostra: countWithTime,
     };
   });

@@ -6,7 +6,7 @@ import { toZonedTime } from "date-fns-tz";
 const TZ = "America/Sao_Paulo";
 
 const dashboardInput = z.object({
-  period: z.enum(["diario", "semanal", "mensal", "anual", "personalizado"]),
+  period: z.enum(["diario", "semanal", "mensal", "anual", "tudo", "personalizado"]),
   range: z.object({
     from: z.string().optional(),
     to: z.string().optional(),

@@ -59,7 +59,7 @@ export const saveStoreSettings = createServerFn({ method: "POST" })
     if (data.clientSecret) patch['shopify_client_secret'] = data.clientSecret.trim();
 
     const { error } = existing
-      ? await supabaseAdmin.from("store_settings").update(patch).eq("id", existing.id)
+      ? await supabaseAdmin.from("store_settings").update(patch as never).eq("id", existing.id)
       : await supabaseAdmin
           .from("store_settings")
           .insert({ id: SETTINGS_ID, ...patch } as never);

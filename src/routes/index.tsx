@@ -74,7 +74,23 @@ function Index() {
       if (kpi.id === "ltv") return { ...kpi, value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(shopifyData.uniqueCustomers ? shopifyData.faturamento / shopifyData.uniqueCustomers : 0) };
       if (kpi.id === "pedidos-enviados") return { ...kpi, value: String(shopifyData.pedidosEnviadosCount) };
       if (kpi.id === "produtos-enviados") return { ...kpi, value: String(shopifyData.produtosEnviadosCount) };
-      if (kpi.id === "tempo-envio") return { ...kpi, value: `${shopifyData.tempoMedioEnvioDias.toFixed(1)} dias` };
+      if (kpi.id === "tempo-envio") {
+        const horas = shopifyData.tempoMedioEnvioHoras ?? 0;
+        const amostra = shopifyData.tempoMedioEnvioAmostra ?? 0;
+        const value =
+          amostra === 0
+            ? "—"
+            : horas < 1
+              ? `${Math.max(1, Math.round(horas * 60))} min`
+              : horas < 24
+                ? `${horas.toFixed(1)} h`
+                : `${(horas / 24).toFixed(1)} dias`;
+        return {
+          ...kpi,
+          value,
+          hint: amostra === 0 ? "Sem envios com rastreio no período" : `Base: ${amostra} pedido(s) enviados`,
+        };
+      }
       return kpi;
     });
 

@@ -91,9 +91,7 @@ export const syncShopifyData = createServerFn({ method: "POST" })
           : null;
 
       while (hasNextPage) {
-        const result: any = await shopifyQuery({
-          data: { query: ORDERS_QUERY, variables: { cursor, query: searchQuery } },
-        });
+        const result: any = await shopifyGraphQL(ORDERS_QUERY, { cursor, query: searchQuery });
         const ordersConnection = result.orders;
 
         for (const edge of ordersConnection.edges) {

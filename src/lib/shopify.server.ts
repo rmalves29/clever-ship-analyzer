@@ -117,3 +117,52 @@ export async function shopifyGraphQL(query: string, variables?: Record<string, u
 
   return result.data;
 }
+
+export const ORDERS_QUERY = `
+  query getOrders($cursor: String, $query: String) {
+    orders(first: 50, after: $cursor, sortKey: UPDATED_AT, reverse: false, query: $query) {
+      pageInfo { hasNextPage endCursor }
+      edges {
+        node {
+          id
+          name
+          createdAt
+          processedAt
+          updatedAt
+          displayFinancialStatus
+          displayFulfillmentStatus
+          currencyCode
+          email
+          phone
+          sourceName
+          subtotalPriceSet { presentmentMoney { amount } }
+          totalDiscountsSet { presentmentMoney { amount } }
+          totalShippingPriceSet { presentmentMoney { amount } }
+          totalTaxSet { presentmentMoney { amount } }
+          totalPriceSet { presentmentMoney { amount } }
+          shippingAddress { name firstName lastName city province country }
+          lineItems(first: 100) {
+            edges {
+              node {
+                id
+                title
+                quantity
+                variantTitle
+                sku
+                discountedUnitPriceSet { presentmentMoney { amount } }
+                totalDiscountSet { presentmentMoney { amount } }
+              }
+            }
+          }
+          fulfillments(first: 10) {
+            id
+            status
+            createdAt
+            updatedAt
+            trackingInfo(first: 1) { company number url }
+          }
+        }
+      }
+    }
+  }
+`;

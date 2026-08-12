@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { shopifyQuery } from "./shopify.functions";
+
 
 const syncInput = z.object({
   fullSync: z.boolean().optional().default(false),

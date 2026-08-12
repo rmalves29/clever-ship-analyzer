@@ -1,67 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { shopifyQuery } from "./shopify.functions";
 
-const syncInput = z.object({
-  fullSync: z.boolean().optional().default(false),
-});
-
-// Note: the custom app has read_orders / read_all_orders but NOT read_customers,
-// so the `customer { ... }` field is unavailable. Customer identity is derived
-// from the order email + shipping address instead.
-const ORDERS_QUERY = `
-  query getOrders($cursor: String, $query: String) {
-    orders(first: 50, after: $cursor, sortKey: UPDATED_AT, reverse: false, query: $query) {
-      pageInfo { hasNextPage endCursor }
-      edges {
-        node {
-          id
-          name
-          createdAt
-          processedAt
-          updatedAt
-          displayFinancialStatus
-          displayFulfillmentStatus
-          currencyCode
-          email
-          phone
-          sourceName
-          subtotalPriceSet { presentmentMoney { amount } }
-          totalDiscountsSet { presentmentMoney { amount } }
-          totalShippingPriceSet { presentmentMoney { amount } }
-          totalTaxSet { presentmentMoney { amount } }
-          totalPriceSet { presentmentMoney { amount } }
-          shippingAddress { name firstName lastName city province country }
-          lineItems(first: 100) {
-            edges {
-              node {
-                id
-                title
-                quantity
-                variantTitle
-                sku
-                discountedUnitPriceSet { presentmentMoney { amount } }
-                totalDiscountSet { presentmentMoney { amount } }
-              }
-            }
-          }
-          fulfillments(first: 10) {
-            id
-            status
-            createdAt
-            updatedAt
-            trackingInfo(first: 1) { company number url }
-          }
-        }
-      }
-    }
-  }
-`;
 
 export const syncShopifyData = createServerFn({ method: "POST" })
-  .validator((data: unknown) => syncInput.parse(data))
+  .validator((data: unknown) => z.object({ fullSync: z.boolean().optional().default(false) }).parse(data))
   .handler(async ({ data: { fullSync } }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { shopifyGraphQL, ORDERS_QUERY } = await import("./shopify.server");
 
     const { data: settings } = await supabaseAdmin
       .from("store_settings")
@@ -90,9 +35,7 @@ export const syncShopifyData = createServerFn({ method: "POST" })
           : null;
 
       while (hasNextPage) {
-        const result: any = await shopifyQuery({
-          data: { query: ORDERS_QUERY, variables: { cursor, query: searchQuery } },
-        });
+        const result: any = await shopifyGraphQL(ORDERS_QUERY, { cursor, query: searchQuery });
         const ordersConnection = result.orders;
 
         for (const edge of ordersConnection.edges) {

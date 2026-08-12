@@ -1,12 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { format, startOfDay, endOfDay, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
-import { toZonedTime } from "date-fns-tz";
+import { toZonedTime, fromZonedTime } from "date-fns-tz";
 
 const TZ = "America/Sao_Paulo";
 
 const dashboardInput = z.object({
-  period: z.enum(["diario", "semanal", "mensal", "anual", "personalizado"]),
+  period: z.enum(["diario", "semanal", "mensal", "anual", "tudo", "personalizado"]),
   range: z.object({
     from: z.string().optional(),
     to: z.string().optional(),
@@ -30,15 +30,18 @@ export const getShopifyDashboardData = createServerFn({ method: "POST" })
       start = startOfYear(now);
     } else if (period === "semanal") {
       start = startOfDay(subDays(now, 7));
+    } else if (period === "tudo") {
+      start = new Date(0);
     } else if (period === "personalizado" && range?.from) {
-      start = startOfDay(new Date(range.from));
-      if (range.to) end = endOfDay(new Date(range.to));
+      start = startOfDay(toZonedTime(new Date(range.from), TZ));
+      if (range.to) end = endOfDay(toZonedTime(new Date(range.to), TZ));
     } else {
       start = startOfMonth(now);
     }
 
-    const startISO = start.toISOString();
-    const endISO = end.toISOString();
+    // As datas acima estão em "hora local de São Paulo"; converte de volta para UTC real.
+    const startISO = period === "tudo" ? start.toISOString() : fromZonedTime(start, TZ).toISOString();
+    const endISO = fromZonedTime(end, TZ).toISOString();
 
     const { data: orders } = await supabaseAdmin
       .from("shopify_orders")

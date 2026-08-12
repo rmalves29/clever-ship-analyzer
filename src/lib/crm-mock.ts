@@ -1,4 +1,4 @@
-export type PeriodKey = "diario" | "semanal" | "mensal" | "anual" | "personalizado";
+export type PeriodKey = "diario" | "semanal" | "mensal" | "anual" | "tudo" | "personalizado";
 
 export type Status = "critico" | "regular" | "meta";
 
@@ -7,6 +7,7 @@ export const PERIODS: { key: PeriodKey; label: string }[] = [
   { key: "semanal", label: "Semanal" },
   { key: "mensal", label: "Mensal" },
   { key: "anual", label: "Anual" },
+  { key: "tudo", label: "Tudo" },
   { key: "personalizado", label: "Personalizado" },
 ];
 
@@ -15,6 +16,7 @@ const MULT: Record<PeriodKey, number> = {
   semanal: 6.4,
   mensal: 27,
   anual: 320,
+  tudo: 420,
   personalizado: 3.5,
 };
 

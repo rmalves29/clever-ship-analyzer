@@ -6,17 +6,14 @@ import { createServerFn } from "@tanstack/react-start";
  */
 export const testShopifyConnection = createServerFn({ method: "POST" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { shopifyGraphQL } = await import("./shopify.server");
   try {
-    const data: any = await shopifyQuery({
-      data: {
-        query: `
-            query {
-              shop { name myshopifyDomain }
-              currentAppInstallation { accessScopes { handle } }
-            }
-          `,
-      },
-    });
+    const data: any = await shopifyGraphQL(`
+      query {
+        shop { name myshopifyDomain }
+        currentAppInstallation { accessScopes { handle } }
+      }
+    `);
 
     const scopes: string[] = data.currentAppInstallation.accessScopes.map((s: any) => s.handle);
 

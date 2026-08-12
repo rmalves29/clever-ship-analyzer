@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { shopifyQuery } from "./shopify.functions";
+
 
 /**
  * Tests the Shopify connection by fetching shop basic info and scopes.

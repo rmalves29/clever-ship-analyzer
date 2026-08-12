@@ -76,6 +76,15 @@ function Index() {
       if (kpi.id === "ltv") return { ...kpi, value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(shopifyData.uniqueCustomers ? shopifyData.faturamento / shopifyData.uniqueCustomers : 0) };
       if (kpi.id === "pedidos-enviados") return { ...kpi, value: String(shopifyData.pedidosEnviadosCount) };
       if (kpi.id === "produtos-enviados") return { ...kpi, value: String(shopifyData.produtosEnviadosCount) };
+      if (kpi.id === "recompra") {
+        const taxa = shopifyData.taxaRecompra ?? 0;
+        return {
+          ...kpi,
+          value: `${taxa.toFixed(1)}%`,
+          hint: `${shopifyData.totalClientesBase ?? 0} clientes na base`,
+          status: statusHigherIsBetter(taxa, GOALS.taxaRecompra.meta, GOALS.taxaRecompra.regular),
+        };
+      }
       if (kpi.id === "tempo-envio") {
         const horas = shopifyData.tempoMedioEnvioHoras ?? 0;
         const amostra = shopifyData.tempoMedioEnvioAmostra ?? 0;

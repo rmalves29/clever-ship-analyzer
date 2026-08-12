@@ -12,7 +12,7 @@ import { AnalysisGrid } from "@/components/crm/AnalysisGrid";
 import { SuggestedActions } from "@/components/crm/SuggestedActions";
 import { Button } from "@/components/ui/button";
 
-import { getDashboardData, type PeriodKey } from "@/lib/crm-mock";
+import { getDashboardData, statusHigherIsBetter, statusLowerIsBetter, GOALS, type PeriodKey } from "@/lib/crm-mock";
 import { getShopifyDashboardData } from "@/lib/shopify-dashboard.functions";
 import { syncShopifyData } from "@/lib/crm-sync.functions";
 import { toast } from "sonner";
@@ -76,6 +76,15 @@ function Index() {
       if (kpi.id === "ltv") return { ...kpi, value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(shopifyData.uniqueCustomers ? shopifyData.faturamento / shopifyData.uniqueCustomers : 0) };
       if (kpi.id === "pedidos-enviados") return { ...kpi, value: String(shopifyData.pedidosEnviadosCount) };
       if (kpi.id === "produtos-enviados") return { ...kpi, value: String(shopifyData.produtosEnviadosCount) };
+      if (kpi.id === "recompra") {
+        const taxa = shopifyData.taxaRecompra ?? 0;
+        return {
+          ...kpi,
+          value: `${taxa.toFixed(1)}%`,
+          hint: `${shopifyData.totalClientesBase ?? 0} clientes na base`,
+          status: statusHigherIsBetter(taxa, GOALS.taxaRecompra.meta, GOALS.taxaRecompra.regular),
+        };
+      }
       if (kpi.id === "tempo-envio") {
         const horas = shopifyData.tempoMedioEnvioHoras ?? 0;
         const amostra = shopifyData.tempoMedioEnvioAmostra ?? 0;
@@ -91,12 +100,42 @@ function Index() {
           ...kpi,
           value,
           hint: amostra === 0 ? "Sem envios com rastreio no período" : `Base: ${amostra} pedido(s) enviados`,
+          status: statusLowerIsBetter(horas / 24, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
         };
       }
       return kpi;
     });
 
-    return { ...mockData, kpis: mergedKpis };
+    const taxa = shopifyData.taxaRecompra ?? 0;
+    const envioDias = (shopifyData.tempoMedioEnvioHoras ?? 0) / 24;
+    const insights = mockData.insights.map((i) => {
+      if (i.title === "Análise de recompra por cliente")
+        return { ...i, highlight: `${taxa.toFixed(2)}%`, tone: statusHigherIsBetter(taxa, GOALS.taxaRecompra.meta, GOALS.taxaRecompra.regular) };
+      if (i.title === "Tempo médio de envio")
+        return {
+          ...i,
+          highlight: envioDias < 1 ? `${(envioDias * 24).toFixed(1)} h` : `${envioDias.toFixed(1)} dias`,
+          tone: statusLowerIsBetter(envioDias, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
+        };
+      if (i.title === "Curva de churn")
+        return { ...i, highlight: `${(shopifyData.churn?.[0]?.value ?? 0).toFixed(1)}%` };
+      return i;
+    });
+
+    return {
+      ...mockData,
+      kpis: mergedKpis,
+      insights,
+      frequencia: shopifyData.frequencia ?? mockData.frequencia,
+      clv: shopifyData.clv ?? mockData.clv,
+      ticketRecorrencia: shopifyData.ticketRecorrencia ?? mockData.ticketRecorrencia,
+      faixaTicket: shopifyData.faixaTicket ?? mockData.faixaTicket,
+      regioes: shopifyData.regioes?.length ? shopifyData.regioes : [],
+      churn: shopifyData.churn ?? mockData.churn,
+      tempoEntreCompras: shopifyData.tempoEntreCompras ?? mockData.tempoEntreCompras,
+      curvaRecompra: shopifyData.curvaRecompra ?? mockData.curvaRecompra,
+      enviosPorDia: shopifyData.enviosPorDia ?? mockData.enviosPorDia,
+    };
   }, [mockData, shopifyData]);
 
   const queryClient = useQueryClient();

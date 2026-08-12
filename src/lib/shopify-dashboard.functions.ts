@@ -57,27 +57,48 @@ export const getShopifyDashboardData = createServerFn({ method: "POST" })
     
     const uniqueCustomers = new Set(validOrders.map(o => o.customer_id)).size;
 
+    // Shipped = fulfillment with a tracking code created within the period
     const { data: fulfillments } = await supabaseAdmin
       .from("shopify_fulfillments")
       .select("*, shopify_orders!inner(processed_at)")
+      .not("tracking_number", "is", null)
       .gte("created_at", startISO)
       .lte("created_at", endISO);
 
-    const pedidosEnviadosCount = fulfillments?.length || 0;
-    
+    const shippedOrderIds = Array.from(
+      new Set((fulfillments ?? []).map((f) => f.order_id).filter(Boolean) as string[]),
+    );
+    const pedidosEnviadosCount = shippedOrderIds.length;
+
+    let produtosEnviadosCount = 0;
+    if (shippedOrderIds.length > 0) {
+      const { data: items } = await supabaseAdmin
+        .from("shopify_order_items")
+        .select("quantity, order_id")
+        .in("order_id", shippedOrderIds);
+      produtosEnviadosCount = (items ?? []).reduce((acc, i) => acc + (i.quantity ?? 0), 0);
+    }
+
+    // Average shipping time = first fulfillment date - payment/processing date
+    const firstFulfillmentByOrder = new Map<string, { at: string; processedAt: string | null }>();
+    for (const f of fulfillments ?? []) {
+      if (!f.order_id || !f.created_at) continue;
+      const processedAt = (f.shopify_orders as any)?.processed_at ?? null;
+      const current = firstFulfillmentByOrder.get(f.order_id);
+      if (!current || new Date(f.created_at) < new Date(current.at)) {
+        firstFulfillmentByOrder.set(f.order_id, { at: f.created_at, processedAt });
+      }
+    }
+
     let totalSendTimeHours = 0;
     let countWithTime = 0;
-
-    fulfillments?.forEach(f => {
-      const order = f.shopify_orders as any;
-      if (order && order.processed_at) {
-        const diff = new Date(f.created_at || "").getTime() - new Date(order.processed_at).getTime();
-        totalSendTimeHours += diff / (1000 * 60 * 60);
-        countWithTime++;
-      }
+    firstFulfillmentByOrder.forEach(({ at, processedAt }) => {
+      if (!processedAt) return;
+      totalSendTimeHours += (new Date(at).getTime() - new Date(processedAt).getTime()) / 3_600_000;
+      countWithTime++;
     });
 
-    const tempoMedioEnvioDias = countWithTime > 0 ? (totalSendTimeHours / countWithTime) / 24 : 0;
+    const tempoMedioEnvioDias = countWithTime > 0 ? totalSendTimeHours / countWithTime / 24 : 0;
 
     return {
       faturamento,
@@ -85,6 +106,7 @@ export const getShopifyDashboardData = createServerFn({ method: "POST" })
       ticketMedio,
       uniqueCustomers,
       pedidosEnviadosCount,
+      produtosEnviadosCount,
       tempoMedioEnvioDias,
     };
   });

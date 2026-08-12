@@ -1,88 +1,90 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-// In-memory cache for access tokens
+export const SHOPIFY_API_VERSION = "2025-01";
+
+// In-memory cache for access tokens (client_credentials tokens last ~24h)
 const TOKEN_CACHE: Record<string, { token: string; expiresAt: number }> = {};
 
+function normalizeDomain(domain: string) {
+  return domain.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+}
+
 /**
- * Validates and gets Shopify Admin Credentials (domain and accessToken).
- * Implements the client_credentials flow as requested.
+ * Validates and gets Shopify Admin Credentials (domain and accessToken)
+ * using the official client_credentials flow.
  */
-export const getShopifyAdminCredentials = createServerFn({ method: "GET" })
-  .handler(async () => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    
-    // Use maybeSingle instead of single to handle empty state gracefully
-    const { data: settings, error } = await supabaseAdmin
-      .from("store_settings")
-      .select("*")
-      .maybeSingle();
+export const getShopifyAdminCredentials = createServerFn({ method: "GET" }).handler(async () => {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    if (error) {
-      console.error("Database error fetching store settings:", error);
-      throw new Error("DB_ERROR: Failed to fetch store settings.");
+  const { data: settings, error } = await supabaseAdmin
+    .from("store_settings")
+    .select("*")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Database error fetching store settings:", error);
+    throw new Error("DB_ERROR: Failed to fetch store settings.");
+  }
+
+  if (!settings) {
+    throw new Error("SHOP_NOT_FOUND: Configure as credenciais da loja em Configurações.");
+  }
+
+  const {
+    shopify_store_domain: rawShop,
+    shopify_client_id: clientId,
+    shopify_client_secret: clientSecret,
+    shopify_admin_access_token: legacyToken,
+  } = settings;
+
+  if (!rawShop) throw new Error("INVALID_STORE: shopify_store_domain is missing.");
+  const shop = normalizeDomain(rawShop);
+
+  if (!clientId || !clientSecret) {
+    if (legacyToken?.startsWith("shpat_")) {
+      return { domain: shop, accessToken: legacyToken };
     }
+    throw new Error("INVALID_CLIENT_CREDENTIALS: Client ID ou Client Secret ausente.");
+  }
 
-    if (!settings) {
-      throw new Error("SHOP_NOT_FOUND: Store settings not found in database. Please configure them first.");
-    }
+  const cached = TOKEN_CACHE[shop];
+  if (cached && cached.expiresAt > Date.now() + 60_000) {
+    return { domain: shop, accessToken: cached.token };
+  }
 
-    const { 
-      shopify_store_domain: shop, 
-      shopify_client_id: clientId, 
-      shopify_client_secret: clientSecret,
-      shopify_admin_access_token: legacyToken 
-    } = settings;
-
-    if (!shop) throw new Error("INVALID_STORE: shopify_store_domain is missing.");
-    
-    // Fallback logic
-    if (!clientId || !clientSecret) {
-      if (legacyToken?.startsWith("shpat_")) {
-        return { domain: shop, accessToken: legacyToken };
-      }
-      throw new Error("INVALID_CLIENT_CREDENTIALS: Shopify Client ID or Secret is missing.");
-    }
-
-    // Check cache
-    const cached = TOKEN_CACHE[shop];
-    if (cached && cached.expiresAt > Date.now() + 60000) {
-      return { domain: shop, accessToken: cached.token };
-    }
-
-    // Official client_credentials flow
-    const tokenUrl = `https://${shop}/admin/oauth/access_token`;
-    const params = new URLSearchParams();
-    params.append("grant_type", "client_credentials");
-    params.append("client_id", clientId);
-    params.append("client_secret", clientSecret);
-
-    const response = await fetch(tokenUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: params.toString(),
-    });
-
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error("Shopify Auth Error:", errBody);
-      throw new Error("INVALID_CLIENT_CREDENTIALS: Failed to authenticate with Shopify.");
-    }
-
-    const data = await response.json() as { access_token: string; expires_in: number };
-    const accessToken = data.access_token;
-    const expiresIn = data.expires_in;
-
-    const duration = expiresIn > 0 ? expiresIn * 1000 : 24 * 60 * 60 * 1000;
-    TOKEN_CACHE[shop] = {
-      token: accessToken,
-      expiresAt: Date.now() + duration,
-    };
-
-    return { domain: shop, accessToken };
+  const response = await fetch(`https://${shop}/admin/oauth/access_token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      grant_type: "client_credentials",
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
   });
+
+  const rawBody = await response.text();
+  let json: { access_token?: string; expires_in?: number } | null = null;
+  try {
+    json = JSON.parse(rawBody);
+  } catch {
+    json = null;
+  }
+
+  if (!response.ok || !json?.access_token) {
+    console.error("Shopify Auth Error:", response.status, rawBody.slice(0, 1000));
+    throw new Error(`INVALID_CLIENT_CREDENTIALS: falha ao autenticar na Shopify (HTTP ${response.status}).`);
+  }
+
+  TOKEN_CACHE[shop] = {
+    token: json.access_token,
+    expiresAt: Date.now() + (json.expires_in ?? 86_000) * 1000,
+  };
+
+  return { domain: shop, accessToken: json.access_token };
+});
 
 const shopifyQuerySchema = z.object({
   query: z.string(),
@@ -98,9 +100,7 @@ export const shopifyQuery = createServerFn({ method: "POST" })
     const { query, variables } = data;
     const { domain, accessToken } = await getShopifyAdminCredentials();
 
-    const url = `https://${domain}/admin/api/2024-07/graphql.json`;
-
-    const response = await fetch(url, {
+    const response = await fetch(`https://${domain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -113,16 +113,22 @@ export const shopifyQuery = createServerFn({ method: "POST" })
       throw new Error("RATE_LIMIT: Shopify API rate limit exceeded.");
     }
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Shopify GraphQL Error:", errText);
-      throw new Error(`INVALID_QUERY: Shopify API returned ${response.status}`);
+    const rawBody = await response.text();
+    let result: { data?: any; errors?: any[] } | null = null;
+    try {
+      result = JSON.parse(rawBody);
+    } catch {
+      result = null;
     }
 
-    const result = await response.json() as { data?: any; errors?: any[] };
+    if (!response.ok || !result) {
+      console.error("Shopify GraphQL Error:", response.status, rawBody.slice(0, 1000));
+      throw new Error(`SHOPIFY_HTTP_${response.status}: erro ao consultar a Shopify.`);
+    }
+
     if (result.errors) {
-      console.error("GraphQL Errors:", result.errors);
-      throw new Error("INVALID_QUERY: GraphQL returned errors.");
+      console.error("GraphQL Errors:", JSON.stringify(result.errors).slice(0, 1000));
+      throw new Error(`INVALID_QUERY: ${result.errors[0]?.message ?? "GraphQL error"}`);
     }
 
     return result.data;

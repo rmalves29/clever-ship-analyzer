@@ -18,12 +18,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { testShopifyConnection } from "@/lib/shopify-operations.functions";
 import { syncShopifyData } from "@/lib/crm-sync.functions";
-import type { Database } from "@/integrations/supabase/types";
-
-type StoreSettings = Database["public"]["Tables"]["store_settings"]["Row"];
+import { getStoreSettings, saveStoreSettings } from "@/lib/store-settings.functions";
 
 export const Route = createFileRoute("/configuracoes")({
   component: Configuracoes,
@@ -41,28 +38,19 @@ function Configuracoes() {
     clientSecret: "",
   });
 
-  // Load store settings
-  const { data: settings, isLoading, refetch } = useQuery<StoreSettings | null>({
+  // Load store settings (server-side, secrets never leave the server)
+  const { data: settings, isLoading, refetch } = useQuery({
     queryKey: ["store-settings"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("store_settings")
-        .select("*")
-        .maybeSingle();
-      
-      if (error) throw error;
-      return data;
-    }
+    queryFn: () => getStoreSettings(),
   });
 
   // Update form when data loads
   useEffect(() => {
     if (settings) {
-      setFormData({
-        domain: settings.shopify_store_domain || "",
-        clientId: settings.shopify_client_id || "",
-        clientSecret: settings.shopify_client_secret || "",
-      });
+      setFormData((prev) => ({
+        ...prev,
+        domain: settings.domain || "",
+      }));
     }
   }, [settings]);
 
@@ -84,38 +72,19 @@ function Configuracoes() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
-    
+
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      const payload: any = {
-        shopify_store_domain: formData.domain,
-        shopify_client_id: formData.clientId,
-        shopify_client_secret: formData.clientSecret,
-        updated_at: new Date().toISOString(),
-        user_id: user?.id // Ensure ownership if table allows
-      };
-
-      if (settings?.id) {
-        payload.id = settings.id;
-      }
-
-      console.log("Upserting settings:", payload);
-      const { data, error } = await supabase
-        .from("store_settings")
-        .upsert(payload, { onConflict: 'shopify_store_domain' })
-        .select();
-
-      if (error) {
-        console.error("Supabase upsert error:", error);
-        throw error;
-      }
-      
-      console.log("Upsert result:", data);
+      await saveStoreSettings({
+        data: {
+          domain: formData.domain,
+          clientId: formData.clientId || undefined,
+          clientSecret: formData.clientSecret || undefined,
+        },
+      });
+      setFormData((prev) => ({ ...prev, clientId: "", clientSecret: "" }));
       toast.success("Configurações salvas com sucesso!");
       refetch();
     } catch (err: any) {
-      console.error("Save catch block:", err);
       toast.error("Erro ao salvar: " + err.message);
     } finally {
       setIsSaving(false);
@@ -162,8 +131,8 @@ function Configuracoes() {
               <p className="text-muted-foreground">Gerencie a conexão com sua loja Shopify</p>
             </div>
           </div>
-          <Badge variant={settings?.sync_status === "connected" ? "default" : "secondary"} className="h-6">
-            {settings?.sync_status === "connected" ? "Conectado" : "Não configurado"}
+          <Badge variant={settings?.syncStatus === "connected" ? "default" : "secondary"} className="h-6">
+            {settings?.syncStatus === "connected" ? "Conectado" : "Não configurado"}
           </Badge>
         </div>
 
@@ -196,9 +165,9 @@ function Configuracoes() {
                     <Input 
                       id="clientId" 
                       type="password"
+                      placeholder={settings?.hasClientId ? "•••••••• (salvo)" : ""}
                       value={formData.clientId}
                       onChange={(e) => setFormData(prev => ({ ...prev, clientId: e.target.value }))}
-                      required
                     />
                   </div>
                   <div className="space-y-2">
@@ -206,9 +175,9 @@ function Configuracoes() {
                     <Input 
                       id="clientSecret" 
                       type="password"
+                      placeholder={settings?.hasClientSecret ? "•••••••• (salvo)" : ""}
                       value={formData.clientSecret}
                       onChange={(e) => setFormData(prev => ({ ...prev, clientSecret: e.target.value }))}
-                      required
                     />
                   </div>
                 </div>
@@ -225,7 +194,7 @@ function Configuracoes() {
                   type="button" 
                   variant="outline" 
                   onClick={() => testConnectionMutation.mutate()} 
-                  disabled={isTesting || !formData.clientId}
+                  disabled={isTesting || !settings?.hasClientSecret}
                 >
                   {isTesting ? <RefreshCw className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}
                   Testar Conexão
@@ -238,7 +207,7 @@ function Configuracoes() {
             </form>
           </Card>
 
-          {settings?.sync_status === "connected" && (
+          {settings?.syncStatus === "connected" && (
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-2">
@@ -253,17 +222,17 @@ function Configuracoes() {
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                   <div className="rounded-lg border bg-card p-3">
                     <p className="text-xs text-muted-foreground">Status</p>
-                    <p className="mt-1 text-sm font-semibold capitalize">{settings.sync_status}</p>
+                    <p className="mt-1 text-sm font-semibold capitalize">{settings.syncStatus}</p>
                   </div>
                   <div className="rounded-lg border bg-card p-3">
                     <p className="text-xs text-muted-foreground">Última Sinc.</p>
                     <p className="mt-1 text-sm font-semibold">
-                      {settings.last_sync_at ? new Date(settings.last_sync_at).toLocaleString("pt-BR") : "Nunca"}
+                      {settings.lastSyncAt ? new Date(settings.lastSyncAt).toLocaleString("pt-BR") : "Nunca"}
                     </p>
                   </div>
                   <div className="rounded-lg border bg-card p-3">
                     <p className="text-xs text-muted-foreground">Loja</p>
-                    <p className="mt-1 text-sm font-semibold truncate">{testResult?.shopName || settings.shopify_store_domain}</p>
+                    <p className="mt-1 text-sm font-semibold truncate">{testResult?.shopName || settings.domain}</p>
                   </div>
                   <div className="rounded-lg border bg-card p-3">
                     <p className="text-xs text-muted-foreground">Timezone</p>
@@ -284,11 +253,11 @@ function Configuracoes() {
                   </div>
                 )}
 
-                {settings.last_sync_error && (
+                {settings.lastSyncError && (
                   <Alert variant="destructive">
                     <AlertCircle className="size-4" />
                     <AlertTitle>Erro na última sincronização</AlertTitle>
-                    <AlertDescription>{settings.last_sync_error}</AlertDescription>
+                    <AlertDescription>{settings.lastSyncError}</AlertDescription>
                   </Alert>
                 )}
               </CardContent>

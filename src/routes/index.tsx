@@ -100,10 +100,7 @@ function Index() {
           ...kpi,
           value,
           hint: amostra === 0 ? "Sem envios com rastreio no período" : `Base: ${amostra} pedido(s) enviados`,
-          status:
-            amostra === 0
-              ? undefined
-              : statusLowerIsBetter(horas / 24, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
+          status: statusLowerIsBetter(horas / 24, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
         };
       }
       return kpi;

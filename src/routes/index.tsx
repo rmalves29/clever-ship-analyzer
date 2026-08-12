@@ -126,6 +126,10 @@ function Index() {
               <span className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground">
                 <Store className="size-3.5" /> Shopify: Integrado
               </span>
+              <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing} className="h-8 gap-2">
+                <RefreshCw className={`size-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+                {isSyncing ? "Sincronizando..." : "Sincronizar Shopify"}
+              </Button>
               <Button variant="outline" size="icon" asChild className="size-8 rounded-full">
                 <Link to="/configuracoes">
                   <Settings className="size-4" />

@@ -99,6 +99,23 @@ function Index() {
     return { ...mockData, kpis: mergedKpis };
   }, [mockData, shopifyData]);
 
+  const queryClient = useQueryClient();
+  const runSync = useServerFn(syncShopifyData);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSync = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await runSync({ data: { fullSync: false } });
+      toast.success(`Sincronização concluída: ${res.totalImported} pedido(s) atualizados.`);
+      await queryClient.invalidateQueries();
+    } catch (err: any) {
+      toast.error("Erro ao sincronizar: " + (err?.message ?? "falha desconhecida"));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const refresh = () => {
     setLoading(true);
     window.setTimeout(() => {

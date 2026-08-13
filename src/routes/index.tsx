@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router"; // NAO ESTÁ FUNCIONANDO TE MANDEI AS CREDENCIAIS PARA VC TESTAR
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { format } from "date-fns";
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { getDashboardData, statusHigherIsBetter, statusLowerIsBetter, GOALS, type PeriodKey } from "@/lib/crm-mock";
 import { getShopifyDashboardData } from "@/lib/shopify-dashboard.functions";
 import { syncShopifyData } from "@/lib/crm-sync.functions";
+import { getLatestAiAnalysis, generateAiAnalysis } from "@/lib/ai-analysis.functions";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -45,18 +46,26 @@ function Index() {
   const [analyzedAt, setAnalyzedAt] = useState(() => new Date());
 
   const getShopifyData = useServerFn(getShopifyDashboardData);
+  const runAiAnalysis = useServerFn(generateAiAnalysis);
+  const getAiAnalysis = useServerFn(getLatestAiAnalysis);
 
   const { data: shopifyData, isLoading: isShopifyLoading } = useQuery({
     queryKey: ["shopify-dashboard", period, range?.from, range?.to],
-    queryFn: () => getShopifyData({ 
-      data: { 
-        period, 
-        range: range?.from ? { 
-          from: range.from.toISOString(), 
-          to: range.to?.toISOString() 
-        } : undefined 
-      } 
+    queryFn: () => getShopifyData({
+      data: {
+        period,
+        range: range?.from ? {
+          from: range.from.toISOString(),
+          to: range.to?.toISOString()
+        } : undefined
+      }
     }),
+  });
+
+  const queryClient = useQueryClient();
+  const { data: aiAnalysis } = useQuery({
+    queryKey: ["ai-analysis"],
+    queryFn: () => getAiAnalysis(),
   });
 
   const customLabel =
@@ -119,10 +128,21 @@ function Index() {
       return i;
     });
 
+    // Insights/réguas/ações reais gerados por IA (quando já existe uma análise salva)
+    // substituem os do mock, que só ficam como placeholder até a 1ª "Refazer análise".
+    const ai = aiAnalysis?.analysis;
+    const aiInsights = ai?.insights.map((i) =>
+      i.highlight
+        ? { title: i.title, text: i.text, tone: i.tone, highlight: i.highlight }
+        : { title: i.title, text: i.text, tone: i.tone },
+    );
+
     return {
       ...mockData,
       kpis: mergedKpis,
-      insights,
+      insights: aiInsights ?? insights,
+      reguas: ai?.reguas ?? mockData.reguas,
+      acoes: ai?.acoes ?? mockData.acoes,
       frequencia: shopifyData.frequencia ?? mockData.frequencia,
       clv: shopifyData.clv ?? mockData.clv,
       ticketRecorrencia: shopifyData.ticketRecorrencia ?? mockData.ticketRecorrencia,
@@ -133,9 +153,8 @@ function Index() {
       curvaRecompra: shopifyData.curvaRecompra ?? mockData.curvaRecompra,
       enviosPorDia: shopifyData.enviosPorDia ?? mockData.enviosPorDia,
     };
-  }, [mockData, shopifyData]);
+  }, [mockData, shopifyData, aiAnalysis]);
 
-  const queryClient = useQueryClient();
   const runSync = useServerFn(syncShopifyData);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -152,12 +171,29 @@ function Index() {
     }
   };
 
-  const refresh = () => {
+  const refresh = async () => {
     setLoading(true);
-    window.setTimeout(() => {
-      setLoading(false);
+    try {
+      const res = await runAiAnalysis({
+        data: {
+          period,
+          range: range?.from
+            ? { from: range.from.toISOString(), to: range.to?.toISOString() }
+            : undefined,
+        },
+      });
+      if (!res.success) {
+        toast.error(res.error || "Falha ao gerar a análise com IA.");
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["ai-analysis"] });
       setAnalyzedAt(new Date());
-    }, 1400);
+      toast.success("Análise atualizada pela IA.");
+    } catch (err: any) {
+      toast.error("Erro ao gerar análise: " + (err?.message ?? "falha desconhecida"));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

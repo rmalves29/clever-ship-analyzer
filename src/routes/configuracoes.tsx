@@ -1,15 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { 
-  Settings, 
-  Store, 
-  ShieldCheck, 
-  AlertCircle, 
-  RefreshCw, 
+import {
+  Settings,
+  Store,
+  ShieldCheck,
+  AlertCircle,
+  RefreshCw,
   ExternalLink,
   Save,
-  ChevronLeft
+  ChevronLeft,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ import { toast } from "sonner";
 import { testShopifyConnection } from "@/lib/shopify-operations.functions";
 import { syncShopifyData } from "@/lib/crm-sync.functions";
 import { getStoreSettings, saveStoreSettings } from "@/lib/store-settings.functions";
+import { getLatestAiAnalysis, saveOpenAiApiKey } from "@/lib/ai-analysis.functions";
 
 export const Route = createFileRoute("/configuracoes")({
   component: Configuracoes,
@@ -67,6 +69,25 @@ function Configuracoes() {
     onError: (err: any) => {
       toast.error("Erro na requisição: " + err.message);
     }
+  });
+
+  const [openAiKey, setOpenAiKey] = useState("");
+  const { data: aiStatus, refetch: refetchAiStatus } = useQuery({
+    queryKey: ["ai-analysis-status"],
+    queryFn: () => getLatestAiAnalysis(),
+  });
+  const saveOpenAiMutation = useMutation({
+    mutationFn: () => saveOpenAiApiKey({ data: { apiKey: openAiKey.trim() } }),
+    onSuccess: (res: any) => {
+      if (res.success) {
+        toast.success("API key da OpenAI salva.");
+        setOpenAiKey("");
+        refetchAiStatus();
+      } else {
+        toast.error(res.error || "Erro ao salvar a API key.");
+      }
+    },
+    onError: (err: any) => toast.error("Erro: " + err.message),
   });
 
   const handleSave = async (e: React.FormEvent) => {
@@ -205,6 +226,58 @@ function Configuracoes() {
                 </Button>
               </CardFooter>
             </form>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Sparkles className="size-5 text-primary" />
+                <CardTitle>Análise por IA (ChatGPT)</CardTitle>
+              </div>
+              <CardDescription>
+                Usada pelo botão "Refazer análise" no dashboard para gerar o resumo executivo e as ações
+                sugeridas a partir dos dados reais da Shopify.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="openaiKey">API Key da OpenAI</Label>
+                <Input
+                  id="openaiKey"
+                  type="password"
+                  placeholder={aiStatus?.hasApiKey ? "•••••••• (salva)" : "sk-..."}
+                  value={openAiKey}
+                  onChange={(e) => setOpenAiKey(e.target.value)}
+                />
+              </div>
+              {aiStatus?.generatedAt && (
+                <p className="text-xs text-muted-foreground">
+                  Última análise gerada em {new Date(aiStatus.generatedAt).toLocaleString("pt-BR")}.
+                </p>
+              )}
+            </CardContent>
+            <CardFooter className="flex justify-between border-t px-6 py-4">
+              <a
+                href="https://platform.openai.com/api-keys"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+              >
+                Gerar uma API key <ExternalLink className="size-3" />
+              </a>
+              <Button
+                type="button"
+                onClick={() => saveOpenAiMutation.mutate()}
+                disabled={saveOpenAiMutation.isPending || openAiKey.trim().length < 20}
+              >
+                {saveOpenAiMutation.isPending ? (
+                  <RefreshCw className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 size-4" />
+                )}
+                Salvar API Key
+              </Button>
+            </CardFooter>
           </Card>
 
           {settings?.syncStatus === "connected" && (

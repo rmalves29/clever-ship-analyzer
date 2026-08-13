@@ -13,11 +13,12 @@ const dashboardInput = z.object({
   }).optional(),
 });
 
-export const getShopifyDashboardData = createServerFn({ method: "POST" })
-  .validator((data: unknown) => dashboardInput.parse(data))
-  .handler(async ({ data: { period, range } }) => {
+export type DashboardPeriod = z.infer<typeof dashboardInput>;
+
+/** Lógica pura, reaproveitada pela server function abaixo e pela análise via IA. */
+export async function computeShopifyDashboardData({ period, range }: DashboardPeriod) {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    
+
     const now = toZonedTime(new Date(), TZ);
     let start: Date;
     let end: Date = endOfDay(now);
@@ -293,4 +294,8 @@ export const getShopifyDashboardData = createServerFn({ method: "POST" })
       curvaRecompra,
       enviosPorDia,
     };
-  });
+}
+
+export const getShopifyDashboardData = createServerFn({ method: "POST" })
+  .validator((data: unknown) => dashboardInput.parse(data))
+  .handler(async ({ data }) => computeShopifyDashboardData(data));

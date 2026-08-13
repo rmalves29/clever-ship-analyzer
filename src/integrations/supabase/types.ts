@@ -237,6 +237,10 @@ export type Database = {
           last_imported_order_at: string | null
           last_sync_at: string | null
           last_sync_error: string | null
+          latest_ai_analysis: Json | null
+          latest_ai_analysis_at: string | null
+          latest_ai_analysis_period: string | null
+          openai_api_key: string | null
           shopify_admin_access_token: string | null
           shopify_client_id: string | null
           shopify_client_secret: string | null
@@ -252,6 +256,10 @@ export type Database = {
           last_imported_order_at?: string | null
           last_sync_at?: string | null
           last_sync_error?: string | null
+          latest_ai_analysis?: Json | null
+          latest_ai_analysis_at?: string | null
+          latest_ai_analysis_period?: string | null
+          openai_api_key?: string | null
           shopify_admin_access_token?: string | null
           shopify_client_id?: string | null
           shopify_client_secret?: string | null
@@ -267,6 +275,10 @@ export type Database = {
           last_imported_order_at?: string | null
           last_sync_at?: string | null
           last_sync_error?: string | null
+          latest_ai_analysis?: Json | null
+          latest_ai_analysis_at?: string | null
+          latest_ai_analysis_period?: string | null
+          openai_api_key?: string | null
           shopify_admin_access_token?: string | null
           shopify_client_id?: string | null
           shopify_client_secret?: string | null

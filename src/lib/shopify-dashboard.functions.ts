@@ -60,13 +60,17 @@ export const getShopifyDashboardData = createServerFn({ method: "POST" })
     
     const uniqueCustomers = new Set(validOrders.map(o => o.customer_id)).size;
 
-    // Shipped = fulfillment with a tracking code created within the period
+    // Shipped = fulfillment with a tracking code, despachado dentro do período.
+    // Usa updated_at, não created_at: o registro de fulfillment costuma ser criado
+    // quase no mesmo instante do pedido (antes de existir rastreio) e só é
+    // atualizado de verdade quando o código de rastreio é adicionado — ou seja,
+    // updated_at é o que reflete o momento real do envio.
     const { data: fulfillments } = await supabaseAdmin
       .from("shopify_fulfillments")
       .select("*, shopify_orders!inner(processed_at)")
       .not("tracking_number", "is", null)
-      .gte("created_at", startISO)
-      .lte("created_at", endISO);
+      .gte("updated_at", startISO)
+      .lte("updated_at", endISO);
 
     const shippedOrderIds = Array.from(
       new Set((fulfillments ?? []).map((f) => f.order_id).filter(Boolean) as string[]),
@@ -82,14 +86,14 @@ export const getShopifyDashboardData = createServerFn({ method: "POST" })
       produtosEnviadosCount = (items ?? []).reduce((acc, i) => acc + (i.quantity ?? 0), 0);
     }
 
-    // Average shipping time = first fulfillment date - payment/processing date
+    // Average shipping time = quando o rastreio foi adicionado (updated_at) - pagamento/processamento
     const firstFulfillmentByOrder = new Map<string, { at: string; processedAt: string | null }>();
     for (const f of fulfillments ?? []) {
-      if (!f.order_id || !f.created_at) continue;
+      if (!f.order_id || !f.updated_at) continue;
       const processedAt = (f.shopify_orders as any)?.processed_at ?? null;
       const current = firstFulfillmentByOrder.get(f.order_id);
-      if (!current || new Date(f.created_at) < new Date(current.at)) {
-        firstFulfillmentByOrder.set(f.order_id, { at: f.created_at, processedAt });
+      if (!current || new Date(f.updated_at) < new Date(current.at)) {
+        firstFulfillmentByOrder.set(f.order_id, { at: f.updated_at, processedAt });
       }
     }
 
@@ -228,13 +232,13 @@ export const getShopifyDashboardData = createServerFn({ method: "POST" })
     const diasLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
     const perDay = new Map<number, { pedidos: Set<string>; horas: number[] }>();
     for (const f of fulfillments ?? []) {
-      if (!f.order_id || !f.created_at) continue;
-      const d = toZonedTime(new Date(f.created_at), TZ).getDay();
+      if (!f.order_id || !f.updated_at) continue;
+      const d = toZonedTime(new Date(f.updated_at), TZ).getDay();
       const slot = perDay.get(d) ?? { pedidos: new Set<string>(), horas: [] };
       slot.pedidos.add(f.order_id);
       const processedAt = (f.shopify_orders as any)?.processed_at ?? null;
       if (processedAt) {
-        slot.horas.push((new Date(f.created_at).getTime() - new Date(processedAt).getTime()) / 3_600_000);
+        slot.horas.push((new Date(f.updated_at).getTime() - new Date(processedAt).getTime()) / 3_600_000);
       }
       perDay.set(d, slot);
     }

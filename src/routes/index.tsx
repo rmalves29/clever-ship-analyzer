@@ -66,9 +66,12 @@ function Index() {
 
   const mockData = useMemo(() => getDashboardData(period, customLabel), [period, customLabel]);
 
-  // Merge shopify data into dashboard data
+  // Merge shopify data into dashboard data.
+  // Só cai para os dados de demonstração enquanto a busca real ainda não voltou —
+  // um período sem pedidos (numPedidos === 0) é um resultado real válido (ex: filtro
+  // "Diário" num dia sem vendas) e deve mostrar zero, não os números fake de mock.
   const data = useMemo(() => {
-    if (!shopifyData || !shopifyData.numPedidos) return mockData;
+    if (!shopifyData) return mockData;
 
     const mergedKpis = mockData.kpis.map(kpi => {
       if (kpi.id === "clientes") return { ...kpi, value: String(shopifyData.uniqueCustomers), hint: `${shopifyData.numPedidos} pedidos` };

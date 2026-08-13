@@ -88,19 +88,13 @@ function Index() {
       if (kpi.id === "tempo-envio") {
         const horas = shopifyData.tempoMedioEnvioHoras ?? 0;
         const amostra = shopifyData.tempoMedioEnvioAmostra ?? 0;
-        const value =
-          amostra === 0
-            ? "—"
-            : horas < 1
-              ? `${Math.max(1, Math.round(horas * 60))} min`
-              : horas < 24
-                ? `${horas.toFixed(1)} h`
-                : `${(horas / 24).toFixed(1)} dias`;
+        const dias = horas / 24;
+        const value = amostra === 0 ? "—" : `${dias.toFixed(1)} dias`;
         return {
           ...kpi,
           value,
           hint: amostra === 0 ? "Sem envios com rastreio no período" : `Base: ${amostra} pedido(s) enviados`,
-          status: statusLowerIsBetter(horas / 24, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
+          status: statusLowerIsBetter(dias, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
         };
       }
       return kpi;
@@ -114,7 +108,7 @@ function Index() {
       if (i.title === "Tempo médio de envio")
         return {
           ...i,
-          highlight: envioDias < 1 ? `${(envioDias * 24).toFixed(1)} h` : `${envioDias.toFixed(1)} dias`,
+          highlight: `${envioDias.toFixed(1)} dias`,
           tone: statusLowerIsBetter(envioDias, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
         };
       if (i.title === "Curva de churn")

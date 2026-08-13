@@ -56,10 +56,23 @@ export type Kpi = {
 
 export type AnalysisSeries = { name: string; value: number }[];
 
+export type PanelStatus = {
+  recompra: Status;
+  clv: Status;
+  ticketRecorrencia: Status;
+  faixaTicket: Status;
+  regioes: Status;
+  churn: Status;
+  tempoEntreCompras: Status;
+  curvaRecompra: Status;
+  envios: Status;
+};
+
 export type DashboardData = {
   periodLabel: string;
   kpis: Kpi[];
   insights: { title: string; text: string; highlight?: string; tone: Status | "info" }[];
+  panelStatus: PanelStatus;
   frequencia: AnalysisSeries;
   clv: AnalysisSeries;
   ticketRecorrencia: { label: string; clientes: number; ticket: number; delta: number | null }[];
@@ -141,6 +154,17 @@ export function getDashboardData(period: PeriodKey, customLabel?: string): Dashb
         status: statusLowerIsBetter(tempoMedioEnvio, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
       },
     ],
+    panelStatus: {
+      recompra: "critico",
+      clv: "regular",
+      ticketRecorrencia: "regular",
+      faixaTicket: "regular",
+      regioes: "regular",
+      churn: "critico",
+      tempoEntreCompras: "critico",
+      curvaRecompra: "meta",
+      envios: statusLowerIsBetter(tempoMedioEnvio, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
+    },
     insights: [
       {
         title: "Análise de recompra por cliente",

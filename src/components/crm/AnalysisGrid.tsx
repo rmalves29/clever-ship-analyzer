@@ -69,7 +69,7 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         index="01"
         title="Análise de recompra por cliente"
         description="Distribuição de frequência de pedidos por cliente único no período."
-        status="critico"
+        status={data.panelStatus.recompra}
       >
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -87,7 +87,7 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         index="02"
         title="Customer Lifetime Value (CLV)"
         description="Valor financeiro acumulado por cliente em cada estágio da jornada."
-        status="regular"
+        status={data.panelStatus.clv}
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data.clv}>
@@ -109,8 +109,13 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
               Relação entre o valor gasto por pedido e a maturidade do cliente.
             </p>
           </div>
-          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase", statusChip.regular)}>
-            regular
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase",
+              statusChip[data.panelStatus.ticketRecorrencia],
+            )}
+          >
+            {statusLabel[data.panelStatus.ticketRecorrencia]}
           </span>
         </header>
         <ul className="mt-4 space-y-4">
@@ -150,7 +155,7 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         index="04"
         title="Base por faixa de ticket"
         description="Segmentação de clientes por valor gasto no pedido mais recente."
-        status="regular"
+        status={data.panelStatus.faixaTicket}
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data.faixaTicket}>
@@ -167,7 +172,7 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         index="05"
         title="Top 5 regiões que recompram"
         description="Estados com maior taxa de recompra da base."
-        status="regular"
+        status={data.panelStatus.regioes}
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data.regioes}>
@@ -180,7 +185,7 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         </ResponsiveContainer>
       </Panel>
 
-      <Panel index="06" title="Curva de churn" description="Volume de clientes perdidos por estágio de compra." status="critico">
+      <Panel index="06" title="Curva de churn" description="Volume de clientes perdidos por estágio de compra." status={data.panelStatus.churn}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data.churn}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
@@ -196,7 +201,7 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         index="07"
         title="Tempo entre 1ª e 2ª compra"
         description="Intervalo de dias entre o primeiro e o segundo pedido do mesmo cliente."
-        status="critico"
+        status={data.panelStatus.tempoEntreCompras}
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data.tempoEntreCompras}>
@@ -209,7 +214,7 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         </ResponsiveContainer>
       </Panel>
 
-      <Panel index="08" title="Curva de recompra" description="Evolução da base de clientes ativos ao longo do tempo." status="meta">
+      <Panel index="08" title="Curva de recompra" description="Evolução da base de clientes ativos ao longo do tempo." status={data.panelStatus.curvaRecompra}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data.curvaRecompra}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
@@ -230,6 +235,14 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
               Pedidos e produtos enviados por dia (com rastreio) e tempo médio de envio (rastreio − pagamento).
             </p>
           </div>
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase",
+              statusChip[data.panelStatus.envios],
+            )}
+          >
+            {statusLabel[data.panelStatus.envios]}
+          </span>
         </header>
         <div className="mt-4 h-[280px]">
           <ResponsiveContainer width="100%" height="100%">

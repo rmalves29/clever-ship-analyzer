@@ -38,10 +38,25 @@ const aiAcaoSchema = z.object({
   receita: z.number(),
 });
 
+const statusEnum = z.enum(["critico", "regular", "meta"]);
+
+const aiPanelStatusSchema = z.object({
+  recompra: statusEnum,
+  clv: statusEnum,
+  ticketRecorrencia: statusEnum,
+  faixaTicket: statusEnum,
+  regioes: statusEnum,
+  churn: statusEnum,
+  tempoEntreCompras: statusEnum,
+  curvaRecompra: statusEnum,
+  envios: statusEnum,
+});
+
 const aiAnalysisSchema = z.object({
   insights: z.array(aiInsightSchema).min(1).max(8),
   reguas: z.array(aiReguaSchema).max(6).default([]),
   acoes: z.array(aiAcaoSchema).max(8).default([]),
+  panelStatus: aiPanelStatusSchema,
 });
 
 function buildPrompt(metrics: Awaited<ReturnType<typeof computeShopifyDashboardData>>) {
@@ -70,11 +85,23 @@ METAS DO SEMÁFORO (pra você classificar o "tone" de cada insight):
 - Ticket médio: tone "meta" se >= R$${GOALS.ticketMedio.meta}, "regular" se >= R$${GOALS.ticketMedio.regular}, senão "critico".
 - Para insights sem meta numérica definida, use "info" (neutro) ou julgue "regular"/"critico" pela gravidade do padrão encontrado.
 
+Além dos insights, classifique também o status ("critico" | "regular" | "meta") de cada um dos 9 painéis do dashboard, com base no padrão real dos dados acima (use seu julgamento de especialista em e-commerce quando não houver meta numérica explícita — ex: concentração excessiva em 1 única compra é crítico, curva de churn acima de 95% após a 1ª compra é crítico, CLV bem distribuído entre faixas é meta, etc.):
+- "recompra": distribuição de frequência de recompra (campo frequencia).
+- "clv": distribuição de CLV por estágio (campo clv).
+- "ticketRecorrencia": evolução do ticket médio conforme o cliente recompra (campo ticketRecorrencia, some no futuro).
+- "faixaTicket": concentração da base por faixa de ticket (campo faixaTicket).
+- "regioes": concentração geográfica da recompra (sem dado explícito acima — julgue pela taxa de recompra geral).
+- "churn": curva de churn por estágio de compra (campo churn).
+- "tempoEntreCompras": intervalo entre 1ª e 2ª compra (campo tempoEntreCompras).
+- "curvaRecompra": retenção da base ativa ao longo do tempo (campo curvaRecompra).
+- "envios": tempo médio de envio, usando as mesmas metas do tempo médio de envio acima.
+
 Responda em JSON estrito com este formato exato (nada de texto fora do JSON):
 {
   "insights": [ { "title": string, "highlight": string opcional (ex: "50,00%"), "tone": "critico"|"regular"|"meta"|"info", "text": string (1 frase, o porquê) } ],
   "reguas": [ { "titulo": string, "tag": string, "descricao": string, "base": string (ex: "31%"), "conv": string (ex: "9,5%"), "receita": number (R$ estimado) } ],
-  "acoes": [ { "cluster": string, "criterio": string, "base": string, "oferta": string, "janela": string (ex: "48h"), "conv": string, "receita": number } ]
+  "acoes": [ { "cluster": string, "criterio": string, "base": string, "oferta": string, "janela": string (ex: "48h"), "conv": string, "receita": number } ],
+  "panelStatus": { "recompra": "critico"|"regular"|"meta", "clv": "critico"|"regular"|"meta", "ticketRecorrencia": "critico"|"regular"|"meta", "faixaTicket": "critico"|"regular"|"meta", "regioes": "critico"|"regular"|"meta", "churn": "critico"|"regular"|"meta", "tempoEntreCompras": "critico"|"regular"|"meta", "curvaRecompra": "critico"|"regular"|"meta", "envios": "critico"|"regular"|"meta" }
 }
 
 Gere de 4 a 6 insights cobrindo recompra, ticket/recorrência, churn e tempo de envio. Gere de 2 a 4 réguas (fluxos automáticos recorrentes) e de 3 a 6 ações pontuais (campanhas segmentadas), sempre baseadas nos números reais acima — nunca invente números que não constem nos dados. Escreva em português do Brasil.`;

@@ -143,6 +143,7 @@ function Index() {
       insights: aiInsights ?? insights,
       reguas: ai?.reguas ?? mockData.reguas,
       acoes: ai?.acoes ?? mockData.acoes,
+      panelStatus: ai?.panelStatus ?? mockData.panelStatus,
       frequencia: shopifyData.frequencia ?? mockData.frequencia,
       clv: shopifyData.clv ?? mockData.clv,
       ticketRecorrencia: shopifyData.ticketRecorrencia ?? mockData.ticketRecorrencia,

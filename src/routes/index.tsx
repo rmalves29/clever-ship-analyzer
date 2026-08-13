@@ -68,6 +68,8 @@ function Index() {
     queryFn: () => getAiAnalysis(),
   });
 
+  const aiIsStaleForPeriod = Boolean(aiAnalysis?.analysis) && aiAnalysis?.period !== period;
+
   const customLabel =
     range?.from && range?.to
       ? `${format(range.from, "dd/MM/yyyy", { locale: ptBR })} – ${format(range.to, "dd/MM/yyyy", { locale: ptBR })}`
@@ -130,7 +132,11 @@ function Index() {
 
     // Insights/réguas/ações reais gerados por IA (quando já existe uma análise salva)
     // substituem os do mock, que só ficam como placeholder até a 1ª "Refazer análise".
-    const ai = aiAnalysis?.analysis;
+    // A análise fica salva por período (latest_ai_analysis_period) — se o usuário trocar
+    // o filtro sem clicar em "Refazer análise", NÃO reaproveitamos a análise de outro
+    // período (senão o Resumo Executivo fica travado nos números de um período antigo).
+    const aiMatchesPeriod = aiAnalysis?.period === period;
+    const ai = aiMatchesPeriod ? aiAnalysis?.analysis : undefined;
     const aiInsights = ai?.insights.map((i) =>
       i.highlight
         ? { title: i.title, text: i.text, tone: i.tone, highlight: i.highlight }
@@ -247,6 +253,13 @@ function Index() {
             <KpiCard key={kpi.id} kpi={kpi} />
           ))}
         </div>
+
+        {aiIsStaleForPeriod && (
+          <div className="mt-6 rounded-lg border border-warning/30 bg-warning-soft/60 px-4 py-2.5 text-sm text-warning">
+            A última análise por IA foi gerada para outro período. Os insights abaixo usam os dados reais deste
+            período, mas para a análise completa da IA clique em "Refazer análise".
+          </div>
+        )}
 
         <div className="mt-6">
           <ExecutiveSummary insights={data.insights} />

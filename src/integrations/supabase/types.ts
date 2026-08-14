@@ -253,6 +253,10 @@ export type Database = {
           whatsapp_meta_phone_number_id: string | null
           whatsapp_meta_template_name: string | null
           whatsapp_meta_template_language: string | null
+          whatsapp_meta_waba_id: string | null
+          whatsapp_meta_verify_token: string | null
+          whatsapp_cost_marketing: number | null
+          whatsapp_cost_utility: number | null
         }
         Insert: {
           created_at?: string
@@ -276,6 +280,10 @@ export type Database = {
           whatsapp_meta_phone_number_id?: string | null
           whatsapp_meta_template_name?: string | null
           whatsapp_meta_template_language?: string | null
+          whatsapp_meta_waba_id?: string | null
+          whatsapp_meta_verify_token?: string | null
+          whatsapp_cost_marketing?: number | null
+          whatsapp_cost_utility?: number | null
         }
         Update: {
           created_at?: string
@@ -299,8 +307,101 @@ export type Database = {
           whatsapp_meta_phone_number_id?: string | null
           whatsapp_meta_template_name?: string | null
           whatsapp_meta_template_language?: string | null
+          whatsapp_meta_waba_id?: string | null
+          whatsapp_meta_verify_token?: string | null
+          whatsapp_cost_marketing?: number | null
+          whatsapp_cost_utility?: number | null
         }
         Relationships: []
+      }
+      whatsapp_campaigns: {
+        Row: {
+          id: string
+          nome: string
+          status: string
+          segment_type: string
+          template_name: string
+          message_type: string
+          coupon_code: string | null
+          enviadas: number
+          falhas: number
+          created_at: string
+          sent_at: string | null
+        }
+        Insert: {
+          id?: string
+          nome: string
+          status?: string
+          segment_type: string
+          template_name: string
+          message_type?: string
+          coupon_code?: string | null
+          enviadas?: number
+          falhas?: number
+          created_at?: string
+          sent_at?: string | null
+        }
+        Update: {
+          id?: string
+          nome?: string
+          status?: string
+          segment_type?: string
+          template_name?: string
+          message_type?: string
+          coupon_code?: string | null
+          enviadas?: number
+          falhas?: number
+          created_at?: string
+          sent_at?: string | null
+        }
+        Relationships: []
+      }
+      whatsapp_campaign_recipients: {
+        Row: {
+          id: string
+          campaign_id: string
+          customer_id: string | null
+          phone: string
+          wa_message_id: string | null
+          status: string
+          sent_at: string | null
+          delivered_at: string | null
+          read_at: string | null
+          error: string | null
+        }
+        Insert: {
+          id?: string
+          campaign_id: string
+          customer_id?: string | null
+          phone: string
+          wa_message_id?: string | null
+          status?: string
+          sent_at?: string | null
+          delivered_at?: string | null
+          read_at?: string | null
+          error?: string | null
+        }
+        Update: {
+          id?: string
+          campaign_id?: string
+          customer_id?: string | null
+          phone?: string
+          wa_message_id?: string | null
+          status?: string
+          sent_at?: string | null
+          delivered_at?: string | null
+          read_at?: string | null
+          error?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

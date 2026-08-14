@@ -2,6 +2,43 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { applyMetaStatusUpdate, getStoredVerifyToken } from "./lib/whatsapp-meta.functions";
+
+const WHATSAPP_WEBHOOK_PATH = "/api/whatsapp-webhook";
+
+// Webhook da Meta é chamado diretamente por eles, fora do protocolo de RPC do
+// createServerFn — por isso é tratado aqui, antes do handler SSR do TanStack Start.
+async function handleWhatsappWebhook(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+
+  if (request.method === "GET") {
+    const mode = url.searchParams.get("hub.mode");
+    const token = url.searchParams.get("hub.verify_token");
+    const challenge = url.searchParams.get("hub.challenge");
+    const storedToken = await getStoredVerifyToken();
+
+    if (mode === "subscribe" && storedToken && token === storedToken && challenge) {
+      return new Response(challenge, { status: 200 });
+    }
+    return new Response("Forbidden", { status: 403 });
+  }
+
+  if (request.method === "POST") {
+    try {
+      const body: any = await request.json();
+      const statuses =
+        body?.entry?.flatMap((e: any) => e?.changes?.flatMap((c: any) => c?.value?.statuses ?? []) ?? []) ?? [];
+      for (const s of statuses) {
+        if (s?.id && s?.status) await applyMetaStatusUpdate({ id: s.id, status: s.status, timestamp: s.timestamp });
+      }
+    } catch (error) {
+      console.error("Falha ao processar webhook do WhatsApp:", error);
+    }
+    return new Response("EVENT_RECEIVED", { status: 200 });
+  }
+
+  return new Response("Method Not Allowed", { status: 405 });
+}
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -46,6 +83,9 @@ function isH3SwallowedErrorBody(body: string): boolean {
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    if (new URL(request.url).pathname === WHATSAPP_WEBHOOK_PATH) {
+      return handleWhatsappWebhook(request);
+    }
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);

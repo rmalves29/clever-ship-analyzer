@@ -10,11 +10,17 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CampanhasWhatsappRouteImport } from './routes/campanhas-whatsapp'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CampanhasWhatsappRoute = CampanhasWhatsappRouteImport.update({
+  id: '/campanhas-whatsapp',
+  path: '/campanhas-whatsapp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
@@ -25,27 +31,31 @@ const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/configuracoes': typeof ConfiguracoesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/configuracoes': typeof ConfiguracoesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/configuracoes': typeof ConfiguracoesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/configuracoes'
+  fullPaths: '/' | '/campanhas-whatsapp' | '/configuracoes'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/configuracoes'
-  id: '__root__' | '/' | '/configuracoes'
+  to: '/' | '/campanhas-whatsapp' | '/configuracoes'
+  id: '__root__' | '/' | '/campanhas-whatsapp' | '/configuracoes'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CampanhasWhatsappRoute: typeof CampanhasWhatsappRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
 }
 
@@ -56,6 +66,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/campanhas-whatsapp': {
+      id: '/campanhas-whatsapp'
+      path: '/campanhas-whatsapp'
+      fullPath: '/campanhas-whatsapp'
+      preLoaderRoute: typeof CampanhasWhatsappRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/configuracoes': {
@@ -70,6 +87,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CampanhasWhatsappRoute: CampanhasWhatsappRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
 }
 export const routeTree = rootRouteImport

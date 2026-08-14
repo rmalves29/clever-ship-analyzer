@@ -5,10 +5,10 @@ import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import type { DashboardData } from "@/lib/crm-mock";
 import { brl } from "@/lib/crm-mock";
-import { sendSegmentCampaign } from "@/lib/whatsapp-meta.functions";
+import { createAndSendCampaign } from "@/lib/whatsapp-meta.functions";
 
 export function SuggestedActions({ reguas, acoes }: { reguas: DashboardData["reguas"]; acoes: DashboardData["acoes"] }) {
-  const runSendCampaign = useServerFn(sendSegmentCampaign);
+  const runCreateCampaign = useServerFn(createAndSendCampaign);
   const [sendingCluster, setSendingCluster] = useState<string | null>(null);
 
   const handleApply = async (a: DashboardData["acoes"][number]) => {
@@ -17,9 +17,22 @@ export function SuggestedActions({ reguas, acoes }: { reguas: DashboardData["reg
     );
     if (!confirmed) return;
 
+    const couponCode = window.prompt(
+      "Código do cupom da Shopify pra essa campanha (opcional, usado pra medir vendas com mais precisão). Deixe em branco se não tiver.",
+      "",
+    );
+
     setSendingCluster(a.cluster);
     try {
-      const res = await runSendCampaign({ data: { segmentType: a.segmentType, bodyParams: [a.oferta] } });
+      const res = await runCreateCampaign({
+        data: {
+          nome: a.cluster,
+          segmentType: a.segmentType,
+          messageType: "marketing",
+          couponCode: couponCode?.trim() || undefined,
+          bodyParams: [a.oferta],
+        },
+      });
       if (!res.success) {
         toast.error(res.error || "Falha ao enviar a campanha.");
         return;

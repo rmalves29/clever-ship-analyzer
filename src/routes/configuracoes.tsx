@@ -92,7 +92,16 @@ function Configuracoes() {
     onError: (err: any) => toast.error("Erro: " + err.message),
   });
 
-  const [waForm, setWaForm] = useState({ accessToken: "", phoneNumberId: "", templateName: "", templateLanguage: "" });
+  const [waForm, setWaForm] = useState({
+    accessToken: "",
+    phoneNumberId: "",
+    templateName: "",
+    templateLanguage: "",
+    wabaId: "",
+    verifyToken: "",
+    costMarketing: "",
+    costUtility: "",
+  });
   const { data: waStatus, refetch: refetchWaStatus } = useQuery({
     queryKey: ["whatsapp-meta-status"],
     queryFn: () => getWhatsappMetaStatus(),
@@ -103,6 +112,8 @@ function Configuracoes() {
         ...prev,
         templateName: prev.templateName || waStatus.templateName,
         templateLanguage: prev.templateLanguage || waStatus.templateLanguage,
+        costMarketing: prev.costMarketing || (waStatus.costMarketing != null ? String(waStatus.costMarketing) : ""),
+        costUtility: prev.costUtility || (waStatus.costUtility != null ? String(waStatus.costUtility) : ""),
       }));
     }
   }, [waStatus]);
@@ -114,12 +125,16 @@ function Configuracoes() {
           phoneNumberId: waForm.phoneNumberId.trim() || undefined,
           templateName: waForm.templateName.trim() || undefined,
           templateLanguage: waForm.templateLanguage.trim() || undefined,
+          wabaId: waForm.wabaId.trim() || undefined,
+          verifyToken: waForm.verifyToken.trim() || undefined,
+          costMarketing: waForm.costMarketing.trim() ? Number(waForm.costMarketing) : undefined,
+          costUtility: waForm.costUtility.trim() ? Number(waForm.costUtility) : undefined,
         },
       }),
     onSuccess: (res: any) => {
       if (res.success) {
         toast.success("Configurações do WhatsApp (Meta) salvas.");
-        setWaForm((prev) => ({ ...prev, accessToken: "", phoneNumberId: "" }));
+        setWaForm((prev) => ({ ...prev, accessToken: "", phoneNumberId: "", wabaId: "", verifyToken: "" }));
         refetchWaStatus();
       } else {
         toast.error(res.error || "Erro ao salvar.");
@@ -369,6 +384,55 @@ function Configuracoes() {
                     placeholder="pt_BR"
                     value={waForm.templateLanguage}
                     onChange={(e) => setWaForm((prev) => ({ ...prev, templateLanguage: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="waWaba">WABA ID</Label>
+                  <Input
+                    id="waWaba"
+                    placeholder={waStatus?.hasWabaId ? "•••••••• (salvo)" : "ID da WhatsApp Business Account"}
+                    value={waForm.wabaId}
+                    onChange={(e) => setWaForm((prev) => ({ ...prev, wabaId: e.target.value }))}
+                  />
+                  <p className="text-xs text-muted-foreground">Usado pra listar os templates aprovados na aba Templates.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="waVerify">Verify Token do Webhook</Label>
+                  <Input
+                    id="waVerify"
+                    type="password"
+                    placeholder={waStatus?.hasVerifyToken ? "•••••••• (salvo)" : "escolha uma string qualquer"}
+                    value={waForm.verifyToken}
+                    onChange={(e) => setWaForm((prev) => ({ ...prev, verifyToken: e.target.value }))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Configure o mesmo valor no painel da Meta, junto com a URL{" "}
+                    <code className="rounded bg-muted px-1">/api/whatsapp-webhook</code> — é assim que Entregues/Lidas
+                    são atualizados em tempo real.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="waCostMkt">Custo por mensagem — Marketing (R$)</Label>
+                  <Input
+                    id="waCostMkt"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={waForm.costMarketing}
+                    onChange={(e) => setWaForm((prev) => ({ ...prev, costMarketing: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="waCostUtil">Custo por mensagem — Utilidade (R$)</Label>
+                  <Input
+                    id="waCostUtil"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={waForm.costUtility}
+                    onChange={(e) => setWaForm((prev) => ({ ...prev, costUtility: e.target.value }))}
                   />
                 </div>
               </div>

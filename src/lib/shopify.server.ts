@@ -135,6 +135,7 @@ export const ORDERS_QUERY = `
           email
           phone
           sourceName
+          discountCodes
           subtotalPriceSet { presentmentMoney { amount } }
           totalDiscountsSet { presentmentMoney { amount } }
           totalShippingPriceSet { presentmentMoney { amount } }

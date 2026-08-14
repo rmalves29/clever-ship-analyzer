@@ -2,6 +2,10 @@ export type PeriodKey = "diario" | "semanal" | "mensal" | "anual" | "tudo" | "pe
 
 export type Status = "critico" | "regular" | "meta";
 
+/** Segmentos realmente calculáveis a partir dos dados da Shopify — usados pra disparar campanhas de WhatsApp. */
+export const SEGMENT_TYPES = ["ticket_alto", "sem_recompra", "recompra_30d", "recompra_60d", "envio_atrasado"] as const;
+export type SegmentType = (typeof SEGMENT_TYPES)[number];
+
 export const PERIODS: { key: PeriodKey; label: string }[] = [
   { key: "diario", label: "Diário" },
   { key: "semanal", label: "Semanal" },
@@ -98,6 +102,7 @@ export type DashboardData = {
     janela: string;
     conv: string;
     receita: number;
+    segmentType: SegmentType;
   }[];
 };
 
@@ -289,12 +294,11 @@ export function getDashboardData(period: PeriodKey, customLabel?: string): Dashb
       },
     ],
     acoes: [
-      { cluster: "Clientes Ticket > R$200", criterio: "Ticket médio acima de R$200.", base: "44%", oferta: "Oferta antecipada", janela: "48h", conv: "4.5%", receita: 1636 },
-      { cluster: "Sem Recompra → Reativação", criterio: "Clientes que nunca voltaram a comprar.", base: "98%", oferta: "Sale", janela: "72h", conv: "1.2%", receita: 750 },
-      { cluster: "Comprou 1x → Comprar 2x (30d)", criterio: "Primeira compra nos últimos 30 dias.", base: "24%", oferta: "Cupom desconto", janela: "24h", conv: "3.5%", receita: 545 },
-      { cluster: "Base PIX → Desconto à vista", criterio: "Clientes que pagaram via PIX.", base: "19%", oferta: "Cupom desconto", janela: "24h", conv: "4.0%", receita: 525 },
-      { cluster: "Comprou 1x → Comprar 2x (60d)", criterio: "Primeira compra nos últimos 60 dias.", base: "29%", oferta: "Frete grátis", janela: "48h", conv: "2.5%", receita: 471 },
-      { cluster: "Envio acima da meta", criterio: "Pedidos enviados com mais de 2 dias.", base: "17%", oferta: "Cupom de desculpas", janela: "24h", conv: "5.1%", receita: 388 },
+      { cluster: "Clientes Ticket > R$200", criterio: "Ticket médio acima de R$200.", base: "44%", oferta: "Oferta antecipada", janela: "48h", conv: "4.5%", receita: 1636, segmentType: "ticket_alto" },
+      { cluster: "Sem Recompra → Reativação", criterio: "Clientes que compraram 1x e nunca voltaram.", base: "98%", oferta: "Sale", janela: "72h", conv: "1.2%", receita: 750, segmentType: "sem_recompra" },
+      { cluster: "Comprou 1x → Comprar 2x (30d)", criterio: "Primeira compra nos últimos 30 dias.", base: "24%", oferta: "Cupom desconto", janela: "24h", conv: "3.5%", receita: 545, segmentType: "recompra_30d" },
+      { cluster: "Comprou 1x → Comprar 2x (60d)", criterio: "Primeira compra entre 31 e 60 dias atrás.", base: "29%", oferta: "Frete grátis", janela: "48h", conv: "2.5%", receita: 471, segmentType: "recompra_60d" },
+      { cluster: "Envio acima da meta", criterio: "Pedidos enviados com mais de 2 dias.", base: "17%", oferta: "Cupom de desculpas", janela: "24h", conv: "5.1%", receita: 388, segmentType: "envio_atrasado" },
     ],
   };
 }

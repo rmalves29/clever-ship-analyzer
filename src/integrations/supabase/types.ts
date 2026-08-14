@@ -249,6 +249,10 @@ export type Database = {
           total_orders_imported: number | null
           updated_at: string
           user_id: string | null
+          whatsapp_meta_access_token: string | null
+          whatsapp_meta_phone_number_id: string | null
+          whatsapp_meta_template_name: string | null
+          whatsapp_meta_template_language: string | null
         }
         Insert: {
           created_at?: string
@@ -268,6 +272,10 @@ export type Database = {
           total_orders_imported?: number | null
           updated_at?: string
           user_id?: string | null
+          whatsapp_meta_access_token?: string | null
+          whatsapp_meta_phone_number_id?: string | null
+          whatsapp_meta_template_name?: string | null
+          whatsapp_meta_template_language?: string | null
         }
         Update: {
           created_at?: string
@@ -287,6 +295,10 @@ export type Database = {
           total_orders_imported?: number | null
           updated_at?: string
           user_id?: string | null
+          whatsapp_meta_access_token?: string | null
+          whatsapp_meta_phone_number_id?: string | null
+          whatsapp_meta_template_name?: string | null
+          whatsapp_meta_template_language?: string | null
         }
         Relationships: []
       }

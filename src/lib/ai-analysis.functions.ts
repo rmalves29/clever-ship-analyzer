@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { computeShopifyDashboardData } from "./shopify-dashboard.functions";
-import { GOALS } from "./crm-mock";
+import { GOALS, SEGMENT_TYPES } from "./crm-mock";
 
 const periodInput = z.object({
   period: z.enum(["diario", "semanal", "mensal", "anual", "tudo", "personalizado"]),
@@ -36,6 +36,7 @@ const aiAcaoSchema = z.object({
   janela: z.string(),
   conv: z.string(),
   receita: z.number(),
+  segmentType: z.enum(SEGMENT_TYPES),
 });
 
 const statusEnum = z.enum(["critico", "regular", "meta"]);
@@ -96,15 +97,25 @@ Além dos insights, classifique também o status ("critico" | "regular" | "meta"
 - "curvaRecompra": retenção da base ativa ao longo do tempo (campo curvaRecompra).
 - "envios": tempo médio de envio, usando as mesmas metas do tempo médio de envio acima.
 
+Cada AÇÃO PONTUAL da lista "acoes" é executada de verdade pelo sistema — ao clicar em "Aplicar ação" o
+backend dispara uma mensagem de WhatsApp (API oficial da Meta) pra todo cliente real que bate com o
+segmento. Por isso, todo "segmentType" tem que ser EXATAMENTE um destes 5 valores (não invente outros,
+não repita o mesmo valor duas vezes na lista de ações):
+- "ticket_alto": clientes com ticket médio (histórico completo) acima de R$${GOALS.ticketMedio.regular}.
+- "sem_recompra": clientes que compraram só 1 vez, há 14 dias ou mais, e nunca voltaram.
+- "recompra_30d": clientes que compraram só 1 vez, nos últimos 30 dias.
+- "recompra_60d": clientes que compraram só 1 vez, entre 31 e 60 dias atrás.
+- "envio_atrasado": clientes com pedido enviado nos últimos 30 dias que demorou mais que a meta (${GOALS.tempoMedioEnvio.regular} dias) entre pagamento e rastreio.
+
 Responda em JSON estrito com este formato exato (nada de texto fora do JSON):
 {
   "insights": [ { "title": string, "highlight": string opcional (ex: "50,00%"), "tone": "critico"|"regular"|"meta"|"info", "text": string (1 frase, o porquê) } ],
   "reguas": [ { "titulo": string, "tag": string, "descricao": string, "base": string (ex: "31%"), "conv": string (ex: "9,5%"), "receita": number (R$ estimado) } ],
-  "acoes": [ { "cluster": string, "criterio": string, "base": string, "oferta": string, "janela": string (ex: "48h"), "conv": string, "receita": number } ],
+  "acoes": [ { "cluster": string, "criterio": string, "base": string, "oferta": string, "janela": string (ex: "48h"), "conv": string, "receita": number, "segmentType": "ticket_alto"|"sem_recompra"|"recompra_30d"|"recompra_60d"|"envio_atrasado" } ],
   "panelStatus": { "recompra": "critico"|"regular"|"meta", "clv": "critico"|"regular"|"meta", "ticketRecorrencia": "critico"|"regular"|"meta", "faixaTicket": "critico"|"regular"|"meta", "regioes": "critico"|"regular"|"meta", "churn": "critico"|"regular"|"meta", "tempoEntreCompras": "critico"|"regular"|"meta", "curvaRecompra": "critico"|"regular"|"meta", "envios": "critico"|"regular"|"meta" }
 }
 
-Gere de 4 a 6 insights cobrindo recompra, ticket/recorrência, churn e tempo de envio. Gere de 2 a 4 réguas (fluxos automáticos recorrentes) e de 3 a 6 ações pontuais (campanhas segmentadas), sempre baseadas nos números reais acima — nunca invente números que não constem nos dados. Escreva em português do Brasil.`;
+Gere de 4 a 6 insights cobrindo recompra, ticket/recorrência, churn e tempo de envio. Gere de 2 a 4 réguas (fluxos automáticos recorrentes) e até 5 ações pontuais — no máximo 1 ação por segmentType, só inclua os segmentos que fizerem sentido pros dados reais acima. Nunca invente números que não constem nos dados. Escreva em português do Brasil.`;
 }
 
 async function callOpenAi(apiKey: string, prompt: string) {

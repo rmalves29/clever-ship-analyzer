@@ -1,10 +1,41 @@
+import { useState } from "react";
 import { Plus, Target, Workflow, Zap } from "lucide-react";
 import { toast } from "sonner";
+import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import type { DashboardData } from "@/lib/crm-mock";
 import { brl } from "@/lib/crm-mock";
+import { sendSegmentCampaign } from "@/lib/whatsapp-meta.functions";
 
 export function SuggestedActions({ reguas, acoes }: { reguas: DashboardData["reguas"]; acoes: DashboardData["acoes"] }) {
+  const runSendCampaign = useServerFn(sendSegmentCampaign);
+  const [sendingCluster, setSendingCluster] = useState<string | null>(null);
+
+  const handleApply = async (a: DashboardData["acoes"][number]) => {
+    const confirmed = window.confirm(
+      `Enviar a mensagem "${a.oferta}" via WhatsApp (API oficial da Meta) pra todos os clientes reais do segmento "${a.cluster}" agora?`,
+    );
+    if (!confirmed) return;
+
+    setSendingCluster(a.cluster);
+    try {
+      const res = await runSendCampaign({ data: { segmentType: a.segmentType, bodyParams: [a.oferta] } });
+      if (!res.success) {
+        toast.error(res.error || "Falha ao enviar a campanha.");
+        return;
+      }
+      if (res.total === 0) {
+        toast.info("Nenhum cliente com telefone cadastrado nesse segmento.");
+      } else {
+        toast.success(`Campanha enviada: ${res.sent}/${res.total} mensagens (${res.failed} falharam).`);
+      }
+    } catch (err: any) {
+      toast.error("Erro ao enviar campanha: " + (err?.message ?? "falha desconhecida"));
+    } finally {
+      setSendingCluster(null);
+    }
+  };
+
   return (
     <section className="surface-card overflow-hidden">
       <header className="flex items-center gap-3 border-b border-border p-5">
@@ -54,7 +85,9 @@ export function SuggestedActions({ reguas, acoes }: { reguas: DashboardData["reg
               <Button
                 variant="secondary"
                 className="mt-4 w-full"
-                onClick={() => toast.success(`Régua "${r.titulo}" enviada para automações`)}
+                onClick={() =>
+                  toast.info('Réguas recorrentes automáticas ainda não estão disponíveis — use "Aplicar ação" abaixo para envios pontuais.')
+                }
               >
                 Instalar régua
               </Button>
@@ -94,8 +127,13 @@ export function SuggestedActions({ reguas, acoes }: { reguas: DashboardData["reg
                   <td className="px-4 py-3">{a.conv}</td>
                   <td className="px-4 py-3 font-semibold">{brl(a.receita)}</td>
                   <td className="px-4 py-3 text-right">
-                    <Button size="sm" className="gap-1" onClick={() => toast.success(`Ação aplicada: ${a.cluster}`)}>
-                      <Plus className="size-3.5" /> Aplicar ação
+                    <Button
+                      size="sm"
+                      className="gap-1"
+                      disabled={sendingCluster === a.cluster}
+                      onClick={() => handleApply(a)}
+                    >
+                      <Plus className="size-3.5" /> {sendingCluster === a.cluster ? "Enviando..." : "Aplicar ação"}
                     </Button>
                   </td>
                 </tr>

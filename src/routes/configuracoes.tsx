@@ -11,6 +11,7 @@ import {
   Save,
   ChevronLeft,
   Sparkles,
+  MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ import { testShopifyConnection } from "@/lib/shopify-operations.functions";
 import { syncShopifyData } from "@/lib/crm-sync.functions";
 import { getStoreSettings, saveStoreSettings } from "@/lib/store-settings.functions";
 import { getLatestAiAnalysis, saveOpenAiApiKey } from "@/lib/ai-analysis.functions";
+import { getWhatsappMetaStatus, saveWhatsappMetaSettings } from "@/lib/whatsapp-meta.functions";
 
 export const Route = createFileRoute("/configuracoes")({
   component: Configuracoes,
@@ -85,6 +87,42 @@ function Configuracoes() {
         refetchAiStatus();
       } else {
         toast.error(res.error || "Erro ao salvar a API key.");
+      }
+    },
+    onError: (err: any) => toast.error("Erro: " + err.message),
+  });
+
+  const [waForm, setWaForm] = useState({ accessToken: "", phoneNumberId: "", templateName: "", templateLanguage: "" });
+  const { data: waStatus, refetch: refetchWaStatus } = useQuery({
+    queryKey: ["whatsapp-meta-status"],
+    queryFn: () => getWhatsappMetaStatus(),
+  });
+  useEffect(() => {
+    if (waStatus) {
+      setWaForm((prev) => ({
+        ...prev,
+        templateName: prev.templateName || waStatus.templateName,
+        templateLanguage: prev.templateLanguage || waStatus.templateLanguage,
+      }));
+    }
+  }, [waStatus]);
+  const saveWaMutation = useMutation({
+    mutationFn: () =>
+      saveWhatsappMetaSettings({
+        data: {
+          accessToken: waForm.accessToken.trim() || undefined,
+          phoneNumberId: waForm.phoneNumberId.trim() || undefined,
+          templateName: waForm.templateName.trim() || undefined,
+          templateLanguage: waForm.templateLanguage.trim() || undefined,
+        },
+      }),
+    onSuccess: (res: any) => {
+      if (res.success) {
+        toast.success("Configurações do WhatsApp (Meta) salvas.");
+        setWaForm((prev) => ({ ...prev, accessToken: "", phoneNumberId: "" }));
+        refetchWaStatus();
+      } else {
+        toast.error(res.error || "Erro ao salvar.");
       }
     },
     onError: (err: any) => toast.error("Erro: " + err.message),
@@ -276,6 +314,81 @@ function Configuracoes() {
                   <Save className="mr-2 size-4" />
                 )}
                 Salvar API Key
+              </Button>
+            </CardFooter>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <MessageCircle className="size-5 text-primary" />
+                <CardTitle>WhatsApp — API Oficial da Meta</CardTitle>
+              </div>
+              <CardDescription>
+                Usada pelo botão "Aplicar ação" no dashboard pra disparar campanhas de WhatsApp pros clientes reais de
+                cada segmento. Requer um app no Meta for Developers com o produto WhatsApp, um número verificado e
+                pelo menos 1 template de mensagem (categoria Marketing) já aprovado pela Meta — o corpo do template
+                deve ter no máximo 1 variável (ex: {"{{1}}"} = oferta).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="waToken">Token de Acesso Permanente</Label>
+                  <Input
+                    id="waToken"
+                    type="password"
+                    placeholder={waStatus?.hasAccessToken ? "•••••••• (salvo)" : "EAAG..."}
+                    value={waForm.accessToken}
+                    onChange={(e) => setWaForm((prev) => ({ ...prev, accessToken: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="waPhoneId">Phone Number ID</Label>
+                  <Input
+                    id="waPhoneId"
+                    type="password"
+                    placeholder={waStatus?.hasPhoneNumberId ? "•••••••• (salvo)" : "1234567890"}
+                    value={waForm.phoneNumberId}
+                    onChange={(e) => setWaForm((prev) => ({ ...prev, phoneNumberId: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="waTemplate">Nome do Template Aprovado</Label>
+                  <Input
+                    id="waTemplate"
+                    placeholder="ex: oferta_recompra"
+                    value={waForm.templateName}
+                    onChange={(e) => setWaForm((prev) => ({ ...prev, templateName: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="waLang">Idioma do Template</Label>
+                  <Input
+                    id="waLang"
+                    placeholder="pt_BR"
+                    value={waForm.templateLanguage}
+                    onChange={(e) => setWaForm((prev) => ({ ...prev, templateLanguage: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter className="flex justify-between border-t px-6 py-4">
+              <a
+                href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+              >
+                Guia de configuração da Meta <ExternalLink className="size-3" />
+              </a>
+              <Button type="button" onClick={() => saveWaMutation.mutate()} disabled={saveWaMutation.isPending}>
+                {saveWaMutation.isPending ? (
+                  <RefreshCw className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 size-4" />
+                )}
+                Salvar
               </Button>
             </CardFooter>
           </Card>

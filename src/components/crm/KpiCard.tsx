@@ -1,4 +1,4 @@
-import { Users, ShoppingBag, TrendingUp, Repeat, Truck, Package, Clock } from "lucide-react";
+import { Users, ShoppingBag, TrendingUp, Repeat, Truck, Package, Clock, Receipt, CircleDollarSign } from "lucide-react";
 import type { Kpi, Status } from "@/lib/crm-mock";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +10,8 @@ const ICONS = {
   truck: Truck,
   box: Package,
   clock: Clock,
+  receipt: Receipt,
+  dollar: CircleDollarSign,
 } as const;
 
 export const statusRing: Record<Status, string> = {

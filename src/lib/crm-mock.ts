@@ -51,7 +51,7 @@ export type Kpi = {
   value: string;
   hint?: string;
   status?: Status;
-  icon: "users" | "bag" | "trend" | "repeat" | "truck" | "box" | "clock";
+  icon: "users" | "bag" | "trend" | "repeat" | "truck" | "box" | "clock" | "receipt" | "dollar";
 };
 
 export type AnalysisSeries = { name: string; value: number }[];
@@ -116,6 +116,14 @@ export function getDashboardData(period: PeriodKey, customLabel?: string): Dashb
       period === "personalizado" ? (customLabel ?? "Período personalizado") : PERIODS.find((p) => p.key === period)!.label,
     kpis: [
       { id: "clientes", label: "Clientes únicos", value: String(clientes), hint: `${pedidos} pedidos`, icon: "users" },
+      { id: "pedidos", label: "Pedidos", value: String(pedidos), hint: "No período selecionado", icon: "receipt" },
+      {
+        id: "vendas",
+        label: "Valor em vendas",
+        value: brl(Math.round(pedidos * ticket)),
+        hint: "Faturamento bruto do período",
+        icon: "dollar",
+      },
       {
         id: "ticket",
         label: "Ticket médio",

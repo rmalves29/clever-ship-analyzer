@@ -86,6 +86,8 @@ function Index() {
 
     const mergedKpis = mockData.kpis.map(kpi => {
       if (kpi.id === "clientes") return { ...kpi, value: String(shopifyData.uniqueCustomers), hint: `${shopifyData.numPedidos} pedidos` };
+      if (kpi.id === "pedidos") return { ...kpi, value: String(shopifyData.numPedidos) };
+      if (kpi.id === "vendas") return { ...kpi, value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(shopifyData.faturamento) };
       if (kpi.id === "ticket") return { ...kpi, value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(shopifyData.ticketMedio) };
       if (kpi.id === "ltv") return { ...kpi, value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(shopifyData.uniqueCustomers ? shopifyData.faturamento / shopifyData.uniqueCustomers : 0) };
       if (kpi.id === "pedidos-enviados") return { ...kpi, value: String(shopifyData.pedidosEnviadosCount) };

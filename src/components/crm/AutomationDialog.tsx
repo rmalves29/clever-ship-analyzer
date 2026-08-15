@@ -28,17 +28,17 @@ export const SEGMENT_LABEL: Record<string, string> = {
 };
 
 export type AutomationSeed = {
-  id?: string;
+  id?: string | undefined;
   nome: string;
-  descricao?: string;
-  segmentType?: SegmentType;
-  templateName?: string;
-  messageType?: "marketing" | "utility";
-  bodyParams?: string[];
-  couponCode?: string;
-  janelaHoras?: number;
-  requerAprovacao?: boolean;
-  ativo?: boolean;
+  descricao?: string | undefined;
+  segmentType?: SegmentType | undefined;
+  templateName?: string | undefined;
+  messageType?: "marketing" | "utility" | undefined;
+  bodyParams?: string[] | undefined;
+  couponCode?: string | undefined;
+  janelaHoras?: number | undefined;
+  requerAprovacao?: boolean | undefined;
+  ativo?: boolean | undefined;
 };
 
 export function AutomationDialog({

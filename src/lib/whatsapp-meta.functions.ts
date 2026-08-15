@@ -3,7 +3,9 @@ import { z } from "zod";
 import { GOALS, SEGMENT_TYPES, type SegmentType } from "./crm-mock";
 
 const DAY_MS = 86_400_000;
-const ATTRIBUTION_WINDOW_DAYS = 7;
+const ATTRIBUTION_WINDOW_DAYS = 3;
+const segmentTypeSchema = z.enum(SEGMENT_TYPES);
+const messageTypeSchema = z.enum(["marketing", "utility"]);
 
 /** Converte telefone BR (com ou sem +55/DDI) pra E.164, exigido pela API do WhatsApp. */
 function toE164(raw: string): string | null {
@@ -85,7 +87,16 @@ async function sendTemplateMessage(params: {
   templateName: string;
   templateLanguage: string;
   bodyParams: string[];
+  headerImageUrl?: string;
 }) {
+  const components: Record<string, unknown>[] = [];
+  if (params.headerImageUrl) {
+    components.push({ type: "header", parameters: [{ type: "image", image: { link: params.headerImageUrl } }] });
+  }
+  if (params.bodyParams.length) {
+    components.push({ type: "body", parameters: params.bodyParams.map((text) => ({ type: "text", text })) });
+  }
+
   const res = await fetch(`https://graph.facebook.com/v20.0/${params.phoneNumberId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${params.accessToken}` },
@@ -96,9 +107,7 @@ async function sendTemplateMessage(params: {
       template: {
         name: params.templateName,
         language: { code: params.templateLanguage },
-        ...(params.bodyParams.length
-          ? { components: [{ type: "body", parameters: params.bodyParams.map((text) => ({ type: "text", text })) }] }
-          : {}),
+        ...(components.length ? { components } : {}),
       },
     }),
   });
@@ -121,6 +130,22 @@ export const getWhatsappMetaStatus = createServerFn({ method: "GET" }).handler(a
     .limit(1)
     .maybeSingle();
 
+  let displayPhoneNumber: string | null = null;
+  if (data?.whatsapp_meta_access_token && data?.whatsapp_meta_phone_number_id) {
+    try {
+      const res = await fetch(
+        `https://graph.facebook.com/v20.0/${data.whatsapp_meta_phone_number_id}?fields=display_phone_number`,
+        { headers: { Authorization: `Bearer ${data.whatsapp_meta_access_token}` } },
+      );
+      if (res.ok) {
+        const json: any = await res.json();
+        displayPhoneNumber = json?.display_phone_number ?? null;
+      }
+    } catch {
+      // sem número exibível não é crítico — segue com null
+    }
+  }
+
   return {
     hasAccessToken: Boolean(data?.whatsapp_meta_access_token),
     hasPhoneNumberId: Boolean(data?.whatsapp_meta_phone_number_id),
@@ -130,8 +155,18 @@ export const getWhatsappMetaStatus = createServerFn({ method: "GET" }).handler(a
     templateLanguage: data?.whatsapp_meta_template_language ?? "pt_BR",
     costMarketing: data?.whatsapp_cost_marketing ?? null,
     costUtility: data?.whatsapp_cost_utility ?? null,
+    displayPhoneNumber,
   };
 });
+
+/** Prévia de quantos clientes batem com o segmento antes de disparar de verdade — usada no passo 2 do wizard. */
+export const previewSegment = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ segmentType: segmentTypeSchema }).parse(data))
+  .handler(async ({ data }) => {
+    const ids = await getSegmentCustomerIds(data.segmentType);
+    const customers = await getCustomersWithPhone(ids);
+    return { totalClientes: ids.length, comTelefone: customers.length };
+  });
 
 const saveSchema = z.object({
   accessToken: z.string().min(20).optional(),
@@ -176,18 +211,18 @@ export const saveWhatsappMetaSettings = createServerFn({ method: "POST" })
     return { success: true as const };
   });
 
-const segmentTypeSchema = z.enum(SEGMENT_TYPES);
-const messageTypeSchema = z.enum(["marketing", "utility"]);
-
 const createCampaignSchema = z.object({
   nome: z.string().min(1),
   segmentType: segmentTypeSchema,
   messageType: messageTypeSchema.default("marketing"),
   couponCode: z.string().optional(),
+  templateName: z.string().min(1).optional(),
+  templateLanguage: z.string().min(2).optional(),
+  headerImageUrl: z.string().url().optional(),
   bodyParams: z.array(z.string()).max(5).default([]),
 });
 
-/** Botão "Aplicar ação": cria a campanha, dispara o template aprovado da Meta pra todo mundo do segmento e loga cada envio. */
+/** Cria a campanha, dispara o template escolhido (ou o padrão da conta) pra todo mundo do segmento e loga cada envio. */
 export const createAndSendCampaign = createServerFn({ method: "POST" })
   .validator((data: unknown) => createCampaignSchema.parse(data))
   .handler(async ({ data }) => {
@@ -200,10 +235,13 @@ export const createAndSendCampaign = createServerFn({ method: "POST" })
       .limit(1)
       .maybeSingle();
 
-    if (!settings?.whatsapp_meta_access_token || !settings?.whatsapp_meta_phone_number_id || !settings?.whatsapp_meta_template_name) {
+    const templateName = data.templateName ?? settings?.whatsapp_meta_template_name ?? undefined;
+    const templateLanguage = data.templateLanguage ?? settings?.whatsapp_meta_template_language ?? "pt_BR";
+
+    if (!settings?.whatsapp_meta_access_token || !settings?.whatsapp_meta_phone_number_id || !templateName) {
       return {
         success: false as const,
-        error: "Configure o token de acesso, o Phone Number ID e o nome do template do WhatsApp (Meta) em Configurações.",
+        error: "Configure o token de acesso e o Phone Number ID em Configurações, e escolha um template.",
       };
     }
 
@@ -213,7 +251,7 @@ export const createAndSendCampaign = createServerFn({ method: "POST" })
         nome: data.nome,
         status: "enviando",
         segment_type: data.segmentType,
-        template_name: settings.whatsapp_meta_template_name,
+        template_name: templateName,
         message_type: data.messageType,
         coupon_code: data.couponCode?.trim() || null,
       } as never)
@@ -241,9 +279,10 @@ export const createAndSendCampaign = createServerFn({ method: "POST" })
         accessToken: settings.whatsapp_meta_access_token,
         phoneNumberId: settings.whatsapp_meta_phone_number_id,
         to,
-        templateName: settings.whatsapp_meta_template_name,
-        templateLanguage: settings.whatsapp_meta_template_language ?? "pt_BR",
+        templateName,
+        templateLanguage,
         bodyParams: data.bodyParams,
+        ...(data.headerImageUrl ? { headerImageUrl: data.headerImageUrl } : {}),
       });
 
       await supabaseAdmin.from("whatsapp_campaign_recipients").insert({
@@ -277,6 +316,7 @@ export async function applyMetaStatusUpdate(status: {
   id: string;
   status: string;
   timestamp?: string;
+  errors?: { code?: number; title?: string; message?: string }[];
 }): Promise<void> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: recipient } = await supabaseAdmin
@@ -293,6 +333,10 @@ export async function applyMetaStatusUpdate(status: {
   const patch: Record<string, unknown> = { status: status.status };
   if (status.status === "delivered") patch["delivered_at"] = at;
   if (status.status === "read") patch["read_at"] = at;
+  if (status.status === "failed" && status.errors?.[0]) {
+    const e = status.errors[0];
+    patch["error"] = [e.code, e.title ?? e.message].filter(Boolean).join(" — ");
+  }
 
   await supabaseAdmin
     .from("whatsapp_campaign_recipients")
@@ -440,6 +484,22 @@ export const getCampaigns = createServerFn({ method: "GET" }).handler(async () =
   });
 });
 
+/** Agrupa os erros reais de envio (retornados pela Meta) por motivo — usado na aba Relatórios. */
+export const getCampaignsFailureBreakdown = createServerFn({ method: "GET" }).handler(async () => {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data } = await supabaseAdmin.from("whatsapp_campaign_recipients").select("error").eq("status", "failed");
+
+  const counts = new Map<string, number>();
+  for (const r of data ?? []) {
+    const motivo = r.error?.trim() || "Falha não categorizada";
+    counts.set(motivo, (counts.get(motivo) ?? 0) + 1);
+  }
+  const total = Array.from(counts.values()).reduce((a, n) => a + n, 0);
+  return Array.from(counts.entries())
+    .map(([motivo, count]) => ({ motivo, count, pct: total > 0 ? Number(((count / total) * 100).toFixed(1)) : 0 }))
+    .sort((a, b) => b.count - a.count);
+});
+
 /** Templates aprovados no WABA — chamado pela aba "Templates" da página de Campanhas. */
 export const listMetaTemplates = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -462,10 +522,154 @@ export const listMetaTemplates = createServerFn({ method: "GET" }).handler(async
   if (!res.ok) return { success: false as const, error: json?.error?.message ?? `Meta respondeu ${res.status}`, templates: [] };
 
   const templates = (json.data ?? []).map((t: any) => ({
+    id: t.id as string,
     name: t.name as string,
     status: t.status as string,
     category: t.category as string,
     language: t.language as string,
+    components: (t.components ?? []) as { type: string; text?: string; format?: string; buttons?: unknown[] }[],
   }));
   return { success: true as const, templates };
 });
+
+/** Detalhe de 1 campanha — lista de destinatários com status, pra tela de "ver campanha". */
+export const getCampaignDetail = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ campaignId: z.string() }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: campaign } = await supabaseAdmin
+      .from("whatsapp_campaigns")
+      .select("*")
+      .eq("id", data.campaignId)
+      .maybeSingle();
+    if (!campaign) return null;
+
+    const { data: recipients } = await supabaseAdmin
+      .from("whatsapp_campaign_recipients")
+      .select("phone, status, sent_at, delivered_at, read_at, error")
+      .eq("campaign_id", data.campaignId)
+      .order("sent_at", { ascending: false });
+
+    return { campaign, recipients: recipients ?? [] };
+  });
+
+/** Duplica um template aprovado como novo rascunho (nome_copy) — Meta não deixa clonar direto, então recria os components. */
+export const duplicateMetaTemplate = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ sourceName: z.string(), components: z.array(z.any()), category: z.string(), language: z.string() }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: settings } = await supabaseAdmin
+      .from("store_settings")
+      .select("whatsapp_meta_access_token, whatsapp_meta_waba_id")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (!settings?.whatsapp_meta_access_token || !settings?.whatsapp_meta_waba_id) {
+      return { success: false as const, error: "Configure o token de acesso e o WABA ID em Configurações." };
+    }
+
+    const newName = `${data.sourceName}_copy_${Date.now().toString(36)}`;
+    const res = await fetch(`https://graph.facebook.com/v20.0/${settings.whatsapp_meta_waba_id}/message_templates`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.whatsapp_meta_access_token}` },
+      body: JSON.stringify({ name: newName, category: data.category, language: data.language, components: data.components }),
+    });
+    const json: any = await res.json().catch(() => ({}));
+    if (!res.ok) return { success: false as const, error: json?.error?.message ?? `Meta respondeu ${res.status}` };
+    return { success: true as const, name: newName };
+  });
+
+/** Edita o corpo de um template — se já estava aprovado, a Meta reenvia pra revisão automaticamente. */
+export const updateMetaTemplate = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ templateId: z.string(), components: z.array(z.any()) }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: settings } = await supabaseAdmin
+      .from("store_settings")
+      .select("whatsapp_meta_access_token")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (!settings?.whatsapp_meta_access_token) {
+      return { success: false as const, error: "Configure o token de acesso em Configurações." };
+    }
+
+    const res = await fetch(`https://graph.facebook.com/v20.0/${data.templateId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.whatsapp_meta_access_token}` },
+      body: JSON.stringify({ components: data.components }),
+    });
+    const json: any = await res.json().catch(() => ({}));
+    if (!res.ok) return { success: false as const, error: json?.error?.message ?? `Meta respondeu ${res.status}` };
+    return { success: true as const };
+  });
+
+/** Apaga um template (todas as línguas com esse nome). */
+export const deleteMetaTemplate = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ name: z.string() }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: settings } = await supabaseAdmin
+      .from("store_settings")
+      .select("whatsapp_meta_access_token, whatsapp_meta_waba_id")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (!settings?.whatsapp_meta_access_token || !settings?.whatsapp_meta_waba_id) {
+      return { success: false as const, error: "Configure o token de acesso e o WABA ID em Configurações." };
+    }
+
+    const res = await fetch(
+      `https://graph.facebook.com/v20.0/${settings.whatsapp_meta_waba_id}/message_templates?name=${encodeURIComponent(data.name)}`,
+      { method: "DELETE", headers: { Authorization: `Bearer ${settings.whatsapp_meta_access_token}` } },
+    );
+    const json: any = await res.json().catch(() => ({}));
+    if (!res.ok) return { success: false as const, error: json?.error?.message ?? `Meta respondeu ${res.status}` };
+    return { success: true as const };
+  });
+
+/** Estatísticas de um template a partir do nosso próprio log de envios (soma de todas as campanhas que o usaram). */
+export const getTemplateStats = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ templateName: z.string() }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: campaigns } = await supabaseAdmin
+      .from("whatsapp_campaigns")
+      .select("id")
+      .eq("template_name", data.templateName);
+    const campaignIds = (campaigns ?? []).map((c) => (c as { id: string }).id);
+    if (campaignIds.length === 0) {
+      return { enviados: 0, entregues: 0, lidos: 0, porDia: [] as { data: string; env: number; ent: number; lid: number }[] };
+    }
+
+    const { data: recipients } = await supabaseAdmin
+      .from("whatsapp_campaign_recipients")
+      .select("status, sent_at, delivered_at, read_at")
+      .in("campaign_id", campaignIds);
+
+    const list = recipients ?? [];
+    const porDiaMap = new Map<string, { env: number; ent: number; lid: number }>();
+    const bump = (date: string | null, key: "env" | "ent" | "lid") => {
+      if (!date) return;
+      const day = date.slice(0, 10);
+      const agg = porDiaMap.get(day) ?? { env: 0, ent: 0, lid: 0 };
+      agg[key]++;
+      porDiaMap.set(day, agg);
+    };
+    for (const r of list) {
+      if (r.status !== "failed") bump(r.sent_at, "env");
+      bump(r.delivered_at, "ent");
+      bump(r.read_at, "lid");
+    }
+
+    const porDia = Array.from(porDiaMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([data, v]) => ({ data, ...v }));
+
+    return {
+      enviados: list.filter((r) => r.status !== "failed").length,
+      entregues: list.filter((r) => r.status === "delivered" || r.status === "read").length,
+      lidos: list.filter((r) => r.status === "read").length,
+      porDia,
+    };
+  });

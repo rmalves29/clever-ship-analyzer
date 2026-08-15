@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Sparkles, Store, Settings, RefreshCw, MessageCircle } from "lucide-react";
+import { Sparkles, Store, Settings, RefreshCw } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { KpiCard } from "@/components/crm/KpiCard";
 import { PeriodFilter } from "@/components/crm/PeriodFilter";
@@ -229,11 +229,6 @@ function Index() {
               <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing} className="h-8 gap-2">
                 <RefreshCw className={`size-3.5 ${isSyncing ? "animate-spin" : ""}`} />
                 {isSyncing ? "Sincronizando..." : "Sincronizar Shopify"}
-              </Button>
-              <Button variant="outline" size="sm" asChild className="h-8 gap-2">
-                <Link to="/campanhas-whatsapp">
-                  <MessageCircle className="size-3.5" /> Campanhas WhatsApp
-                </Link>
               </Button>
               <Button variant="outline" size="icon" asChild className="size-8 rounded-full">
                 <Link to="/configuracoes">

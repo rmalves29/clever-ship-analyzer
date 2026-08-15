@@ -1,14 +1,22 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, MessageCircle, RefreshCw, Settings } from "lucide-react";
-import { toast } from "sonner";
+import { Eye, MessageCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getCampaigns, listMetaTemplates } from "@/lib/whatsapp-meta.functions";
+import { getCampaigns } from "@/lib/whatsapp-meta.functions";
 import { brl } from "@/lib/crm-mock";
+import { CampaignWizard } from "@/components/whatsapp/CampaignWizard";
+import { CampaignDetailDialog } from "@/components/whatsapp/CampaignDetailDialog";
+import { TemplatesTab } from "@/components/whatsapp/TemplatesTab";
+import { ReportsTab } from "@/components/whatsapp/ReportsTab";
 
 export const Route = createFileRoute("/campanhas-whatsapp")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: search["tab"] === "templates" || search["tab"] === "relatorios" ? (search["tab"] as string) : "campanhas",
+  }),
   component: CampanhasWhatsapp,
 });
 
@@ -32,6 +40,13 @@ const SEGMENT_LABEL: Record<string, string> = {
   envio_atrasado: "Envio atrasado",
 };
 
+const STATUS_FILTERS = [
+  { value: "todas", label: "Todas" },
+  { value: "enviando", label: "Enviando" },
+  { value: "finalizada", label: "Finalizadas" },
+  { value: "erro", label: "Erro" },
+];
+
 function StatCard({ label, value, hint, dark }: { label: string; value: string; hint: string; dark?: boolean }) {
   return (
     <div className={dark ? "surface-card p-5 bg-foreground text-background" : "surface-card p-5"}>
@@ -44,47 +59,38 @@ function StatCard({ label, value, hint, dark }: { label: string; value: string; 
 
 function CampanhasWhatsapp() {
   const navigate = useNavigate();
+  const { tab } = Route.useSearch();
+  const [statusFilter, setStatusFilter] = useState("todas");
+  const [search, setSearch] = useState("");
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   const { data: campanhas, isLoading, refetch } = useQuery({
     queryKey: ["whatsapp-campaigns"],
     queryFn: () => getCampaigns(),
   });
 
-  const { data: templatesResult, isLoading: isLoadingTemplates } = useQuery({
-    queryKey: ["whatsapp-templates"],
-    queryFn: () => listMetaTemplates(),
-  });
-
-  const list = campanhas ?? [];
-  const totalEnviadas = list.reduce((a, c) => a + c.enviadas, 0);
-  const totalReceita = list.reduce((a, c) => a + c.receita, 0);
-  const totalCusto = list.reduce((a, c) => a + c.custo, 0);
+  const allList = campanhas ?? [];
+  const totalEnviadas = allList.reduce((a, c) => a + c.enviadas, 0);
+  const totalReceita = allList.reduce((a, c) => a + c.receita, 0);
+  const totalCusto = allList.reduce((a, c) => a + c.custo, 0);
   const roas = totalCusto > 0 ? totalReceita / totalCusto : null;
 
-  const bySegment = Object.entries(
-    list.reduce<Record<string, { campanhas: number; enviadas: number; vendas: number; receita: number; custo: number }>>(
-      (acc, c) => {
-        const agg = acc[c.segmentType] ?? { campanhas: 0, enviadas: 0, vendas: 0, receita: 0, custo: 0 };
-        agg.campanhas += 1;
-        agg.enviadas += c.enviadas;
-        agg.vendas += c.vendas;
-        agg.receita += c.receita;
-        agg.custo += c.custo;
-        acc[c.segmentType] = agg;
-        return acc;
-      },
-      {},
-    ),
-  );
+  const list = useMemo(() => {
+    return allList.filter((c) => {
+      if (statusFilter !== "todas" && c.status !== statusFilter) return false;
+      if (search.trim() && !c.nome.toLowerCase().includes(search.trim().toLowerCase())) return false;
+      return true;
+    });
+  }, [allList, statusFilter, search]);
+
+  const setTab = (value: string) => navigate({ to: "/campanhas-whatsapp", search: { tab: value } });
 
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-[1400px] px-4 py-8 md:px-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate({ to: "/" })}>
-              <ChevronLeft className="size-5" />
-            </Button>
             <span className="gradient-brand flex size-11 items-center justify-center rounded-2xl text-primary-foreground">
               <MessageCircle className="size-5" />
             </span>
@@ -97,29 +103,18 @@ function CampanhasWhatsapp() {
             <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
               <RefreshCw className="size-3.5" /> Atualizar
             </Button>
-            <Button variant="outline" size="icon" asChild className="size-9 rounded-full">
-              <Link to="/configuracoes">
-                <Settings className="size-4" />
-              </Link>
-            </Button>
-            <Button
-              onClick={() =>
-                toast.info('Crie campanhas a partir de "Aplicar ação", na seção Ações Sugeridas do dashboard.')
-              }
-            >
-              Nova campanha
-            </Button>
+            <Button onClick={() => setWizardOpen(true)}>Nova campanha</Button>
           </div>
         </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Envios" value={String(totalEnviadas)} hint="Mensagens enviadas no total" />
-          <StatCard label="Receita" value={brl(totalReceita)} hint="Valor de pedidos atribuídos" />
+          <StatCard label="Receita" value={brl(totalReceita)} hint="Pedido em até 3 dias do envio" />
           <StatCard label="Custo estimado" value={brl(totalCusto)} hint="Enviadas × custo configurado por tipo" />
           <StatCard label="ROAS estimado" value={roas !== null ? `${roas.toFixed(1)}x` : "—"} hint="Receita ÷ custo" dark />
         </div>
 
-        <Tabs defaultValue="campanhas" className="mt-8">
+        <Tabs value={tab} onValueChange={setTab} className="mt-8">
           <TabsList>
             <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
             <TabsTrigger value="templates">Templates</TabsTrigger>
@@ -127,6 +122,23 @@ function CampanhasWhatsapp() {
           </TabsList>
 
           <TabsContent value="campanhas">
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap gap-2">
+                {STATUS_FILTERS.map((f) => (
+                  <button
+                    key={f.value}
+                    onClick={() => setStatusFilter(f.value)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      statusFilter === f.value ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:bg-muted/70"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <Input placeholder="Buscar campanha..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
+            </div>
+
             <div className="mt-4 overflow-x-auto rounded-xl border border-border">
               <table className="w-full min-w-[960px] text-sm">
                 <thead className="bg-muted/60 text-left text-xs uppercase tracking-wider text-muted-foreground">
@@ -139,20 +151,21 @@ function CampanhasWhatsapp() {
                     <th className="px-4 py-3 font-medium">Vendas</th>
                     <th className="px-4 py-3 font-medium">Receita</th>
                     <th className="px-4 py-3 font-medium">Custo</th>
+                    <th className="px-4 py-3 text-right font-medium">Ver</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading && (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                      <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
                         Carregando...
                       </td>
                     </tr>
                   )}
                   {!isLoading && list.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
-                        Nenhuma campanha ainda. Use "Aplicar ação" no dashboard pra criar a primeira.
+                      <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
+                        {allList.length === 0 ? 'Nenhuma campanha ainda. Clique em "Nova campanha" pra criar a primeira.' : "Nenhuma campanha bate com o filtro."}
                       </td>
                     </tr>
                   )}
@@ -175,6 +188,11 @@ function CampanhasWhatsapp() {
                       <td className="px-4 py-3">{c.vendas}</td>
                       <td className="px-4 py-3 font-semibold">{brl(c.receita)}</td>
                       <td className="px-4 py-3">{brl(c.custo)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <Button variant="ghost" size="icon" className="size-8" onClick={() => setDetailId(c.id)}>
+                          <Eye className="size-4" />
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -183,91 +201,17 @@ function CampanhasWhatsapp() {
           </TabsContent>
 
           <TabsContent value="templates">
-            <div className="mt-4 overflow-x-auto rounded-xl border border-border">
-              <table className="w-full min-w-[640px] text-sm">
-                <thead className="bg-muted/60 text-left text-xs uppercase tracking-wider text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Nome</th>
-                    <th className="px-4 py-3 font-medium">Categoria</th>
-                    <th className="px-4 py-3 font-medium">Idioma</th>
-                    <th className="px-4 py-3 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoadingTemplates && (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
-                        Carregando...
-                      </td>
-                    </tr>
-                  )}
-                  {!isLoadingTemplates && templatesResult && !templatesResult.success && (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
-                        {templatesResult.error}
-                      </td>
-                    </tr>
-                  )}
-                  {!isLoadingTemplates && templatesResult?.success && templatesResult.templates.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
-                        Nenhum template encontrado nesse WABA.
-                      </td>
-                    </tr>
-                  )}
-                  {templatesResult?.success &&
-                    templatesResult.templates.map((t: { name: string; category: string; language: string; status: string }) => (
-                      <tr key={`${t.name}-${t.language}`} className="border-t border-border">
-                        <td className="px-4 py-3 font-medium">{t.name}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{t.category}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{t.language}</td>
-                        <td className="px-4 py-3">{t.status}</td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
+            <TemplatesTab />
           </TabsContent>
 
           <TabsContent value="relatorios">
-            <div className="mt-4 overflow-x-auto rounded-xl border border-border">
-              <table className="w-full min-w-[720px] text-sm">
-                <thead className="bg-muted/60 text-left text-xs uppercase tracking-wider text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Segmento</th>
-                    <th className="px-4 py-3 font-medium">Campanhas</th>
-                    <th className="px-4 py-3 font-medium">Envios</th>
-                    <th className="px-4 py-3 font-medium">Vendas</th>
-                    <th className="px-4 py-3 font-medium">Receita</th>
-                    <th className="px-4 py-3 font-medium">Custo</th>
-                    <th className="px-4 py-3 font-medium">ROAS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bySegment.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
-                        Sem dados ainda.
-                      </td>
-                    </tr>
-                  )}
-                  {bySegment.map(([segment, agg]) => (
-                    <tr key={segment} className="border-t border-border">
-                      <td className="px-4 py-3 font-medium">{SEGMENT_LABEL[segment] ?? segment}</td>
-                      <td className="px-4 py-3">{agg.campanhas}</td>
-                      <td className="px-4 py-3">{agg.enviadas}</td>
-                      <td className="px-4 py-3">{agg.vendas}</td>
-                      <td className="px-4 py-3 font-semibold">{brl(agg.receita)}</td>
-                      <td className="px-4 py-3">{brl(agg.custo)}</td>
-                      <td className="px-4 py-3">{agg.custo > 0 ? `${(agg.receita / agg.custo).toFixed(1)}x` : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ReportsTab />
           </TabsContent>
         </Tabs>
       </div>
+
+      <CampaignWizard open={wizardOpen} onOpenChange={setWizardOpen} onCreated={() => refetch()} />
+      <CampaignDetailDialog campaignId={detailId} onOpenChange={(v) => !v && setDetailId(null)} />
     </div>
   );
 }

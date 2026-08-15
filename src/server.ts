@@ -29,7 +29,9 @@ async function handleWhatsappWebhook(request: Request): Promise<Response> {
       const statuses =
         body?.entry?.flatMap((e: any) => e?.changes?.flatMap((c: any) => c?.value?.statuses ?? []) ?? []) ?? [];
       for (const s of statuses) {
-        if (s?.id && s?.status) await applyMetaStatusUpdate({ id: s.id, status: s.status, timestamp: s.timestamp });
+        if (s?.id && s?.status) {
+          await applyMetaStatusUpdate({ id: s.id, status: s.status, timestamp: s.timestamp, errors: s.errors });
+        }
       }
     } catch (error) {
       console.error("Falha ao processar webhook do WhatsApp:", error);

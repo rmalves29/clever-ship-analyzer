@@ -314,6 +314,66 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_automations: {
+        Row: {
+          ativo: boolean
+          body_params: Json
+          coupon_code: string | null
+          created_at: string
+          descricao: string | null
+          id: string
+          janela_horas: number
+          last_run_at: string | null
+          message_type: string
+          nome: string
+          origem: string
+          requer_aprovacao: boolean
+          segment_type: string
+          template_language: string
+          template_name: string
+          total_execucoes: number
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          body_params?: Json
+          coupon_code?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          janela_horas?: number
+          last_run_at?: string | null
+          message_type?: string
+          nome: string
+          origem?: string
+          requer_aprovacao?: boolean
+          segment_type: string
+          template_language?: string
+          template_name: string
+          total_execucoes?: number
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          body_params?: Json
+          coupon_code?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          janela_horas?: number
+          last_run_at?: string | null
+          message_type?: string
+          nome?: string
+          origem?: string
+          requer_aprovacao?: boolean
+          segment_type?: string
+          template_language?: string
+          template_name?: string
+          total_execucoes?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       whatsapp_campaign_recipients: {
         Row: {
           campaign_id: string
@@ -363,6 +423,10 @@ export type Database = {
       }
       whatsapp_campaigns: {
         Row: {
+          approved_at: string | null
+          approved_by: string | null
+          automation_id: string | null
+          body_params: Json
           coupon_code: string | null
           created_at: string
           enviadas: number
@@ -370,12 +434,21 @@ export type Database = {
           id: string
           message_type: string
           nome: string
+          origem: string
+          reject_reason: string | null
+          rejected_at: string | null
           segment_type: string
           sent_at: string | null
           status: string
+          template_language: string
           template_name: string
+          total_destinatarios: number
         }
         Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          automation_id?: string | null
+          body_params?: Json
           coupon_code?: string | null
           created_at?: string
           enviadas?: number
@@ -383,12 +456,21 @@ export type Database = {
           id?: string
           message_type?: string
           nome: string
+          origem?: string
+          reject_reason?: string | null
+          rejected_at?: string | null
           segment_type: string
           sent_at?: string | null
           status?: string
+          template_language?: string
           template_name: string
+          total_destinatarios?: number
         }
         Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          automation_id?: string | null
+          body_params?: Json
           coupon_code?: string | null
           created_at?: string
           enviadas?: number
@@ -396,12 +478,25 @@ export type Database = {
           id?: string
           message_type?: string
           nome?: string
+          origem?: string
+          reject_reason?: string | null
+          rejected_at?: string | null
           segment_type?: string
           sent_at?: string | null
           status?: string
+          template_language?: string
           template_name?: string
+          total_destinatarios?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_campaigns_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_automations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

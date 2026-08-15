@@ -1,0 +1,1 @@
+ALTER TABLE public.store_settings ENABLE ROW LEVEL SECURITY;

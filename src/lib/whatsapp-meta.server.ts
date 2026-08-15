@@ -160,12 +160,12 @@ export type NewCampaignInput = {
   nome: string;
   segmentType: SegmentType;
   messageType: MessageType;
-  templateName?: string;
-  templateLanguage?: string;
+  templateName?: string | undefined;
+  templateLanguage?: string | undefined;
   bodyParams: string[];
-  couponCode?: string;
-  origem?: string;
-  automationId?: string;
+  couponCode?: string | undefined;
+  origem?: string | undefined;
+  automationId?: string | undefined;
 };
 
 /** Cria a campanha no banco (sem enviar). Status inicial define se vai pra fila de aprovação. */
@@ -454,19 +454,19 @@ export async function listCampaignsWithMetrics() {
 }
 
 export type AutomationInput = {
-  id?: string;
+  id?: string | undefined;
   nome: string;
-  descricao?: string;
+  descricao?: string | undefined;
   segmentType: SegmentType;
-  templateName?: string;
-  templateLanguage?: string;
+  templateName?: string | undefined;
+  templateLanguage?: string | undefined;
   messageType: MessageType;
   bodyParams: string[];
-  couponCode?: string;
+  couponCode?: string | undefined;
   janelaHoras: number;
   requerAprovacao: boolean;
   ativo: boolean;
-  origem?: string;
+  origem?: string | undefined;
 };
 
 export async function upsertAutomation(input: AutomationInput) {

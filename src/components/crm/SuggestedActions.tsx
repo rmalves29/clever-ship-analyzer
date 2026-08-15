@@ -1,52 +1,43 @@
 import { useState } from "react";
 import { Plus, Target, Workflow, Zap } from "lucide-react";
-import { toast } from "sonner";
-import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import type { DashboardData } from "@/lib/crm-mock";
 import { brl } from "@/lib/crm-mock";
-import { createAndSendCampaign } from "@/lib/whatsapp-meta.functions";
+import { WhatsappSendDialog, type SendDialogSeed } from "./WhatsappSendDialog";
+import { AutomationDialog, type AutomationSeed } from "./AutomationDialog";
 
 export function SuggestedActions({ reguas, acoes }: { reguas: DashboardData["reguas"]; acoes: DashboardData["acoes"] }) {
-  const runCreateCampaign = useServerFn(createAndSendCampaign);
-  const [sendingCluster, setSendingCluster] = useState<string | null>(null);
+  const [sendSeed, setSendSeed] = useState<SendDialogSeed | null>(null);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [autoSeed, setAutoSeed] = useState<AutomationSeed | null>(null);
+  const [autoOpen, setAutoOpen] = useState(false);
 
-  const handleApply = async (a: DashboardData["acoes"][number]) => {
-    const confirmed = window.confirm(
-      `Enviar a mensagem "${a.oferta}" via WhatsApp (API oficial da Meta) pra todos os clientes reais do segmento "${a.cluster}" agora?`,
-    );
-    if (!confirmed) return;
+  const openSend = (a: DashboardData["acoes"][number]) => {
+    setSendSeed({ nome: a.cluster, segmentType: a.segmentType, oferta: a.oferta });
+    setSendOpen(true);
+  };
 
-    const couponCode = window.prompt(
-      "Código do cupom da Shopify pra essa campanha (opcional, usado pra medir vendas com mais precisão). Deixe em branco se não tiver.",
-      "",
-    );
+  const openInstall = (r: DashboardData["reguas"][number]) => {
+    setAutoSeed({
+      nome: r.titulo,
+      descricao: r.descricao,
+      bodyParams: [r.descricao],
+      requerAprovacao: true,
+      ativo: true,
+    });
+    setAutoOpen(true);
+  };
 
-    setSendingCluster(a.cluster);
-    try {
-      const res = await runCreateCampaign({
-        data: {
-          nome: a.cluster,
-          segmentType: a.segmentType,
-          messageType: "marketing",
-          couponCode: couponCode?.trim() || undefined,
-          bodyParams: [a.oferta],
-        },
-      });
-      if (!res.success) {
-        toast.error(res.error || "Falha ao enviar a campanha.");
-        return;
-      }
-      if (res.total === 0) {
-        toast.info("Nenhum cliente com telefone cadastrado nesse segmento.");
-      } else {
-        toast.success(`Campanha enviada: ${res.sent}/${res.total} mensagens (${res.failed} falharam).`);
-      }
-    } catch (err: any) {
-      toast.error("Erro ao enviar campanha: " + (err?.message ?? "falha desconhecida"));
-    } finally {
-      setSendingCluster(null);
-    }
+  const openInstallFromAction = (a: DashboardData["acoes"][number]) => {
+    setAutoSeed({
+      nome: a.cluster,
+      descricao: a.criterio,
+      segmentType: a.segmentType,
+      bodyParams: [a.oferta],
+      requerAprovacao: true,
+      ativo: true,
+    });
+    setAutoOpen(true);
   };
 
   return (
@@ -95,13 +86,7 @@ export function SuggestedActions({ reguas, acoes }: { reguas: DashboardData["reg
                   <dd className="font-semibold text-brand">{brl(r.receita)}</dd>
                 </div>
               </dl>
-              <Button
-                variant="secondary"
-                className="mt-4 w-full"
-                onClick={() =>
-                  toast.info('Réguas recorrentes automáticas ainda não estão disponíveis — use "Aplicar ação" abaixo para envios pontuais.')
-                }
-              >
+              <Button variant="secondary" className="mt-4 w-full" onClick={() => openInstall(r)}>
                 Instalar régua
               </Button>
             </article>
@@ -115,7 +100,7 @@ export function SuggestedActions({ reguas, acoes }: { reguas: DashboardData["reg
         </div>
 
         <div className="mt-4 overflow-x-auto rounded-xl border border-border">
-          <table className="w-full min-w-[840px] text-sm">
+          <table className="w-full min-w-[900px] text-sm">
             <thead className="bg-muted/60 text-left text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 font-medium">Cluster / critério</th>
@@ -139,15 +124,15 @@ export function SuggestedActions({ reguas, acoes }: { reguas: DashboardData["reg
                   <td className="px-4 py-3 text-muted-foreground">{a.janela}</td>
                   <td className="px-4 py-3">{a.conv}</td>
                   <td className="px-4 py-3 font-semibold">{brl(a.receita)}</td>
-                  <td className="px-4 py-3 text-right">
-                    <Button
-                      size="sm"
-                      className="gap-1"
-                      disabled={sendingCluster === a.cluster}
-                      onClick={() => handleApply(a)}
-                    >
-                      <Plus className="size-3.5" /> {sendingCluster === a.cluster ? "Enviando..." : "Aplicar ação"}
-                    </Button>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="outline" className="gap-1" onClick={() => openInstallFromAction(a)}>
+                        <Workflow className="size-3.5" /> Automatizar
+                      </Button>
+                      <Button size="sm" className="gap-1" onClick={() => openSend(a)}>
+                        <Plus className="size-3.5" /> Aplicar ação
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -155,6 +140,9 @@ export function SuggestedActions({ reguas, acoes }: { reguas: DashboardData["reg
           </table>
         </div>
       </div>
+
+      <WhatsappSendDialog seed={sendSeed} open={sendOpen} onOpenChange={setSendOpen} />
+      <AutomationDialog seed={autoSeed} open={autoOpen} onOpenChange={setAutoOpen} />
     </section>
   );
 }

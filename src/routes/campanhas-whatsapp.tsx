@@ -1,35 +1,55 @@
+import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, MessageCircle, RefreshCw, Settings } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { ChevronLeft, MessageCircle, Play, Plus, RefreshCw, Settings, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getCampaigns, listMetaTemplates } from "@/lib/whatsapp-meta.functions";
+import {
+  approveCampaign,
+  deleteAutomation,
+  getCampaigns,
+  listAutomations,
+  listMetaTemplates,
+  rejectCampaign,
+  runAutomationNow,
+  toggleAutomation,
+} from "@/lib/whatsapp-meta.functions";
 import { brl } from "@/lib/crm-mock";
+import { AutomationDialog, SEGMENT_LABEL, type AutomationSeed } from "@/components/crm/AutomationDialog";
+import { WhatsappSendDialog, type SendDialogSeed } from "@/components/crm/WhatsappSendDialog";
 
 export const Route = createFileRoute("/campanhas-whatsapp")({
+  head: () => ({
+    meta: [
+      { title: "Campanhas WhatsApp | CRM Insights" },
+      { name: "description", content: "Envie, aprove e automatize campanhas de WhatsApp pela API oficial da Meta com métricas reais da Shopify." },
+      { property: "og:title", content: "Campanhas WhatsApp | CRM Insights" },
+      { property: "og:description", content: "Envio, aprovação e automações de WhatsApp integrados ao CRM da sua loja." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: CampanhasWhatsapp,
 });
 
 const STATUS_LABEL: Record<string, string> = {
+  aguardando_aprovacao: "Aguardando aprovação",
+  rejeitada: "Rejeitada",
   enviando: "Enviando",
   finalizada: "Finalizada",
   erro: "Erro",
 };
 
 const STATUS_CLASS: Record<string, string> = {
+  aguardando_aprovacao: "bg-warning-soft text-warning",
+  rejeitada: "bg-critical-soft text-critical",
   enviando: "bg-warning-soft text-warning",
   finalizada: "bg-success-soft text-success",
   erro: "bg-critical-soft text-critical",
-};
-
-const SEGMENT_LABEL: Record<string, string> = {
-  ticket_alto: "Ticket alto",
-  sem_recompra: "Sem recompra",
-  recompra_30d: "Recompra 30d",
-  recompra_60d: "Recompra 60d",
-  envio_atrasado: "Envio atrasado",
 };
 
 function StatCard({ label, value, hint, dark }: { label: string; value: string; hint: string; dark?: boolean }) {
@@ -44,6 +64,17 @@ function StatCard({ label, value, hint, dark }: { label: string; value: string; 
 
 function CampanhasWhatsapp() {
   const navigate = useNavigate();
+  const runApprove = useServerFn(approveCampaign);
+  const runReject = useServerFn(rejectCampaign);
+  const runToggle = useServerFn(toggleAutomation);
+  const runDelete = useServerFn(deleteAutomation);
+  const runNow = useServerFn(runAutomationNow);
+
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [autoSeed, setAutoSeed] = useState<AutomationSeed | null>(null);
+  const [autoOpen, setAutoOpen] = useState(false);
+  const [sendSeed, setSendSeed] = useState<SendDialogSeed | null>(null);
+  const [sendOpen, setSendOpen] = useState(false);
 
   const { data: campanhas, isLoading, refetch } = useQuery({
     queryKey: ["whatsapp-campaigns"],
@@ -55,7 +86,13 @@ function CampanhasWhatsapp() {
     queryFn: () => listMetaTemplates(),
   });
 
+  const { data: automations, refetch: refetchAutomations } = useQuery({
+    queryKey: ["whatsapp-automations"],
+    queryFn: () => listAutomations(),
+  });
+
   const list = campanhas ?? [];
+  const pendentes = list.filter((c) => c.status === "aguardando_aprovacao");
   const totalEnviadas = list.reduce((a, c) => a + c.enviadas, 0);
   const totalReceita = list.reduce((a, c) => a + c.receita, 0);
   const totalCusto = list.reduce((a, c) => a + c.custo, 0);
@@ -77,6 +114,50 @@ function CampanhasWhatsapp() {
     ),
   );
 
+  const handleApprove = async (id: string) => {
+    setBusyId(id);
+    try {
+      const res = await runApprove({ data: { campaignId: id } });
+      if (!res.success) toast.error(res.error);
+      else toast.success(`Aprovada e enviada: ${res.sent}/${res.total} mensagens.`);
+      refetch();
+    } catch (err: any) {
+      toast.error("Erro ao aprovar: " + (err?.message ?? "falha desconhecida"));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleReject = async (id: string) => {
+    const reason = window.prompt("Motivo da rejeição (opcional):", "") ?? undefined;
+    setBusyId(id);
+    try {
+      const res = await runReject({ data: { campaignId: id, reason } });
+      if (!res.success) toast.error(res.error);
+      else toast.success("Campanha rejeitada.");
+      refetch();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleRunAutomation = async (id: string) => {
+    setBusyId(id);
+    try {
+      const res = await runNow({ data: { id } });
+      if (!res.success) toast.error(res.error);
+      else if ("pendingApproval" in res && res.pendingApproval)
+        toast.success("Campanha criada e enviada pra fila de aprovação.");
+      else toast.success(`Automação executada: ${(res as any).sent}/${(res as any).total} mensagens.`);
+      refetch();
+      refetchAutomations();
+    } catch (err: any) {
+      toast.error("Erro ao executar automação: " + (err?.message ?? "falha desconhecida"));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-[1400px] px-4 py-8 md:px-8">
@@ -90,7 +171,7 @@ function CampanhasWhatsapp() {
             </span>
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Campanhas WhatsApp</h1>
-              <p className="text-sm text-muted-foreground">Gerencie campanhas, templates e relatórios do canal.</p>
+              <p className="text-sm text-muted-foreground">Envio, aprovação, automações e relatórios da API oficial.</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -103,9 +184,10 @@ function CampanhasWhatsapp() {
               </Link>
             </Button>
             <Button
-              onClick={() =>
-                toast.info('Crie campanhas a partir de "Aplicar ação", na seção Ações Sugeridas do dashboard.')
-              }
+              onClick={() => {
+                setSendSeed({ nome: "Campanha manual", segmentType: "sem_recompra", oferta: "" });
+                setSendOpen(true);
+              }}
             >
               Nova campanha
             </Button>
@@ -122,6 +204,8 @@ function CampanhasWhatsapp() {
         <Tabs defaultValue="campanhas" className="mt-8">
           <TabsList>
             <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
+            <TabsTrigger value="aprovacoes">Aprovações {pendentes.length > 0 && `(${pendentes.length})`}</TabsTrigger>
+            <TabsTrigger value="automacoes">Automações</TabsTrigger>
             <TabsTrigger value="templates">Templates</TabsTrigger>
             <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
           </TabsList>
@@ -161,7 +245,8 @@ function CampanhasWhatsapp() {
                       <td className="px-4 py-3">
                         <p className="font-medium">{c.nome}</p>
                         <p className="text-xs text-muted-foreground">
-                          {SEGMENT_LABEL[c.segmentType] ?? c.segmentType} · {c.messageType === "utility" ? "Utilidade" : "Marketing"}
+                          {SEGMENT_LABEL[c.segmentType] ?? c.segmentType} ·{" "}
+                          {c.messageType === "utility" ? "Utilidade" : "Marketing"} · {c.origem}
                         </p>
                       </td>
                       <td className="px-4 py-3">
@@ -179,6 +264,127 @@ function CampanhasWhatsapp() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="aprovacoes">
+            <div className="mt-4 space-y-3">
+              {pendentes.length === 0 && (
+                <p className="rounded-xl border border-border px-4 py-8 text-center text-muted-foreground">
+                  Nenhuma campanha aguardando aprovação.
+                </p>
+              )}
+              {pendentes.map((c) => (
+                <article key={c.id} className="surface-card flex flex-wrap items-center justify-between gap-4 p-5">
+                  <div>
+                    <p className="font-semibold">{c.nome}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {SEGMENT_LABEL[c.segmentType] ?? c.segmentType} · template {c.templateName} ·{" "}
+                      {c.totalDestinatarios} destinatários
+                    </p>
+                    {c.bodyParams.length > 0 && (
+                      <p className="mt-2 rounded-lg bg-muted px-3 py-2 text-sm">“{c.bodyParams.join(" | ")}”</p>
+                    )}
+                    {c.couponCode && <p className="mt-1 text-xs text-muted-foreground">Cupom: {c.couponCode}</p>}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" disabled={busyId === c.id} onClick={() => handleReject(c.id)}>
+                      Rejeitar
+                    </Button>
+                    <Button disabled={busyId === c.id} onClick={() => handleApprove(c.id)}>
+                      {busyId === c.id ? "Enviando..." : "Aprovar e enviar"}
+                    </Button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="automacoes">
+            <div className="mt-4 flex justify-end">
+              <Button
+                className="gap-2"
+                onClick={() => {
+                  setAutoSeed({ nome: "Nova automação" });
+                  setAutoOpen(true);
+                }}
+              >
+                <Plus className="size-4" /> Nova automação
+              </Button>
+            </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              {(automations ?? []).length === 0 && (
+                <p className="rounded-xl border border-border px-4 py-8 text-center text-muted-foreground lg:col-span-2">
+                  Nenhuma automação ainda. Crie aqui ou instale uma direto das ações sugeridas do CRM.
+                </p>
+              )}
+              {(automations ?? []).map((a) => (
+                <article key={a.id} className="surface-card space-y-3 p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{a.nome}</p>
+                      <p className="text-sm text-muted-foreground">{a.descricao ?? "—"}</p>
+                    </div>
+                    <Switch
+                      checked={a.ativo}
+                      onCheckedChange={async (v) => {
+                        await runToggle({ data: { id: a.id, ativo: v } });
+                        refetchAutomations();
+                      }}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <Badge variant="outline">{SEGMENT_LABEL[a.segmentType] ?? a.segmentType}</Badge>
+                    <Badge variant="outline">{a.templateName}</Badge>
+                    <Badge variant="outline">{a.messageType === "utility" ? "Utilidade" : "Marketing"}</Badge>
+                    <Badge variant="outline">janela {a.janelaHoras}h</Badge>
+                    <Badge variant="outline">{a.requerAprovacao ? "Com aprovação" : "Envio direto"}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {a.totalExecucoes} execuções ·{" "}
+                    {a.lastRunAt ? `última em ${new Date(a.lastRunAt).toLocaleString("pt-BR")}` : "nunca executada"}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" disabled={busyId === a.id} className="gap-1" onClick={() => handleRunAutomation(a.id)}>
+                      <Play className="size-3.5" /> Executar agora
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setAutoSeed({
+                          id: a.id,
+                          nome: a.nome,
+                          descricao: a.descricao ?? "",
+                          segmentType: a.segmentType as AutomationSeed["segmentType"],
+                          templateName: a.templateName,
+                          messageType: a.messageType as "marketing" | "utility",
+                          bodyParams: a.bodyParams,
+                          couponCode: a.couponCode ?? "",
+                          janelaHoras: a.janelaHoras,
+                          requerAprovacao: a.requerAprovacao,
+                          ativo: a.ativo,
+                        });
+                        setAutoOpen(true);
+                      }}
+                    >
+                      Editar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="gap-1 text-critical"
+                      onClick={async () => {
+                        if (!window.confirm(`Excluir a automação "${a.nome}"?`)) return;
+                        await runDelete({ data: { id: a.id } });
+                        refetchAutomations();
+                      }}
+                    >
+                      <Trash2 className="size-3.5" /> Excluir
+                    </Button>
+                  </div>
+                </article>
+              ))}
             </div>
           </TabsContent>
 
@@ -268,6 +474,9 @@ function CampanhasWhatsapp() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <AutomationDialog seed={autoSeed} open={autoOpen} onOpenChange={setAutoOpen} onSaved={() => refetchAutomations()} />
+      <WhatsappSendDialog seed={sendSeed} open={sendOpen} onOpenChange={setSendOpen} onDone={() => refetch()} />
     </div>
   );
 }

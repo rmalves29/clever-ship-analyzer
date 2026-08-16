@@ -214,9 +214,37 @@ async function sendTemplateMessage(params: {
   console.log("[sendTemplateMessage] Success", { waMessageId, to: params.to });
   return { ok: true as const, waMessageId };
 
+export async function listMetaTemplates() {
+  const settings = await loadSettings();
+  if (!settings.accessToken || !settings.wabaId) {
+    console.log("[listMetaTemplates] Missing credentials", { wabaId: settings.wabaId, hasToken: !!settings.accessToken });
+    return { success: false as const, error: "Configure o token de acesso e o WABA ID em Configurações.", templates: [] };
+  }
+
+  const res = await fetch(`https://graph.facebook.com/v20.0/${settings.wabaId}/message_templates?limit=100`, {
+    headers: { Authorization: `Bearer ${settings.accessToken}` },
+  });
+  
+  const json: any = await res.json().catch(() => ({}));
+  console.log("[listMetaTemplates] API Response", { status: res.status, count: json?.data?.length, wabaId: settings.wabaId });
+
+  if (!res.ok) {
+    return { success: false as const, error: json?.error?.message ?? `Meta respondeu ${res.status}`, templates: [] };
+  }
+
+  const templates = (json.data ?? []).map((t: any) => ({
+    id: t.id as string,
+    name: t.name as string,
+    status: t.status as string,
+    category: t.category as string,
+    language: t.language as string,
+    components: (t.components ?? []) as { type: string; text?: string; format?: string }[],
+  }));
+  return { success: true as const, templates };
 }
 
 export type NewCampaignInput = {
+
   nome: string;
   segmentType: SegmentType;
   messageType: MessageType;

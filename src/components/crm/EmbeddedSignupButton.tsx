@@ -27,6 +27,7 @@ function loadFacebookSdk(appId: string, onReady: () => void, onError: () => void
   }
   window.fbAsyncInit = () => {
     window.FB!.init({ appId, autoLogAppEvents: true, xfbml: true, version: "v20.0" });
+    console.log("FB SDK initialized with appId:", appId);
     onReady();
   };
   if (sdkLoadStarted) return;
@@ -107,6 +108,7 @@ export function EmbeddedSignupButton({
   };
 
   const handleConnect = () => {
+    console.log("handleConnect called, FB SDK status:", !!window.FB);
     if (!window.FB) {
       toast.error("SDK do Facebook ainda não carregou — tenta de novo em alguns segundos.");
       return;
@@ -192,7 +194,12 @@ export function EmbeddedSignupButton({
   }
 
   return (
-    <Button type="button" onClick={handleConnect} disabled={!sdkReady || connecting} className="gap-2">
+    <Button 
+      type="button" 
+      onClick={handleConnect} 
+      disabled={!sdkReady || connecting} 
+      className="gap-2"
+    >
       <MessageCircle className="size-4" />
       {!sdkReady ? "Carregando..." : connecting ? "Conectando..." : "Conectar com um clique"}
     </Button>

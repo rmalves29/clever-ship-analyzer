@@ -126,10 +126,19 @@ export function SuggestedActions({ reguas, acoes }: { reguas: DashboardData["reg
                   <td className="px-4 py-3 font-semibold">{brl(a.receita)}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
-                      <Button size="sm" variant="outline" className="gap-1" onClick={() => openInstallFromAction(a)}>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="gap-1 border-brand/20 text-brand hover:bg-brand/5" 
+                        onClick={() => openInstallFromAction(a)}
+                      >
                         <Workflow className="size-3.5" /> Automatizar
                       </Button>
-                      <Button size="sm" className="gap-1" onClick={() => openSend(a)}>
+                      <Button 
+                        size="sm" 
+                        className="gap-1 bg-brand text-white hover:bg-brand/90" 
+                        onClick={() => openSend(a)}
+                      >
                         <Plus className="size-3.5" /> Aplicar ação
                       </Button>
                     </div>

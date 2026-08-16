@@ -165,8 +165,27 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string): 
 
 
 
-    if (match) ids.push(customerId);
+  if (ids.length > 0) return ids;
+
+  // Se não é um segmento nativo ou não teve match, tenta buscar na tabela crm_segments (IDs customizados)
+  const { data: customSegment } = await supabaseAdmin
+    .from("crm_segments")
+    .select("id")
+    .eq("id", segmentType)
+    .maybeSingle();
+
+  if (customSegment) {
+    // Por enquanto, rascunho de execução de regras customizadas.
+    // Como o motor de filtros dinâmicos é complexo, retornamos vazio ou
+    // implementamos um fallback básico se for uma lista estática.
+    const { data: staticMembers } = await supabaseAdmin
+      .from("crm_list_members")
+      .select("customer_id")
+      .eq("lista_id", segmentType);
+    
+    if (staticMembers?.length) return staticMembers.map(m => m.customer_id);
   }
+
   return ids;
 }
 

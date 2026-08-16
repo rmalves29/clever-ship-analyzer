@@ -213,8 +213,10 @@ async function sendTemplateMessage(params: {
   const waMessageId: string | undefined = json?.messages?.[0]?.id;
   console.log("[sendTemplateMessage] Success", { waMessageId, to: params.to });
   return { ok: true as const, waMessageId };
+}
 
 export async function listMetaTemplates() {
+
   const settings = await loadSettings();
   if (!settings.accessToken || !settings.wabaId) {
     console.log("[listMetaTemplates] Missing credentials", { wabaId: settings.wabaId, hasToken: !!settings.accessToken });

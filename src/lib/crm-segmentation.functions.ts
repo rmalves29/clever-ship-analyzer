@@ -80,3 +80,54 @@ export const getCRMStats = createServerFn({ method: "GET" }).handler(async () =>
     newContacts: newContacts || 0,
   };
 });
+
+export const getSegmentsList = createServerFn({ method: "GET" }).handler(async () => {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin.from("crm_segments").select("*").order("created_at", { ascending: false });
+  if (error) throw error;
+  return data;
+});
+
+export const saveSegment = createServerFn({ method: "POST" })
+  .validator((data: unknown) =>
+    z.object({
+      id: z.string().uuid().optional(),
+      nome: z.string().min(1),
+      descricao: z.string().optional(),
+      regras: z.any(),
+      tipo: z.enum(["dinamico", "estatico"]).default("dinamico"),
+    }).parse(data)
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: result, error } = await supabaseAdmin
+      .from("crm_segments")
+      .upsert({
+        id: data.id || undefined,
+        nome: data.nome,
+        descricao: data.descricao,
+        regras: data.regras,
+        tipo: data.tipo,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .select()
+      .single();
+    if (error) throw error;
+    return result;
+  });
+
+export const deleteSegment = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("crm_segments").delete().eq("id", data.id);
+    if (error) throw error;
+    return { success: true };
+  });
+
+export const getStaticLists = createServerFn({ method: "GET" }).handler(async () => {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin.from("crm_static_lists").select("*").order("created_at", { ascending: false });
+  if (error) throw error;
+  return data;
+});

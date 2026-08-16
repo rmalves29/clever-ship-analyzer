@@ -106,7 +106,7 @@ const CATEGORIES = [
   }
 ];
 
-const OPERATORS: Record<string, { label: string; value: string }[]> = {
+const OPERATORS = {
   string: [
     { label: "É igual a", value: "eq" },
     { label: "Não é igual a", value: "neq" },
@@ -127,7 +127,7 @@ const OPERATORS: Record<string, { label: string; value: string }[]> = {
     { label: "Nos últimos X dias", value: "last_days" },
     { label: "Exatamente em", value: "on" },
   ]
-};
+} as const;
 
 export function SegmentEditor({ onCancel, onSave }: { onCancel: () => void, onSave: () => void }) {
   const runSave = useServerFn(saveSegment);

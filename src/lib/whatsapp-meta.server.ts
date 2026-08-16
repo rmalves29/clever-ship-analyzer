@@ -156,9 +156,10 @@ export async function getSegmentCustomerIds(segmentType: SegmentType): Promise<s
 
     let match = false;
     if (segmentType === "ticket_alto") match = avgTicket > GOALS.ticketMedio.regular;
-    else if (segmentType === "sem_recompra") match = count === 1 && daysSinceFirst >= 14;
-    else if (segmentType === "recompra_30d") match = count === 1 && daysSinceFirst <= 30;
-    else if (segmentType === "recompra_60d") match = count === 1 && daysSinceFirst > 30 && daysSinceFirst <= 60;
+    else if (segmentType === "sem_recompra") match = count === 1; // Removida trava de 14 dias para facilitar testes e onboarding
+    else if (segmentType === "recompra_30d") match = count === 1;
+    else if (segmentType === "recompra_60d") match = count === 1;
+
 
     if (match) ids.push(customerId);
   }

@@ -168,7 +168,7 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string): 
 
   const { data: customSegment } = await supabaseAdmin
     .from("crm_segments")
-    .select("id")
+    .select("id, regras")
     .eq("id", segmentType)
     .maybeSingle();
 
@@ -179,6 +179,27 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string): 
       .eq("lista_id", segmentType);
     
     if (staticMembers?.length) return staticMembers.map(m => m.customer_id);
+
+    const { data: allCustomers } = await supabaseAdmin
+      .from("shopify_customers")
+      .select("id, email, city, province, phone");
+
+    if (allCustomers && (customSegment.regras as any)?.groups) {
+      const groups = (customSegment.regras as any).groups;
+      return allCustomers.filter(c => {
+        return groups.some((g: any) => {
+          if (!g.conditions?.length) return false;
+          return g.conditions.every((cond: any) => {
+            const val = String(c[cond.field as keyof typeof c] || "").toLowerCase();
+            const target = String(cond.value || "").toLowerCase();
+            if (cond.operator === "eq") return val === target;
+            if (cond.operator === "contains") return val.includes(target);
+            if (cond.operator === "starts_with") return val.startsWith(target);
+            return false;
+          });
+        });
+      }).map(c => c.id);
+    }
   }
 
   return ids;

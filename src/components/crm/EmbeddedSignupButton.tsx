@@ -20,7 +20,7 @@ declare global {
 
 let sdkLoadStarted = false;
 
-function loadFacebookSdk(appId: string, onReady: () => void) {
+function loadFacebookSdk(appId: string, onReady: () => void, onError: () => void) {
   if (window.FB) {
     onReady();
     return;
@@ -35,6 +35,11 @@ function loadFacebookSdk(appId: string, onReady: () => void) {
   script.src = "https://connect.facebook.net/pt_BR/sdk.js";
   script.async = true;
   script.defer = true;
+  script.onerror = () => {
+    sdkLoadStarted = false;
+    console.error("Falha ao carregar o SDK do Facebook (connect.facebook.net bloqueado ou inacessível).");
+    onError();
+  };
   document.body.appendChild(script);
 }
 
@@ -49,11 +54,31 @@ export function EmbeddedSignupButton({
 }) {
   const runFinish = useServerFn(finishEmbeddedSignup);
   const [sdkReady, setSdkReady] = useState(false);
+  const [sdkError, setSdkError] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const signupData = useRef<{ phoneNumberId?: string; wabaId?: string }>({});
 
+  const startSdkLoad = () => {
+    setSdkError(false);
+    const slowLoadTimeout = setTimeout(() => {
+      if (!window.FB) setSdkError(true);
+    }, 10_000);
+    loadFacebookSdk(
+      appId,
+      () => {
+        clearTimeout(slowLoadTimeout);
+        setSdkReady(true);
+      },
+      () => {
+        clearTimeout(slowLoadTimeout);
+        setSdkError(true);
+      },
+    );
+    return slowLoadTimeout;
+  };
+
   useEffect(() => {
-    loadFacebookSdk(appId, () => setSdkReady(true));
+    const slowLoadTimeout = startSdkLoad();
 
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== "https://www.facebook.com" && event.origin !== "https://web.facebook.com") return;
@@ -69,8 +94,17 @@ export function EmbeddedSignupButton({
       }
     };
     window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
+    return () => {
+      clearTimeout(slowLoadTimeout);
+      window.removeEventListener("message", handleMessage);
+    };
   }, [appId]);
+
+  const handleRetry = () => {
+    sdkLoadStarted = false;
+    setSdkReady(false);
+    startSdkLoad();
+  };
 
   const handleConnect = () => {
     if (!window.FB) {
@@ -143,10 +177,24 @@ export function EmbeddedSignupButton({
     }
   };
 
+  if (sdkError) {
+    return (
+      <div className="flex items-center gap-2">
+        <p className="text-xs text-critical">
+          Não deu pra carregar o SDK da Meta (connect.facebook.net). Verifique bloqueadores de anúncio/rastreamento
+          no navegador.
+        </p>
+        <Button type="button" variant="outline" size="sm" onClick={handleRetry}>
+          Tentar de novo
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <Button type="button" onClick={handleConnect} disabled={!sdkReady || connecting} className="gap-2">
       <MessageCircle className="size-4" />
-      {connecting ? "Conectando..." : "Conectar com um clique"}
+      {!sdkReady ? "Carregando..." : connecting ? "Conectando..." : "Conectar com um clique"}
     </Button>
   );
 }

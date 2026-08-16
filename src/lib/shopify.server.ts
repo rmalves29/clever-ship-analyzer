@@ -169,8 +169,8 @@ export const ORDERS_QUERY = `
 `;
 
 export const CUSTOMERS_QUERY = `
-  query getCustomers($cursor: String, $query: String) {
-    customers(first: 50, after: $cursor, query: $query) {
+  query getCustomers($cursor: String) {
+    customers(first: 50, after: $cursor) {
       pageInfo { hasNextPage endCursor }
       edges {
         node {
@@ -190,4 +190,5 @@ export const CUSTOMERS_QUERY = `
       }
     }
   }
+
 `;

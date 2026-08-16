@@ -146,7 +146,17 @@ export function TemplatesTab() {
             )}
             {!isLoading && templatesResult?.success && templates.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">Nenhum template encontrado.</td>
+                <td colSpan={5} className="px-4 py-8 text-center">
+                  <p className="text-muted-foreground">Nenhum template encontrado na conta Meta.</p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-4 gap-2"
+                    onClick={() => window.open("https://business.facebook.com/wa/manage/message-templates/", "_blank")}
+                  >
+                    Gerenciar Templates na Meta
+                  </Button>
+                </td>
               </tr>
             )}
             {templates.map((t) => (

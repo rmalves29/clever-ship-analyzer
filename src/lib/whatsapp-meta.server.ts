@@ -160,6 +160,7 @@ export async function getSegmentCustomerIds(segmentType: SegmentType): Promise<s
     else if (segmentType === "recorrencia") match = count > 1;
     else if (segmentType === "recompra_30d") match = count >= 1;
     else if (segmentType === "recompra_60d") match = count >= 1;
+    else if (segmentType === "envio_atrasado") match = true; // Fallback se já filtrado acima
 
 
 

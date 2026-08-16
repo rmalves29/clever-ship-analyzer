@@ -164,11 +164,25 @@ export function WhatsappSendDialog({
                   <SelectValue placeholder="Template padrão das configurações" />
                 </SelectTrigger>
                 <SelectContent>
-                  {approved.map((t: { name: string; language: string }) => (
-                    <SelectItem key={`${t.name}-${t.language}`} value={t.name}>
-                      {t.name} ({t.language})
-                    </SelectItem>
-                  ))}
+                  {approved.length === 0 ? (
+                    <div className="p-4 text-center text-sm">
+                      <p className="text-muted-foreground">Nenhum template aprovado encontrado na Meta.</p>
+                      <Button 
+                        variant="link" 
+                        size="sm" 
+                        className="mt-2 h-auto p-0"
+                        onClick={() => window.open("https://business.facebook.com/wa/manage/message-templates/", "_blank")}
+                      >
+                        Criar template na Meta
+                      </Button>
+                    </div>
+                  ) : (
+                    approved.map((t: { name: string; language: string }) => (
+                      <SelectItem key={`${t.name}-${t.language}`} value={t.name}>
+                        {t.name} ({t.language})
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>

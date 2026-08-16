@@ -6,7 +6,7 @@ export const syncShopifyData = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.object({ fullSync: z.boolean().optional().default(false) }).parse(data))
   .handler(async ({ data: { fullSync } }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { shopifyGraphQL, ORDERS_QUERY } = await import("./shopify.server");
+    const { shopifyGraphQL, ORDERS_QUERY, CUSTOMERS_QUERY } = await import("./shopify.server");
 
     const { data: settings } = await supabaseAdmin
       .from("store_settings")
@@ -28,14 +28,50 @@ export const syncShopifyData = createServerFn({ method: "POST" })
       let totalImported = 0;
       let lastUpdatedAt: string | null = null;
 
-      // Incremental sync: only orders updated after the last successful sync.
-      const searchQuery =
+      // 1. Sync Customers
+      cursor = null;
+      hasNextPage = true;
+      const customerSearchQuery = !fullSync && settings.last_sync_at
+        ? `updated_at:>='${new Date(settings.last_sync_at).toISOString()}'`
+        : null;
+
+      while (hasNextPage) {
+        const result: any = await shopifyGraphQL(CUSTOMERS_QUERY, { cursor, query: customerSearchQuery });
+        const customersConnection = result.customers;
+
+        for (const edge of customersConnection.edges) {
+          const customer = edge.node;
+          const email = customer.email?.toLowerCase();
+          const customerId = email ? `email:${email}` : `id:${customer.id.split('/').pop()}`;
+
+          await supabaseAdmin.from("shopify_customers").upsert({
+            id: customerId,
+            email: customer.email || null,
+            first_name: customer.firstName || null,
+            last_name: customer.lastName || null,
+            phone: customer.phone || null,
+            city: customer.defaultAddress?.city || null,
+            province: customer.defaultAddress?.province || null,
+            country: customer.defaultAddress?.country || null,
+            updated_at: customer.updatedAt || new Date().toISOString(),
+            created_at: customer.createdAt || new Date().toISOString(),
+          });
+        }
+        hasNextPage = customersConnection.pageInfo.hasNextPage;
+        cursor = customersConnection.pageInfo.endCursor;
+        if (totalImported > 5000) break; // Safety
+      }
+
+      // 2. Sync Orders
+      cursor = null;
+      hasNextPage = true;
+      const orderSearchQuery =
         !fullSync && settings.last_sync_at
           ? `updated_at:>='${new Date(settings.last_sync_at).toISOString()}'`
           : null;
 
       while (hasNextPage) {
-        const result: any = await shopifyGraphQL(ORDERS_QUERY, { cursor, query: searchQuery });
+        const result: any = await shopifyGraphQL(ORDERS_QUERY, { cursor, query: orderSearchQuery });
         const ordersConnection = result.orders;
 
         for (const edge of ordersConnection.edges) {

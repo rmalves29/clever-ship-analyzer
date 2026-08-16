@@ -17,7 +17,6 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { label: "Contatos", to: "/crm", search: { tab: "contatos" }, icon: Sparkles },
       { label: "Segmentos", to: "/crm", search: { tab: "segmentos" }, icon: Sparkles },
       { label: "Listas Estáticas", to: "/crm", search: { tab: "listas" }, icon: Sparkles },
-      { label: "Configurações", to: "/configuracoes", icon: Settings },
     ],
   },
   {
@@ -26,6 +25,12 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { label: "Campanhas", to: "/campanhas-whatsapp", search: { tab: "campanhas" }, icon: Megaphone },
       { label: "Templates", to: "/campanhas-whatsapp", search: { tab: "templates" }, icon: FileText },
       { label: "Relatórios", to: "/campanhas-whatsapp", search: { tab: "relatorios" }, icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Sistema",
+    items: [
+      { label: "Configurações", to: "/configuracoes", icon: Settings },
     ],
   },
 ];

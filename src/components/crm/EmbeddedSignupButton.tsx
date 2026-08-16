@@ -80,51 +80,67 @@ export function EmbeddedSignupButton({
     signupData.current = {};
     setConnecting(true);
 
-    window.FB.login(
-      async (response) => {
-        const code = response.authResponse?.code;
-        if (!code) {
-          toast.error("Conexão cancelada ou sem permissão concedida.");
-          setConnecting(false);
-          return;
-        }
+    // Se nada acontecer em 20s (ex: popup bloqueado sem aviso do SDK), destrava o botão.
+    const timeout = setTimeout(() => {
+      setConnecting(false);
+      toast.error(
+        "A Meta não respondeu. Verifique se o navegador bloqueou o popup (ícone perto da barra de endereço) e tente de novo.",
+      );
+    }, 20_000);
 
-        // O postMessage com phone_number_id/waba_id pode chegar um instante depois do callback.
-        let attempts = 0;
-        while (!signupData.current.phoneNumberId && attempts < 20) {
-          await new Promise((r) => setTimeout(r, 250));
-          attempts++;
-        }
-
-        if (!signupData.current.phoneNumberId || !signupData.current.wabaId) {
-          toast.error("Não recebemos o número conectado. Tenta novamente ou use a configuração manual abaixo.");
-          setConnecting(false);
-          return;
-        }
-
-        try {
-          const res = await runFinish({
-            data: { code, phoneNumberId: signupData.current.phoneNumberId, wabaId: signupData.current.wabaId },
-          });
-          if (!res.success) {
-            toast.error(res.error || "Falha ao concluir a conexão.");
-          } else {
-            toast.success("WhatsApp conectado com sucesso!");
-            onConnected();
+    try {
+      window.FB.login(
+        async (response) => {
+          clearTimeout(timeout);
+          const code = response.authResponse?.code;
+          if (!code) {
+            toast.error("Conexão cancelada ou sem permissão concedida.");
+            setConnecting(false);
+            return;
           }
-        } catch (err: any) {
-          toast.error("Erro ao conectar: " + (err?.message ?? "falha desconhecida"));
-        } finally {
-          setConnecting(false);
-        }
-      },
-      {
-        config_id: configId,
-        response_type: "code",
-        override_default_response_type: true,
-        extras: { sessionInfoVersion: "3" },
-      },
-    );
+
+          // O postMessage com phone_number_id/waba_id pode chegar um instante depois do callback.
+          let attempts = 0;
+          while (!signupData.current.phoneNumberId && attempts < 20) {
+            await new Promise((r) => setTimeout(r, 250));
+            attempts++;
+          }
+
+          if (!signupData.current.phoneNumberId || !signupData.current.wabaId) {
+            toast.error("Não recebemos o número conectado. Tenta novamente ou use a configuração manual abaixo.");
+            setConnecting(false);
+            return;
+          }
+
+          try {
+            const res = await runFinish({
+              data: { code, phoneNumberId: signupData.current.phoneNumberId, wabaId: signupData.current.wabaId },
+            });
+            if (!res.success) {
+              toast.error(res.error || "Falha ao concluir a conexão.");
+            } else {
+              toast.success("WhatsApp conectado com sucesso!");
+              onConnected();
+            }
+          } catch (err: any) {
+            toast.error("Erro ao conectar: " + (err?.message ?? "falha desconhecida"));
+          } finally {
+            setConnecting(false);
+          }
+        },
+        {
+          config_id: configId,
+          response_type: "code",
+          override_default_response_type: true,
+          extras: { sessionInfoVersion: "3" },
+        },
+      );
+    } catch (err: any) {
+      clearTimeout(timeout);
+      setConnecting(false);
+      console.error("FB.login falhou:", err);
+      toast.error("Falha ao abrir o popup da Meta: " + (err?.message ?? "erro desconhecido"));
+    }
   };
 
   return (

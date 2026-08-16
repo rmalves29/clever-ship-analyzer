@@ -124,45 +124,52 @@ export function EmbeddedSignupButton({
       );
     }, 20_000);
 
+    const handleLoginResponse = async (response: { authResponse?: { code?: string } }) => {
+      clearTimeout(timeout);
+      const code = response.authResponse?.code;
+      if (!code) {
+        toast.error("Conexão cancelada ou sem permissão concedida.");
+        setConnecting(false);
+        return;
+      }
+
+      // O postMessage com phone_number_id/waba_id pode chegar um instante depois do callback.
+      let attempts = 0;
+      while (!signupData.current.phoneNumberId && attempts < 20) {
+        await new Promise((r) => setTimeout(r, 250));
+        attempts++;
+      }
+
+      if (!signupData.current.phoneNumberId || !signupData.current.wabaId) {
+        toast.error("Não recebemos o número conectado. Tenta novamente ou use a configuração manual abaixo.");
+        setConnecting(false);
+        return;
+      }
+
+      try {
+        const res = await runFinish({
+          data: { code, phoneNumberId: signupData.current.phoneNumberId, wabaId: signupData.current.wabaId },
+        });
+        if (!res.success) {
+          toast.error(res.error || "Falha ao concluir a conexão.");
+        } else {
+          toast.success("WhatsApp conectado com sucesso!");
+          onConnected();
+        }
+      } catch (err: any) {
+        toast.error("Erro ao conectar: " + (err?.message ?? "falha desconhecida"));
+      } finally {
+        setConnecting(false);
+      }
+    };
+
     try {
+      // O SDK do Facebook rejeita callbacks async diretamente ("Expression is of type
+      // asyncfunction, not function") — por isso o callback aqui é síncrono e apenas
+      // dispara a lógica assíncrona sem esperar por ela.
       window.FB.login(
-        async (response) => {
-          clearTimeout(timeout);
-          const code = response.authResponse?.code;
-          if (!code) {
-            toast.error("Conexão cancelada ou sem permissão concedida.");
-            setConnecting(false);
-            return;
-          }
-
-          // O postMessage com phone_number_id/waba_id pode chegar um instante depois do callback.
-          let attempts = 0;
-          while (!signupData.current.phoneNumberId && attempts < 20) {
-            await new Promise((r) => setTimeout(r, 250));
-            attempts++;
-          }
-
-          if (!signupData.current.phoneNumberId || !signupData.current.wabaId) {
-            toast.error("Não recebemos o número conectado. Tenta novamente ou use a configuração manual abaixo.");
-            setConnecting(false);
-            return;
-          }
-
-          try {
-            const res = await runFinish({
-              data: { code, phoneNumberId: signupData.current.phoneNumberId, wabaId: signupData.current.wabaId },
-            });
-            if (!res.success) {
-              toast.error(res.error || "Falha ao concluir a conexão.");
-            } else {
-              toast.success("WhatsApp conectado com sucesso!");
-              onConnected();
-            }
-          } catch (err: any) {
-            toast.error("Erro ao conectar: " + (err?.message ?? "falha desconhecida"));
-          } finally {
-            setConnecting(false);
-          }
+        (response) => {
+          void handleLoginResponse(response);
         },
         {
           config_id: configId,

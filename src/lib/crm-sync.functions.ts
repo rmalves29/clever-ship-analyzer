@@ -36,7 +36,9 @@ export const syncShopifyData = createServerFn({ method: "POST" })
         : null;
 
       while (hasNextPage) {
-        const result: any = await shopifyGraphQL(CUSTOMERS_QUERY, { cursor, query: customerSearchQuery });
+        // Remove 'query' argument for customers if it fails (not all scopes support customer search)
+        const result: any = await shopifyGraphQL(CUSTOMERS_QUERY, { cursor });
+
         const customersConnection = result.customers;
 
         for (const edge of customersConnection.edges) {

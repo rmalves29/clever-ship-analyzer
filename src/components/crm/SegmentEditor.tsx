@@ -293,13 +293,15 @@ export function SegmentEditor({ onCancel, onSave }: { onCancel: () => void, onSa
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {(condition.field.includes("gasto") || condition.field.includes("total") || condition.field.includes("ticket") || condition.field.includes("idade")) ? 
-                            OPERATORS.number.map(op => <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>) :
-                            (condition.field.includes("compra") ? 
-                              OPERATORS.date.map(op => <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>) :
-                              OPERATORS.string.map(op => <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>)
-                            )
-                          }
+                          {(() => {
+                            if (condition.field.includes("gasto") || condition.field.includes("total") || condition.field.includes("ticket") || condition.field.includes("idade")) {
+                              return OPERATORS.number.map(op => <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>);
+                            }
+                            if (condition.field.includes("compra")) {
+                              return OPERATORS.date.map(op => <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>);
+                            }
+                            return OPERATORS.string.map(op => <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>);
+                          })()}
                         </SelectContent>
                       </Select>
 

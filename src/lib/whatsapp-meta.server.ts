@@ -246,8 +246,8 @@ export async function listMetaTemplates() {
 }
 
 export type NewCampaignInput = {
-
   nome: string;
+
   segmentType: SegmentType;
   messageType: MessageType;
   templateName?: string | undefined;

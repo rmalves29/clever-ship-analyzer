@@ -4,7 +4,7 @@ import { Users } from "lucide-react";
 
 const VALID_TABS = ["contatos", "segmentos", "listas"] as const;
 
-export const Route = createFileRoute("/crm")({
+export const Route = createFileRoute("/crm/")({
   validateSearch: (search: Record<string, unknown>) => ({
     tab: (VALID_TABS as readonly string[]).includes(search["tab"] as string) ? (search["tab"] as string) : "contatos",
   }),

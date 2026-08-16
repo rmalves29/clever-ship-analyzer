@@ -167,3 +167,27 @@ export const ORDERS_QUERY = `
     }
   }
 `;
+
+export const CUSTOMERS_QUERY = `
+  query getCustomers($cursor: String, $query: String) {
+    customers(first: 50, after: $cursor, query: $query) {
+      pageInfo { hasNextPage endCursor }
+      edges {
+        node {
+          id
+          email
+          firstName
+          lastName
+          phone
+          defaultAddress {
+            city
+            province
+            country
+          }
+          updatedAt
+          createdAt
+        }
+      }
+    }
+  }
+`;

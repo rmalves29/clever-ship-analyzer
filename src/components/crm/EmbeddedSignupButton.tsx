@@ -27,6 +27,7 @@ function loadFacebookSdk(appId: string, onReady: () => void, onError: () => void
   }
   window.fbAsyncInit = () => {
     window.FB!.init({ appId, autoLogAppEvents: true, xfbml: true, version: "v20.0" });
+    console.log("FB SDK initialized with appId:", appId);
     onReady();
   };
   if (sdkLoadStarted) return;
@@ -195,10 +196,7 @@ export function EmbeddedSignupButton({
   return (
     <Button 
       type="button" 
-      onClick={() => {
-        console.log("Button raw click");
-        handleConnect();
-      }} 
+      onClick={handleConnect} 
       disabled={!sdkReady || connecting} 
       className="gap-2"
     >

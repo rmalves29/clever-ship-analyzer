@@ -109,6 +109,7 @@ function RootShell({ children }: { children: ReactNode }) {
       </head>
       <body>
         {children}
+        <div id="fb-root"></div>
         <Scripts />
       </body>
     </html>

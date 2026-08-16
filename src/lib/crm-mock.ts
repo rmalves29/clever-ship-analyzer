@@ -4,7 +4,7 @@ export type Status = "critico" | "regular" | "meta";
 
 /** Segmentos realmente calculáveis a partir dos dados da Shopify — usados pra disparar campanhas de WhatsApp. */
 export const SEGMENT_TYPES = ["ticket_alto", "sem_recompra", "recompra_30d", "recompra_60d", "envio_atrasado", "recorrencia"] as const;
-export type SegmentType = (typeof SEGMENT_TYPES)[number];
+export type SegmentType = (typeof SEGMENT_TYPES)[number] | (string & {});
 
 export const PERIODS: { key: PeriodKey; label: string }[] = [
   { key: "diario", label: "Diário" },

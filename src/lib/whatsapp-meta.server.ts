@@ -110,7 +110,7 @@ export function toE164(raw: string): string | null {
 }
 
 /** IDs de clientes que batem com o segmento — calculado sobre o histórico completo, não o período do dashboard. */
-export async function getSegmentCustomerIds(segmentType: SegmentType): Promise<string[]> {
+export async function getSegmentCustomerIds(segmentType: SegmentType | string): Promise<string[]> {
   const supabaseAdmin = await admin();
 
   if (segmentType === "envio_atrasado") {

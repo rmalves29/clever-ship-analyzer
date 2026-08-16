@@ -152,22 +152,20 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string): 
   for (const [customerId, agg] of byCustomer) {
     const count = agg.dates.length;
     const avgTicket = agg.total / count;
-    const daysSinceFirst = (now - Math.min(...agg.dates)) / DAY_MS;
-
+    
     let match = false;
     if (segmentType === "ticket_alto") match = avgTicket > GOALS.ticketMedio.regular;
     else if (segmentType === "sem_recompra") match = count === 1; 
     else if (segmentType === "recorrencia") match = count > 1;
     else if (segmentType === "recompra_30d") match = count >= 1;
     else if (segmentType === "recompra_60d") match = count >= 1;
-    else if (segmentType === "envio_atrasado") match = true; // Fallback se já filtrado acima
+    else if (segmentType === "envio_atrasado") match = true;
 
-
-
+    if (match) ids.push(customerId);
+  }
 
   if (ids.length > 0) return ids;
 
-  // Se não é um segmento nativo ou não teve match, tenta buscar na tabela crm_segments (IDs customizados)
   const { data: customSegment } = await supabaseAdmin
     .from("crm_segments")
     .select("id")
@@ -175,9 +173,6 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string): 
     .maybeSingle();
 
   if (customSegment) {
-    // Por enquanto, rascunho de execução de regras customizadas.
-    // Como o motor de filtros dinâmicos é complexo, retornamos vazio ou
-    // implementamos um fallback básico se for uma lista estática.
     const { data: staticMembers } = await supabaseAdmin
       .from("crm_list_members")
       .select("customer_id")

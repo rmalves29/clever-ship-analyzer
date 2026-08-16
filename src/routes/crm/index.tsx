@@ -12,7 +12,8 @@ import {
   ArrowUpRight,
   RefreshCw,
   Mail,
-  Phone
+  Phone,
+  LayoutDashboard
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,7 @@ import { brl } from "@/lib/crm-mock";
 
 const VALID_TABS = ["contatos", "segmentos", "listas"] as const;
 
-export const Route = createFileRoute("/crm")({
+export const Route = createFileRoute("/crm/")({
   validateSearch: (search: Record<string, unknown>) => ({
     tab: (VALID_TABS as readonly string[]).includes(search["tab"] as string) ? (search["tab"] as string) : "contatos",
   }),

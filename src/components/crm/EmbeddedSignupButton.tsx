@@ -107,6 +107,7 @@ export function EmbeddedSignupButton({
   };
 
   const handleConnect = () => {
+    console.log("handleConnect called, FB SDK status:", !!window.FB);
     if (!window.FB) {
       toast.error("SDK do Facebook ainda não carregou — tenta de novo em alguns segundos.");
       return;

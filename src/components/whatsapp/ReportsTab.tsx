@@ -4,14 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getCampaigns, getCampaignsFailureBreakdown } from "@/lib/whatsapp-meta.functions";
 import { brl } from "@/lib/crm-mock";
-
-const SEGMENT_LABEL: Record<string, string> = {
-  ticket_alto: "Ticket alto",
-  sem_recompra: "Sem recompra",
-  recompra_30d: "Recompra 30d",
-  recompra_60d: "Recompra 60d",
-  envio_atrasado: "Envio atrasado",
-};
+import { SEGMENT_LABEL } from "@/components/crm/AutomationDialog";
 
 function FunnelRow({ label, value, pct, tone }: { label: string; value: number; pct: number; tone: string }) {
   return (

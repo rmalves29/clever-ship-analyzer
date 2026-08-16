@@ -2,7 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
-import { applyMetaStatusUpdate, getStoredVerifyToken } from "./lib/whatsapp-meta.functions";
+import { applyMetaStatusUpdate, getStoredVerifyToken } from "./lib/whatsapp-meta.server";
 
 const WHATSAPP_WEBHOOK_PATH = "/api/whatsapp-webhook";
 

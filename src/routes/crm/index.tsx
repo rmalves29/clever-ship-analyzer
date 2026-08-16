@@ -34,8 +34,10 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getCustomersList, getCRMStats } from "@/lib/crm-segmentation.functions";
+import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment } from "@/lib/crm-segmentation.functions";
 import { brl } from "@/lib/crm-mock";
+import { SegmentEditor } from "@/components/crm/SegmentEditor";
+import { toast } from "sonner";
 
 const VALID_TABS = ["contatos", "segmentos", "listas"] as const;
 
@@ -77,8 +79,12 @@ function CRMPage() {
   const setTab = (value: string) => navigate({ to: "/crm", search: { tab: value } });
 
   const [search, setSearch] = useState("");
+  const [showEditor, setShowEditor] = useState(false);
+  
   const fetchList = useServerFn(getCustomersList);
   const fetchStats = useServerFn(getCRMStats);
+  const fetchSegments = useServerFn(getSegmentsList);
+  const runDeleteSegment = useServerFn(deleteSegment);
 
   const { data: stats } = useQuery({
     queryKey: ["crm-stats"],
@@ -89,6 +95,39 @@ function CRMPage() {
     queryKey: ["crm-customers", search],
     queryFn: () => fetchList({ data: { search } }),
   });
+
+  const { data: segments, refetch: refetchSegments } = useQuery({
+    queryKey: ["crm-segments"],
+    queryFn: () => fetchSegments(),
+    enabled: tab === "segmentos",
+  });
+
+  const handleDeleteSegment = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir este segmento?")) return;
+    try {
+      await runDeleteSegment({ data: { id } });
+      toast.success("Segmento excluído.");
+      refetchSegments();
+    } catch (err: any) {
+      toast.error("Erro ao excluir: " + err.message);
+    }
+  };
+
+  if (showEditor) {
+    return (
+      <div className="min-h-screen bg-background p-8">
+        <div className="mx-auto max-w-4xl">
+          <SegmentEditor 
+            onCancel={() => setShowEditor(false)} 
+            onSave={() => {
+              setShowEditor(false);
+              refetchSegments();
+            }} 
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -251,20 +290,52 @@ function CRMPage() {
              <div className="surface-card p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-lg font-bold">Segmentos</h2>
-                    <p className="text-sm text-muted-foreground">Crie e gerencie públicos dinâmicos para campanhas e automações.</p>
+                    <h2 className="text-lg font-bold">Biblioteca de Segmentos</h2>
+                    <p className="text-sm text-muted-foreground">Públicos dinâmicos baseados em regras.</p>
                   </div>
-                  <Button className="gap-2 bg-brand hover:bg-brand/90 text-white">
+                  <Button onClick={() => setShowEditor(true)} className="gap-2 bg-brand hover:bg-brand/90 text-white">
                     <Plus className="size-4" /> Criar segmento
                   </Button>
                 </div>
                 
-                <div className="mt-8 text-center py-20 border-2 border-dashed border-border rounded-xl">
-                  <Sparkles className="mx-auto size-12 text-muted-foreground/30" />
-                  <h3 className="mt-4 font-semibold">Biblioteca de segmentos</h3>
-                  <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1">
-                    Aqui você verá seus públicos dinâmicos. A interface de regras (E/OU) baseada em Comportamento, RFM e Dados Pessoais está sendo integrada.
-                  </p>
+                <div className="mt-8">
+                  {segments?.length === 0 ? (
+                    <div className="text-center py-20 border-2 border-dashed border-border rounded-xl">
+                      <Sparkles className="mx-auto size-12 text-muted-foreground/30" />
+                      <h3 className="mt-4 font-semibold">Nenhum segmento customizado</h3>
+                      <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1">
+                        Você ainda não criou segmentos baseados em regras dinâmicas.
+                      </p>
+                      <Button variant="outline" className="mt-4" onClick={() => setShowEditor(true)}>Criar meu primeiro segmento</Button>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {segments?.map((seg: any) => (
+                        <div key={seg.id} className="group relative rounded-xl border border-border bg-card p-4 transition-all hover:border-brand/50 hover:shadow-md">
+                          <div className="mb-2 flex items-center justify-between">
+                            <Badge variant="outline" className="text-[10px] uppercase font-bold text-brand border-brand/20">DINÂMICO</Badge>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="size-8 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10"
+                              onClick={() => handleDeleteSegment(seg.id)}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </div>
+                          <h4 className="font-bold text-lg">{seg.nome}</h4>
+                          <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{seg.descricao || "Sem descrição."}</p>
+                          
+                          <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Users className="size-3" /> Calculando contatos...
+                            </span>
+                            <Button variant="ghost" size="sm" className="h-8 text-brand text-xs">Editar Regras</Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
              </div>
           </TabsContent>

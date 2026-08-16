@@ -252,6 +252,9 @@ export type Database = {
           whatsapp_cost_marketing: number | null
           whatsapp_cost_utility: number | null
           whatsapp_meta_access_token: string | null
+          whatsapp_meta_app_id: string | null
+          whatsapp_meta_app_secret: string | null
+          whatsapp_meta_config_id: string | null
           whatsapp_meta_phone_number_id: string | null
           whatsapp_meta_template_language: string | null
           whatsapp_meta_template_name: string | null
@@ -279,6 +282,9 @@ export type Database = {
           whatsapp_cost_marketing?: number | null
           whatsapp_cost_utility?: number | null
           whatsapp_meta_access_token?: string | null
+          whatsapp_meta_app_id?: string | null
+          whatsapp_meta_app_secret?: string | null
+          whatsapp_meta_config_id?: string | null
           whatsapp_meta_phone_number_id?: string | null
           whatsapp_meta_template_language?: string | null
           whatsapp_meta_template_name?: string | null
@@ -306,6 +312,9 @@ export type Database = {
           whatsapp_cost_marketing?: number | null
           whatsapp_cost_utility?: number | null
           whatsapp_meta_access_token?: string | null
+          whatsapp_meta_app_id?: string | null
+          whatsapp_meta_app_secret?: string | null
+          whatsapp_meta_config_id?: string | null
           whatsapp_meta_phone_number_id?: string | null
           whatsapp_meta_template_language?: string | null
           whatsapp_meta_template_name?: string | null

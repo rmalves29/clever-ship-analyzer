@@ -25,6 +25,7 @@ import { syncShopifyData } from "@/lib/crm-sync.functions";
 import { getStoreSettings, saveStoreSettings } from "@/lib/store-settings.functions";
 import { getLatestAiAnalysis, saveOpenAiApiKey } from "@/lib/ai-analysis.functions";
 import { getWhatsappMetaStatus, saveWhatsappMetaSettings } from "@/lib/whatsapp-meta.functions";
+import { EmbeddedSignupButton } from "@/components/crm/EmbeddedSignupButton";
 
 export const Route = createFileRoute("/configuracoes")({
   component: Configuracoes,
@@ -101,6 +102,9 @@ function Configuracoes() {
     verifyToken: "",
     costMarketing: "",
     costUtility: "",
+    appId: "",
+    appSecret: "",
+    configId: "",
   });
   const { data: waStatus, refetch: refetchWaStatus } = useQuery({
     queryKey: ["whatsapp-meta-status"],
@@ -129,12 +133,22 @@ function Configuracoes() {
           verifyToken: waForm.verifyToken.trim() || undefined,
           costMarketing: waForm.costMarketing.trim() ? Number(waForm.costMarketing) : undefined,
           costUtility: waForm.costUtility.trim() ? Number(waForm.costUtility) : undefined,
+          appId: waForm.appId.trim() || undefined,
+          appSecret: waForm.appSecret.trim() || undefined,
+          configId: waForm.configId.trim() || undefined,
         },
       }),
     onSuccess: (res: any) => {
       if (res.success) {
         toast.success("Configurações do WhatsApp (Meta) salvas.");
-        setWaForm((prev) => ({ ...prev, accessToken: "", phoneNumberId: "", wabaId: "", verifyToken: "" }));
+        setWaForm((prev) => ({
+          ...prev,
+          accessToken: "",
+          phoneNumberId: "",
+          wabaId: "",
+          verifyToken: "",
+          appSecret: "",
+        }));
         refetchWaStatus();
       } else {
         toast.error(res.error || "Erro ao salvar.");
@@ -346,7 +360,62 @@ function Configuracoes() {
                 deve ter no máximo 1 variável (ex: {"{{1}}"} = oferta).
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
+              <div className="space-y-4 rounded-xl border border-border bg-muted/30 p-4">
+                <div>
+                  <p className="text-sm font-semibold">Conexão automática (recomendado)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Configure seu app da Meta uma vez (App ID, App Secret e Config ID do Cadastro Incorporado) e depois
+                    conecte com um clique — sem copiar token, WABA ID ou Phone Number ID manualmente.
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="waAppId">App ID</Label>
+                    <Input
+                      id="waAppId"
+                      placeholder={waStatus?.appId ? waStatus.appId : "ex: 2358751441288240"}
+                      value={waForm.appId}
+                      onChange={(e) => setWaForm((prev) => ({ ...prev, appId: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="waAppSecret">App Secret</Label>
+                    <Input
+                      id="waAppSecret"
+                      type="password"
+                      placeholder={waStatus?.hasAppSecret ? "•••••••• (salvo)" : "Configurações do app → Básico"}
+                      value={waForm.appSecret}
+                      onChange={(e) => setWaForm((prev) => ({ ...prev, appSecret: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="waConfigId">Config ID (Cadastro Incorporado)</Label>
+                    <Input
+                      id="waConfigId"
+                      placeholder={waStatus?.configId ? waStatus.configId : "ex: 2595083274228237"}
+                      value={waForm.configId}
+                      onChange={(e) => setWaForm((prev) => ({ ...prev, configId: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => saveWaMutation.mutate()}
+                    disabled={saveWaMutation.isPending}
+                  >
+                    Salvar App ID / Secret / Config ID
+                  </Button>
+                  {waStatus?.appId && waStatus?.configId && (
+                    <EmbeddedSignupButton appId={waStatus.appId} configId={waStatus.configId} onConnected={() => refetchWaStatus()} />
+                  )}
+                </div>
+              </div>
+
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ou configure manualmente</p>
+
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="waToken">Token de Acesso Permanente</Label>

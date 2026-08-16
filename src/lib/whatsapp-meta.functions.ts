@@ -5,7 +5,7 @@ import { SEGMENT_TYPES } from "./crm-mock";
 const segmentTypeSchema = z.enum(SEGMENT_TYPES);
 const messageTypeSchema = z.enum(["marketing", "utility"]);
 
-/** Status pra tela de Configurações — nunca devolve o token de acesso. */
+/** Status pra tela de Configurações — nunca devolve o token de acesso nem o App Secret. */
 export const getWhatsappMetaStatus = createServerFn({ method: "GET" }).handler(async () => {
   const { loadSettings } = await import("./whatsapp-meta.server");
   const s = await loadSettings();
@@ -18,6 +18,9 @@ export const getWhatsappMetaStatus = createServerFn({ method: "GET" }).handler(a
     templateLanguage: s.templateLanguage,
     costMarketing: s.costMarketing,
     costUtility: s.costUtility,
+    appId: s.appId,
+    hasAppSecret: Boolean(s.appSecret),
+    configId: s.configId,
   };
 });
 
@@ -30,6 +33,9 @@ const saveSchema = z.object({
   verifyToken: z.string().min(6).optional(),
   costMarketing: z.number().min(0).optional(),
   costUtility: z.number().min(0).optional(),
+  appId: z.string().min(5).optional(),
+  appSecret: z.string().min(10).optional(),
+  configId: z.string().min(5).optional(),
 });
 
 /** Salva as credenciais da API oficial da Meta — token nunca é devolvido ao cliente depois de salvo. */
@@ -58,6 +64,9 @@ export const saveWhatsappMetaSettings = createServerFn({ method: "POST" })
     if (data.verifyToken) patch["whatsapp_meta_verify_token"] = data.verifyToken.trim();
     if (data.costMarketing !== undefined) patch["whatsapp_cost_marketing"] = data.costMarketing;
     if (data.costUtility !== undefined) patch["whatsapp_cost_utility"] = data.costUtility;
+    if (data.appId) patch["whatsapp_meta_app_id"] = data.appId.trim();
+    if (data.appSecret) patch["whatsapp_meta_app_secret"] = data.appSecret.trim();
+    if (data.configId) patch["whatsapp_meta_config_id"] = data.configId.trim();
 
     const { error } = await supabaseAdmin.from("store_settings").update(patch as never).eq("id", existing.id);
     if (error) return { success: false as const, error: error.message };
@@ -301,4 +310,14 @@ export const runAutomationNow = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { runAutomation } = await import("./whatsapp-meta.server");
     return runAutomation(data.id, true);
+  });
+
+/** Recebe o "code" do popup de Embedded Signup da Meta e troca por token, salvando tudo automaticamente. */
+export const finishEmbeddedSignup = createServerFn({ method: "POST" })
+  .validator((data: unknown) =>
+    z.object({ code: z.string().min(5), phoneNumberId: z.string().min(3), wabaId: z.string().min(3) }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { exchangeEmbeddedSignupCode } = await import("./whatsapp-meta.server");
+    return exchangeEmbeddedSignupCode(data);
   });

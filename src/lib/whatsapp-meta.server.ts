@@ -14,6 +14,9 @@ export type WhatsappSettings = {
   verifyToken: string | null;
   costMarketing: number | null;
   costUtility: number | null;
+  appId: string | null;
+  appSecret: string | null;
+  configId: string | null;
 };
 
 async function admin() {
@@ -26,7 +29,7 @@ export async function loadSettings(): Promise<WhatsappSettings & { id: string | 
   const { data } = await supabaseAdmin
     .from("store_settings")
     .select(
-      "id, whatsapp_meta_access_token, whatsapp_meta_phone_number_id, whatsapp_meta_template_name, whatsapp_meta_template_language, whatsapp_meta_waba_id, whatsapp_meta_verify_token, whatsapp_cost_marketing, whatsapp_cost_utility",
+      "id, whatsapp_meta_access_token, whatsapp_meta_phone_number_id, whatsapp_meta_template_name, whatsapp_meta_template_language, whatsapp_meta_waba_id, whatsapp_meta_verify_token, whatsapp_cost_marketing, whatsapp_cost_utility, whatsapp_meta_app_id, whatsapp_meta_app_secret, whatsapp_meta_config_id",
     )
     .order("created_at", { ascending: true })
     .limit(1)
@@ -42,7 +45,58 @@ export async function loadSettings(): Promise<WhatsappSettings & { id: string | 
     verifyToken: data?.whatsapp_meta_verify_token ?? null,
     costMarketing: data?.whatsapp_cost_marketing ?? null,
     costUtility: data?.whatsapp_cost_utility ?? null,
+    appId: data?.whatsapp_meta_app_id ?? null,
+    appSecret: data?.whatsapp_meta_app_secret ?? null,
+    configId: data?.whatsapp_meta_config_id ?? null,
   };
+}
+
+/** Troca o "code" do Embedded Signup por um token de acesso e salva tudo automaticamente. */
+export async function exchangeEmbeddedSignupCode(params: { code: string; phoneNumberId: string; wabaId: string }) {
+  const settings = await loadSettings();
+  if (!settings.appId || !settings.appSecret) {
+    return { success: false as const, error: "Configure o App ID e o App Secret da Meta em Configurações primeiro." };
+  }
+  if (!settings.id) {
+    return { success: false as const, error: "Configure primeiro a conexão com o Shopify em Configurações." };
+  }
+
+  const tokenUrl = new URL("https://graph.facebook.com/v20.0/oauth/access_token");
+  tokenUrl.searchParams.set("client_id", settings.appId);
+  tokenUrl.searchParams.set("client_secret", settings.appSecret);
+  tokenUrl.searchParams.set("code", params.code);
+
+  const res = await fetch(tokenUrl.toString());
+  const json: any = await res.json().catch(() => ({}));
+  if (!res.ok || !json?.access_token) {
+    return { success: false as const, error: json?.error?.message ?? "Falha ao trocar o código pelo token de acesso." };
+  }
+
+  const accessToken = json.access_token as string;
+
+  // Inscreve o app pra receber os webhooks dessa WABA (status de entrega/leitura).
+  try {
+    await fetch(`https://graph.facebook.com/v20.0/${params.wabaId}/subscribed_apps`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  } catch {
+    // Não crítico — o usuário ainda pode reenviar/re-inscrever depois.
+  }
+
+  const supabaseAdmin = await admin();
+  const { error } = await supabaseAdmin
+    .from("store_settings")
+    .update({
+      whatsapp_meta_access_token: accessToken,
+      whatsapp_meta_phone_number_id: params.phoneNumberId,
+      whatsapp_meta_waba_id: params.wabaId,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("id", settings.id);
+
+  if (error) return { success: false as const, error: error.message };
+  return { success: true as const };
 }
 
 /** Converte telefone BR (com ou sem +55/DDI) pra E.164, exigido pela API do WhatsApp. */

@@ -156,9 +156,13 @@ export async function getSegmentCustomerIds(segmentType: SegmentType): Promise<s
 
     let match = false;
     if (segmentType === "ticket_alto") match = avgTicket > GOALS.ticketMedio.regular;
-    else if (segmentType === "sem_recompra") match = count === 1 && daysSinceFirst >= 14;
-    else if (segmentType === "recompra_30d") match = count === 1 && daysSinceFirst <= 30;
-    else if (segmentType === "recompra_60d") match = count === 1 && daysSinceFirst > 30 && daysSinceFirst <= 60;
+    else if (segmentType === "sem_recompra") match = count === 1; 
+    else if (segmentType === "recorrencia") match = count > 1;
+    else if (segmentType === "recompra_30d") match = count >= 1;
+    else if (segmentType === "recompra_60d") match = count >= 1;
+
+
+
 
     if (match) ids.push(customerId);
   }
@@ -205,13 +209,48 @@ async function sendTemplateMessage(params: {
   });
 
   const json: any = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false as const, error: json?.error?.message ?? `Meta respondeu ${res.status}` };
+  if (!res.ok) {
+    console.error("[sendTemplateMessage] Error", { status: res.status, body: json });
+    return { ok: false as const, error: json?.error?.message ?? `Meta respondeu ${res.status}` };
+  }
   const waMessageId: string | undefined = json?.messages?.[0]?.id;
+  console.log("[sendTemplateMessage] Success", { waMessageId, to: params.to });
   return { ok: true as const, waMessageId };
+}
+
+export async function listMetaTemplates() {
+
+  const settings = await loadSettings();
+  if (!settings.accessToken || !settings.wabaId) {
+    console.log("[listMetaTemplates] Missing credentials", { wabaId: settings.wabaId, hasToken: !!settings.accessToken });
+    return { success: false as const, error: "Configure o token de acesso e o WABA ID em Configurações.", templates: [] };
+  }
+
+  const res = await fetch(`https://graph.facebook.com/v20.0/${settings.wabaId}/message_templates?limit=100`, {
+    headers: { Authorization: `Bearer ${settings.accessToken}` },
+  });
+  
+  const json: any = await res.json().catch(() => ({}));
+  console.log("[listMetaTemplates] API Response", { status: res.status, count: json?.data?.length, wabaId: settings.wabaId });
+
+  if (!res.ok) {
+    return { success: false as const, error: json?.error?.message ?? `Meta respondeu ${res.status}`, templates: [] };
+  }
+
+  const templates = (json.data ?? []).map((t: any) => ({
+    id: t.id as string,
+    name: t.name as string,
+    status: t.status as string,
+    category: t.category as string,
+    language: t.language as string,
+    components: (t.components ?? []) as { type: string; text?: string; format?: string }[],
+  }));
+  return { success: true as const, templates };
 }
 
 export type NewCampaignInput = {
   nome: string;
+
   segmentType: SegmentType;
   messageType: MessageType;
   templateName?: string | undefined;

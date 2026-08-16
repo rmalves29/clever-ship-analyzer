@@ -3,7 +3,7 @@ export type PeriodKey = "diario" | "semanal" | "mensal" | "anual" | "tudo" | "pe
 export type Status = "critico" | "regular" | "meta";
 
 /** Segmentos realmente calculáveis a partir dos dados da Shopify — usados pra disparar campanhas de WhatsApp. */
-export const SEGMENT_TYPES = ["ticket_alto", "sem_recompra", "recompra_30d", "recompra_60d", "envio_atrasado"] as const;
+export const SEGMENT_TYPES = ["ticket_alto", "sem_recompra", "recompra_30d", "recompra_60d", "envio_atrasado", "recorrencia"] as const;
 export type SegmentType = (typeof SEGMENT_TYPES)[number];
 
 export const PERIODS: { key: PeriodKey; label: string }[] = [

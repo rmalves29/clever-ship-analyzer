@@ -193,7 +193,15 @@ export function EmbeddedSignupButton({
   }
 
   return (
-    <Button type="button" onClick={handleConnect} disabled={!sdkReady || connecting} className="gap-2">
+    <Button 
+      type="button" 
+      onClick={() => {
+        console.log("Button raw click");
+        handleConnect();
+      }} 
+      disabled={!sdkReady || connecting} 
+      className="gap-2"
+    >
       <MessageCircle className="size-4" />
       {!sdkReady ? "Carregando..." : connecting ? "Conectando..." : "Conectar com um clique"}
     </Button>

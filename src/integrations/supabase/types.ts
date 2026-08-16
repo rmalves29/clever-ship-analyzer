@@ -14,6 +14,83 @@ export type Database = {
   }
   public: {
     Tables: {
+      crm_list_members: {
+        Row: {
+          adicionado_em: string
+          customer_id: string
+          id: string
+          lista_id: string
+        }
+        Insert: {
+          adicionado_em?: string
+          customer_id: string
+          id?: string
+          lista_id: string
+        }
+        Update: {
+          adicionado_em?: string
+          customer_id?: string
+          id?: string
+          lista_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_list_members_lista_id_fkey"
+            columns: ["lista_id"]
+            isOneToOne: false
+            referencedRelation: "crm_static_lists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_segments: {
+        Row: {
+          atualizado_em: string
+          criado_em: string
+          descricao: string | null
+          id: string
+          nome: string
+          regras: Json
+        }
+        Insert: {
+          atualizado_em?: string
+          criado_em?: string
+          descricao?: string | null
+          id?: string
+          nome: string
+          regras?: Json
+        }
+        Update: {
+          atualizado_em?: string
+          criado_em?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+          regras?: Json
+        }
+        Relationships: []
+      }
+      crm_static_lists: {
+        Row: {
+          criado_em: string
+          descricao: string | null
+          id: string
+          nome: string
+        }
+        Insert: {
+          criado_em?: string
+          descricao?: string | null
+          id?: string
+          nome: string
+        }
+        Update: {
+          criado_em?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+        }
+        Relationships: []
+      }
       shopify_customers: {
         Row: {
           city: string | null

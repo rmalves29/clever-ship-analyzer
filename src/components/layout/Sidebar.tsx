@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 type NavItem = {
   label: string;
-  to: "/" | "/configuracoes" | "/campanhas-whatsapp";
+  to: "/" | "/configuracoes" | "/campanhas-whatsapp" | "/crm";
   search?: Record<string, string>;
   icon: typeof LayoutDashboard;
 };
@@ -14,6 +14,9 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: "CRM",
     items: [
       { label: "Dashboard", to: "/", icon: LayoutDashboard },
+      { label: "Contatos", to: "/crm", search: { tab: "contatos" }, icon: Sparkles },
+      { label: "Segmentos", to: "/crm", search: { tab: "segmentos" }, icon: Sparkles },
+      { label: "Listas Estáticas", to: "/crm", search: { tab: "listas" }, icon: Sparkles },
       { label: "Configurações", to: "/configuracoes", icon: Settings },
     ],
   },

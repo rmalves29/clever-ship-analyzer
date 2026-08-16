@@ -12,6 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CampanhasWhatsappRouteImport } from './routes/campanhas-whatsapp'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
+import { Route as CrmIndexRouteImport } from './routes/crm/index'
+import { Route as CrmContatosRouteImport } from './routes/crm/contatos'
+import { Route as CrmListasEstaticasRouteImport } from './routes/crm/listas-estaticas'
+import { Route as CrmSegmentosRouteImport } from './routes/crm/segmentos'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,35 +32,93 @@ const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
   path: '/configuracoes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CrmIndexRoute = CrmIndexRouteImport.update({
+  id: '/crm/',
+  path: '/crm/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CrmContatosRoute = CrmContatosRouteImport.update({
+  id: '/crm/contatos',
+  path: '/crm/contatos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CrmListasEstaticasRoute = CrmListasEstaticasRouteImport.update({
+  id: '/crm/listas-estaticas',
+  path: '/crm/listas-estaticas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CrmSegmentosRoute = CrmSegmentosRouteImport.update({
+  id: '/crm/segmentos',
+  path: '/crm/segmentos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/crm/contatos': typeof CrmContatosRoute
+  '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
+  '/crm/segmentos': typeof CrmSegmentosRoute
+  '/crm/': typeof CrmIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/crm/contatos': typeof CrmContatosRoute
+  '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
+  '/crm/segmentos': typeof CrmSegmentosRoute
+  '/crm': typeof CrmIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/crm/contatos': typeof CrmContatosRoute
+  '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
+  '/crm/segmentos': typeof CrmSegmentosRoute
+  '/crm/': typeof CrmIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/campanhas-whatsapp' | '/configuracoes'
+  fullPaths:
+    | '/'
+    | '/campanhas-whatsapp'
+    | '/configuracoes'
+    | '/crm/contatos'
+    | '/crm/listas-estaticas'
+    | '/crm/segmentos'
+    | '/crm/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/campanhas-whatsapp' | '/configuracoes'
-  id: '__root__' | '/' | '/campanhas-whatsapp' | '/configuracoes'
+  to:
+    | '/'
+    | '/campanhas-whatsapp'
+    | '/configuracoes'
+    | '/crm/contatos'
+    | '/crm/listas-estaticas'
+    | '/crm/segmentos'
+    | '/crm'
+  id:
+    | '__root__'
+    | '/'
+    | '/campanhas-whatsapp'
+    | '/configuracoes'
+    | '/crm/contatos'
+    | '/crm/listas-estaticas'
+    | '/crm/segmentos'
+    | '/crm/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CampanhasWhatsappRoute: typeof CampanhasWhatsappRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
+  CrmContatosRoute: typeof CrmContatosRoute
+  CrmListasEstaticasRoute: typeof CrmListasEstaticasRoute
+  CrmSegmentosRoute: typeof CrmSegmentosRoute
+  CrmIndexRoute: typeof CrmIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -82,6 +144,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConfiguracoesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/crm/': {
+      id: '/crm/'
+      path: '/crm'
+      fullPath: '/crm/'
+      preLoaderRoute: typeof CrmIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/crm/contatos': {
+      id: '/crm/contatos'
+      path: '/crm/contatos'
+      fullPath: '/crm/contatos'
+      preLoaderRoute: typeof CrmContatosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/crm/listas-estaticas': {
+      id: '/crm/listas-estaticas'
+      path: '/crm/listas-estaticas'
+      fullPath: '/crm/listas-estaticas'
+      preLoaderRoute: typeof CrmListasEstaticasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/crm/segmentos': {
+      id: '/crm/segmentos'
+      path: '/crm/segmentos'
+      fullPath: '/crm/segmentos'
+      preLoaderRoute: typeof CrmSegmentosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -89,6 +179,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CampanhasWhatsappRoute: CampanhasWhatsappRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
+  CrmContatosRoute: CrmContatosRoute,
+  CrmListasEstaticasRoute: CrmListasEstaticasRoute,
+  CrmSegmentosRoute: CrmSegmentosRoute,
+  CrmIndexRoute: CrmIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

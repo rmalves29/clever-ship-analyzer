@@ -110,7 +110,7 @@ export function toE164(raw: string): string | null {
 }
 
 /** IDs de clientes que batem com o segmento — calculado sobre o histórico completo, não o período do dashboard. */
-export async function getSegmentCustomerIds(segmentType: SegmentType): Promise<string[]> {
+export async function getSegmentCustomerIds(segmentType: SegmentType | string): Promise<string[]> {
   const supabaseAdmin = await admin();
 
   if (segmentType === "envio_atrasado") {
@@ -152,21 +152,56 @@ export async function getSegmentCustomerIds(segmentType: SegmentType): Promise<s
   for (const [customerId, agg] of byCustomer) {
     const count = agg.dates.length;
     const avgTicket = agg.total / count;
-    const daysSinceFirst = (now - Math.min(...agg.dates)) / DAY_MS;
-
+    
     let match = false;
     if (segmentType === "ticket_alto") match = avgTicket > GOALS.ticketMedio.regular;
     else if (segmentType === "sem_recompra") match = count === 1; 
     else if (segmentType === "recorrencia") match = count > 1;
     else if (segmentType === "recompra_30d") match = count >= 1;
     else if (segmentType === "recompra_60d") match = count >= 1;
-    else if (segmentType === "envio_atrasado") match = true; // Fallback se já filtrado acima
-
-
-
+    else if (segmentType === "envio_atrasado") match = true;
 
     if (match) ids.push(customerId);
   }
+
+  if (ids.length > 0) return ids;
+
+  const { data: customSegment } = await supabaseAdmin
+    .from("crm_segments")
+    .select("id, regras")
+    .eq("id", segmentType)
+    .maybeSingle();
+
+  if (customSegment) {
+    const { data: staticMembers } = await supabaseAdmin
+      .from("crm_list_members")
+      .select("customer_id")
+      .eq("lista_id", segmentType);
+    
+    if (staticMembers?.length) return staticMembers.map(m => m.customer_id);
+
+    const { data: allCustomers } = await supabaseAdmin
+      .from("shopify_customers")
+      .select("id, email, city, province, phone");
+
+    if (allCustomers && (customSegment.regras as any)?.groups) {
+      const groups = (customSegment.regras as any).groups;
+      return allCustomers.filter(c => {
+        return groups.some((g: any) => {
+          if (!g.conditions?.length) return false;
+          return g.conditions.every((cond: any) => {
+            const val = String(c[cond.field as keyof typeof c] || "").toLowerCase();
+            const target = String(cond.value || "").toLowerCase();
+            if (cond.operator === "eq") return val === target;
+            if (cond.operator === "contains") return val.includes(target);
+            if (cond.operator === "starts_with") return val.startsWith(target);
+            return false;
+          });
+        });
+      }).map(c => c.id);
+    }
+  }
+
   return ids;
 }
 

@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { SEGMENT_TYPES } from "./crm-mock";
 
-const segmentTypeSchema = z.enum(SEGMENT_TYPES);
+const segmentTypeSchema = z.string();
 const messageTypeSchema = z.enum(["marketing", "utility"]);
 
 /** Status pra tela de Configurações — nunca devolve o token de acesso nem o App Secret. */

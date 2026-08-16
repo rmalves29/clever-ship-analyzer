@@ -25,7 +25,12 @@ import { CampaignDetailDialog } from "@/components/whatsapp/CampaignDetailDialog
 import { TemplatesTab } from "@/components/whatsapp/TemplatesTab";
 import { ReportsTab } from "@/components/whatsapp/ReportsTab";
 
+const VALID_TABS = ["campanhas", "aprovacoes", "automacoes", "templates", "relatorios"] as const;
+
 export const Route = createFileRoute("/campanhas-whatsapp")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: (VALID_TABS as readonly string[]).includes(search["tab"] as string) ? (search["tab"] as string) : "campanhas",
+  }),
   head: () => ({
     meta: [
       { title: "Campanhas WhatsApp | CRM Insights" },
@@ -67,6 +72,8 @@ function StatCard({ label, value, hint, dark }: { label: string; value: string; 
 
 function CampanhasWhatsapp() {
   const navigate = useNavigate();
+  const { tab } = Route.useSearch();
+  const setTab = (value: string) => navigate({ to: "/campanhas-whatsapp", search: { tab: value } });
   const runApprove = useServerFn(approveCampaign);
   const runReject = useServerFn(rejectCampaign);
   const runToggle = useServerFn(toggleAutomation);
@@ -201,7 +208,7 @@ function CampanhasWhatsapp() {
           <StatCard label="ROAS estimado" value={roas !== null ? `${roas.toFixed(1)}x` : "—"} hint="Receita ÷ custo" dark />
         </div>
 
-        <Tabs defaultValue="campanhas" className="mt-8">
+        <Tabs value={tab} onValueChange={setTab} className="mt-8">
           <TabsList>
             <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
             <TabsTrigger value="aprovacoes">Aprovações {pendentes.length > 0 && `(${pendentes.length})`}</TabsTrigger>

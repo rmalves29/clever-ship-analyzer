@@ -17,7 +17,7 @@ export const testShopifyConnection = createServerFn({ method: "POST" }).handler(
 
     const scopes: string[] = data.currentAppInstallation.accessScopes.map((s: any) => s.handle);
 
-    const requiredScopes = ["read_orders", "read_customers"];
+    const requiredScopes = ["read_orders", "read_customers", "read_products", "read_fulfillments"];
     const missingScopes = requiredScopes.filter((s) => !scopes.includes(s));
     const hasReadAll = scopes.includes("read_all_orders");
 

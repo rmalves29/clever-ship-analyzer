@@ -83,7 +83,7 @@ export const getCRMStats = createServerFn({ method: "GET" }).handler(async () =>
 
 export const getSegmentsList = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin.from("crm_segments").select("*").order("created_at", { ascending: false });
+  const { data, error } = await supabaseAdmin.from("crm_segments").select("*").order("criado_em", { ascending: false });
   if (error) throw error;
   return data;
 });

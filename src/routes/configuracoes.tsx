@@ -206,6 +206,27 @@ function Configuracoes() {
   const isTesting = testConnectionMutation.isPending;
   const testResult = testConnectionMutation.data as any;
 
+  const renderScopesStatus = () => {
+    if (!testResult?.scopes) return null;
+    return (
+      <div className="mt-4 space-y-2">
+        <p className="text-sm font-medium">Permissões (Scopes):</p>
+        <div className="flex flex-wrap gap-2">
+          {testResult.scopes.map((scope: string) => (
+            <Badge key={scope} variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/20 dark:text-green-400 dark:border-green-900">
+              {scope}
+            </Badge>
+          ))}
+          {testResult.missingScopes?.map((scope: string) => (
+            <Badge key={scope} variant="destructive">
+              Faltando: {scope}
+            </Badge>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-4xl px-4 py-8 md:px-8">
@@ -276,6 +297,7 @@ function Configuracoes() {
                     Suas credenciais são armazenadas com segurança e nunca expostas ao navegador. A autenticação é realizada exclusivamente no servidor.
                   </AlertDescription>
                 </Alert>
+                {renderScopesStatus()}
               </CardContent>
               <CardFooter className="flex justify-between border-t px-6 py-4">
                 <Button 

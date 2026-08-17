@@ -84,7 +84,8 @@ export const syncShopifyData = createServerFn({ method: "POST" })
         console.error("Customer sync failed:", custErr);
         // We log and re-throw if it's the specific access denied error to inform the user
         if (custErr.message?.includes("Access denied")) {
-          throw new Error(`PERMISSAO_NEGADA: O App da Shopify não tem permissão para ler Clientes (scope read_customers). Verifique as configurações do App na Shopify.`);
+          console.error("Access denied error detail:", custErr.message);
+          throw new Error(`PERMISSAO_NEGADA: O App da Shopify (Client ID: ${settings.shopify_client_id}) não tem permissão para ler Clientes (scope read_customers). Verifique no admin da Shopify em Settings -> Apps and sales channels -> [Seu App] -> Configuration -> Admin API integration -> Edit, e garanta que 'read_customers' esteja marcado.`);
         }
         // For other errors, we continue to orders which is more critical
       }

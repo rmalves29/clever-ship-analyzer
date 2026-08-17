@@ -36,20 +36,24 @@ export const syncShopifyData = createServerFn({ method: "POST" })
       console.log("Starting customer sync...");
       try {
         while (hasNextPage) {
+          console.log(`Fetching customers page with cursor: ${cursor}`);
           const result: any = await shopifyGraphQL(CUSTOMERS_QUERY, { cursor });
+          
           if (!result?.customers) {
-            console.warn("No customers found or error in query");
+            console.warn("No customers found in response:", JSON.stringify(result));
             break;
           }
           
           const customersConnection = result.customers;
+          console.log(`Processing ${customersConnection.edges.length} customers`);
 
           for (const edge of customersConnection.edges) {
             const customer = edge.node;
             const email = customer.email?.toLowerCase();
+            // Use Shopify ID as primary if possible to avoid collisions, fall back to email
             const customerId = email ? `email:${email}` : `id:${customer.id.split('/').pop()}`;
 
-            await supabaseAdmin.from("shopify_customers").upsert({
+            const { error: upsertError } = await supabaseAdmin.from("shopify_customers").upsert({
               id: customerId,
               email: customer.email || null,
               first_name: customer.firstName || null,
@@ -61,14 +65,25 @@ export const syncShopifyData = createServerFn({ method: "POST" })
               updated_at: customer.updatedAt || new Date().toISOString(),
               created_at: customer.createdAt || new Date().toISOString(),
             });
+
+            if (upsertError) {
+              console.error(`Error upserting customer ${customerId}:`, upsertError);
+            }
           }
+          
           hasNextPage = customersConnection.pageInfo.hasNextPage;
           cursor = customersConnection.pageInfo.endCursor;
-          if (totalImported > 5000) break; // Safety
+          
+          totalImported += customersConnection.edges.length;
+          if (totalImported > 10000) break; // Safety
         }
       } catch (custErr: any) {
-        console.error("Customer sync failed, but continuing with orders:", custErr);
-        // We continue because orders sync might still work and is more critical for KPIs
+        console.error("Customer sync failed:", custErr);
+        // We log and re-throw if it's the specific access denied error to inform the user
+        if (custErr.message?.includes("Access denied")) {
+          throw new Error(`PERMISSAO_NEGADA: O App da Shopify não tem permissão para ler Clientes (scope read_customers). Verifique as configurações do App na Shopify.`);
+        }
+        // For other errors, we continue to orders which is more critical
       }
 
       // 2. Sync Orders
@@ -86,18 +101,20 @@ export const syncShopifyData = createServerFn({ method: "POST" })
         for (const edge of ordersConnection.edges) {
           const order = edge.node;
           const addr = order.shippingAddress;
-          const email: string | null = order.email || null;
-          const customerId = email ? `email:${email.toLowerCase()}` : null;
+          const email: string | null = order.email || order.customer?.email || null;
+          const customerId = email ? `email:${email.toLowerCase()}` : (order.customer?.id ? `id:${order.customer.id.split('/').pop()}` : null);
 
           if (customerId) {
             const fullName =
-              addr?.name || [addr?.firstName, addr?.lastName].filter(Boolean).join(" ") || null;
+              addr?.name || [addr?.firstName, addr?.lastName].filter(Boolean).join(" ") || 
+              [order.customer?.firstName, order.customer?.lastName].filter(Boolean).join(" ") || null;
+              
             await supabaseAdmin.from("shopify_customers").upsert({
               id: customerId,
               email,
-              first_name: addr?.firstName ?? fullName?.split(" ")[0] ?? null,
-              last_name: addr?.lastName ?? fullName?.split(" ").slice(1).join(" ") ?? null,
-              phone: order.phone ?? null,
+              first_name: addr?.firstName ?? order.customer?.firstName ?? fullName?.split(" ")[0] ?? null,
+              last_name: addr?.lastName ?? order.customer?.lastName ?? fullName?.split(" ").slice(1).join(" ") ?? null,
+              phone: order.phone ?? order.customer?.phone ?? null,
               city: addr?.city ?? null,
               province: addr?.province ?? null,
               country: addr?.country ?? null,

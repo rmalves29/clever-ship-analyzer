@@ -141,6 +141,13 @@ export const ORDERS_QUERY = `
           totalTaxSet { presentmentMoney { amount } }
           totalPriceSet { presentmentMoney { amount } }
           shippingAddress { name firstName lastName city province country }
+          customer {
+            id
+            email
+            firstName
+            lastName
+            phone
+          }
           lineItems(first: 100) {
             edges {
               node {
@@ -180,6 +187,11 @@ export const CUSTOMERS_QUERY = `
           phone
           updatedAt
           createdAt
+          defaultAddress {
+            city
+            province
+            country
+          }
         }
       }
     }

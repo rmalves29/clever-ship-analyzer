@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { format, startOfDay, endOfDay, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
+import { format, startOfDay, endOfDay, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfWeek } from "date-fns";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
 
 const TZ = "America/Sao_Paulo";
@@ -25,18 +25,23 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
 
     if (period === "diario") {
       start = startOfDay(now);
+    } else if (period === "semanal") {
+      // O usuário diz: "Visão semanal, é o que está acontecendo na semana."
+      // Usamos startOfWeek (domingo por padrão, ou segunda se configurado). 
+      // Em PT-BR "na semana" geralmente começa no domingo ou segunda.
+      // Vamos usar segunda-feira como início da semana comercial.
+      start = startOfWeek(now, { weekStartsOn: 1 });
     } else if (period === "mensal") {
       start = startOfMonth(now);
     } else if (period === "anual") {
       start = startOfYear(now);
-    } else if (period === "semanal") {
-      start = startOfDay(subDays(now, 7));
     } else if (period === "tudo") {
       start = new Date(0);
     } else if (period === "personalizado" && range?.from) {
       start = startOfDay(toZonedTime(new Date(range.from), TZ));
       if (range.to) end = endOfDay(toZonedTime(new Date(range.to), TZ));
     } else {
+      // Default fallback
       start = startOfMonth(now);
     }
 

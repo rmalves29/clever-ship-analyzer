@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { 
@@ -77,6 +77,7 @@ function StatCard({ label, value, hint, trend, icon: Icon }: any) {
 
 function CRMPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { tab } = Route.useSearch();
   const setTab = (value: string) => navigate({ to: "/crm", search: { tab: value } });
 

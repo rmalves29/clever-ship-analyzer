@@ -180,6 +180,11 @@ export const CUSTOMERS_QUERY = `
           phone
           updatedAt
           createdAt
+          defaultAddress {
+            city
+            province
+            country
+          }
         }
       }
     }

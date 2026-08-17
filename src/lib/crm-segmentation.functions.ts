@@ -14,7 +14,6 @@ export const getCustomersList = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     // Selecionamos primeiro os clientes com contagem total
     let query = supabaseAdmin

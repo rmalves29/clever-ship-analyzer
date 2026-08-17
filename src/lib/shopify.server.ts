@@ -191,6 +191,7 @@ export const CUSTOMERS_QUERY = `
             city
             province
             country
+            phone
           }
         }
       }

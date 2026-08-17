@@ -28,23 +28,19 @@ export const getCustomersList = createServerFn({ method: "POST" })
         .eq("id", data.segmentId)
         .single();
 
-      if (segment?.regras?.groups) {
-        // Implementação simplificada de filtros dinâmicos
-        // Para cada grupo (OR), criamos uma condição. Dentro de cada grupo (AND).
-        // Nota: O PostgREST tem limitações para filtros complexos E/OU aninhados via JS
-        // Para uma implementação robusta, o ideal é converter as regras em filtros SQL ou usar RPC.
-        // Aqui vamos focar na regra de CIDADE solicitada pelo usuário.
-        
-        segment.regras.groups.forEach((group: any) => {
-          group.conditions.forEach((condition: any) => {
-            if (condition.field === "cidade" && condition.operator === "eq") {
-              query = query.eq("city", condition.value);
-            } else if (condition.field === "estado" && condition.operator === "eq") {
-              query = query.eq("province", condition.value);
-            }
-            // Adicionar outros mapeamentos aqui conforme necessário
+      if (segment?.regras) {
+        const rules = segment.regras as any;
+        if (rules.groups) {
+          rules.groups.forEach((group: any) => {
+            group.conditions.forEach((condition: any) => {
+              if (condition.field === "cidade" && condition.operator === "eq") {
+                query = query.eq("city", condition.value);
+              } else if (condition.field === "estado" && condition.operator === "eq") {
+                query = query.eq("province", condition.value);
+              }
+            });
           });
-        });
+        }
       }
     }
 

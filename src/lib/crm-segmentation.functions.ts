@@ -108,7 +108,7 @@ export const saveSegment = createServerFn({ method: "POST" })
         descricao: data.descricao,
         regras: data.regras,
         tipo: data.tipo,
-        updated_at: new Date().toISOString(),
+        atualizado_em: new Date().toISOString(),
       } as never)
       .select()
       .single();

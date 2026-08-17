@@ -16,7 +16,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
 
     let query = supabaseAdmin
       .from("shopify_customers")
-      .select("*, shopify_orders(count), shopify_orders(total_price, processed_at)", { count: "exact" });
+      .select("*, shopify_orders(total_price, processed_at)", { count: "exact" });
 
     if (data.search) {
       query = query.or(`first_name.ilike.%${data.search}%,last_name.ilike.%${data.search}%,email.ilike.%${data.search}%,phone.ilike.%${data.search}%`);

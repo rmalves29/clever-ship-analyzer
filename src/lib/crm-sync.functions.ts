@@ -108,13 +108,19 @@ export const syncShopifyData = createServerFn({ method: "POST" })
             const fullName =
               addr?.name || [addr?.firstName, addr?.lastName].filter(Boolean).join(" ") || 
               [order.customer?.firstName, order.customer?.lastName].filter(Boolean).join(" ") || null;
+            
+            // Prioridade para o telefone: 
+            // 1. Endereço de entrega (addr?.phone) - comum em dropshipping/e-commerce
+            // 2. Telefone do cliente no objeto principal (order.customer?.phone)
+            // 3. Telefone do pedido (order.phone)
+            const customerPhone = addr?.phone ?? order.customer?.phone ?? order.phone ?? null;
               
             await supabaseAdmin.from("shopify_customers").upsert({
               id: customerId,
               email,
               first_name: addr?.firstName ?? order.customer?.firstName ?? fullName?.split(" ")[0] ?? null,
               last_name: addr?.lastName ?? order.customer?.lastName ?? fullName?.split(" ").slice(1).join(" ") ?? null,
-              phone: addr?.phone ?? order.phone ?? order.customer?.phone ?? null,
+              phone: customerPhone,
               city: addr?.city ?? null,
               province: addr?.province ?? null,
               country: addr?.country ?? null,

@@ -135,7 +135,6 @@ export const ORDERS_QUERY = `
           email
           phone
           sourceName
-          discountCodes
           subtotalPriceSet { presentmentMoney { amount } }
           totalDiscountsSet { presentmentMoney { amount } }
           totalShippingPriceSet { presentmentMoney { amount } }
@@ -179,16 +178,10 @@ export const CUSTOMERS_QUERY = `
           firstName
           lastName
           phone
-          defaultAddress {
-            city
-            province
-            country
-          }
           updatedAt
           createdAt
         }
       }
     }
   }
-
 `;

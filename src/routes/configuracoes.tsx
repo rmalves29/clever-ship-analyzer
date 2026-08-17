@@ -526,7 +526,7 @@ function Configuracoes() {
             </CardFooter>
           </Card>
 
-          {settings?.syncStatus === "connected" && (
+          {(settings?.syncStatus === "connected" || settings?.syncStatus === "error") && (
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-2">

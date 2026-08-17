@@ -31,37 +31,44 @@ export const syncShopifyData = createServerFn({ method: "POST" })
       // 1. Sync Customers
       cursor = null;
       hasNextPage = true;
-      const customerSearchQuery = !fullSync && settings.last_sync_at
-        ? `updated_at:>='${new Date(settings.last_sync_at).toISOString()}'`
-        : null;
+      totalImported = 0;
 
-      while (hasNextPage) {
-        // Remove 'query' argument for customers if it fails (not all scopes support customer search)
-        const result: any = await shopifyGraphQL(CUSTOMERS_QUERY, { cursor });
+      console.log("Starting customer sync...");
+      try {
+        while (hasNextPage) {
+          const result: any = await shopifyGraphQL(CUSTOMERS_QUERY, { cursor });
+          if (!result?.customers) {
+            console.warn("No customers found or error in query");
+            break;
+          }
+          
+          const customersConnection = result.customers;
 
-        const customersConnection = result.customers;
+          for (const edge of customersConnection.edges) {
+            const customer = edge.node;
+            const email = customer.email?.toLowerCase();
+            const customerId = email ? `email:${email}` : `id:${customer.id.split('/').pop()}`;
 
-        for (const edge of customersConnection.edges) {
-          const customer = edge.node;
-          const email = customer.email?.toLowerCase();
-          const customerId = email ? `email:${email}` : `id:${customer.id.split('/').pop()}`;
-
-          await supabaseAdmin.from("shopify_customers").upsert({
-            id: customerId,
-            email: customer.email || null,
-            first_name: customer.firstName || null,
-            last_name: customer.lastName || null,
-            phone: customer.phone || null,
-            city: customer.defaultAddress?.city || null,
-            province: customer.defaultAddress?.province || null,
-            country: customer.defaultAddress?.country || null,
-            updated_at: customer.updatedAt || new Date().toISOString(),
-            created_at: customer.createdAt || new Date().toISOString(),
-          });
+            await supabaseAdmin.from("shopify_customers").upsert({
+              id: customerId,
+              email: customer.email || null,
+              first_name: customer.firstName || null,
+              last_name: customer.lastName || null,
+              phone: customer.phone || null,
+              city: customer.defaultAddress?.city || null,
+              province: customer.defaultAddress?.province || null,
+              country: customer.defaultAddress?.country || null,
+              updated_at: customer.updatedAt || new Date().toISOString(),
+              created_at: customer.createdAt || new Date().toISOString(),
+            });
+          }
+          hasNextPage = customersConnection.pageInfo.hasNextPage;
+          cursor = customersConnection.pageInfo.endCursor;
+          if (totalImported > 5000) break; // Safety
         }
-        hasNextPage = customersConnection.pageInfo.hasNextPage;
-        cursor = customersConnection.pageInfo.endCursor;
-        if (totalImported > 5000) break; // Safety
+      } catch (custErr: any) {
+        console.error("Customer sync failed, but continuing with orders:", custErr);
+        // We continue because orders sync might still work and is more critical for KPIs
       }
 
       // 2. Sync Orders

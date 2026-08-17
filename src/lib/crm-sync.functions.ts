@@ -101,18 +101,20 @@ export const syncShopifyData = createServerFn({ method: "POST" })
         for (const edge of ordersConnection.edges) {
           const order = edge.node;
           const addr = order.shippingAddress;
-          const email: string | null = order.email || null;
-          const customerId = email ? `email:${email.toLowerCase()}` : null;
+          const email: string | null = order.email || order.customer?.email || null;
+          const customerId = email ? `email:${email.toLowerCase()}` : (order.customer?.id ? `id:${order.customer.id.split('/').pop()}` : null);
 
           if (customerId) {
             const fullName =
-              addr?.name || [addr?.firstName, addr?.lastName].filter(Boolean).join(" ") || null;
+              addr?.name || [addr?.firstName, addr?.lastName].filter(Boolean).join(" ") || 
+              [order.customer?.firstName, order.customer?.lastName].filter(Boolean).join(" ") || null;
+              
             await supabaseAdmin.from("shopify_customers").upsert({
               id: customerId,
               email,
-              first_name: addr?.firstName ?? fullName?.split(" ")[0] ?? null,
-              last_name: addr?.lastName ?? fullName?.split(" ").slice(1).join(" ") ?? null,
-              phone: order.phone ?? null,
+              first_name: addr?.firstName ?? order.customer?.firstName ?? fullName?.split(" ")[0] ?? null,
+              last_name: addr?.lastName ?? order.customer?.lastName ?? fullName?.split(" ").slice(1).join(" ") ?? null,
+              phone: order.phone ?? order.customer?.phone ?? null,
               city: addr?.city ?? null,
               province: addr?.province ?? null,
               country: addr?.country ?? null,

@@ -58,7 +58,10 @@ export const syncShopifyData = createServerFn({ method: "POST" })
               email: customer.email || null,
               first_name: customer.firstName || null,
               last_name: customer.lastName || null,
-              phone: customer.phone || null,
+              phone: customer.phone || 
+                     customer.defaultAddress?.phone || 
+                     customer.addresses?.find((a: any) => a.phone)?.phone || 
+                     null,
               city: customer.defaultAddress?.city || null,
               province: customer.defaultAddress?.province || null,
               country: customer.defaultAddress?.country || null,

@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { 
@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment } from "@/lib/crm-segmentation.functions";
+import { fixCustomerPhone } from "@/lib/admin-maintenance.functions";
 import { brl } from "@/lib/crm-mock";
 import { SegmentEditor } from "@/components/crm/SegmentEditor";
 import { toast } from "sonner";
@@ -76,6 +77,7 @@ function StatCard({ label, value, hint, trend, icon: Icon }: any) {
 
 function CRMPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { tab } = Route.useSearch();
   const setTab = (value: string) => navigate({ to: "/crm", search: { tab: value } });
 
@@ -86,6 +88,7 @@ function CRMPage() {
   const fetchStats = useServerFn(getCRMStats);
   const fetchSegments = useServerFn(getSegmentsList);
   const runDeleteSegment = useServerFn(deleteSegment);
+  const runFixPhone = useServerFn(fixCustomerPhone);
 
   const { data: stats } = useQuery({
     queryKey: ["crm-stats"],
@@ -112,6 +115,21 @@ function CRMPage() {
     } catch (err: any) {
       toast.error("Erro ao excluir: " + err.message);
     }
+  };
+
+  const handleFixPhone = async (email: string) => {
+    const phone = prompt("Digite o telefone correto para " + email + " (formato: +55...):");
+    if (!phone) return;
+    
+    const promise = runFixPhone({ data: { email, phone } });
+    toast.promise(promise, {
+      loading: "Corrigindo telefone...",
+      success: () => {
+        queryClient.refetchQueries({ queryKey: ["crm-customers"] });
+        return "Telefone atualizado com sucesso!";
+      },
+      error: (err) => "Erro ao atualizar: " + err.message
+    });
   };
 
   if (showEditor) {
@@ -274,9 +292,19 @@ function CRMPage() {
                             {c.lastOrderAt ? new Date(c.lastOrderAt).toLocaleDateString("pt-BR") : "—"}
                           </TableCell>
                           <TableCell>
-                            <Button variant="ghost" size="icon" className="size-8">
-                              <MoreHorizontal className="size-4" />
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="size-8">
+                                  <MoreHorizontal className="size-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleFixPhone(c.email)}>
+                                  <Phone className="mr-2 size-4" /> Corrigir Telefone
+                                </DropdownMenuItem>
+                                <DropdownMenuItem>Ver Detalhes</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </TableCell>
                         </TableRow>
                       ))

@@ -140,7 +140,7 @@ export const ORDERS_QUERY = `
           totalShippingPriceSet { presentmentMoney { amount } }
           totalTaxSet { presentmentMoney { amount } }
           totalPriceSet { presentmentMoney { amount } }
-          shippingAddress { name firstName lastName city province country phone }
+          shippingAddress { name firstName lastName city province country phone address1 address2 zip }
           customer {
             id
             email

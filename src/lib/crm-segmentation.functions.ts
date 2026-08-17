@@ -14,9 +14,11 @@ export const getCustomersList = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+
+    // Selecionamos primeiro os clientes com contagem total
     let query = supabaseAdmin
       .from("shopify_customers")
-      .select("*, shopify_orders(total_price, processed_at)", { count: "exact" });
+      .select("*", { count: "exact" });
 
     if (data.search) {
       query = query.or(`first_name.ilike.%${data.search}%,last_name.ilike.%${data.search}%,email.ilike.%${data.search}%,phone.ilike.%${data.search}%`);
@@ -28,8 +30,27 @@ export const getCustomersList = createServerFn({ method: "POST" })
 
     if (error) throw error;
 
+    // Se temos clientes, buscamos os pedidos deles separadamente para evitar o erro de agregação no select do PostgREST
+    const customerIds = customers?.map(c => c.id) || [];
+    let customersWithOrders = customers || [];
+
+    if (customerIds.length > 0) {
+      const { data: orders, error: ordersError } = await supabaseAdmin
+        .from("shopify_orders")
+        .select("customer_id, total_price, processed_at")
+        .in("customer_id", customerIds);
+
+      if (!ordersError && orders) {
+        customersWithOrders = (customers || []).map(c => ({
+          ...c,
+          shopify_orders: orders.filter(o => o.customer_id === c.id)
+        }));
+      }
+    }
+
     // Processar KPIs básicos por cliente
-    const processed = (customers ?? []).map((c: any) => {
+    const processed = (customersWithOrders ?? []).map((c: any) => {
+
       const orders = c.shopify_orders || [];
       const totalSpent = orders.reduce((acc: number, o: any) => acc + Number(o.total_price || 0), 0);
       const lastOrder = orders.sort((a: any, b: any) => new Date(b.processed_at).getTime() - new Date(a.processed_at).getTime())[0];
@@ -56,14 +77,22 @@ export const getCRMStats = createServerFn({ method: "GET" }).handler(async () =>
   
   const { count: total } = await supabaseAdmin.from("shopify_customers").select("*", { count: "exact", head: true });
   
-  // Leads = nunca compraram
-  const { count: leads } = await supabaseAdmin
-    .from("shopify_customers")
-    .select("id, shopify_orders(id)", { count: "exact", head: true });
+  // Contagem de leads e clientes de forma mais direta para evitar subqueries de agregação
+  // Clientes: Pelo menos um pedido
+  const { count: customersCount } = await supabaseAdmin
+    .from("shopify_orders")
+    .select("customer_id", { count: "exact", head: true });
     
-  const { count: customers } = await supabaseAdmin
-    .from("shopify_customers")
-    .select("id, shopify_orders!inner(id)", { count: "exact", head: true });
+  // Nota: A contagem exata de clientes únicos pode ser complexa sem subqueries, 
+  // mas aqui o objetivo é o total de contatos que compraram.
+  // Vamos usar uma abordagem mais segura:
+  const { data: uniqueCustomers } = await supabaseAdmin
+    .from("shopify_orders")
+    .select("customer_id");
+  
+  const uniqueCustomerIds = new Set(uniqueCustomers?.map(o => o.customer_id).filter(Boolean));
+  const customers = uniqueCustomerIds.size;
+
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
   const { count: newContacts } = await supabaseAdmin

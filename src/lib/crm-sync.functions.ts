@@ -110,10 +110,12 @@ export const syncShopifyData = createServerFn({ method: "POST" })
               [order.customer?.firstName, order.customer?.lastName].filter(Boolean).join(" ") || null;
             
             // Prioridade para o telefone: 
-            // 1. Endereço de entrega (addr?.phone) - comum em dropshipping/e-commerce
-            // 2. Telefone do cliente no objeto principal (order.customer?.phone)
-            // 3. Telefone do pedido (order.phone)
-            const customerPhone = addr?.phone ?? order.customer?.phone ?? order.phone ?? null;
+            // 1. Telefone do cliente no objeto principal (order.customer?.phone)
+            // 2. Telefone do pedido (order.phone)
+            // 3. Endereço de entrega (addr?.phone)
+            // Nota: addr.phone às vezes é o telefone de entrega, que pode ser diferente, 
+            // mas geralmente é o melhor dado disponível se os outros falharem.
+            const customerPhone = order.customer?.phone ?? order.phone ?? addr?.phone ?? null;
               
             await supabaseAdmin.from("shopify_customers").upsert({
               id: customerId,

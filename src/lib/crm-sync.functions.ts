@@ -114,7 +114,7 @@ export const syncShopifyData = createServerFn({ method: "POST" })
               email,
               first_name: addr?.firstName ?? order.customer?.firstName ?? fullName?.split(" ")[0] ?? null,
               last_name: addr?.lastName ?? order.customer?.lastName ?? fullName?.split(" ").slice(1).join(" ") ?? null,
-              phone: order.phone ?? order.customer?.phone ?? null,
+              phone: addr?.phone ?? order.phone ?? order.customer?.phone ?? null,
               city: addr?.city ?? null,
               province: addr?.province ?? null,
               country: addr?.country ?? null,

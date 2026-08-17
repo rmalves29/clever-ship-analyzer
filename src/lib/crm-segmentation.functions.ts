@@ -59,9 +59,7 @@ export const getCRMStats = createServerFn({ method: "GET" }).handler(async () =>
   // Leads = nunca compraram
   const { count: leads } = await supabaseAdmin
     .from("shopify_customers")
-    .select("id, shopify_orders!inner(id)", { count: "exact", head: true });
-    // Nota: O filtro acima na verdade pega quem TEM pedidos. Leads é o inverso.
-    // Em uma query real, faríamos um NOT EXISTS ou similar. Simplificando para o MVP:
+    .select("id, shopify_orders(id)", { count: "exact", head: true });
     
   const { count: customers } = await supabaseAdmin
     .from("shopify_customers")

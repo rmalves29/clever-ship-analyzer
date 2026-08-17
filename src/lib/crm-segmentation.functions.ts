@@ -77,14 +77,22 @@ export const getCRMStats = createServerFn({ method: "GET" }).handler(async () =>
   
   const { count: total } = await supabaseAdmin.from("shopify_customers").select("*", { count: "exact", head: true });
   
-  // Leads = nunca compraram
-  const { count: leads } = await supabaseAdmin
-    .from("shopify_customers")
-    .select("id, shopify_orders(id)", { count: "exact", head: true });
+  // Contagem de leads e clientes de forma mais direta para evitar subqueries de agregação
+  // Clientes: Pelo menos um pedido
+  const { count: customersCount } = await supabaseAdmin
+    .from("shopify_orders")
+    .select("customer_id", { count: "exact", head: true });
     
-  const { count: customers } = await supabaseAdmin
-    .from("shopify_customers")
-    .select("id, shopify_orders!inner(id)", { count: "exact", head: true });
+  // Nota: A contagem exata de clientes únicos pode ser complexa sem subqueries, 
+  // mas aqui o objetivo é o total de contatos que compraram.
+  // Vamos usar uma abordagem mais segura:
+  const { data: uniqueCustomers } = await supabaseAdmin
+    .from("shopify_orders")
+    .select("customer_id");
+  
+  const uniqueCustomerIds = new Set(uniqueCustomers?.map(o => o.customer_id).filter(Boolean));
+  const customers = uniqueCustomerIds.size;
+
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
   const { count: newContacts } = await supabaseAdmin

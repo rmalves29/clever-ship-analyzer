@@ -127,7 +127,7 @@ export const deleteSegment = createServerFn({ method: "POST" })
 
 export const getStaticLists = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin.from("crm_static_lists").select("*").order("created_at", { ascending: false });
+  const { data, error } = await supabaseAdmin.from("crm_static_lists").select("*").order("criado_em", { ascending: false });
   if (error) throw error;
   return data;
 });

@@ -6,6 +6,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
     z
       .object({
         search: z.string().optional(),
+        segmentId: z.string().uuid().optional(),
         limit: z.number().default(50),
         offset: z.number().default(0),
       })
@@ -14,11 +15,38 @@ export const getCustomersList = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-
     // Selecionamos primeiro os clientes com contagem total
     let query = supabaseAdmin
       .from("shopify_customers")
       .select("*", { count: "exact" });
+
+    // Se houver um segmento, aplicamos as regras dele
+    if (data.segmentId) {
+      const { data: segment } = await supabaseAdmin
+        .from("crm_segments")
+        .select("regras")
+        .eq("id", data.segmentId)
+        .single();
+
+      if (segment?.regras?.groups) {
+        // Implementação simplificada de filtros dinâmicos
+        // Para cada grupo (OR), criamos uma condição. Dentro de cada grupo (AND).
+        // Nota: O PostgREST tem limitações para filtros complexos E/OU aninhados via JS
+        // Para uma implementação robusta, o ideal é converter as regras em filtros SQL ou usar RPC.
+        // Aqui vamos focar na regra de CIDADE solicitada pelo usuário.
+        
+        segment.regras.groups.forEach((group: any) => {
+          group.conditions.forEach((condition: any) => {
+            if (condition.field === "cidade" && condition.operator === "eq") {
+              query = query.eq("city", condition.value);
+            } else if (condition.field === "estado" && condition.operator === "eq") {
+              query = query.eq("province", condition.value);
+            }
+            // Adicionar outros mapeamentos aqui conforme necessário
+          });
+        });
+      }
+    }
 
     if (data.search) {
       query = query.or(`first_name.ilike.%${data.search}%,last_name.ilike.%${data.search}%,email.ilike.%${data.search}%,phone.ilike.%${data.search}%`);
@@ -30,7 +58,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
 
     if (error) throw error;
 
-    // Se temos clientes, buscamos os pedidos deles separadamente para evitar o erro de agregação no select do PostgREST
+    // Se temos clientes, buscamos os pedidos deles separadamente para evitar o erro de agregação
     const customerIds = customers?.map(c => c.id) || [];
     let customersWithOrders = customers || [];
 
@@ -50,7 +78,6 @@ export const getCustomersList = createServerFn({ method: "POST" })
 
     // Processar KPIs básicos por cliente
     const processed = (customersWithOrders ?? []).map((c: any) => {
-
       const orders = c.shopify_orders || [];
       const totalSpent = orders.reduce((acc: number, o: any) => acc + Number(o.total_price || 0), 0);
       const lastOrder = orders.sort((a: any, b: any) => new Date(b.processed_at).getTime() - new Date(a.processed_at).getTime())[0];

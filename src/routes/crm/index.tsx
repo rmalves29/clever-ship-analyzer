@@ -15,7 +15,8 @@ import {
   Phone,
   LayoutDashboard,
   Sparkles,
-  Trash2
+  Trash2,
+  X
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -82,6 +83,7 @@ function CRMPage() {
   const setTab = (value: string) => navigate({ to: "/crm", search: { tab: value } });
 
   const [search, setSearch] = useState("");
+  const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
   
   const fetchList = useServerFn(getCustomersList);
@@ -96,8 +98,8 @@ function CRMPage() {
   });
 
   const { data: listData, isLoading } = useQuery({
-    queryKey: ["crm-customers", search],
-    queryFn: () => fetchList({ data: { search } }),
+    queryKey: ["crm-customers", search, selectedSegment],
+    queryFn: () => fetchList({ data: { search, segmentId: selectedSegment || undefined } }),
   });
 
   const { data: segments, refetch: refetchSegments } = useQuery({
@@ -225,6 +227,22 @@ function CRMPage() {
                   />
                 </div>
                 <div className="flex items-center gap-2">
+                  {selectedSegment && (
+                    <Badge variant="secondary" className="bg-brand/10 text-brand border-brand/20 gap-1 pr-1">
+                      Segmento: {segments?.find(s => s.id === selectedSegment)?.nome}
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="size-4 hover:bg-transparent" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedSegment(null);
+                        }}
+                      >
+                        <X className="size-3" />
+                      </Button>
+                    </Badge>
+                  )}
                   <Button variant="outline" size="sm" className="gap-2">
                     Todos os status <Filter className="size-3.5" />
                   </Button>
@@ -340,7 +358,14 @@ function CRMPage() {
                   ) : (
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                       {segments?.map((seg: any) => (
-                        <div key={seg.id} className="group relative rounded-xl border border-border bg-card p-4 transition-all hover:border-brand/50 hover:shadow-md">
+                        <div 
+                          key={seg.id} 
+                          className={`group relative rounded-xl border p-4 transition-all hover:border-brand/50 hover:shadow-md cursor-pointer ${selectedSegment === seg.id ? 'border-brand bg-brand/5 shadow-sm' : 'border-border bg-card'}`}
+                          onClick={() => {
+                            setSelectedSegment(seg.id);
+                            setTab("contatos");
+                          }}
+                        >
                           <div className="mb-2 flex items-center justify-between">
                             <Badge variant="outline" className="text-[10px] uppercase font-bold text-brand border-brand/20">DINÂMICO</Badge>
                             <Button 

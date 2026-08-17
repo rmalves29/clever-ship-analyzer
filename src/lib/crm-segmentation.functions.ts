@@ -122,24 +122,35 @@ export const saveSegment = createServerFn({ method: "POST" })
       nome: z.string().min(1),
       descricao: z.string().optional(),
       regras: z.any(),
-      tipo: z.enum(["dinamico", "estatico"]).default("dinamico"),
+      // 'tipo' column doesn't exist in DB, it's inferred or we skip it for now
     }).parse(data)
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    
+    const payload: any = {
+      nome: data.nome,
+      descricao: data.descricao || null,
+      regras: data.regras,
+      atualizado_em: new Date().toISOString(),
+    };
+
+    if (data.id) {
+      payload.id = data.id;
+    } else {
+      payload.criado_em = new Date().toISOString();
+    }
+
     const { data: result, error } = await supabaseAdmin
       .from("crm_segments")
-      .upsert({
-        id: data.id || undefined,
-        nome: data.nome,
-        descricao: data.descricao,
-        regras: data.regras,
-        tipo: data.tipo,
-        atualizado_em: new Date().toISOString(),
-      } as never)
+      .upsert(payload)
       .select()
       .single();
-    if (error) throw error;
+
+    if (error) {
+      console.error("Error saving segment:", error);
+      throw error;
+    }
     return result;
   });
 

@@ -16,7 +16,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
 
     let query = supabaseAdmin
       .from("shopify_customers")
-      .select("*, shopify_orders(count), shopify_orders(total_price, processed_at)", { count: "exact" });
+      .select("*, shopify_orders(total_price, processed_at)", { count: "exact" });
 
     if (data.search) {
       query = query.or(`first_name.ilike.%${data.search}%,last_name.ilike.%${data.search}%,email.ilike.%${data.search}%,phone.ilike.%${data.search}%`);
@@ -59,9 +59,7 @@ export const getCRMStats = createServerFn({ method: "GET" }).handler(async () =>
   // Leads = nunca compraram
   const { count: leads } = await supabaseAdmin
     .from("shopify_customers")
-    .select("id, shopify_orders!inner(id)", { count: "exact", head: true });
-    // Nota: O filtro acima na verdade pega quem TEM pedidos. Leads é o inverso.
-    // Em uma query real, faríamos um NOT EXISTS ou similar. Simplificando para o MVP:
+    .select("id, shopify_orders(id)", { count: "exact", head: true });
     
   const { count: customers } = await supabaseAdmin
     .from("shopify_customers")
@@ -83,7 +81,7 @@ export const getCRMStats = createServerFn({ method: "GET" }).handler(async () =>
 
 export const getSegmentsList = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin.from("crm_segments").select("*").order("created_at", { ascending: false });
+  const { data, error } = await supabaseAdmin.from("crm_segments").select("*").order("criado_em", { ascending: false });
   if (error) throw error;
   return data;
 });
@@ -108,7 +106,7 @@ export const saveSegment = createServerFn({ method: "POST" })
         descricao: data.descricao,
         regras: data.regras,
         tipo: data.tipo,
-        updated_at: new Date().toISOString(),
+        atualizado_em: new Date().toISOString(),
       } as never)
       .select()
       .single();
@@ -127,7 +125,7 @@ export const deleteSegment = createServerFn({ method: "POST" })
 
 export const getStaticLists = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin.from("crm_static_lists").select("*").order("created_at", { ascending: false });
+  const { data, error } = await supabaseAdmin.from("crm_static_lists").select("*").order("criado_em", { ascending: false });
   if (error) throw error;
   return data;
 });

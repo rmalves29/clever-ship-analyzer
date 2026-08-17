@@ -298,6 +298,28 @@ function Configuracoes() {
                   </AlertDescription>
                 </Alert>
                 {renderScopesStatus()}
+                <div className="mt-6 rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-900/50 dark:bg-orange-950/20">
+                  <div className="flex gap-3">
+                    <AlertCircle className="size-5 text-orange-600 dark:text-orange-400" />
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">
+                        Permissões Necessárias na Shopify
+                      </p>
+                      <p className="text-xs text-orange-800 dark:text-orange-200">
+                        Para o sistema funcionar perfeitamente, você precisa liberar as seguintes permissões (Scopes) no seu App Customizado da Shopify:
+                      </p>
+                      <ul className="list-inside list-disc space-y-1 text-xs text-orange-800 dark:text-orange-200">
+                        <li><strong>read_orders</strong>: Para importar e analisar seus pedidos e vendas.</li>
+                        <li><strong>read_customers</strong>: Para gerenciar o CRM e criar segmentações.</li>
+                        <li><strong>read_products</strong>: Para identificar quais produtos seus clientes estão comprando.</li>
+                        <li><strong>read_fulfillments</strong>: Para calcular o tempo médio de envio e rastreio.</li>
+                      </ul>
+                      <p className="mt-2 text-[10px] text-orange-700 dark:text-orange-300 italic">
+                        Configurações &gt; Apps e canais de vendas &gt; Desenvolver apps &gt; [Seu App] &gt; Configuração da API Admin.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
               <CardFooter className="flex justify-between border-t px-6 py-4">
                 <Button 

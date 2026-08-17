@@ -178,16 +178,10 @@ export const CUSTOMERS_QUERY = `
           firstName
           lastName
           phone
-          defaultAddress {
-            city
-            province
-            country
-          }
           updatedAt
           createdAt
         }
       }
     }
   }
-
 `;

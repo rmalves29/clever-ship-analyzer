@@ -58,7 +58,10 @@ export const syncShopifyData = createServerFn({ method: "POST" })
               email: customer.email || null,
               first_name: customer.firstName || null,
               last_name: customer.lastName || null,
-              phone: customer.phone || null,
+              phone: customer.phone || 
+                     customer.defaultAddress?.phone || 
+                     customer.addresses?.find((a: any) => a.phone)?.phone || 
+                     null,
               city: customer.defaultAddress?.city || null,
               province: customer.defaultAddress?.province || null,
               country: customer.defaultAddress?.country || null,
@@ -111,11 +114,9 @@ export const syncShopifyData = createServerFn({ method: "POST" })
             
             // Prioridade para o telefone: 
             // 1. Telefone do cliente no objeto principal (order.customer?.phone)
-            // 2. Telefone do pedido (order.phone)
-            // 3. Endereço de entrega (addr?.phone)
-            // Nota: addr.phone às vezes é o telefone de entrega, que pode ser diferente, 
-            // mas geralmente é o melhor dado disponível se os outros falharem.
-            const customerPhone = order.customer?.phone ?? order.phone ?? addr?.phone ?? null;
+            // 2. Telefone do endereço de entrega (addr?.phone)
+            // 3. Telefone do pedido (order.phone)
+            const customerPhone = order.customer?.phone ?? addr?.phone ?? order.phone ?? null;
               
             await supabaseAdmin.from("shopify_customers").upsert({
               id: customerId,

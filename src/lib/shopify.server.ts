@@ -187,6 +187,13 @@ export const CUSTOMERS_QUERY = `
           phone
           updatedAt
           createdAt
+          addresses(first: 5) {
+            phone
+            city
+            province
+            country
+            zip
+          }
           defaultAddress {
             city
             province

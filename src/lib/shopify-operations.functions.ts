@@ -1,13 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 
 
 /**
  * Tests the Shopify connection by fetching shop basic info and scopes.
  */
-export const testShopifyConnection = createServerFn({ method: "POST" }).handler(async () => {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { shopifyGraphQL } = await import("./shopify.server");
+export const testShopifyConnection = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.any().parse(data))
+  .handler(async () => {
   try {
+    const { shopifyGraphQL } = await import("./shopify.server");
     const data: any = await shopifyGraphQL(`
       query {
         shop { name myshopifyDomain }
@@ -22,6 +24,7 @@ export const testShopifyConnection = createServerFn({ method: "POST" }).handler(
     const missingScopes = requiredScopes.filter((s) => !scopes.includes(s));
     const hasReadAll = scopes.includes("read_all_orders");
 
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await supabaseAdmin
       .from("store_settings")
       .update({
@@ -45,6 +48,7 @@ export const testShopifyConnection = createServerFn({ method: "POST" }).handler(
   } catch (error: any) {
     console.error("Connection test failed:", error);
     try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       await supabaseAdmin
         .from("store_settings")
         .update({ last_sync_error: error.message, sync_status: "error" })

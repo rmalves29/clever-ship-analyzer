@@ -60,7 +60,7 @@ function Configuracoes() {
   }, [settings]);
 
   const testConnectionMutation = useMutation({
-    mutationFn: () => testShopifyConnection(),
+    mutationFn: () => testShopifyConnection({ data: {} }),
     onSuccess: (res: any) => {
       if (res.success) {
         toast.success(res.message || "Conexão testada com sucesso!");

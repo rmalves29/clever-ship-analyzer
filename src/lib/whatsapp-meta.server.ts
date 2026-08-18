@@ -430,13 +430,34 @@ export async function dispatchCampaign(campaignId: string) {
 
   const bodyParams = Array.isArray(campaign.body_params) ? (campaign.body_params as string[]) : [];
   const ids = await getSegmentCustomerIds(campaign.segment_type as SegmentType, campaign.segment_id || undefined);
-  const customers = await getCustomersWithPhone(ids);
+  
+  // Lógica especial para Carrinhos Abandonados: enviar para CADA abandono
+  const isAbandonedCartSegment = campaign.segment_type === "carrinho" || campaign.segment_type === "abandoned_cart";
+  
+  let recipients: { id: string; phone: string; first_name: string | null; checkout_url?: string | null }[] = [];
+
+  if (isAbandonedCartSegment) {
+    const { data: abandonedEvents } = await (supabaseAdmin
+      .from("shopify_abandoned_checkouts")
+      .select("customer_id, phone, checkout_url, shopify_customers(first_name)") as any)
+      .in("customer_id", ids);
+
+    recipients = (abandonedEvents ?? []).map((ae: any) => ({
+      id: ae.customer_id!,
+      phone: ae.phone!,
+      first_name: ae.shopify_customers?.first_name || null,
+      checkout_url: ae.checkout_url
+    })).filter((r: any) => Boolean(r.phone));
+  } else {
+    const customers = await getCustomersWithPhone(ids);
+    recipients = customers;
+  }
 
   let sent = 0;
   let failed = 0;
   const sampleErrors: string[] = [];
 
-  for (const c of customers) {
+  for (const c of recipients) {
     const to = toE164(c.phone);
     if (!to) {
       failed++;

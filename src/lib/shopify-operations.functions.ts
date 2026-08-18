@@ -48,6 +48,7 @@ export const testShopifyConnection = createServerFn({ method: "POST" })
   } catch (error: any) {
     console.error("Connection test failed:", error);
     try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       await supabaseAdmin
         .from("store_settings")
         .update({ last_sync_error: error.message, sync_status: "error" })

@@ -258,9 +258,12 @@ function CRMPage() {
         <Tabs value={tab} onValueChange={setTab} className="mt-8">
           <div className="flex justify-center">
             <TabsList className="bg-muted/50 p-1">
-              <TabsTrigger value="contatos" className="px-8">Contatos</TabsTrigger>
-              <TabsTrigger value="segmentos" className="px-8">Segmentos</TabsTrigger>
-              <TabsTrigger value="listas" className="px-8">Listas Estáticas</TabsTrigger>
+              <TabsTrigger value="contatos" className="px-6">Contatos</TabsTrigger>
+              <TabsTrigger value="segmentos" className="px-6">Segmentos</TabsTrigger>
+              <TabsTrigger value="listas" className="px-6">Listas Estáticas</TabsTrigger>
+              <TabsTrigger value="rfm" className="px-6 flex gap-2 items-center">
+                <BarChart3 className="size-4" /> Análise RFM
+              </TabsTrigger>
             </TabsList>
           </div>
 

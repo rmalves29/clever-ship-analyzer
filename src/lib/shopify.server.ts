@@ -178,14 +178,14 @@ export const ORDERS_QUERY = `
 
 export const ABANDONED_CHECKOUTS_QUERY = `
   query getAbandonedCheckouts($cursor: String) {
-    abandonedCheckouts(first: 50, after: $cursor) {
+    checkouts(first: 50, after: $cursor) {
       pageInfo { hasNextPage endCursor }
       edges {
         node {
           id
           createdAt
           updatedAt
-          abandonedCheckoutUrl
+          webUrl
           totalPriceSet { presentmentMoney { amount } }
           phone
           shippingAddress {
@@ -208,15 +208,10 @@ export const ABANDONED_CHECKOUTS_QUERY = `
             }
             addresses(first: 5) { phone }
           }
-
           lineItems(first: 5) {
-            edges {
-              node {
-                title
-                quantity
-                variant { title price }
-              }
-            }
+            title
+            quantity
+            variant { title price }
           }
         }
       }

@@ -372,7 +372,7 @@ export function SegmentEditor({
                             <SelectValue placeholder="Selecionar perfil..." />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="carrinho">Carrinho Abandonado</SelectItem>
+                            <SelectItem value="carrinho">Checkout Abandonado</SelectItem>
                           </SelectContent>
                         </Select>
                       ) : (

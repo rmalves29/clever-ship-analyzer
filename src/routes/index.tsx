@@ -94,10 +94,11 @@ function Index() {
       if (kpi.id === "produtos-enviados") return { ...kpi, value: String(shopifyData.produtosEnviadosCount) };
       if (kpi.id === "recompra") {
         const taxa = shopifyData.taxaRecompra ?? 0;
+        const recomprasCount = shopifyData.recomprasCount ?? 0;
         return {
           ...kpi,
           value: `${taxa.toFixed(1)}%`,
-          hint: `${shopifyData.totalClientesBase ?? 0} clientes na base`,
+          hint: `${recomprasCount} clientes são recompras`,
           status: statusHigherIsBetter(taxa, GOALS.taxaRecompra.meta, GOALS.taxaRecompra.regular),
         };
       }

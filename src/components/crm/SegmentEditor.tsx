@@ -129,13 +129,21 @@ const OPERATORS = {
   ]
 } as const;
 
-export function SegmentEditor({ onCancel, onSave }: { onCancel: () => void, onSave: () => void }) {
+export function SegmentEditor({ 
+  onCancel, 
+  onSave, 
+  initialData 
+}: { 
+  onCancel: () => void, 
+  onSave: () => void,
+  initialData?: { id: string, nome: string, descricao: string, regras: any }
+}) {
   const runSave = useServerFn(saveSegment);
-  const [nome, setNome] = useState("");
-  const [descricao, setDescricao] = useState("");
-  const [groups, setGroups] = useState<RuleGroup[]>([
-    { id: "1", type: "AND", conditions: [] }
-  ]);
+  const [nome, setNome] = useState(initialData?.nome || "");
+  const [descricao, setDescricao] = useState(initialData?.descricao || "");
+  const [groups, setGroups] = useState<RuleGroup[]>(
+    initialData?.regras?.groups || [{ id: "1", type: "AND", conditions: [] }]
+  );
   const [isSaving, setIsSaving] = useState(false);
 
   const addCondition = (groupId: string, category: string, fieldId: string, fieldLabel: string) => {
@@ -188,13 +196,14 @@ export function SegmentEditor({ onCancel, onSave }: { onCancel: () => void, onSa
     try {
       await runSave({
         data: {
+          id: initialData?.id,
           nome,
           descricao,
           regras: { groups },
           tipo: "dinamico"
         }
       });
-      toast.success("Segmento criado com sucesso!");
+      toast.success(initialData?.id ? "Segmento atualizado com sucesso!" : "Segmento criado com sucesso!");
       onSave();
     } catch (err: any) {
       toast.error("Erro ao salvar: " + err.message);
@@ -211,7 +220,7 @@ export function SegmentEditor({ onCancel, onSave }: { onCancel: () => void, onSa
             <ArrowLeft className="size-5" />
           </Button>
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight">Criar Segmento</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">{initialData?.id ? "Editar Segmento" : "Criar Segmento"}</h2>
             <p className="text-sm text-muted-foreground">Defina regras para agrupar seus clientes automaticamente.</p>
           </div>
         </div>

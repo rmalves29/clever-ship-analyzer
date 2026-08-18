@@ -84,6 +84,7 @@ function CRMPage() {
 
   const [search, setSearch] = useState("");
   const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
+  const [editingSegment, setEditingSegment] = useState<any>(null);
   const [showEditor, setShowEditor] = useState(false);
   
   const fetchList = useServerFn(getCustomersList);
@@ -155,9 +156,14 @@ function CRMPage() {
       <div className="min-h-screen bg-background p-8">
         <div className="mx-auto max-w-4xl">
           <SegmentEditor 
-            onCancel={() => setShowEditor(false)} 
+            initialData={editingSegment}
+            onCancel={() => {
+              setShowEditor(false);
+              setEditingSegment(null);
+            }} 
             onSave={() => {
               setShowEditor(false);
+              setEditingSegment(null);
               refetchSegments();
             }} 
           />
@@ -403,7 +409,18 @@ function CRMPage() {
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                               <Users className="size-3" /> Calculando contatos...
                             </span>
-                            <Button variant="ghost" size="sm" className="h-8 text-brand text-xs">Editar Regras</Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 text-brand text-xs"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingSegment(seg);
+                                setShowEditor(true);
+                              }}
+                            >
+                              Editar Regras
+                            </Button>
                           </div>
                         </div>
                       ))}

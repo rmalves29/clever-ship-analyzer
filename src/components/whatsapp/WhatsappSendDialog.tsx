@@ -213,8 +213,7 @@ export function WhatsappSendDialog({
                       </div>
                     </div>
                   </div>
-                  </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 pt-2 border-t border-border/50">
                     <Label className="text-sm font-semibold">Tag da campanha (opcional)</Label>
                     <Input 
                       value={campaignTag} 
@@ -222,7 +221,9 @@ export function WhatsappSendDialog({
                       placeholder="Ex: promo_inverno_2026"
                       className="h-12 bg-muted/30 border-muted-foreground/20 focus:border-brand transition-all"
                     />
-                    <p className="text-[10px] text-muted-foreground">Esta tag será adicionada a todos os clientes que receberem a campanha, permitindo criar novos segmentos futuramente.</p>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      Esta tag será adicionada a todos os clientes que receberem a campanha, facilitando a criação de segmentos posteriormente.
+                    </p>
                   </div>
                 </div>
               )}

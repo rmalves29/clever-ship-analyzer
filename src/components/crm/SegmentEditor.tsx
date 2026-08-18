@@ -363,6 +363,18 @@ export function SegmentEditor({
                             <SelectItem value="Perdidos">Perdidos</SelectItem>
                           </SelectContent>
                         </Select>
+                      ) : condition.field === "perfil" ? (
+                        <Select
+                          value={condition.value as string}
+                          onValueChange={v => updateCondition(group.id, condition.id, { value: v })}
+                        >
+                          <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs">
+                            <SelectValue placeholder="Selecionar perfil..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="carrinho">Carrinho Abandonado</SelectItem>
+                          </SelectContent>
+                        </Select>
                       ) : (
                         <Input 
                           className="h-8 flex-1 border-none bg-muted/50 text-xs" 

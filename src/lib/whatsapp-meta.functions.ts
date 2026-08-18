@@ -105,6 +105,7 @@ export const createAndSendCampaign = createServerFn({ method: "POST" })
       {
         nome: data.nome,
         segmentType: data.segmentType,
+        segmentId: data.segmentId,
         messageType: data.messageType,
         templateName: data.templateName,
         templateLanguage: data.templateLanguage,
@@ -112,7 +113,7 @@ export const createAndSendCampaign = createServerFn({ method: "POST" })
         couponCode: data.couponCode,
         origem: "crm",
       },
-      data.requireApproval ? "aguardando_aprovacao" : "enviando",
+      data.sendAt ? "agendada" : data.requireApproval ? "aguardando_aprovacao" : "enviando",
     );
     if (!created.success) return created;
 

@@ -75,10 +75,10 @@ export const saveWhatsappMetaSettings = createServerFn({ method: "POST" })
 
 /** Prévia do segmento: quantos clientes reais receberiam a mensagem agora. */
 export const previewSegment = createServerFn({ method: "POST" })
-  .validator((data: unknown) => z.object({ segmentType: segmentTypeSchema }).parse(data))
+  .validator((data: unknown) => z.object({ segmentType: z.string(), segmentId: z.string().uuid().optional() }).parse(data))
   .handler(async ({ data }) => {
     const { countSegmentRecipients } = await import("./whatsapp-meta.server");
-    return countSegmentRecipients(data.segmentType);
+    return countSegmentRecipients(data.segmentType, data.segmentId);
   });
 
 const createCampaignSchema = z.object({

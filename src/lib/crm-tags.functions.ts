@@ -13,14 +13,14 @@ export const addTagToCustomers = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     
     // Buscar clientes para pegar tags atuais
-    const { data: customers } = await supabaseAdmin
+    const { data: customers } = await (supabaseAdmin
       .from("shopify_customers")
-      .select("id, tags")
+      .select("id, tags") as any)
       .in("id", customerIds);
       
     if (!customers) return { success: false, error: "Clientes não encontrados" };
 
-    const updates = customers.map(c => {
+    const updates = (customers as any[]).map((c: any) => {
       const currentTags = Array.isArray(c.tags) ? c.tags : [];
       if (currentTags.includes(tag)) return null;
       return {

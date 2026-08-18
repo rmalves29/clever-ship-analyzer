@@ -90,8 +90,8 @@ export const getCustomersList = createServerFn({ method: "POST" })
 
     if (error) throw error;
 
-    const customerIds = customers?.map(c => c.id) || [];
-    let customersWithOrders: any[] = (customers || []).map(c => ({ ...c, shopify_orders: [] }));
+    const customerIds = (customers as any[])?.map((c: any) => c.id) || [];
+    let customersWithOrders: any[] = ((customers as any[]) || []).map((c: any) => ({ ...c, shopify_orders: [] }));
 
     if (customerIds.length > 0) {
       const { data: orders, error: ordersError } = await supabaseAdmin
@@ -100,7 +100,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
         .in("customer_id", customerIds);
 
       if (!ordersError && orders) {
-        customersWithOrders = (customers || []).map(c => ({
+        customersWithOrders = ((customers as any[]) || []).map((c: any) => ({
           ...c,
           shopify_orders: orders.filter(o => o.customer_id === c.id)
         }));
@@ -333,7 +333,7 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
     if (error) throw error;
 
     // Buscar todos os pedidos para calcular totalSpent e totalOrders
-    const customerIds = customers?.map(c => c.id) || [];
+    const customerIds = (customers as any[])?.map((c: any) => c.id) || [];
     let ordersMap: Record<string, any[]> = {};
     
     if (customerIds.length > 0) {
@@ -351,7 +351,7 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
       });
     }
 
-    const rows = (customers || []).map(c => {
+    const rows = ((customers as any[]) || []).map((c: any) => {
       const cid = c.id ? String(c.id) : '';
       const orders = cid ? (ordersMap[cid] || []) : [];
       const totalSpent = orders.reduce((acc, o) => acc + Number(o.total_price || 0), 0);
@@ -375,7 +375,7 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
     const headers = Object.keys(firstRow);
     const csvContent = [
       headers.join(","),
-      ...rows.map(row => headers.map(h => `"${String(row[h as keyof typeof row] || "").replace(/"/g, '""')}"`).join(","))
+      ...rows.map((row: any) => headers.map(h => `"${String(row[h as keyof typeof row] || "").replace(/"/g, '""')}"`).join(","))
     ].join("\n");
 
     return { csv: csvContent };

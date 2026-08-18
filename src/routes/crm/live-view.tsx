@@ -23,7 +23,7 @@ function LiveViewPage() {
   
   const { data, isLoading } = useQuery({
     queryKey: ["live-dashboard"],
-    queryFn: () => fetchDashboard({ period: "diario" }),
+    queryFn: () => fetchDashboard({ data: { period: "diario" } }),
     refetchInterval: 30000, // Atualiza a cada 30s
   });
 

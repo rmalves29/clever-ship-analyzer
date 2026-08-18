@@ -8,11 +8,11 @@ export const identifyAbandonedCheckouts = createServerFn({ method: "POST" })
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     
-    // 1. Find all customers with EXPIRED orders
+    // 1. Find all customers with EXPIRED, VOIDED or PENDING orders (common for abandoned/failed checkouts)
     const { data: expiredOrders, error: orderError } = await supabaseAdmin
       .from("shopify_orders")
       .select("customer_id, financial_status, phone")
-      .eq("financial_status", "EXPIRED");
+      .in("financial_status", ["EXPIRED", "VOIDED", "PENDING", "AUTHORIZED"]);
       
     if (orderError) throw orderError;
     

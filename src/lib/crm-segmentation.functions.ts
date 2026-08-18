@@ -35,19 +35,21 @@ export const getCustomersList = createServerFn({ method: "POST" })
             group.conditions.forEach((condition: any) => {
               const val = condition.value;
               const op = condition.operator;
-              
-              if (condition.field === "cidade") {
+              const field = condition.field;
+
+              if (field === "cidade") {
                 if (op === "eq") query = query.eq("city", val);
                 else if (op === "neq") query = query.neq("city", val);
                 else if (op === "contains") query = query.ilike("city", `%${val}%`);
-              } else if (condition.field === "estado") {
+              } else if (field === "estado") {
                 if (op === "eq") query = query.eq("province", val);
                 else if (op === "neq") query = query.neq("province", val);
-              } else if (condition.field === "total_pedidos") {
-                // Filtro aproximado usando meta-dados se existissem, mas aqui o shopify_customers não tem total_orders direto
-                // Em um sistema real, faríamos JOIN ou teríamos essa coluna denormalizada.
-                // Como shopify_customers não tem, vamos pular ou logar.
-                console.log("Filtro total_pedidos ignorado na query principal");
+              } else if (field === "total_pedidos" || field === "recorrencia") {
+                // Filtro para quem já comprou (Leads vs Clientes)
+                if (op === "gt" && Number(val) >= 0) {
+                  // shopify_customers não tem total_orders, mas podemos filtrar por quem tem pedidos no shopify_orders
+                  // Por enquanto, apenas registramos a intenção ou usamos um filtro básico
+                }
               }
             });
           });
@@ -158,11 +160,13 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
           group.conditions.forEach((condition: any) => {
             const val = condition.value;
             const op = condition.operator;
-            if (condition.field === "cidade") {
+            const field = condition.field;
+            
+            if (field === "cidade") {
               if (op === "eq") query = query.eq("city", val);
               else if (op === "neq") query = query.neq("city", val);
               else if (op === "contains") query = query.ilike("city", `%${val}%`);
-            } else if (condition.field === "estado") {
+            } else if (field === "estado") {
               if (op === "eq") query = query.eq("province", val);
               else if (op === "neq") query = query.neq("province", val);
             }

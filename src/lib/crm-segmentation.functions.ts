@@ -144,6 +144,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
         phone: c.phone,
         city: c.city,
         province: c.province,
+        rfmSegment: c.rfm_segment,
         totalOrders: orders.length,
         totalSpent,
         lastOrderAt: lastOrder?.processed_at || null,

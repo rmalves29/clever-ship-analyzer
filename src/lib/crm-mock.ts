@@ -202,7 +202,7 @@ export function getDashboardData(period: PeriodKey, customLabel?: string): Dashb
       },
       {
         title: "Tempo médio de envio",
-        text: "Envios acima da meta operacional de 1,5 dia impactam diretamente a experiência pós-compra.",
+        text: "Envios acima da meta operacional de 3 dias impactam diretamente a experiência pós-compra.",
         highlight: `${tempoMedioEnvio.toFixed(1)} dias`,
         tone: statusLowerIsBetter(tempoMedioEnvio, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
       },

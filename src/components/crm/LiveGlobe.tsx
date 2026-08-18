@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import Globe from 'react-globe.gl';
-import * as THREE from 'three';
-import { interpolateYlOrRd } from 'd3-scale-chromatic';
 import { scaleSequential } from 'd3-scale';
+import { interpolateYlOrRd } from 'd3-scale-chromatic';
 
 interface LiveGlobeProps {
   markers: any[];
@@ -13,14 +12,11 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Cores e escalas
-  const colorScale = scaleSequential(interpolateYlOrRd).domain([0, 10]);
-
   const globeData = useMemo(() => {
     return markers.map(m => ({
       lat: m.coordinates[1],
       lng: m.coordinates[0],
-      size: m.type === 'order' ? 0.5 : 0.2,
+      size: m.type === 'order' ? 0.8 : 0.4,
       color: m.type === 'order' ? '#10b981' : '#3b82f6',
       label: m.name
     }));
@@ -55,34 +51,28 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
 
   useEffect(() => {
     if (globeRef.current) {
-      // Configurações do globo
       const globe = globeRef.current;
       
-      // Auto-rotação
+      // Auto-rotação suave
       globe.controls().autoRotate = true;
       globe.controls().autoRotateSpeed = 0.5;
-      globe.controls().enableZoom = false;
+      globe.controls().enableZoom = true;
       
-      // Focar na América do Sul inicialmente
+      // Focar na América do Sul inicialmente (foco no Brasil)
       globe.pointOfView({ lat: -15, lng: -55, altitude: 2 }, 1000);
-      
-      // Luzes
-      const directionalLight = globe.scene().children.find((obj: any) => obj.type === 'DirectionalLight');
-      if (directionalLight) {
-        directionalLight.intensity = 2;
-      }
     }
   }, []);
 
   return (
-    <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-transparent">
+    <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-transparent rounded-xl">
       <Globe
         ref={globeRef}
         width={dimensions.width}
         height={dimensions.height}
         backgroundColor="rgba(0,0,0,0)"
-        globeImageUrl="https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
-        bumpImageUrl="https://unpkg.com/three-globe/example/img/earth-topology.png"
+        globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
+        bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
+        backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
         pointsData={globeData}
         pointRadius="size"
         pointColor="color"
@@ -98,8 +88,9 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
         labelText={d => (d as any).label}
         labelSize={1.5}
         labelDotRadius={0.5}
-        labelColor={() => 'rgba(255, 255, 255, 0.75)'}
+        labelColor={() => 'rgba(255, 255, 255, 0.9)'}
         labelResolution={2}
+        labelAltitude={0.02}
       />
     </div>
   );

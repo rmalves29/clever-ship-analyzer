@@ -99,14 +99,27 @@ export async function exchangeEmbeddedSignupCode(params: { code: string; phoneNu
   return { success: true as const };
 }
 
-/** Converte telefone BR (com ou sem +55/DDI) pra E.164, exigido pela API do WhatsApp. */
-export function toE164(raw: string): string | null {
+/** Converte telefone para E.164, garantindo DDI 55 para números BR se necessário. */
+export function toE164(raw: string | null | undefined): string | null {
+  if (!raw) return null;
   const digits = raw.replace(/\D/g, "");
   if (!digits) return null;
+  
+  // Se já tem +, assumimos que está correto e apenas limpamos caracteres não-numéricos
   if (raw.trim().startsWith("+")) return `+${digits}`;
-  if (digits.startsWith("55") && digits.length >= 12) return `+${digits}`;
-  if (digits.length === 10 || digits.length === 11) return `+55${digits}`;
-  return `+${digits}`;
+  
+  // Se começa com 55 e tem tamanho de DDI + DDD + Número (12 ou 13 dígitos)
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+    return `+${digits}`;
+  }
+  
+  // Se tem 10 ou 11 dígitos (DDD + Número), adicionamos o DDI 55 do Brasil
+  if (digits.length === 10 || digits.length === 11) {
+    return `+55${digits}`;
+  }
+  
+  // Fallback: retorna com + se tiver comprimento mínimo razoável, senão null
+  return digits.length >= 8 ? `+${digits}` : null;
 }
 
 /** IDs de clientes que batem com o segmento — calculado sobre o histórico completo, não o período do dashboard. */
@@ -193,18 +206,19 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
 
     if (allCustomers && (customSegment.regras as any)?.groups) {
       const groups = (customSegment.regras as any).groups;
-      const customersWithOrdersList = Array.from(new Set((orders ?? []).map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
-
-      return allCustomers.filter(c => {
+      
+      // Mapear regras para ids
+      const filtered = allCustomers.filter(c => {
         return groups.some((g: any) => {
           if (!g.conditions?.length) return false;
           return g.conditions.every((cond: any) => {
             const field = cond.field;
             const operator = cond.operator;
-            const target = String(cond.value || "").toLowerCase();
+            const value = cond.value;
+            const target = String(value || "").toLowerCase();
 
             if (field === "total_pedidos" || field === "recorrencia") {
-              const numVal = Number(cond.value);
+              const numVal = Number(value);
               const orderCount = orders?.filter(o => o.customer_id === c.id).length || 0;
               
               if (field === "total_pedidos") {
@@ -228,7 +242,9 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
             return false;
           });
         });
-      }).map(c => c.id);
+      });
+      
+      return filtered.map(c => c.id);
     }
   }
 
@@ -245,8 +261,18 @@ export async function getCustomersWithPhone(ids: string[]) {
 export async function countSegmentRecipients(segmentType: SegmentType | string, segmentId?: string) {
   const ids = await getSegmentCustomerIds(segmentType, segmentId);
   const customers = await getCustomersWithPhone(ids);
-  const validos = customers.filter((c) => toE164(c.phone));
-  return { clientes: ids.length, comTelefone: customers.length, destinatarios: validos.length };
+  
+  // Validar se o telefone convertido para E164 é válido para o WhatsApp
+  const validos = customers.filter((c) => {
+    const e164 = toE164(c.phone);
+    return e164 && e164.length >= 12; // Mínimo +55 + DDD + 8 dígitos
+  });
+  
+  return { 
+    clientes: ids.length, 
+    comTelefone: customers.length, 
+    destinatarios: validos.length 
+  };
 }
 
 async function sendTemplateMessage(params: {

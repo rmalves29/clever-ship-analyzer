@@ -212,9 +212,14 @@ function Configuracoes() {
       <div className="mt-4 space-y-2">
         <p className="text-sm font-medium">Permissões (Scopes):</p>
         <div className="flex flex-wrap gap-2">
-          {testResult.scopes.map((scope: string) => (
-            <Badge key={scope} variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/20 dark:text-green-400 dark:border-green-900">
-              {scope}
+          {testResult.scopes.map((scope: any) => (
+            <Badge 
+              key={typeof scope === 'string' ? scope : scope.handle} 
+              variant="outline" 
+              className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/20 dark:text-green-400 dark:border-green-900"
+              title={typeof scope === 'object' ? scope.description : undefined}
+            >
+              {typeof scope === 'string' ? scope : scope.handle}
             </Badge>
           ))}
           {testResult.missingScopes?.map((scope: string) => (

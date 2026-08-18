@@ -33,7 +33,7 @@ export const brlCents = (v: number) =>
 /** Metas do semáforo (vermelho crítico / amarelo regular / verde dentro da meta) */
 export const GOALS = {
   taxaRecompra: { meta: 10, regular: 5 }, // %
-  tempoMedioEnvio: { meta: 1.5, regular: 2.5 }, // dias (menor é melhor)
+  tempoMedioEnvio: { meta: 3.0, regular: 3.5 }, // dias (menor é melhor)
   ticketMedio: { meta: 300, regular: 200 }, // R$
 };
 
@@ -202,7 +202,7 @@ export function getDashboardData(period: PeriodKey, customLabel?: string): Dashb
       },
       {
         title: "Tempo médio de envio",
-        text: "Envios acima da meta operacional de 1,5 dia impactam diretamente a experiência pós-compra.",
+        text: "Envios acima da meta operacional de 3 dias impactam diretamente a experiência pós-compra.",
         highlight: `${tempoMedioEnvio.toFixed(1)} dias`,
         tone: statusLowerIsBetter(tempoMedioEnvio, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
       },

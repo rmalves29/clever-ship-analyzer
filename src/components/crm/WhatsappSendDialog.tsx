@@ -271,9 +271,6 @@ export function WhatsappSendDialog({
             <Input value={coupon} onChange={(e) => setCoupon(e.target.value)} placeholder="Ex: VOLTA10" />
           </div>
 
-          <Badge variant="outline" className="gap-1">
-            <CheckCircle2 className="size-3" /> Segmento: {seed?.segmentType}
-          </Badge>
         </div>
 
         <DialogFooter className="gap-2 sm:justify-between">

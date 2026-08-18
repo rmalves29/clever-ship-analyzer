@@ -1,10 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 
 
 /**
  * Tests the Shopify connection by fetching shop basic info and scopes.
  */
-export const testShopifyConnection = createServerFn({ method: "POST" }).handler(async () => {
+export const testShopifyConnection = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.any().parse(data))
+  .handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { shopifyGraphQL } = await import("./shopify.server");
   try {

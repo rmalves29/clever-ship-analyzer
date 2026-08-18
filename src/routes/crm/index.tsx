@@ -257,7 +257,7 @@ function CRMPage() {
                 <DropdownMenuItem onClick={async () => {
                   const promise = runIdentifyAbandoned();
                   toast.promise(promise, {
-                    loading: "Analisando carrinhos abandonados...",
+                    loading: "Analisando checkouts abandonados...",
                     success: (res: any) => {
                       queryClient.invalidateQueries({ queryKey: ["crm-customers"] });
                       queryClient.invalidateQueries({ queryKey: ["crm-stats"] });
@@ -266,7 +266,7 @@ function CRMPage() {
                     error: "Erro na análise de abandono."
                   });
                 }}>
-                  Identificar Carrinhos Abandonados
+                  Identificar Checkouts Abandonados
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={async () => {
                   const query = prompt("Digite o nome ou e-mail da cliente para buscar na Shopify:");

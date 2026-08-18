@@ -63,13 +63,14 @@ export const getCustomersList = createServerFn({ method: "POST" })
               .select("customer_id")
               .eq("financial_status", val);
             
-            const customerIds = Array.from(new Set(customersWithStatus?.map(o => String(o.customer_id)).filter(Boolean)));
+            const customerIds = Array.from(new Set(customersWithStatus?.map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
             
             if (operator === "eq") {
               if (customerIds.length > 0) {
                 query = query.in("id", customerIds);
               } else {
-                return { customers: [], total: 0 };
+                // Se nenhum cliente tem esse status, a query não deve retornar nada para esse filtro 'eq'
+                query = query.eq("id", "00000000-0000-0000-0000-000000000000");
               }
             } else if (operator === "neq") {
               if (customerIds.length > 0) {

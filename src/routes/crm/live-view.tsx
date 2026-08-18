@@ -38,12 +38,15 @@ const CITY_COORDINATES: Record<string, [number, number]> = {
   "Porto Alegre": [-51.2177, -30.0346],
   "Fortaleza": [-38.5267, -3.7319],
   "Goiânia": [-49.255, -16.6786],
+  "GOIANIA": [-49.255, -16.6786],
   "Naviraí": [-54.1906, -23.0647],
   "Governador Valadares": [-41.9492, -18.8511],
   "Belford Roxo": [-43.3995, -22.7641],
   "São Gonçalo": [-43.0472, -22.8269],
+  "SÃo GonÇalo": [-43.0472, -22.8269],
   "Salto": [-47.2858, -23.2008],
   "São José": [-48.6333, -27.6146],
+  "Sao jose": [-48.6333, -27.6146],
   "São José do Rio Preto": [-49.3797, -20.8114],
   "Pontes e Lacerda": [-59.35, -15.22],
   "Lages": [-50.3261, -27.8161],
@@ -56,25 +59,26 @@ const CITY_COORDINATES: Record<string, [number, number]> = {
 function getDynamicMarkers(data: any) {
   const markers: any[] = [];
   
-  // 1. Adicionar pontos baseados nas cidades com pedidos reais do dashboard
-  if (data?.enviosPorDia) {
-    // Pegamos cidades mencionadas ou usamos as top cidades do banco que mapeamos
-    // Como enviosPorDia não tem a cidade, vamos focar em cidades que sabemos que têm pedidos
-    const topCities = ["Belo Horizonte", "São Paulo", "Brasília", "Naviraí", "Rio de Janeiro"];
-    topCities.forEach(city => {
-      if (CITY_COORDINATES[city]) {
-        markers.push({
-          name: city,
-          coordinates: CITY_COORDINATES[city],
-          type: "order"
-        });
-      }
-    });
-  }
+  // Cidades com pedidos reais (conforme visto no banco de dados)
+  const realOrderCities = [
+    "Belo Horizonte", "São Paulo", "Brasília", "Naviraí", "Rio de Janeiro", 
+    "Governador Valadares", "Belford Roxo", "São Gonçalo", "Salto", "São José", 
+    "São José do Rio Preto", "Pontes e Lacerda", "GOIANIA", "Lages", "Sarandi", 
+    "Tramandaí", "Palhoça"
+  ];
 
-  // 2. Adicionar alguns visitantes aleatórios próximos a capitais para volume visual, 
-  // mas priorizando onde há dados reais
-  const visitorCities = ["São Paulo", "Rio de Janeiro", "Curitiba", "Salvador", "Goiânia"];
+  realOrderCities.forEach(city => {
+    if (CITY_COORDINATES[city]) {
+      markers.push({
+        name: city,
+        coordinates: CITY_COORDINATES[city],
+        type: "order"
+      });
+    }
+  });
+
+  // Visitantes em outras capitais para preencher o mapa visualmente
+  const visitorCities = ["Curitiba", "Salvador", "Porto Alegre", "Fortaleza"];
   visitorCities.forEach(city => {
     if (CITY_COORDINATES[city] && !markers.find(m => m.name === city)) {
       markers.push({

@@ -11,10 +11,8 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
       throw error;
     }
     console.error("SERVER_FN_ERROR:", error);
-    return new Response(renderErrorPage(), {
-      status: 500,
-      headers: { "content-type": "text/html; charset=utf-8" },
-    });
+    // Let the error propagate so we can see it in the dev console/network
+    throw error;
   }
 });
 

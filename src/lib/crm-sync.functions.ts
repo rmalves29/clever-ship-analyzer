@@ -259,7 +259,7 @@ export const syncShopifyData = createServerFn({ method: "POST" })
                   .maybeSingle();
                 
                 const currentTags = existing?.tags || [];
-                const newTags = Array.from(new Set([...currentTags, "Carrinho Abandonado", "Checkout"]));
+                const newTags = Array.from(new Set([...currentTags, "Carrinho Abandonado", "Checkout", "CAR24"]));
 
                 // Update customer info and tag as abandoned
                 await supabaseAdmin.from("shopify_customers").upsert({

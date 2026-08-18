@@ -116,7 +116,15 @@ function LiveViewPage() {
               </p>
             </div>
           </div>
-          <Button variant="outline" size="sm" className="gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="gap-2"
+            onClick={() => {
+              const fetchSync = useServerFn(syncShopifyData);
+              fetchSync({ data: { fullSync: false } });
+            }}
+          >
             <RefreshCw className="size-4" /> Atualizar agora
           </Button>
         </div>

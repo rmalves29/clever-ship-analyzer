@@ -129,13 +129,21 @@ const OPERATORS = {
   ]
 } as const;
 
-export function SegmentEditor({ onCancel, onSave }: { onCancel: () => void, onSave: () => void }) {
+export function SegmentEditor({ 
+  onCancel, 
+  onSave, 
+  initialData 
+}: { 
+  onCancel: () => void, 
+  onSave: () => void,
+  initialData?: { id: string, nome: string, descricao: string, regras: any }
+}) {
   const runSave = useServerFn(saveSegment);
-  const [nome, setNome] = useState("");
-  const [descricao, setDescricao] = useState("");
-  const [groups, setGroups] = useState<RuleGroup[]>([
-    { id: "1", type: "AND", conditions: [] }
-  ]);
+  const [nome, setNome] = useState(initialData?.nome || "");
+  const [descricao, setDescricao] = useState(initialData?.descricao || "");
+  const [groups, setGroups] = useState<RuleGroup[]>(
+    initialData?.regras?.groups || [{ id: "1", type: "AND", conditions: [] }]
+  );
   const [isSaving, setIsSaving] = useState(false);
 
   const addCondition = (groupId: string, category: string, fieldId: string, fieldLabel: string) => {

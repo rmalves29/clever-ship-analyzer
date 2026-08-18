@@ -187,6 +187,13 @@ export const ABANDONED_CHECKOUTS_QUERY = `
           updatedAt
           abandonedCheckoutUrl
           totalPriceSet { presentmentMoney { amount } }
+          phone
+          shippingAddress {
+            phone
+            city
+            province
+            country
+          }
           customer {
             id
             email

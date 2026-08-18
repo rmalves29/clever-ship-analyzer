@@ -494,12 +494,12 @@ export async function dispatchCampaign(campaignId: string) {
       status: "finalizada",
       enviadas: sent,
       falhas: failed,
-      total_destinatarios: customers.length,
+      total_destinatarios: recipients.length,
       sent_at: new Date().toISOString(),
     } as never)
     .eq("id", campaignId);
 
-  return { success: true as const, campaignId, total: customers.length, sent, failed, sampleErrors };
+  return { success: true as const, campaignId, total: recipients.length, sent, failed, sampleErrors };
 }
 
 const RANK: Record<string, number> = { sent: 0, delivered: 1, read: 2, failed: 3 };

@@ -100,6 +100,11 @@ function CampanhasWhatsapp() {
     queryFn: () => listAutomations(),
   });
 
+  const { data: crmSegments } = useQuery({
+    queryKey: ["crm-segments"],
+    queryFn: () => getSegmentsList(),
+  });
+
   const list = campanhas ?? [];
   const pendentes = list.filter((c) => c.status === "aguardando_aprovacao");
 

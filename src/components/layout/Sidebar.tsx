@@ -14,6 +14,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: "CRM",
     items: [
       { label: "Dashboard", to: "/", icon: LayoutDashboard },
+      { label: "Live View", to: "/crm/live-view", icon: BarChart3 },
       { label: "Contatos", to: "/crm", search: { tab: "contatos" }, icon: Sparkles },
       { label: "Segmentos", to: "/crm", search: { tab: "segmentos" }, icon: Sparkles },
       { label: "Listas Estáticas", to: "/crm", search: { tab: "listas" }, icon: Sparkles },

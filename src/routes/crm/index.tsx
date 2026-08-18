@@ -39,6 +39,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment, exportSegmentCustomers } from "@/lib/crm-segmentation.functions";
 import { fixCustomerPhone, deepSyncCustomer } from "@/lib/admin-maintenance.functions";
+import { normalizeAllPhones } from "@/lib/maintenance-scripts.functions";
 import { brl } from "@/lib/crm-mock";
 import { SegmentEditor } from "@/components/crm/SegmentEditor";
 import { toast } from "sonner";
@@ -95,6 +96,7 @@ function CRMPage() {
   const runFixPhone = useServerFn(fixCustomerPhone);
   const runDeepSync = useServerFn(deepSyncCustomer);
   const runExport = useServerFn(exportSegmentCustomers);
+  const runNormalizePhones = useServerFn(normalizeAllPhones);
   const [isExporting, setIsExporting] = useState(false);
 
   const handleExport = async () => {
@@ -232,6 +234,20 @@ function CRMPage() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem>Importar CSV</DropdownMenuItem>
+                <DropdownMenuItem onClick={async () => {
+                  const promise = runNormalizePhones();
+                  toast.promise(promise, {
+                    loading: "Normalizando e recuperando telefones...",
+                    success: (res: any) => {
+                      queryClient.invalidateQueries({ queryKey: ["crm-customers"] });
+                      queryClient.invalidateQueries({ queryKey: ["crm-stats"] });
+                      return `${res.fixedCount} telefones ajustados/recuperados!`;
+                    },
+                    error: "Erro na normalização."
+                  });
+                }}>
+                  Ajustar todos os telefones
+                </DropdownMenuItem>
                 <DropdownMenuItem>Sincronizar Shopify</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

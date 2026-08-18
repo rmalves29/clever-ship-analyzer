@@ -1,6 +1,18 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+function normalizePhone(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  let cleaned = phone.replace(/\D/g, "");
+  if (cleaned.length === 10 || cleaned.length === 11) {
+    return `+55${cleaned}`;
+  }
+  if (cleaned.length > 11 && !phone.startsWith("+")) {
+    return `+${cleaned}`;
+  }
+  return phone.startsWith("+") ? phone : `+${cleaned}`;
+}
+
 
 export const syncShopifyData = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.object({ fullSync: z.boolean().optional().default(false) }).parse(data))
@@ -58,10 +70,11 @@ export const syncShopifyData = createServerFn({ method: "POST" })
               email: customer.email || null,
               first_name: customer.firstName || null,
               last_name: customer.lastName || null,
-              phone: customer.phone || 
-                     customer.defaultAddress?.phone || 
-                     customer.addresses?.find((a: any) => a.phone)?.phone || 
-                     null,
+              phone: normalizePhone(
+                customer.phone || 
+                customer.defaultAddress?.phone || 
+                customer.addresses?.find((a: any) => a.phone)?.phone
+              ),
               city: customer.defaultAddress?.city || null,
               province: customer.defaultAddress?.province || null,
               country: customer.defaultAddress?.country || null,
@@ -119,13 +132,13 @@ export const syncShopifyData = createServerFn({ method: "POST" })
             // 3. Telefone padrão do cliente (order.customer?.defaultAddress?.phone)
             // 4. Telefone de qualquer endereço cadastrado
             // 5. Telefone do pedido (order.phone)
-            const customerPhone = 
+            const customerPhone = normalizePhone(
               addr?.phone ?? 
               order.customer?.phone ?? 
               order.customer?.defaultAddress?.phone ??
               order.customer?.addresses?.find((a: any) => a.phone)?.phone ??
-              order.phone ?? 
-              null;
+              order.phone
+            );
               
             await supabaseAdmin.from("shopify_customers").upsert({
               id: customerId,

@@ -160,7 +160,8 @@ export const getRFMStats = createServerFn({ method: "GET" })
       .neq("financial_status", "VOIDED");
 
     orders?.forEach(o => {
-      const seg = customerToSegment.get(o.customer_id);
+      const customerId = o.customer_id ? String(o.customer_id) : "";
+      const seg = customerToSegment.get(customerId);
       if (seg && segmentMetrics[seg]) {
         segmentMetrics[seg].pedidos += 1;
         segmentMetrics[seg].receita += Number(o.total_price || 0);

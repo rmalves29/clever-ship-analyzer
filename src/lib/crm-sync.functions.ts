@@ -228,10 +228,11 @@ export const syncShopifyData = createServerFn({ method: "POST" })
       while (hasNextPage) {
         try {
           const result: any = await shopifyGraphQL(ABANDONED_CHECKOUTS_QUERY, { cursor });
-          if (!result?.checkouts) break;
+          if (!result?.abandonedCheckouts) break;
           
-          const abandonedConnection = result.checkouts;
+          const abandonedConnection = result.abandonedCheckouts;
           console.log(`Processing ${abandonedConnection.edges.length} abandoned checkouts`);
+
 
           for (const edge of abandonedConnection.edges) {
             const checkout = edge.node;

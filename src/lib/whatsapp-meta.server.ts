@@ -315,7 +315,7 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
     };
   }
 
-  const { destinatarios } = await countSegmentRecipients(input.segmentType);
+  const { destinatarios } = await countSegmentRecipients(input.segmentType, segmentId);
 
   const { data: campaign, error } = await supabaseAdmin
     .from("whatsapp_campaigns")

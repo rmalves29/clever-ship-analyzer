@@ -395,9 +395,23 @@ function CRMPage() {
                             ) : "—"}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="secondary" className="bg-muted text-[10px] font-medium uppercase tracking-wider">
-                              {c.totalOrders > 0 ? "Ativo" : "Lead"}
-                            </Badge>
+                            <div className="flex flex-col gap-1">
+                              {c.rfmSegment && (
+                                <Badge 
+                                  variant="outline" 
+                                  className="text-[9px] font-bold uppercase w-fit"
+                                  style={{ 
+                                    color: RFM_SEGMENTS_CONFIG[c.rfmSegment as keyof typeof RFM_SEGMENTS_CONFIG]?.color,
+                                    borderColor: `${RFM_SEGMENTS_CONFIG[c.rfmSegment as keyof typeof RFM_SEGMENTS_CONFIG]?.color}40`
+                                  }}
+                                >
+                                  {c.rfmSegment}
+                                </Badge>
+                              )}
+                              <Badge variant="secondary" className="bg-muted text-[10px] font-medium uppercase tracking-wider w-fit">
+                                {c.totalOrders > 0 ? "Ativo" : "Lead"}
+                              </Badge>
+                            </div>
                           </TableCell>
                           <TableCell className="text-center font-bold">{c.totalOrders}</TableCell>
                           <TableCell className="text-right font-bold">{brl(c.totalSpent)}</TableCell>

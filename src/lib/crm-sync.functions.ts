@@ -285,7 +285,7 @@ export const syncShopifyData = createServerFn({ method: "POST" })
 
           hasNextPage = abandonedConnection.pageInfo.hasNextPage;
           cursor = abandonedConnection.pageInfo.endCursor;
-          if (totalAbandoned > 1000) break;
+          if (totalAbandoned > 5000) break; // Increased safety limit
         } catch (abandonedErr: any) {
           console.error("Abandoned checkout sync page failed:", abandonedErr);
           // If abandoned checkouts fail (e.g. scope missing), we don't want to crash the whole sync

@@ -90,8 +90,9 @@ const createCampaignSchema = z.object({
   templateName: z.string().optional(),
   templateLanguage: z.string().optional(),
   couponCode: z.string().optional(),
-  bodyParams: z.array(z.string()).max(5).default([]),
+  bodyParams: z.array(z.string()).max(10).default([]),
   requireApproval: z.boolean().default(false),
+  sendAt: z.string().optional(),
 });
 
 /** "Aplicar ação" no CRM: cria a campanha e envia na hora, ou manda pra fila de aprovação. */

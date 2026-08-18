@@ -243,10 +243,13 @@ export const syncShopifyData = createServerFn({ method: "POST" })
               
               if (customerId) {
                 const customerPhone = normalizePhone(
+                  checkout.phone ??
+                  checkout.shippingAddress?.phone ??
                   customer.phone ?? 
                   customer.defaultAddress?.phone ??
                   customer.addresses?.find((a: any) => a.phone)?.phone
                 );
+
 
                 // Get existing tags to avoid overwriting
                 const { data: existing } = await supabaseAdmin

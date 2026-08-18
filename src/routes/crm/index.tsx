@@ -352,7 +352,7 @@ function CRMPage() {
                       <TableHead className="w-12"></TableHead>
                       <TableHead>NOME / E-MAIL</TableHead>
                       <TableHead>TELEFONE</TableHead>
-                      <TableHead>PERFIL</TableHead>
+                      <TableHead>RFM / PERFIL</TableHead>
                       <TableHead className="text-center">COMPRAS</TableHead>
                       <TableHead className="text-right">TOTAL GASTO</TableHead>
                       <TableHead className="text-right">ÚLTIMA COMPRA</TableHead>

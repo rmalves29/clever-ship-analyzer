@@ -107,6 +107,14 @@ export const getCustomersList = createServerFn({ method: "POST" })
               else if (operator === "neq") {
                 query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}");
               }
+            } else if (val === "lead") {
+              // Leads: clientes sem pedidos e que NÃO são carrinhos abandonados
+              if (operator === "eq") {
+                if (customersWithOrdersList.length > 0) {
+                  query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
+                }
+                query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}");
+              }
             }
           }
         }

@@ -90,13 +90,13 @@ export function WhatsappSendDialog({
   });
 
   const submit = async (requireApproval: boolean) => {
-    if (!seed) return;
     setBusy(true);
     try {
       const res = await runCreateCampaign({
         data: {
-          nome: nome.trim() || seed.nome,
-          segmentType: seed.segmentType,
+          nome: nome.trim() || (seed?.nome ?? "Campanha"),
+          segmentType,
+          segmentId,
           messageType,
           templateName: templateName || undefined,
           couponCode: coupon.trim() || undefined,

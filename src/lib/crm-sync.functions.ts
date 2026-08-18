@@ -224,7 +224,7 @@ export const syncShopifyData = createServerFn({ method: "POST" })
       hasNextPage = true;
       let totalAbandoned = 0;
 
-      console.log("Starting abandoned checkouts sync...");
+      console.log("Starting abandoned checkouts sync (TAG: CAR24)...");
       while (hasNextPage) {
         try {
           const result: any = await shopifyGraphQL(ABANDONED_CHECKOUTS_QUERY, { cursor });

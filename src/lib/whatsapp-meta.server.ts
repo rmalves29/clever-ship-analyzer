@@ -368,7 +368,7 @@ export async function dispatchCampaign(campaignId: string) {
   await supabaseAdmin.from("whatsapp_campaigns").update({ status: "enviando" } as never).eq("id", campaignId);
 
   const bodyParams = Array.isArray(campaign.body_params) ? (campaign.body_params as string[]) : [];
-  const ids = await getSegmentCustomerIds(campaign.segment_type as SegmentType);
+  const ids = await getSegmentCustomerIds(campaign.segment_type as SegmentType, campaign.segment_id || undefined);
   const customers = await getCustomersWithPhone(ids);
 
   let sent = 0;

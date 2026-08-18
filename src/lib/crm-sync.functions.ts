@@ -224,57 +224,68 @@ export const syncShopifyData = createServerFn({ method: "POST" })
       hasNextPage = true;
       let totalAbandoned = 0;
 
+      console.log("Starting abandoned checkouts sync...");
       while (hasNextPage) {
-        const result: any = await shopifyGraphQL(ABANDONED_CHECKOUTS_QUERY, { cursor });
-        if (!result?.abandonedCheckouts) break;
-        
-        const abandonedConnection = result.abandonedCheckouts;
-
-        for (const edge of abandonedConnection.edges) {
-          const checkout = edge.node;
-          const customer = checkout.customer;
+        try {
+          const result: any = await shopifyGraphQL(ABANDONED_CHECKOUTS_QUERY, { cursor });
+          if (!result?.abandonedCheckouts) break;
           
-          if (customer) {
-            const customerId = customer.email ? `email:${customer.email.toLowerCase()}` : (customer.id ? `id:${customer.id.split('/').pop()}` : null);
+          const abandonedConnection = result.abandonedCheckouts;
+          console.log(`Processing ${abandonedConnection.edges.length} abandoned checkouts`);
+
+          for (const edge of abandonedConnection.edges) {
+            const checkout = edge.node;
+            const customer = checkout.customer;
             
-            if (customerId) {
-              const customerPhone = normalizePhone(
-                customer.phone ?? 
-                customer.defaultAddress?.phone
-              );
-
-              // Get existing tags to avoid overwriting
-              const { data: existing } = await supabaseAdmin
-                .from("shopify_customers")
-                .select("tags")
-                .eq("id", customerId)
-                .single();
+            if (customer) {
+              const email = customer.email?.toLowerCase();
+              const customerId = email ? `email:${email}` : (customer.id ? `id:${customer.id.split('/').pop()}` : null);
               
-              const currentTags = existing?.tags || [];
-              const newTags = Array.from(new Set([...currentTags, "Carrinho Abandonado", "Checkout"]));
+              if (customerId) {
+                const customerPhone = normalizePhone(
+                  customer.phone ?? 
+                  customer.defaultAddress?.phone ??
+                  customer.addresses?.find((a: any) => a.phone)?.phone
+                );
 
-              // Update customer info and tag as abandoned
-              await supabaseAdmin.from("shopify_customers").upsert({
-                id: customerId,
-                email: customer.email,
-                first_name: customer.firstName,
-                last_name: customer.lastName,
-                phone: customerPhone,
-                city: customer.defaultAddress?.city ?? null,
-                province: customer.defaultAddress?.province ?? null,
-                country: customer.defaultAddress?.country ?? null,
-                tags: newTags,
-                updated_at: new Date().toISOString(),
-              });
+                // Get existing tags to avoid overwriting
+                const { data: existing } = await supabaseAdmin
+                  .from("shopify_customers")
+                  .select("tags")
+                  .eq("id", customerId)
+                  .maybeSingle();
+                
+                const currentTags = existing?.tags || [];
+                const newTags = Array.from(new Set([...currentTags, "Carrinho Abandonado", "Checkout"]));
+
+                // Update customer info and tag as abandoned
+                await supabaseAdmin.from("shopify_customers").upsert({
+                  id: customerId,
+                  email: customer.email || null,
+                  first_name: customer.firstName || null,
+                  last_name: customer.lastName || null,
+                  phone: customerPhone,
+                  city: customer.defaultAddress?.city ?? null,
+                  province: customer.defaultAddress?.province ?? null,
+                  country: customer.defaultAddress?.country ?? null,
+                  tags: newTags,
+                  updated_at: new Date().toISOString(),
+                });
+              }
             }
+            totalAbandoned++;
           }
-          totalAbandoned++;
-        }
 
-        hasNextPage = abandonedConnection.pageInfo.hasNextPage;
-        cursor = abandonedConnection.pageInfo.endCursor;
-        if (totalAbandoned > 1000) break;
+          hasNextPage = abandonedConnection.pageInfo.hasNextPage;
+          cursor = abandonedConnection.pageInfo.endCursor;
+          if (totalAbandoned > 1000) break;
+        } catch (abandonedErr: any) {
+          console.error("Abandoned checkout sync page failed:", abandonedErr);
+          // If abandoned checkouts fail (e.g. scope missing), we don't want to crash the whole sync
+          break;
+        }
       }
+
 
 
       await supabaseAdmin

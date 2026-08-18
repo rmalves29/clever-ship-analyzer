@@ -294,10 +294,10 @@ function CRMPage() {
                 trend="+42%" 
               />
               <StatCard 
-                label="Leads" 
-                value={new Intl.NumberFormat().format(stats?.leads || 0)} 
-                hint="Contatos que nunca compraram" 
-                trend="+58%" 
+                label="Carrinhos Abandonados" 
+                value={new Intl.NumberFormat().format(stats?.abandoned || 0)} 
+                hint="Identificados por pedidos expirados" 
+                trend="+15%" 
               />
               <StatCard 
                 label="Clientes" 

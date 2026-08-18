@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 type NavItem = {
   label: string;
-  to: "/" | "/configuracoes" | "/campanhas-whatsapp" | "/crm";
+  to: "/" | "/configuracoes" | "/campanhas-whatsapp" | "/crm" | "/crm/live-view";
   search?: Record<string, string>;
   icon: typeof LayoutDashboard;
 };

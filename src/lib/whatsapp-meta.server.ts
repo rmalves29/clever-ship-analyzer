@@ -113,8 +113,10 @@ export function toE164(raw: string): string | null {
 export async function getSegmentCustomerIds(segmentType: SegmentType | string, segmentId?: string): Promise<string[]> {
   const supabaseAdmin = await admin();
 
-  // Prioridade para o segmentId se fornecido
+  // Prioridade para o segmentId se fornecido, ou se segmentType parecer um UUID
+  const isUuid = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
   const finalSegmentType = segmentId || segmentType;
+  const isCustomSegment = isUuid(finalSegmentType);
 
   if (finalSegmentType === "envio_atrasado") {
     const cutoff = new Date(Date.now() - 30 * DAY_MS).toISOString();
@@ -157,17 +159,19 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
     const avgTicket = agg.total / count;
     
     let match = false;
-    if (finalSegmentType === "ticket_alto") match = avgTicket > GOALS.ticketMedio.regular;
-    else if (finalSegmentType === "sem_recompra") match = count === 1; 
-    else if (finalSegmentType === "recorrencia") match = count > 1;
-    else if (finalSegmentType === "recompra_30d") match = count >= 1;
-    else if (finalSegmentType === "recompra_60d") match = count >= 1;
-    else if (finalSegmentType === "envio_atrasado") match = true;
+    if (!isCustomSegment) {
+      if (finalSegmentType === "ticket_alto") match = avgTicket > GOALS.ticketMedio.regular;
+      else if (finalSegmentType === "sem_recompra") match = count === 1; 
+      else if (finalSegmentType === "recorrencia") match = count > 1;
+      else if (finalSegmentType === "recompra_30d") match = count >= 1;
+      else if (finalSegmentType === "recompra_60d") match = count >= 1;
+      else if (finalSegmentType === "envio_atrasado") match = true;
 
-    if (match) ids.push(customerId);
+      if (match) ids.push(customerId);
+    }
   }
 
-  if (ids.length > 0) return ids;
+  if (ids.length > 0 || !isCustomSegment) return ids;
 
   const { data: customSegment } = await supabaseAdmin
     .from("crm_segments")

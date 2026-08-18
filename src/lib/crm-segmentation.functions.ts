@@ -347,6 +347,57 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
             } else if (field === "rfm_segment") {
               if (op === "eq") query = query.eq("rfm_segment", val);
               else if (op === "neq") query = query.neq("rfm_segment", val);
+            } else if (field === "perfil") {
+              if (val === "carrinho") {
+                if (op === "eq") query = query.or('tags.cs.{"Carrinho Abandonado"},tags.cs.{"Checkout"},tags.cs.{"CAR24"}');
+                else if (op === "neq") query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}");
+              } else if (val === "lead") {
+                if (op === "eq") {
+                  if (customersWithOrdersList.length > 0) query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
+                  query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}").not("tags", "cs", "{\"CAR24\"}");
+                }
+              } else if (val === "primeira_compra") {
+                const { data: customerOrderCounts } = await supabaseAdmin.from("shopify_orders").select("customer_id");
+                const counts: Record<string, number> = {};
+                customerOrderCounts?.forEach(o => { const cid = String(o.customer_id); counts[cid] = (counts[cid] || 0) + 1; });
+                const firstTimeBuyers = Object.keys(counts).filter(cid => counts[cid] === 1);
+                if (op === "eq") {
+                  if (firstTimeBuyers.length > 0) query = query.in("id", firstTimeBuyers);
+                  else query = query.eq("id", "00000000-0000-0000-0000-000000000000");
+                }
+              } else if (val === "acesso_sem_compra") {
+                if (op === "eq") {
+                  if (customersWithOrdersList.length > 0) query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
+                  query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}").not("tags", "cs", "{\"CAR24\"}");
+                }
+              }
+            } else if (field === "data_pedido_hoje") {
+              const today = new Date(); today.setHours(0, 0, 0, 0);
+              const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+              const { data: todaysOrders } = await supabaseAdmin.from("shopify_orders").select("customer_id").gte("processed_at", today.toISOString()).lt("processed_at", tomorrow.toISOString());
+              const customerIds = Array.from(new Set(todaysOrders?.map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
+              if (val === "sim") {
+                if (customerIds.length > 0) query = query.in("id", customerIds);
+                else query = query.eq("id", "00000000-0000-0000-0000-000000000000");
+              }
+            } else if (field === "data_envio_hoje") {
+              const today = new Date(); today.setHours(0, 0, 0, 0);
+              const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+              const { data: todaysFulfillments } = await supabaseAdmin.from("shopify_fulfillments").select("order_id").gte("created_at", today.toISOString()).lt("created_at", tomorrow.toISOString());
+              const orderIds = todaysFulfillments?.map(f => f.order_id) || [];
+              if (orderIds.length > 0) {
+                const { data: ordersWithCustomers } = await supabaseAdmin.from("shopify_orders").select("customer_id").in("id", orderIds.filter((id): id is string => id !== null));
+                const customerIds = Array.from(new Set(ordersWithCustomers?.map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
+                if (val === "sim") {
+                  if (customerIds.length > 0) query = query.in("id", customerIds);
+                  else query = query.eq("id", "00000000-0000-0000-0000-000000000000");
+                }
+              } else if (val === "sim") {
+                query = query.eq("id", "00000000-0000-0000-0000-000000000000");
+              }
+            } else if (field === "acesso_sem_compra") {
+              if (customersWithOrdersList.length > 0) query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
+              query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}").not("tags", "cs", "{\"CAR24\"}");
             }
           }
         }

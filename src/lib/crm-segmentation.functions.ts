@@ -102,7 +102,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
           } else if (field === "perfil") {
             if (val === "carrinho") {
               if (operator === "eq") {
-                query = query.or('tags.cs.{"Carrinho Abandonado"},tags.cs.{"Checkout"}');
+                query = query.or('tags.cs.{"Carrinho Abandonado"},tags.cs.{"Checkout"},tags.cs.{"CAR24"}');
               }
               else if (operator === "neq") {
                 query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}");

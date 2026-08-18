@@ -262,7 +262,7 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
     const cohortStart = startOfMonth(subMonths(now, 7));
     const monthsInterval = eachMonthOfInterval({ start: cohortStart, end: endOfMonth(now) });
     const ptBRModule = await import("date-fns/locale/pt-BR");
-    const ptBR = ptBRModule.default || ptBRModule;
+    const ptBR = (ptBRModule as any).default || ptBRModule;
 
     const cohortData = monthsInterval.map((monthDate) => {
       const monthStart = startOfMonth(monthDate).getTime();

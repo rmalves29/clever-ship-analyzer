@@ -49,6 +49,7 @@ const STATUS_LABEL: Record<string, string> = {
   aguardando_aprovacao: "Aguardando aprovação",
   rejeitada: "Rejeitada",
   enviando: "Enviando",
+  agendada: "Agendada",
   finalizada: "Finalizada",
   erro: "Erro",
 };

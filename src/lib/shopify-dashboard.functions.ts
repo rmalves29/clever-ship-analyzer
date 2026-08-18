@@ -261,12 +261,16 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
     // ---------- Análise de Coorte (Cohort) ----------
     const cohortStart = startOfMonth(subMonths(now, 7));
     const monthsInterval = eachMonthOfInterval({ start: cohortStart, end: endOfMonth(now) });
-    const ptBR = (await import("date-fns/locale/pt-BR")).default;
+    const ptBRModule = await import("date-fns/locale/pt-BR");
+265:     const ptBR = ptBRModule.default || ptBRModule;
 
     const cohortData = monthsInterval.map((monthDate) => {
       const monthStart = startOfMonth(monthDate).getTime();
       const monthEnd = endOfMonth(monthDate).getTime();
-      const firstTimers = customers.filter(c => c.dates[0] >= monthStart && c.dates[0] <= monthEnd);
+      const firstTimers = customers.filter(c => {
+269:         const firstDate = c.dates[0];
+270:         return firstDate !== undefined && firstDate >= monthStart && firstDate <= monthEnd;
+271:       });
       const cohortSize = firstTimers.length;
       
       const retention = monthsInterval.map((targetMonthDate) => {

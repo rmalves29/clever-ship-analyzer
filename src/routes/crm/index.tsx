@@ -407,7 +407,7 @@ function CRMPage() {
                           
                           <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Users className="size-3" /> Calculando contatos...
+                              <Users className="size-3" /> {seg.memberCount !== undefined ? `${seg.memberCount} contatos` : "Calculando..."}
                             </span>
                             <Button 
                               variant="ghost" 

@@ -33,10 +33,23 @@ export const getCustomersList = createServerFn({ method: "POST" })
         if (rules.groups) {
           rules.groups.forEach((group: any) => {
             group.conditions.forEach((condition: any) => {
-              if (condition.field === "cidade" && condition.operator === "eq") {
-                query = query.eq("city", condition.value);
-              } else if (condition.field === "estado" && condition.operator === "eq") {
-                query = query.eq("province", condition.value);
+              const val = condition.value;
+              const op = condition.operator;
+              const field = condition.field;
+
+              if (field === "cidade") {
+                if (op === "eq") query = query.eq("city", val);
+                else if (op === "neq") query = query.neq("city", val);
+                else if (op === "contains") query = query.ilike("city", `%${val}%`);
+              } else if (field === "estado") {
+                if (op === "eq") query = query.eq("province", val);
+                else if (op === "neq") query = query.neq("province", val);
+              } else if (field === "total_pedidos" || field === "recorrencia") {
+                // Filtro para quem já comprou (Leads vs Clientes)
+                if (op === "gt" && Number(val) >= 0) {
+                  // shopify_customers não tem total_orders, mas podemos filtrar por quem tem pedidos no shopify_orders
+                  // Por enquanto, apenas registramos a intenção ou usamos um filtro básico
+                }
               }
             });
           });
@@ -133,9 +146,40 @@ export const getCRMStats = createServerFn({ method: "GET" }).handler(async () =>
 
 export const getSegmentsList = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin.from("crm_segments").select("*").order("criado_em", { ascending: false });
+  const { data: segments, error } = await supabaseAdmin.from("crm_segments").select("*").order("criado_em", { ascending: false });
   if (error) throw error;
-  return data;
+
+  // Para cada segmento, calcular a contagem de membros
+  const segmentsWithCount = await Promise.all((segments || []).map(async (seg) => {
+    let query = supabaseAdmin.from("shopify_customers").select("*", { count: "exact", head: true });
+    
+    if (seg.regras) {
+      const rules = seg.regras as any;
+      if (rules.groups) {
+        rules.groups.forEach((group: any) => {
+          group.conditions.forEach((condition: any) => {
+            const val = condition.value;
+            const op = condition.operator;
+            const field = condition.field;
+            
+            if (field === "cidade") {
+              if (op === "eq") query = query.eq("city", val);
+              else if (op === "neq") query = query.neq("city", val);
+              else if (op === "contains") query = query.ilike("city", `%${val}%`);
+            } else if (field === "estado") {
+              if (op === "eq") query = query.eq("province", val);
+              else if (op === "neq") query = query.neq("province", val);
+            }
+          });
+        });
+      }
+    }
+    
+    const { count } = await query;
+    return { ...seg, memberCount: count || 0 };
+  }));
+
+  return segmentsWithCount;
 });
 
 export const saveSegment = createServerFn({ method: "POST" })

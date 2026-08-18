@@ -165,6 +165,8 @@ function CampanhasWhatsapp() {
     }
   };
 
+  const segments = (automations ?? []).map(a => ({ id: a.id, nome: a.nome })); // Fallback simples ou usar getSegmentsList
+
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-[1400px] px-4 py-8 md:px-8">

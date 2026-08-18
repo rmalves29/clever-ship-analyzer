@@ -36,7 +36,7 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment } from "@/lib/crm-segmentation.functions";
+import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment, exportSegmentCustomers } from "@/lib/crm-segmentation.functions";
 import { fixCustomerPhone, deepSyncCustomer } from "@/lib/admin-maintenance.functions";
 import { brl } from "@/lib/crm-mock";
 import { SegmentEditor } from "@/components/crm/SegmentEditor";

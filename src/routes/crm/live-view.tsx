@@ -24,6 +24,19 @@ export const Route = createFileRoute("/crm/live-view")({
   }),
 });
 
+// TopoJSON do mapa mundi
+const geoUrl = "https://raw.githubusercontent.com/lotusms/world-map-data/main/world-110m.json";
+
+// Mock de localizações para o mapa (lat, long, type)
+const markers = [
+  { name: "São Paulo", coordinates: [-46.6333, -23.5505], type: "visitor" },
+  { name: "Belo Horizonte", coordinates: [-43.9378, -19.9209], type: "order" },
+  { name: "Brasília", coordinates: [-47.8828, -15.7942], type: "visitor" },
+  { name: "Rio de Janeiro", coordinates: [-43.1729, -22.9068], type: "visitor" },
+  { name: "Curitiba", coordinates: [-49.2733, -25.4284], type: "visitor" },
+  { name: "Salvador", coordinates: [-38.5014, -12.9714], type: "visitor" },
+];
+
 function LiveViewPage() {
   const fetchDashboard = useServerFn(getShopifyDashboardData);
   

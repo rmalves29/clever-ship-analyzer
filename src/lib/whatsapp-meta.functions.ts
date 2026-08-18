@@ -90,8 +90,9 @@ const createCampaignSchema = z.object({
   templateName: z.string().optional(),
   templateLanguage: z.string().optional(),
   couponCode: z.string().optional(),
-  bodyParams: z.array(z.string()).max(5).default([]),
+  bodyParams: z.array(z.string()).max(10).default([]),
   requireApproval: z.boolean().default(false),
+  sendAt: z.string().optional(),
 });
 
 /** "Aplicar ação" no CRM: cria a campanha e envia na hora, ou manda pra fila de aprovação. */
@@ -104,6 +105,7 @@ export const createAndSendCampaign = createServerFn({ method: "POST" })
       {
         nome: data.nome,
         segmentType: data.segmentType,
+        segmentId: data.segmentId,
         messageType: data.messageType,
         templateName: data.templateName,
         templateLanguage: data.templateLanguage,
@@ -111,7 +113,7 @@ export const createAndSendCampaign = createServerFn({ method: "POST" })
         couponCode: data.couponCode,
         origem: "crm",
       },
-      data.requireApproval ? "aguardando_aprovacao" : "enviando",
+      data.sendAt ? "agendada" : data.requireApproval ? "aguardando_aprovacao" : "enviando",
     );
     if (!created.success) return created;
 

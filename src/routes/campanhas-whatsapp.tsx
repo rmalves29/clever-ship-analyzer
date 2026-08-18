@@ -21,7 +21,7 @@ import {
 } from "@/lib/whatsapp-meta.functions";
 import { brl } from "@/lib/crm-mock";
 import { AutomationDialog, SEGMENT_LABEL, type AutomationSeed } from "@/components/crm/AutomationDialog";
-import { WhatsappSendDialog, type SendDialogSeed } from "@/components/crm/WhatsappSendDialog";
+import { WhatsappSendDialog, type SendDialogSeed } from "@/components/whatsapp/WhatsappSendDialog";
 import { CampaignDetailDialog } from "@/components/whatsapp/CampaignDetailDialog";
 import { TemplatesTab } from "@/components/whatsapp/TemplatesTab";
 import { ReportsTab } from "@/components/whatsapp/ReportsTab";
@@ -49,6 +49,7 @@ const STATUS_LABEL: Record<string, string> = {
   aguardando_aprovacao: "Aguardando aprovação",
   rejeitada: "Rejeitada",
   enviando: "Enviando",
+  agendada: "Agendada",
   finalizada: "Finalizada",
   erro: "Erro",
 };
@@ -57,6 +58,7 @@ const STATUS_CLASS: Record<string, string> = {
   aguardando_aprovacao: "bg-warning-soft text-warning",
   rejeitada: "bg-critical-soft text-critical",
   enviando: "bg-warning-soft text-warning",
+  agendada: "bg-brand-soft text-brand",
   finalizada: "bg-success-soft text-success",
   erro: "bg-critical-soft text-critical",
 };
@@ -111,6 +113,7 @@ function CampanhasWhatsapp() {
   const STATUS_FILTERS = [
     { value: "todas", label: "Todas" },
     { value: "enviando", label: "Enviando" },
+    { value: "agendada", label: "Agendadas" },
     { value: "finalizada", label: "Finalizadas" },
     { value: "erro", label: "Erro" },
   ];

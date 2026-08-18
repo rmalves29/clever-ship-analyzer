@@ -62,6 +62,7 @@ function Configuracoes() {
   const testConnectionMutation = useMutation({
     mutationFn: () => testShopifyConnection({ data: {} }),
     onSuccess: (res: any) => {
+      console.log("Test Connection Result:", res);
       if (res.success) {
         toast.success(res.message || "Conexão testada com sucesso!");
         refetch();
@@ -331,7 +332,10 @@ function Configuracoes() {
                 <Button 
                   type="button" 
                   variant="outline" 
-                  onClick={() => testConnectionMutation.mutate()} 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    testConnectionMutation.mutate();
+                  }} 
                   disabled={isTesting || !settings?.hasClientSecret}
                 >
                   {isTesting ? <RefreshCw className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}

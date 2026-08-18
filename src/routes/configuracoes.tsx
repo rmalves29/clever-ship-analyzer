@@ -320,7 +320,9 @@ function Configuracoes() {
                         <li><strong>read_products</strong>: Para identificar quais produtos seus clientes estão comprando.</li>
                         <li><strong>read_fulfillments</strong>: Para calcular o tempo médio de envio e rastreio.</li>
                         <li><strong>read_all_orders</strong>: Recomendado para acessar histórico completo.</li>
+                        <li><strong>read_checkouts</strong>: Necessário para importar checkouts abandonados e recuperar clientes.</li>
                       </ul>
+
                       <p className="mt-2 text-[10px] text-orange-700 dark:text-orange-300 italic">
                         Configurações &gt; Apps e canais de vendas &gt; Desenvolver apps &gt; [Seu App] &gt; Configuração da API Admin.
                       </p>

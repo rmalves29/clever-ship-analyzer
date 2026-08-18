@@ -120,7 +120,7 @@ export async function shopifyGraphQL(query: string, variables?: Record<string, u
 
 export const ORDERS_QUERY = `
   query getOrders($cursor: String, $query: String) {
-    orders(first: 50, after: $cursor, sortKey: UPDATED_AT, reverse: false, query: $query) {
+    orders(first: 100, after: $cursor, sortKey: UPDATED_AT, reverse: false, query: $query) {
       pageInfo { hasNextPage endCursor }
       edges {
         node {
@@ -224,7 +224,7 @@ export const ABANDONED_CHECKOUTS_QUERY = `
 
 export const CUSTOMERS_QUERY = `
   query getCustomers($cursor: String) {
-    customers(first: 50, after: $cursor) {
+    customers(first: 100, after: $cursor) {
       pageInfo { hasNextPage endCursor }
       edges {
         node {

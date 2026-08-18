@@ -196,6 +196,8 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
                 if (customersWithOrdersList.length > 0) query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
               } else if (customersWithOrdersList.length > 0) {
                 query = query.in("id", customersWithOrdersList);
+              } else {
+                query = query.eq("id", "00000000-0000-0000-0000-000000000000"); // Nenhum cliente se não há pedidos
               }
             }
           }

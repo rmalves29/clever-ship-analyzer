@@ -13,6 +13,7 @@ import {
   approveCampaign,
   deleteAutomation,
   getCampaigns,
+  getSegmentsList,
   listAutomations,
   rejectCampaign,
   runAutomationNow,

@@ -102,10 +102,27 @@ export const getCustomersList = createServerFn({ method: "POST" })
           } else if (field === "perfil") {
             if (val === "carrinho") {
               if (operator === "eq") {
-                query = query.or('tags.cs.{"Carrinho Abandonado"},tags.cs.{"Checkout"},tags.cs.{"CAR24"}');
+                // Filtra clientes que possuem pelo menos um registro na tabela de checkouts abandonados
+                const { data: abandonedCheckouts } = await supabaseAdmin
+                  .from("shopify_abandoned_checkouts")
+                  .select("customer_id");
+                
+                const customerIds = Array.from(new Set(abandonedCheckouts?.map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
+                
+                if (customerIds.length > 0) {
+                  query = query.in("id", customerIds);
+                } else {
+                  query = query.eq("id", "00000000-0000-0000-0000-000000000000");
+                }
               }
               else if (operator === "neq") {
-                query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}");
+                const { data: abandonedCheckouts } = await supabaseAdmin
+                  .from("shopify_abandoned_checkouts")
+                  .select("customer_id");
+                const customerIds = Array.from(new Set(abandonedCheckouts?.map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
+                if (customerIds.length > 0) {
+                  query = query.not("id", "in", `(${customerIds.join(",")})`);
+                }
               }
             } else if (val === "lead") {
             // Leads: clientes sem pedidos e que NÃO são carrinhos abandonados

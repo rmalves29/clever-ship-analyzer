@@ -255,7 +255,15 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
     });
 
     const taxaRecompra = Number(
-      (totalCustomers > 0 ? (customers.filter((c) => c.count >= 2).length / totalCustomers) * 100 : 0).toFixed(2),
+      (totalCustomers > 0 
+        ? (customers.filter((c) => {
+            if (c.count < 2) return false;
+            // Verifica se houve uma nova compra em até 90 dias após a primeira
+            const gap = (c.dates[1]! - c.dates[0]!) / 86_400_000;
+            return gap <= 90;
+          }).length / totalCustomers) * 100 
+        : 0
+      ).toFixed(2),
     );
 
     // ---------- Análise de Coorte (Cohort) ----------

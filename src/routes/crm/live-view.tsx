@@ -5,14 +5,12 @@ import { Activity, Map as MapIcon, RefreshCw, BarChart3, Users, ShoppingBag, Cre
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import {
-  ComposableMap,
-  Geographies,
-  Geography,
-  Marker
-} from "react-simple-maps";
+import { lazy, Suspense } from "react";
 import { getShopifyDashboardData } from "@/lib/shopify-dashboard.functions";
 import { brl } from "@/lib/crm-mock";
+
+// Carregamento dinâmico do globo para evitar problemas com SSR e bibliotecas pesadas
+const LiveGlobe = lazy(() => import("@/components/crm/LiveGlobe"));
 
 export const Route = createFileRoute("/crm/live-view")({
   component: LiveViewPage,
@@ -171,7 +169,7 @@ function LiveViewPage() {
           <div className="lg:col-span-2 surface-card p-0 overflow-hidden relative min-h-[500px] flex flex-col bg-muted/5 border-none">
             <div className="absolute top-6 left-6 z-20">
                <Badge variant="outline" className="bg-background/80 backdrop-blur-sm border-border/50 text-xs px-3 py-1">
-                 Mapa em Tempo Real
+                 Globo em Tempo Real
                </Badge>
             </div>
             <div className="absolute top-6 right-6 z-20 flex gap-2">
@@ -179,52 +177,19 @@ function LiveViewPage() {
               <Button size="icon" variant="secondary" className="size-8 bg-background/80 backdrop-blur-sm"><RefreshCw className="size-4" /></Button>
             </div>
             
-            {/* Interactive World Map */}
-            <div className="flex-1 w-full h-full min-h-[400px]">
-              <ComposableMap
-                projection="geoEqualEarth"
-                projectionConfig={{
-                  scale: 240,
-                  center: [-50, -10] // Centered more towards South America
-                }}
-                className="w-full h-full"
-              >
-                <Geographies geography={geoUrl}>
-                  {({ geographies }) =>
-                    geographies.map((geo) => (
-                      <Geography
-                        key={geo.rsmKey}
-                        geography={geo}
-                        fill="currentColor"
-                        className="text-muted/20 outline-none"
-                        stroke="currentColor"
-                        strokeWidth={0.5}
-                        strokeOpacity={0.1}
-                      />
-                    ))
-                  }
-                </Geographies>
-                {getDynamicMarkers(data).map(({ name, coordinates, type }) => (
-                  <Marker key={`${name}-${type}`} coordinates={coordinates as [number, number]}>
-                    <g className={type === 'order' ? 'text-success' : 'text-brand'}>
-                      <circle
-                        r={4}
-                        fill="currentColor"
-                        className="animate-pulse"
-                      />
-                      <circle
-                        r={8}
-                        fill="currentColor"
-                        fillOpacity={0.2}
-                        className="animate-ping"
-                      />
-                    </g>
-                  </Marker>
-                ))}
-              </ComposableMap>
+            {/* Interactive 3D Globe */}
+            <div className="flex-1 w-full h-full min-h-[500px] flex items-center justify-center">
+              <Suspense fallback={
+                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                  <RefreshCw className="size-8 animate-spin" />
+                  <p className="text-sm">Iniciando globo 3D...</p>
+                </div>
+              }>
+                <LiveGlobe markers={getDynamicMarkers(data)} />
+              </Suspense>
             </div>
 
-            <div className="absolute bottom-6 right-6 z-20 flex gap-4">
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex gap-4">
               <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm px-3 py-1 rounded-full border border-border/50 text-[10px] font-medium">
                 <span className="size-2 rounded-full bg-brand"></span> Visitantes agora
               </div>

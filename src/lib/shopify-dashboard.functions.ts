@@ -333,12 +333,7 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
       curvaRecompra,
       enviosPorDia,
       cohortData,
-      sessoes: topLandings.length > 0 ? topLandings : [
-        { page: "Homepage · /", count: 304, trend: 1300 },
-        { page: "Collection · /collections/kit-colar-e-brinco", count: 182 },
-        { page: "Search · /search", count: 118 },
-        { page: "Product · /products/kit-anel-regulavel...", count: 92 },
-      ],
+      sessoes: topLandings,
     };
 }
 

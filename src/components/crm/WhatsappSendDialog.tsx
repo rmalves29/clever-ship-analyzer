@@ -23,6 +23,7 @@ import { createAndSendCampaign, listMetaTemplates, previewSegment } from "@/lib/
 export type SendDialogSeed = {
   nome: string;
   segmentType: SegmentType;
+  segmentId?: string;
   oferta: string;
 };
 
@@ -40,11 +41,13 @@ export function WhatsappSendDialog({
   open,
   onOpenChange,
   onDone,
+  segments = [],
 }: {
   seed: SendDialogSeed | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onDone?: () => void;
+  segments?: { id: string; nome: string }[];
 }) {
   const runCreateCampaign = useServerFn(createAndSendCampaign);
   const runPreview = useServerFn(previewSegment);
@@ -56,6 +59,8 @@ export function WhatsappSendDialog({
   const [messageType, setMessageType] = useState<"marketing" | "utility">("marketing");
   const [coupon, setCoupon] = useState("");
   const [busy, setBusy] = useState(false);
+  const [segmentType, setSegmentType] = useState<SegmentType>("sem_recompra");
+  const [segmentId, setSegmentId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (seed && open) {
@@ -63,6 +68,8 @@ export function WhatsappSendDialog({
       setOferta(seed.oferta);
       setBodyParams([]);
       setCoupon("");
+      setSegmentType(seed.segmentType);
+      setSegmentId(seed.segmentId);
       setBusy(false);
     }
   }, [seed, open]);
@@ -79,19 +86,19 @@ export function WhatsappSendDialog({
   const bodyVarCount = selectedTemplate ? countBodyVars(selectedTemplate.components) : 0;
 
   const { data: preview, isLoading: loadingPreview } = useQuery({
-    queryKey: ["segment-preview", seed?.segmentType, open],
-    queryFn: () => runPreview({ data: { segmentType: seed!.segmentType } }),
-    enabled: Boolean(seed && open),
+    queryKey: ["segment-preview", segmentType, segmentId, open],
+    queryFn: () => runPreview({ data: { segmentType, segmentId } }),
+    enabled: Boolean(open),
   });
 
   const submit = async (requireApproval: boolean) => {
-    if (!seed) return;
     setBusy(true);
     try {
       const res = await runCreateCampaign({
         data: {
-          nome: nome.trim() || seed.nome,
-          segmentType: seed.segmentType,
+          nome: nome.trim() || (seed?.nome ?? "Campanha"),
+          segmentType,
+          segmentId,
           messageType,
           templateName: templateName || undefined,
           couponCode: coupon.trim() || undefined,
@@ -133,21 +140,54 @@ export function WhatsappSendDialog({
         <div className="space-y-4">
           <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/40 p-3">
             <Users className="size-4 text-brand" />
-            <p className="text-sm">
-              {loadingPreview ? (
-                "Calculando destinatários..."
-              ) : (
-                <>
-                  <strong>{preview?.destinatarios ?? 0}</strong> destinatários com telefone válido
-                  <span className="text-muted-foreground"> (de {preview?.clientes ?? 0} clientes no segmento)</span>
-                </>
-              )}
-            </p>
+            <div className="flex-1">
+              <p className="text-sm">
+                {loadingPreview ? (
+                  "Calculando destinatários..."
+                ) : (
+                  <>
+                    <strong>{preview?.destinatarios ?? 0}</strong> destinatários com telefone válido
+                    <span className="text-muted-foreground"> (de {preview?.clientes ?? 0} clientes no segmento)</span>
+                  </>
+                )}
+              </p>
+            </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Nome da campanha</Label>
-            <Input value={nome} onChange={(e) => setNome(e.target.value)} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Nome da campanha</Label>
+              <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Campanha manual" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Segmento de clientes</Label>
+              <Select 
+                value={segmentId || segmentType} 
+                onValueChange={(v) => {
+                  if (v.includes("-")) {
+                    setSegmentId(v);
+                  } else {
+                    setSegmentType(v as SegmentType);
+                    setSegmentId(undefined);
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ticket_alto">Ticket Alto</SelectItem>
+                  <SelectItem value="sem_recompra">Sem Recompra</SelectItem>
+                  <SelectItem value="recompra_30d">Recompra 30d</SelectItem>
+                  <SelectItem value="recompra_60d">Recompra 60d</SelectItem>
+                  <SelectItem value="envio_atrasado">Envio Atrasado</SelectItem>
+                  <SelectItem value="recorrencia">Recorrência</SelectItem>
+                  {segments.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -235,9 +275,6 @@ export function WhatsappSendDialog({
             <Input value={coupon} onChange={(e) => setCoupon(e.target.value)} placeholder="Ex: VOLTA10" />
           </div>
 
-          <Badge variant="outline" className="gap-1">
-            <CheckCircle2 className="size-3" /> Segmento: {seed?.segmentType}
-          </Badge>
         </div>
 
         <DialogFooter className="gap-2 sm:justify-between">

@@ -110,10 +110,13 @@ export function toE164(raw: string): string | null {
 }
 
 /** IDs de clientes que batem com o segmento — calculado sobre o histórico completo, não o período do dashboard. */
-export async function getSegmentCustomerIds(segmentType: SegmentType | string): Promise<string[]> {
+export async function getSegmentCustomerIds(segmentType: SegmentType | string, segmentId?: string): Promise<string[]> {
   const supabaseAdmin = await admin();
 
-  if (segmentType === "envio_atrasado") {
+  // Prioridade para o segmentId se fornecido
+  const finalSegmentType = segmentId || segmentType;
+
+  if (finalSegmentType === "envio_atrasado") {
     const cutoff = new Date(Date.now() - 30 * DAY_MS).toISOString();
     const { data: fulfillments } = await supabaseAdmin
       .from("shopify_fulfillments")
@@ -154,12 +157,12 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string): 
     const avgTicket = agg.total / count;
     
     let match = false;
-    if (segmentType === "ticket_alto") match = avgTicket > GOALS.ticketMedio.regular;
-    else if (segmentType === "sem_recompra") match = count === 1; 
-    else if (segmentType === "recorrencia") match = count > 1;
-    else if (segmentType === "recompra_30d") match = count >= 1;
-    else if (segmentType === "recompra_60d") match = count >= 1;
-    else if (segmentType === "envio_atrasado") match = true;
+    if (finalSegmentType === "ticket_alto") match = avgTicket > GOALS.ticketMedio.regular;
+    else if (finalSegmentType === "sem_recompra") match = count === 1; 
+    else if (finalSegmentType === "recorrencia") match = count > 1;
+    else if (finalSegmentType === "recompra_30d") match = count >= 1;
+    else if (finalSegmentType === "recompra_60d") match = count >= 1;
+    else if (finalSegmentType === "envio_atrasado") match = true;
 
     if (match) ids.push(customerId);
   }
@@ -169,14 +172,14 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string): 
   const { data: customSegment } = await supabaseAdmin
     .from("crm_segments")
     .select("id, regras")
-    .eq("id", segmentType)
+    .eq("id", finalSegmentType)
     .maybeSingle();
 
   if (customSegment) {
     const { data: staticMembers } = await supabaseAdmin
       .from("crm_list_members")
       .select("customer_id")
-      .eq("lista_id", segmentType);
+      .eq("lista_id", finalSegmentType);
     
     if (staticMembers?.length) return staticMembers.map(m => m.customer_id);
 
@@ -212,8 +215,8 @@ export async function getCustomersWithPhone(ids: string[]) {
   return (data ?? []).filter((c) => Boolean(c.phone)) as { id: string; phone: string; first_name: string | null }[];
 }
 
-export async function countSegmentRecipients(segmentType: SegmentType) {
-  const ids = await getSegmentCustomerIds(segmentType);
+export async function countSegmentRecipients(segmentType: SegmentType | string, segmentId?: string) {
+  const ids = await getSegmentCustomerIds(segmentType, segmentId);
   const customers = await getCustomersWithPhone(ids);
   const validos = customers.filter((c) => toE164(c.phone));
   return { clientes: ids.length, comTelefone: customers.length, destinatarios: validos.length };
@@ -303,6 +306,8 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
   const settings = await loadSettings();
 
   const templateName = input.templateName?.trim() || settings.templateName;
+  const segmentId = (input as any).segmentId;
+  
   if (!settings.accessToken || !settings.phoneNumberId || !templateName) {
     return {
       success: false as const,
@@ -310,7 +315,7 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
     };
   }
 
-  const { destinatarios } = await countSegmentRecipients(input.segmentType);
+  const { destinatarios } = await countSegmentRecipients(input.segmentType, segmentId);
 
   const { data: campaign, error } = await supabaseAdmin
     .from("whatsapp_campaigns")
@@ -318,6 +323,7 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
       nome: input.nome,
       status,
       segment_type: input.segmentType,
+      segment_id: segmentId || null,
       template_name: templateName,
       template_language: input.templateLanguage?.trim() || settings.templateLanguage,
       message_type: input.messageType,
@@ -341,7 +347,7 @@ export async function dispatchCampaign(campaignId: string) {
 
   const { data: campaignRow } = await supabaseAdmin
     .from("whatsapp_campaigns")
-    .select("id, segment_type, template_name, template_language, body_params")
+    .select("id, segment_type, segment_id, template_name, template_language, body_params")
     .eq("id", campaignId)
     .maybeSingle();
 
@@ -353,6 +359,7 @@ export async function dispatchCampaign(campaignId: string) {
   const campaign = campaignRow as {
     id: string;
     segment_type: string;
+    segment_id: string | null;
     template_name: string;
     template_language: string | null;
     body_params: unknown;
@@ -361,7 +368,7 @@ export async function dispatchCampaign(campaignId: string) {
   await supabaseAdmin.from("whatsapp_campaigns").update({ status: "enviando" } as never).eq("id", campaignId);
 
   const bodyParams = Array.isArray(campaign.body_params) ? (campaign.body_params as string[]) : [];
-  const ids = await getSegmentCustomerIds(campaign.segment_type as SegmentType);
+  const ids = await getSegmentCustomerIds(campaign.segment_type as SegmentType, campaign.segment_id || undefined);
   const customers = await getCustomersWithPhone(ids);
 
   let sent = 0;

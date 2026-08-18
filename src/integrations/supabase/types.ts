@@ -523,6 +523,7 @@ export type Database = {
           origem: string
           reject_reason: string | null
           rejected_at: string | null
+          segment_id: string | null
           segment_type: string
           sent_at: string | null
           status: string
@@ -545,6 +546,7 @@ export type Database = {
           origem?: string
           reject_reason?: string | null
           rejected_at?: string | null
+          segment_id?: string | null
           segment_type: string
           sent_at?: string | null
           status?: string
@@ -567,6 +569,7 @@ export type Database = {
           origem?: string
           reject_reason?: string | null
           rejected_at?: string | null
+          segment_id?: string | null
           segment_type?: string
           sent_at?: string | null
           status?: string
@@ -580,6 +583,13 @@ export type Database = {
             columns: ["automation_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_automations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_campaigns_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "crm_segments"
             referencedColumns: ["id"]
           },
         ]

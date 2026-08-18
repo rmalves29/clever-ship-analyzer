@@ -13,6 +13,7 @@ import {
   approveCampaign,
   deleteAutomation,
   getCampaigns,
+  getSegmentsList,
   listAutomations,
   rejectCampaign,
   runAutomationNow,
@@ -99,6 +100,11 @@ function CampanhasWhatsapp() {
     queryFn: () => listAutomations(),
   });
 
+  const { data: crmSegments } = useQuery({
+    queryKey: ["crm-segments"],
+    queryFn: () => getSegmentsList(),
+  });
+
   const list = campanhas ?? [];
   const pendentes = list.filter((c) => c.status === "aguardando_aprovacao");
 
@@ -164,6 +170,8 @@ function CampanhasWhatsapp() {
       setBusyId(null);
     }
   };
+
+  const segmentsList = (crmSegments ?? []).map(s => ({ id: s.id, nome: s.nome }));
 
   return (
     <div className="min-h-screen bg-background">
@@ -431,7 +439,7 @@ function CampanhasWhatsapp() {
       </div>
 
       <AutomationDialog seed={autoSeed} open={autoOpen} onOpenChange={setAutoOpen} onSaved={() => refetchAutomations()} />
-      <WhatsappSendDialog seed={sendSeed} open={sendOpen} onOpenChange={setSendOpen} onDone={() => refetch()} />
+      <WhatsappSendDialog seed={sendSeed} open={sendOpen} onOpenChange={setSendOpen} segments={segmentsList} onDone={() => refetch()} />
       <CampaignDetailDialog campaignId={detailId} onOpenChange={(v) => !v && setDetailId(null)} />
     </div>
   );

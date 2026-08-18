@@ -315,12 +315,32 @@ export function SegmentEditor({
                         </SelectContent>
                       </Select>
 
-                      <Input 
-                        className="h-8 flex-1 border-none bg-muted/50 text-xs" 
-                        placeholder="Valor..." 
-                        value={condition.value as string}
-                        onChange={e => updateCondition(group.id, condition.id, { value: e.target.value })}
-                      />
+                      {condition.field === "status_pagamento" ? (
+                        <Select
+                          value={condition.value as string}
+                          onValueChange={v => updateCondition(group.id, condition.id, { value: v })}
+                        >
+                          <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs">
+                            <SelectValue placeholder="Selecionar status..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="paid">Pago (Paid)</SelectItem>
+                            <SelectItem value="pending">Pendente (Pending)</SelectItem>
+                            <SelectItem value="refunded">Reembolsado (Refunded)</SelectItem>
+                            <SelectItem value="partially_refunded">Parcialmente Reembolsado</SelectItem>
+                            <SelectItem value="voided">Anulado (Voided)</SelectItem>
+                            <SelectItem value="authorized">Autorizado (Authorized)</SelectItem>
+                            <SelectItem value="partially_paid">Parcialmente Pago</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input 
+                          className="h-8 flex-1 border-none bg-muted/50 text-xs" 
+                          placeholder="Valor..." 
+                          value={condition.value as string}
+                          onChange={e => updateCondition(group.id, condition.id, { value: e.target.value })}
+                        />
+                      )}
 
                       <Button 
                         variant="ghost" 

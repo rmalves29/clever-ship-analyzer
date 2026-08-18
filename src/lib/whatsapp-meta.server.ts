@@ -323,6 +323,7 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
       nome: input.nome,
       status,
       segment_type: input.segmentType,
+      segment_id: segmentId || null,
       template_name: templateName,
       template_language: input.templateLanguage?.trim() || settings.templateLanguage,
       message_type: input.messageType,

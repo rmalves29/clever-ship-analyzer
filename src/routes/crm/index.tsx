@@ -38,7 +38,8 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment, exportSegmentCustomers } from "@/lib/crm-segmentation.functions";
+import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment, exportSegmentCustomers, saveSegment } from "@/lib/crm-segmentation.functions";
+import { syncShopifyData } from "@/lib/crm-sync.functions";
 import { RFMAnalysis } from "@/components/crm/RFMAnalysis";
 import { fixCustomerPhone, deepSyncCustomer, checkSpecificAbandonedCheckout } from "@/lib/admin-maintenance.functions";
 import { RFM_SEGMENTS_CONFIG } from "@/lib/crm-rfm.functions";

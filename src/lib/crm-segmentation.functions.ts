@@ -99,6 +99,11 @@ export const getCustomersList = createServerFn({ method: "POST" })
           } else if (field === "rfm_segment") {
             if (operator === "eq") query = query.eq("rfm_segment", val);
             else if (operator === "neq") query = query.neq("rfm_segment", val);
+          } else if (field === "perfil") {
+            if (val === "carrinho") {
+              if (operator === "eq") query = query.contains("tags", ["Carrinho Abandonado"]);
+              else if (operator === "neq") query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}");
+            }
           }
         }
       }

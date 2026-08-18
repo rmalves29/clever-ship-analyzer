@@ -182,7 +182,9 @@ export function WhatsappSendDialog({
                   <SelectItem value="recompra_60d">Recompra 60d</SelectItem>
                   <SelectItem value="envio_atrasado">Envio Atrasado</SelectItem>
                   <SelectItem value="recorrencia">Recorrência</SelectItem>
-                  {/* Aqui poderíamos mapear os segmentos criados dinamicamente no CRM se passarmos via props */}
+                  {segments.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

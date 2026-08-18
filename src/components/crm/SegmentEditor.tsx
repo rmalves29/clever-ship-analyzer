@@ -74,6 +74,7 @@ const CATEGORIES = [
       { id: "primeira_compra", label: "Data da Primeira Compra" },
       { id: "ticket_medio", label: "Ticket Médio" },
       { id: "recorrencia", label: "Recorrência" },
+      { id: "status_pagamento", label: "Status do Pagamento" },
     ]
   },
   {

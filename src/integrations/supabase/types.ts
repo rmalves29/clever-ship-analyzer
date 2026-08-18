@@ -91,6 +91,50 @@ export type Database = {
         }
         Relationships: []
       }
+      shopify_abandoned_checkouts: {
+        Row: {
+          checkout_url: string | null
+          created_at: string
+          customer_id: string | null
+          email: string | null
+          id: string
+          phone: string | null
+          raw_data: Json | null
+          total_price: number | null
+          updated_at: string
+        }
+        Insert: {
+          checkout_url?: string | null
+          created_at: string
+          customer_id?: string | null
+          email?: string | null
+          id: string
+          phone?: string | null
+          raw_data?: Json | null
+          total_price?: number | null
+          updated_at: string
+        }
+        Update: {
+          checkout_url?: string | null
+          created_at?: string
+          customer_id?: string | null
+          email?: string | null
+          id?: string
+          phone?: string | null
+          raw_data?: Json | null
+          total_price?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_abandoned_checkouts_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shopify_customers: {
         Row: {
           city: string | null

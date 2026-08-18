@@ -196,13 +196,14 @@ export function SegmentEditor({
     try {
       await runSave({
         data: {
+          id: initialData?.id,
           nome,
           descricao,
           regras: { groups },
           tipo: "dinamico"
         }
       });
-      toast.success("Segmento criado com sucesso!");
+      toast.success(initialData?.id ? "Segmento atualizado com sucesso!" : "Segmento criado com sucesso!");
       onSave();
     } catch (err: any) {
       toast.error("Erro ao salvar: " + err.message);

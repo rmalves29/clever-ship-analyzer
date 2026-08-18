@@ -215,8 +215,8 @@ export async function getCustomersWithPhone(ids: string[]) {
   return (data ?? []).filter((c) => Boolean(c.phone)) as { id: string; phone: string; first_name: string | null }[];
 }
 
-export async function countSegmentRecipients(segmentType: SegmentType) {
-  const ids = await getSegmentCustomerIds(segmentType);
+export async function countSegmentRecipients(segmentType: SegmentType | string, segmentId?: string) {
+  const ids = await getSegmentCustomerIds(segmentType, segmentId);
   const customers = await getCustomersWithPhone(ids);
   const validos = customers.filter((c) => toE164(c.phone));
   return { clientes: ids.length, comTelefone: customers.length, destinatarios: validos.length };

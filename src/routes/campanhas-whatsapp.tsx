@@ -439,7 +439,7 @@ function CampanhasWhatsapp() {
       </div>
 
       <AutomationDialog seed={autoSeed} open={autoOpen} onOpenChange={setAutoOpen} onSaved={() => refetchAutomations()} />
-      <WhatsappSendDialog seed={sendSeed} open={sendOpen} onOpenChange={setSendOpen} onDone={() => refetch()} />
+      <WhatsappSendDialog seed={sendSeed} open={sendOpen} onOpenChange={setSendOpen} segments={segmentsList} onDone={() => refetch()} />
       <CampaignDetailDialog campaignId={detailId} onOpenChange={(v) => !v && setDetailId(null)} />
     </div>
   );

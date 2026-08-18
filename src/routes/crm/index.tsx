@@ -288,7 +288,7 @@ function CRMPage() {
                 }}>
                   Localizar Cliente Específico (Shopify)
                 </DropdownMenuItem>
-                <DropdownMenuItem>Sincronizar Shopify</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleSync}>Sincronizar Shopify</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

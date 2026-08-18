@@ -56,6 +56,26 @@ export const getCustomersList = createServerFn({ method: "POST" })
             if (operator === "contains") query = query.contains("tags", [val]);
             else if (operator === "not_contains") query = query.not("tags", "cs", `{${val}}`);
             else if (operator === "eq") query = query.eq("tags", `{${val}}`);
+          } else if (field === "status_pagamento") {
+            // Filtrar clientes que possuem pelo menos um pedido com este status financeiro
+            const { data: customersWithStatus } = await supabaseAdmin
+              .from("shopify_orders")
+              .select("customer_id")
+              .eq("financial_status", val);
+            
+            const customerIds = Array.from(new Set(customersWithStatus?.map(o => String(o.customer_id)).filter(Boolean)));
+            
+            if (operator === "eq") {
+              if (customerIds.length > 0) {
+                query = query.in("id", customerIds);
+              } else {
+                return { customers: [], total: 0 };
+              }
+            } else if (operator === "neq") {
+              if (customerIds.length > 0) {
+                query = query.not("id", "in", `(${customerIds.join(",")})`);
+              }
+            }
           } else if (field === "total_pedidos" || field === "recorrencia") {
             const numVal = Number(val);
             // LEADS: total_pedidos == 0
@@ -194,6 +214,18 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
             } else if (field === "estado") {
               if (op === "eq") query = query.eq("province", val);
               else if (op === "neq") query = query.neq("province", val);
+            } else if (field === "status_pagamento") {
+              const { data: customersWithStatus } = await supabaseAdmin
+                .from("shopify_orders")
+                .select("customer_id")
+                .eq("financial_status", val);
+              const customerIds = Array.from(new Set(customersWithStatus?.map(o => String(o.customer_id)).filter(Boolean)));
+              if (op === "eq") {
+                if (customerIds.length > 0) query = query.in("id", customerIds);
+                else query = query.eq("id", "00000000-0000-0000-0000-000000000000");
+              } else if (op === "neq" && customerIds.length > 0) {
+                query = query.not("id", "in", `(${customerIds.join(",")})`);
+              }
             } else if (field === "total_pedidos" || field === "recorrencia") {
               const numVal = Number(val);
               if (field === "total_pedidos" && op === "eq" && numVal === 0) {
@@ -311,6 +343,17 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
           } else if (field === "estado") {
             if (operator === "eq") query = query.eq("province", value);
             else if (operator === "neq") query = query.neq("province", value);
+          } else if (field === "status_pagamento") {
+            const { data: customersWithStatus } = await supabaseAdmin
+              .from("shopify_orders")
+              .select("customer_id")
+              .eq("financial_status", value);
+            const customerIds = Array.from(new Set(customersWithStatus?.map(o => String(o.customer_id)).filter(Boolean)));
+            if (operator === "eq") {
+              if (customerIds.length > 0) query = query.in("id", customerIds);
+            } else if (operator === "neq" && customerIds.length > 0) {
+              query = query.not("id", "in", `(${customerIds.join(",")})`);
+            }
           } else if (field === "customer_tag") {
             if (operator === "contains") query = query.contains("tags", [value]);
           } else if (field === "total_pedidos" || field === "recorrencia") {

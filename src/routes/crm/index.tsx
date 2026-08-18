@@ -84,6 +84,7 @@ function CRMPage() {
 
   const [search, setSearch] = useState("");
   const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
+  const [editingSegment, setEditingSegment] = useState<any>(null);
   const [showEditor, setShowEditor] = useState(false);
   
   const fetchList = useServerFn(getCustomersList);

@@ -110,10 +110,13 @@ export function toE164(raw: string): string | null {
 }
 
 /** IDs de clientes que batem com o segmento — calculado sobre o histórico completo, não o período do dashboard. */
-export async function getSegmentCustomerIds(segmentType: SegmentType | string): Promise<string[]> {
+export async function getSegmentCustomerIds(segmentType: SegmentType | string, segmentId?: string): Promise<string[]> {
   const supabaseAdmin = await admin();
 
-  if (segmentType === "envio_atrasado") {
+  // Prioridade para o segmentId se fornecido
+  const finalSegmentType = segmentId || segmentType;
+
+  if (finalSegmentType === "envio_atrasado") {
     const cutoff = new Date(Date.now() - 30 * DAY_MS).toISOString();
     const { data: fulfillments } = await supabaseAdmin
       .from("shopify_fulfillments")

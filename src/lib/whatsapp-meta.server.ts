@@ -113,8 +113,10 @@ export function toE164(raw: string): string | null {
 export async function getSegmentCustomerIds(segmentType: SegmentType | string, segmentId?: string): Promise<string[]> {
   const supabaseAdmin = await admin();
 
-  // Prioridade para o segmentId se fornecido
+  // Prioridade para o segmentId se fornecido, ou se segmentType parecer um UUID
+  const isUuid = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
   const finalSegmentType = segmentId || segmentType;
+  const isCustomSegment = isUuid(finalSegmentType);
 
   if (finalSegmentType === "envio_atrasado") {
     const cutoff = new Date(Date.now() - 30 * DAY_MS).toISOString();
@@ -157,17 +159,19 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
     const avgTicket = agg.total / count;
     
     let match = false;
-    if (finalSegmentType === "ticket_alto") match = avgTicket > GOALS.ticketMedio.regular;
-    else if (finalSegmentType === "sem_recompra") match = count === 1; 
-    else if (finalSegmentType === "recorrencia") match = count > 1;
-    else if (finalSegmentType === "recompra_30d") match = count >= 1;
-    else if (finalSegmentType === "recompra_60d") match = count >= 1;
-    else if (finalSegmentType === "envio_atrasado") match = true;
+    if (!isCustomSegment) {
+      if (finalSegmentType === "ticket_alto") match = avgTicket > GOALS.ticketMedio.regular;
+      else if (finalSegmentType === "sem_recompra") match = count === 1; 
+      else if (finalSegmentType === "recorrencia") match = count > 1;
+      else if (finalSegmentType === "recompra_30d") match = count >= 1;
+      else if (finalSegmentType === "recompra_60d") match = count >= 1;
+      else if (finalSegmentType === "envio_atrasado") match = true;
 
-    if (match) ids.push(customerId);
+      if (match) ids.push(customerId);
+    }
   }
 
-  if (ids.length > 0) return ids;
+  if (ids.length > 0 || !isCustomSegment) return ids;
 
   const { data: customSegment } = await supabaseAdmin
     .from("crm_segments")
@@ -189,15 +193,38 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
 
     if (allCustomers && (customSegment.regras as any)?.groups) {
       const groups = (customSegment.regras as any).groups;
+      const customersWithOrdersList = Array.from(new Set((orders ?? []).map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
+
       return allCustomers.filter(c => {
         return groups.some((g: any) => {
           if (!g.conditions?.length) return false;
           return g.conditions.every((cond: any) => {
-            const val = String(c[cond.field as keyof typeof c] || "").toLowerCase();
+            const field = cond.field;
+            const operator = cond.operator;
             const target = String(cond.value || "").toLowerCase();
-            if (cond.operator === "eq") return val === target;
-            if (cond.operator === "contains") return val.includes(target);
-            if (cond.operator === "starts_with") return val.startsWith(target);
+
+            if (field === "total_pedidos" || field === "recorrencia") {
+              const numVal = Number(cond.value);
+              const orderCount = orders?.filter(o => o.customer_id === c.id).length || 0;
+              
+              if (field === "total_pedidos") {
+                if (operator === "eq") return orderCount === numVal;
+                if (operator === "gt") return orderCount > numVal;
+                if (operator === "gte") return orderCount >= numVal;
+                if (operator === "lt") return orderCount < numVal;
+                if (operator === "lte") return orderCount <= numVal;
+              }
+              if (field === "recorrencia") {
+                const isRecurring = orderCount > 1;
+                return operator === "eq" ? isRecurring === (target === "true" || target === "1") : true;
+              }
+            }
+
+            const val = String(c[field as keyof typeof c] || "").toLowerCase();
+            if (operator === "eq") return val === target;
+            if (operator === "neq") return val !== target;
+            if (operator === "contains") return val.includes(target);
+            if (operator === "starts_with") return val.startsWith(target);
             return false;
           });
         });

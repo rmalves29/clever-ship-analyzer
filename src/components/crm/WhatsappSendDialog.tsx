@@ -57,6 +57,8 @@ export function WhatsappSendDialog({
   const [messageType, setMessageType] = useState<"marketing" | "utility">("marketing");
   const [coupon, setCoupon] = useState("");
   const [busy, setBusy] = useState(false);
+  const [segmentType, setSegmentType] = useState<SegmentType>("sem_recompra");
+  const [segmentId, setSegmentId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (seed && open) {
@@ -64,6 +66,8 @@ export function WhatsappSendDialog({
       setOferta(seed.oferta);
       setBodyParams([]);
       setCoupon("");
+      setSegmentType(seed.segmentType);
+      setSegmentId(seed.segmentId);
       setBusy(false);
     }
   }, [seed, open]);

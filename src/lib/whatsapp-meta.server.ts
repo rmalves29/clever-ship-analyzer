@@ -347,7 +347,7 @@ export async function dispatchCampaign(campaignId: string) {
 
   const { data: campaignRow } = await supabaseAdmin
     .from("whatsapp_campaigns")
-    .select("id, segment_type, template_name, template_language, body_params")
+    .select("id, segment_type, segment_id, template_name, template_language, body_params")
     .eq("id", campaignId)
     .maybeSingle();
 

@@ -138,21 +138,52 @@ export function WhatsappSendDialog({
         <div className="space-y-4">
           <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/40 p-3">
             <Users className="size-4 text-brand" />
-            <p className="text-sm">
-              {loadingPreview ? (
-                "Calculando destinatários..."
-              ) : (
-                <>
-                  <strong>{preview?.destinatarios ?? 0}</strong> destinatários com telefone válido
-                  <span className="text-muted-foreground"> (de {preview?.clientes ?? 0} clientes no segmento)</span>
-                </>
-              )}
-            </p>
+            <div className="flex-1">
+              <p className="text-sm">
+                {loadingPreview ? (
+                  "Calculando destinatários..."
+                ) : (
+                  <>
+                    <strong>{preview?.destinatarios ?? 0}</strong> destinatários com telefone válido
+                    <span className="text-muted-foreground"> (de {preview?.clientes ?? 0} clientes no segmento)</span>
+                  </>
+                )}
+              </p>
+            </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Nome da campanha</Label>
-            <Input value={nome} onChange={(e) => setNome(e.target.value)} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Nome da campanha</Label>
+              <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Ex: Campanha manual" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Segmento de clientes</Label>
+              <Select 
+                value={segmentId || segmentType} 
+                onValueChange={(v) => {
+                  if (v.includes("-")) {
+                    setSegmentId(v);
+                  } else {
+                    setSegmentType(v as SegmentType);
+                    setSegmentId(undefined);
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ticket_alto">Ticket Alto</SelectItem>
+                  <SelectItem value="sem_recompra">Sem Recompra</SelectItem>
+                  <SelectItem value="recompra_30d">Recompra 30d</SelectItem>
+                  <SelectItem value="recompra_60d">Recompra 60d</SelectItem>
+                  <SelectItem value="envio_atrasado">Envio Atrasado</SelectItem>
+                  <SelectItem value="recorrencia">Recorrência</SelectItem>
+                  {/* Aqui poderíamos mapear os segmentos criados dinamicamente no CRM se passarmos via props */}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">

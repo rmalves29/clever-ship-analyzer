@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment } from "@/lib/crm-segmentation.functions";
-import { fixCustomerPhone } from "@/lib/admin-maintenance.functions";
+import { fixCustomerPhone, deepSyncCustomer } from "@/lib/admin-maintenance.functions";
 import { brl } from "@/lib/crm-mock";
 import { SegmentEditor } from "@/components/crm/SegmentEditor";
 import { toast } from "sonner";
@@ -91,6 +91,7 @@ function CRMPage() {
   const fetchSegments = useServerFn(getSegmentsList);
   const runDeleteSegment = useServerFn(deleteSegment);
   const runFixPhone = useServerFn(fixCustomerPhone);
+  const runDeepSync = useServerFn(deepSyncCustomer);
 
   const { data: stats } = useQuery({
     queryKey: ["crm-stats"],
@@ -131,6 +132,21 @@ function CRMPage() {
         return "Telefone atualizado com sucesso!";
       },
       error: (err) => "Erro ao atualizar: " + err.message
+    });
+  };
+  
+  const handleDeepSync = async (customerId: string) => {
+    const promise = runDeepSync({ data: { customerId } });
+    toast.promise(promise, {
+      loading: "Buscando dados detalhados na Shopify...",
+      success: (res: any) => {
+        if (res.success) {
+          queryClient.invalidateQueries({ queryKey: ["crm-customers"] });
+          return `Sincronizado! Telefone: ${res.phone || "Não encontrado"}`;
+        }
+        return "Cliente não encontrado na Shopify.";
+      },
+      error: (err) => "Erro ao sincronizar: " + err.message
     });
   };
 
@@ -319,6 +335,9 @@ function CRMPage() {
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => handleFixPhone(c.email)}>
                                   <Phone className="mr-2 size-4" /> Corrigir Telefone
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleDeepSync(c.id.replace('email:', '').replace('id:', ''))}>
+                                  <RefreshCw className="mr-2 size-4" /> Forçar Sincronia Shopify
                                 </DropdownMenuItem>
                                 <DropdownMenuItem>Ver Detalhes</DropdownMenuItem>
                               </DropdownMenuContent>

@@ -113,11 +113,19 @@ export const syncShopifyData = createServerFn({ method: "POST" })
               addr?.name || [addr?.firstName, addr?.lastName].filter(Boolean).join(" ") || 
               [order.customer?.firstName, order.customer?.lastName].filter(Boolean).join(" ") || null;
             
-            // Prioridade para o telefone: 
-            // 1. Telefone do cliente no objeto principal (order.customer?.phone)
-            // 2. Telefone do endereço de entrega (addr?.phone)
-            // 3. Telefone do pedido (order.phone)
-            const customerPhone = order.customer?.phone ?? addr?.phone ?? order.phone ?? null;
+            // Prioridade máxima para o telefone: 
+            // 1. Telefone do endereço de entrega (addr?.phone) - costuma ser o mais atual
+            // 2. Telefone do objeto principal do cliente (order.customer?.phone)
+            // 3. Telefone padrão do cliente (order.customer?.defaultAddress?.phone)
+            // 4. Telefone de qualquer endereço cadastrado
+            // 5. Telefone do pedido (order.phone)
+            const customerPhone = 
+              addr?.phone ?? 
+              order.customer?.phone ?? 
+              order.customer?.defaultAddress?.phone ??
+              order.customer?.addresses?.find((a: any) => a.phone)?.phone ??
+              order.phone ?? 
+              null;
               
             await supabaseAdmin.from("shopify_customers").upsert({
               id: customerId,

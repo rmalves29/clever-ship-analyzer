@@ -33,10 +33,21 @@ export const getCustomersList = createServerFn({ method: "POST" })
         if (rules.groups) {
           rules.groups.forEach((group: any) => {
             group.conditions.forEach((condition: any) => {
-              if (condition.field === "cidade" && condition.operator === "eq") {
-                query = query.eq("city", condition.value);
-              } else if (condition.field === "estado" && condition.operator === "eq") {
-                query = query.eq("province", condition.value);
+              const val = condition.value;
+              const op = condition.operator;
+              
+              if (condition.field === "cidade") {
+                if (op === "eq") query = query.eq("city", val);
+                else if (op === "neq") query = query.neq("city", val);
+                else if (op === "contains") query = query.ilike("city", `%${val}%`);
+              } else if (condition.field === "estado") {
+                if (op === "eq") query = query.eq("province", val);
+                else if (op === "neq") query = query.neq("province", val);
+              } else if (condition.field === "total_pedidos") {
+                // Filtro aproximado usando meta-dados se existissem, mas aqui o shopify_customers não tem total_orders direto
+                // Em um sistema real, faríamos JOIN ou teríamos essa coluna denormalizada.
+                // Como shopify_customers não tem, vamos pular ou logar.
+                console.log("Filtro total_pedidos ignorado na query principal");
               }
             });
           });

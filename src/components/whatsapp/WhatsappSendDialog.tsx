@@ -219,8 +219,13 @@ export function WhatsappSendDialog({
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">Selecione o segmento</Label>
                     <Select value={segmentId || segmentType} onValueChange={(v) => {
-                      if (v.includes("-")) setSegmentId(v);
-                      else { setSegmentType(v as SegmentType); setSegmentId(undefined); }
+                      if (v.includes("-") || v.length > 20) {
+                        setSegmentId(v);
+                        setSegmentType("custom"); 
+                      } else { 
+                        setSegmentType(v as SegmentType); 
+                        setSegmentId(undefined); 
+                      }
                     }}>
                       <SelectTrigger className="h-12 bg-muted/30 border-muted-foreground/20">
                         <SelectValue />

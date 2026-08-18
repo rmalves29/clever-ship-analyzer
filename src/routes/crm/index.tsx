@@ -44,7 +44,7 @@ import { brl } from "@/lib/crm-mock";
 import { SegmentEditor } from "@/components/crm/SegmentEditor";
 import { toast } from "sonner";
 
-const VALID_TABS = ["contatos", "segmentos", "listas"] as const;
+const VALID_TABS = ["contatos", "segmentos", "listas", "rfm"] as const;
 
 export const Route = createFileRoute("/crm/")({
   validateSearch: (search: Record<string, unknown>) => ({

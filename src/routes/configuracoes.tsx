@@ -332,11 +332,11 @@ function Configuracoes() {
                 <Button 
                   type="button" 
                   variant="outline" 
-                  onClick={(e) => {
+                  onClick={async (e) => {
                     e.preventDefault();
-                    testConnectionMutation.mutate();
+                    await testConnectionMutation.mutateAsync();
                   }} 
-                  disabled={isTesting || !settings?.hasClientSecret}
+                  disabled={isTesting || (!settings?.hasClientSecret && !formData.clientSecret)}
                 >
                   {isTesting ? <RefreshCw className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}
                   Testar Conexão

@@ -336,10 +336,11 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
         .select("customer_id, total_price")
         .in("customer_id", customerIds);
       
-      allOrders?.forEach(o => {
-        if (o.customer_id) {
-          if (!ordersMap[o.customer_id]) ordersMap[o.customer_id] = [];
-          ordersMap[o.customer_id].push(o);
+      (allOrders || []).forEach(o => {
+        const cid = String(o.customer_id);
+        if (cid && cid !== 'null') {
+          if (!ordersMap[cid]) ordersMap[cid] = [];
+          ordersMap[cid].push(o);
         }
       });
     }

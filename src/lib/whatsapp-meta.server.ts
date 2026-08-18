@@ -289,8 +289,8 @@ export async function listMetaTemplates() {
 
 export type NewCampaignInput = {
   nome: string;
-
-  segmentType: SegmentType;
+  segmentType: string;
+  segmentId?: string | undefined;
   messageType: MessageType;
   templateName?: string | undefined;
   templateLanguage?: string | undefined;
@@ -301,7 +301,7 @@ export type NewCampaignInput = {
 };
 
 /** Cria a campanha no banco (sem enviar). Status inicial define se vai pra fila de aprovação. */
-export async function createCampaignRow(input: NewCampaignInput, status: "aguardando_aprovacao" | "enviando") {
+export async function createCampaignRow(input: NewCampaignInput, status: "aguardando_aprovacao" | "enviando" | "agendada") {
   const supabaseAdmin = await admin();
   const settings = await loadSettings();
 

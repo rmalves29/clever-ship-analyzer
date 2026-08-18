@@ -52,6 +52,10 @@ export const getCustomersList = createServerFn({ method: "POST" })
           } else if (field === "estado") {
             if (operator === "eq") query = query.eq("province", val);
             else if (operator === "neq") query = query.neq("province", val);
+          } else if (field === "customer_tag") {
+            if (operator === "contains") query = query.contains("tags", [val]);
+            else if (operator === "not_contains") query = query.not("tags", "cs", `{${val}}`);
+            else if (operator === "eq") query = query.eq("tags", `{${val}}`);
           } else if (field === "total_pedidos" || field === "recorrencia") {
             const numVal = Number(val);
             // LEADS: total_pedidos == 0
@@ -307,6 +311,8 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
           } else if (field === "estado") {
             if (operator === "eq") query = query.eq("province", value);
             else if (operator === "neq") query = query.neq("province", value);
+          } else if (field === "customer_tag") {
+            if (operator === "contains") query = query.contains("tags", [value]);
           } else if (field === "total_pedidos" || field === "recorrencia") {
             const numVal = Number(value);
             if (field === "total_pedidos" && operator === "eq" && numVal === 0) {

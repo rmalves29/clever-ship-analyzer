@@ -65,6 +65,7 @@ export function WhatsappSendDialog({
   const [segmentId, setSegmentId] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [sendNow, setSendNow] = useState(true);
+  const [campaignTag, setCampaignTag] = useState("");
 
   useEffect(() => {
     if (seed && open) {
@@ -105,6 +106,7 @@ export function WhatsappSendDialog({
           couponCode: coupon.trim() || undefined,
           bodyParams: selectedTemplate ? bodyParams.slice(0, bodyVarCount) : [],
           requireApproval,
+          campaignTag: campaignTag.trim() || undefined,
         },
       });
 
@@ -210,6 +212,17 @@ export function WhatsappSendDialog({
                         <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Número Oficial Verificado</p>
                       </div>
                     </div>
+                  </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Tag da campanha (opcional)</Label>
+                    <Input 
+                      value={campaignTag} 
+                      onChange={(e) => setCampaignTag(e.target.value)} 
+                      placeholder="Ex: promo_inverno_2026"
+                      className="h-12 bg-muted/30 border-muted-foreground/20 focus:border-brand transition-all"
+                    />
+                    <p className="text-[10px] text-muted-foreground">Esta tag será adicionada a todos os clientes que receberem a campanha, permitindo criar novos segmentos futuramente.</p>
                   </div>
                 </div>
               )}

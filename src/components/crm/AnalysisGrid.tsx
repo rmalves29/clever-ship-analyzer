@@ -257,6 +257,71 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
           </ResponsiveContainer>
         </div>
       </section>
+
+      <section className="surface-card p-5 lg:col-span-2">
+        <header className="flex items-start gap-3 border-b border-border pb-3">
+          <span className="mt-1 text-xs font-mono text-muted-foreground">10</span>
+          <div className="flex-1">
+            <h3 className="text-base font-semibold">Análise de coorte de clientes</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Retenção de clientes por mês de primeira compra.</p>
+          </div>
+        </header>
+        <div className="mt-4 overflow-x-auto pb-2">
+          <table className="w-full text-left text-[10px] border-collapse min-w-[600px]">
+            <thead>
+              <tr>
+                <th className="p-2 font-medium text-muted-foreground border-b border-border">Coorte</th>
+                <th className="p-2 font-medium text-muted-foreground border-b border-border text-center" colSpan={8}>Meses</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.cohortData?.map((cohort, idx) => (
+                <tr key={idx} className="hover:bg-muted/50 transition-colors">
+                  <td className="p-2 font-medium whitespace-nowrap border-b border-border">{cohort.month}</td>
+                  {cohort.retention.map((val, i) => (
+                    <td 
+                      key={i} 
+                      className={cn(
+                        "p-2 text-center border-b border-border",
+                        val === null ? "bg-transparent" : 
+                        val === 0 ? "text-muted-foreground/30" : 
+                        val > 20 ? "bg-meta/20 font-semibold" : 
+                        val > 10 ? "bg-meta/10" : ""
+                      )}
+                    >
+                      {val !== null ? `${val}%` : ""}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="surface-card p-5 lg:col-span-2">
+        <header className="flex items-start gap-3 border-b border-border pb-3">
+          <span className="mt-1 text-xs font-mono text-muted-foreground">11</span>
+          <div className="flex-1">
+            <h3 className="text-base font-semibold">Sessões por página de destino</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Principais páginas de entrada na loja.</p>
+          </div>
+        </header>
+        <ul className="mt-4 space-y-2">
+          {data.sessoes?.map((s, i) => (
+            <li key={i} className="flex items-center justify-between text-xs p-2 rounded-md hover:bg-muted/50 transition-colors">
+              <span className="truncate max-w-[300px]" title={s.page}>{s.page}</span>
+              <div className="flex items-center gap-3">
+                <span className="font-semibold">{s.count}</span>
+                {s.trend && (
+                  <span className="text-meta font-medium">↗ {(s.trend/100).toFixed(1)} mil%</span>
+                )}
+                {!s.trend && <span className="text-muted-foreground">—</span>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }

@@ -15,44 +15,60 @@ export const getCustomersList = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Selecionamos primeiro os clientes com contagem total
-    let query = supabaseAdmin
-      .from("shopify_customers")
-      .select("*", { count: "exact" });
-
-    // Se houver um segmento, aplicamos as regras dele
+    // 1. Buscar regras do segmento se aplicável
+    let segmentRules: any = null;
     if (data.segmentId) {
       const { data: segment } = await supabaseAdmin
         .from("crm_segments")
         .select("regras")
         .eq("id", data.segmentId)
         .single();
+      segmentRules = segment?.regras;
+    }
 
-      if (segment?.regras) {
-        const rules = segment.regras as any;
-        if (rules.groups) {
-          rules.groups.forEach((group: any) => {
-            group.conditions.forEach((condition: any) => {
-              const val = condition.value;
-              const op = condition.operator;
-              const field = condition.field;
+    // 2. Buscar IDs de clientes que possuem pedidos (para filtros de Leads/Clientes)
+    const { data: ordersData } = await supabaseAdmin
+      .from("shopify_orders")
+      .select("customer_id");
+    const customersWithOrdersSet = new Set(ordersData?.map(o => String(o.customer_id)).filter(id => id && id !== 'null'));
+    const customersWithOrdersList = Array.from(customersWithOrdersSet);
 
-              if (field === "cidade") {
-                if (op === "eq") query = query.eq("city", val);
-                else if (op === "neq") query = query.neq("city", val);
-                else if (op === "contains") query = query.ilike("city", `%${val}%`);
-              } else if (field === "estado") {
-                if (op === "eq") query = query.eq("province", val);
-                else if (op === "neq") query = query.neq("province", val);
-              } else if (field === "total_pedidos" || field === "recorrencia") {
-                // Filtro para quem já comprou (Leads vs Clientes)
-                if (op === "gt" && Number(val) >= 0) {
-                  // shopify_customers não tem total_orders, mas podemos filtrar por quem tem pedidos no shopify_orders
-                  // Por enquanto, apenas registramos a intenção ou usamos um filtro básico
-                }
+    // 3. Construir query base
+    let query = supabaseAdmin
+      .from("shopify_customers")
+      .select("*", { count: "exact" });
+
+    // 4. Aplicar filtros baseados em regras
+    if (segmentRules?.groups) {
+      for (const group of segmentRules.groups) {
+        for (const condition of group.conditions) {
+          const { field, operator, value } = condition;
+          const val = value;
+
+          if (field === "cidade") {
+            if (operator === "eq") query = query.eq("city", val);
+            else if (operator === "neq") query = query.neq("city", val);
+            else if (operator === "contains") query = query.ilike("city", `%${val}%`);
+          } else if (field === "estado") {
+            if (operator === "eq") query = query.eq("province", val);
+            else if (operator === "neq") query = query.neq("province", val);
+          } else if (field === "total_pedidos" || field === "recorrencia") {
+            const numVal = Number(val);
+            if (field === "total_pedidos" && operator === "eq" && numVal === 0) {
+              // LEADS: Clientes que NÃO estão na lista de pedidos
+              if (customersWithOrdersList.length > 0) {
+                query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
               }
-            });
-          });
+            } else if ((field === "total_pedidos" && operator === "gt" && numVal >= 0) || (field === "recorrencia")) {
+              // CLIENTES: Clientes que ESTÃO na lista de pedidos
+              if (customersWithOrdersList.length > 0) {
+                query = query.in("id", customersWithOrdersList);
+              } else {
+                // Se não há pedidos, nenhum cliente atende ao critério "com pedidos"
+                return { customers: [], total: 0 };
+              }
+            }
+          }
         }
       }
     }
@@ -67,9 +83,8 @@ export const getCustomersList = createServerFn({ method: "POST" })
 
     if (error) throw error;
 
-    // Se temos clientes, buscamos os pedidos deles separadamente para evitar o erro de agregação
     const customerIds = customers?.map(c => c.id) || [];
-    let customersWithOrders = customers || [];
+    let customersWithOrders: any[] = (customers || []).map(c => ({ ...c, shopify_orders: [] }));
 
     if (customerIds.length > 0) {
       const { data: orders, error: ordersError } = await supabaseAdmin
@@ -149,6 +164,9 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
   const { data: segments, error } = await supabaseAdmin.from("crm_segments").select("*").order("criado_em", { ascending: false });
   if (error) throw error;
 
+  const { data: ordersData } = await supabaseAdmin.from("shopify_orders").select("customer_id");
+  const customersWithOrdersList = Array.from(new Set(ordersData?.map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
+
   // Para cada segmento, calcular a contagem de membros
   const segmentsWithCount = await Promise.all((segments || []).map(async (seg) => {
     let query = supabaseAdmin.from("shopify_customers").select("*", { count: "exact", head: true });
@@ -156,8 +174,8 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
     if (seg.regras) {
       const rules = seg.regras as any;
       if (rules.groups) {
-        rules.groups.forEach((group: any) => {
-          group.conditions.forEach((condition: any) => {
+        for (const group of rules.groups) {
+          for (const condition of group.conditions) {
             const val = condition.value;
             const op = condition.operator;
             const field = condition.field;
@@ -169,9 +187,16 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
             } else if (field === "estado") {
               if (op === "eq") query = query.eq("province", val);
               else if (op === "neq") query = query.neq("province", val);
+            } else if (field === "total_pedidos" || field === "recorrencia") {
+              const numVal = Number(val);
+              if (field === "total_pedidos" && op === "eq" && numVal === 0) {
+                if (customersWithOrdersList.length > 0) query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
+              } else if (customersWithOrdersList.length > 0) {
+                query = query.in("id", customersWithOrdersList);
+              }
             }
-          });
-        });
+          }
+        }
       }
     }
     

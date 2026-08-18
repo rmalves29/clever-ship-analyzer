@@ -147,6 +147,8 @@ export const ORDERS_QUERY = `
             firstName
             lastName
             phone
+            addresses(first: 5) { phone }
+            defaultAddress { phone }
           }
           lineItems(first: 100) {
             edges {

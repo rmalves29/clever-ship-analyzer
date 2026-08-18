@@ -16,7 +16,8 @@ import {
   LayoutDashboard,
   Sparkles,
   Trash2,
-  X
+  X,
+  Download
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -36,7 +37,7 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment } from "@/lib/crm-segmentation.functions";
+import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment, exportSegmentCustomers } from "@/lib/crm-segmentation.functions";
 import { fixCustomerPhone, deepSyncCustomer } from "@/lib/admin-maintenance.functions";
 import { brl } from "@/lib/crm-mock";
 import { SegmentEditor } from "@/components/crm/SegmentEditor";
@@ -93,6 +94,43 @@ function CRMPage() {
   const runDeleteSegment = useServerFn(deleteSegment);
   const runFixPhone = useServerFn(fixCustomerPhone);
   const runDeepSync = useServerFn(deepSyncCustomer);
+  const runExport = useServerFn(exportSegmentCustomers);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      const { csv } = await runExport({ 
+        data: { 
+          segmentId: selectedSegment || undefined,
+          search: search || undefined
+        } 
+      });
+
+      if (!csv) {
+        toast.error("Nenhum dado para exportar.");
+        return;
+      }
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      const filename = selectedSegment 
+        ? `segmento-${segments?.find(s => s.id === selectedSegment)?.nome.toLowerCase().replace(/\s+/g, '-')}.csv`
+        : `contatos-crm-${new Date().toISOString().split('T')[0]}.csv`;
+      link.setAttribute("download", filename);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success("Exportação concluída!");
+    } catch (err: any) {
+      toast.error("Erro na exportação: " + err.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const { data: stats } = useQuery({
     queryKey: ["crm-stats"],
@@ -265,6 +303,20 @@ function CRMPage() {
                       </Button>
                     </Badge>
                   )}
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="gap-2"
+                    onClick={handleExport}
+                    disabled={isExporting}
+                  >
+                    {isExporting ? (
+                      <RefreshCw className="size-3.5 animate-spin" />
+                    ) : (
+                      <Download className="size-3.5" />
+                    )}
+                    Exportar Lista
+                  </Button>
                   <Button variant="outline" size="sm" className="gap-2">
                     Todos os status <Filter className="size-3.5" />
                   </Button>

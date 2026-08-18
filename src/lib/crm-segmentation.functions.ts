@@ -54,17 +54,20 @@ export const getCustomersList = createServerFn({ method: "POST" })
             else if (operator === "neq") query = query.neq("province", val);
           } else if (field === "total_pedidos" || field === "recorrencia") {
             const numVal = Number(val);
+            // LEADS: total_pedidos == 0
             if (field === "total_pedidos" && operator === "eq" && numVal === 0) {
-              // LEADS: Clientes que NÃO estão na lista de pedidos
               if (customersWithOrdersList.length > 0) {
                 query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
               }
-            } else if ((field === "total_pedidos" && operator === "gt" && numVal >= 0) || (field === "recorrencia")) {
-              // CLIENTES: Clientes que ESTÃO na lista de pedidos
+            } 
+            // CLIENTES COM PEDIDOS: total_pedidos > 0 ou recorrencia
+            else if (
+              (field === "total_pedidos" && (operator === "gt" || operator === "gte") && numVal >= 0) || 
+              field === "recorrencia"
+            ) {
               if (customersWithOrdersList.length > 0) {
                 query = query.in("id", customersWithOrdersList);
               } else {
-                // Se não há pedidos, nenhum cliente atende ao critério "com pedidos"
                 return { customers: [], total: 0 };
               }
             }
@@ -193,6 +196,8 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
                 if (customersWithOrdersList.length > 0) query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
               } else if (customersWithOrdersList.length > 0) {
                 query = query.in("id", customersWithOrdersList);
+              } else {
+                query = query.eq("id", "00000000-0000-0000-0000-000000000000"); // Nenhum cliente se não há pedidos
               }
             }
           }
@@ -261,3 +266,111 @@ export const getStaticLists = createServerFn({ method: "GET" }).handler(async ()
   if (error) throw error;
   return data;
 });
+
+export const exportSegmentCustomers = createServerFn({ method: "POST" })
+  .validator((data: unknown) =>
+    z
+      .object({
+        segmentId: z.string().uuid().optional(),
+        search: z.string().optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    let segmentRules: any = null;
+    if (data.segmentId) {
+      const { data: segment } = await supabaseAdmin
+        .from("crm_segments")
+        .select("regras")
+        .eq("id", data.segmentId)
+        .single();
+      segmentRules = segment?.regras;
+    }
+
+    const { data: ordersData } = await supabaseAdmin
+      .from("shopify_orders")
+      .select("customer_id");
+    const customersWithOrdersList = Array.from(new Set(ordersData?.map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
+
+    let query = supabaseAdmin.from("shopify_customers").select("*");
+
+    if (segmentRules?.groups) {
+      for (const group of segmentRules.groups) {
+        for (const condition of group.conditions) {
+          const { field, operator, value } = condition;
+          if (field === "cidade") {
+            if (operator === "eq") query = query.eq("city", value);
+            else if (operator === "neq") query = query.neq("city", value);
+            else if (operator === "contains") query = query.ilike("city", `%${value}%`);
+          } else if (field === "estado") {
+            if (operator === "eq") query = query.eq("province", value);
+            else if (operator === "neq") query = query.neq("province", value);
+          } else if (field === "total_pedidos" || field === "recorrencia") {
+            const numVal = Number(value);
+            if (field === "total_pedidos" && operator === "eq" && numVal === 0) {
+              if (customersWithOrdersList.length > 0) query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
+            } else if (customersWithOrdersList.length > 0) {
+              query = query.in("id", customersWithOrdersList);
+            }
+          }
+        }
+      }
+    }
+
+    if (data.search) {
+      query = query.or(`first_name.ilike.%${data.search}%,last_name.ilike.%${data.search}%,email.ilike.%${data.search}%,phone.ilike.%${data.search}%`);
+    }
+
+    const { data: customers, error } = await query;
+    if (error) throw error;
+
+    // Buscar todos os pedidos para calcular totalSpent e totalOrders
+    const customerIds = customers?.map(c => c.id) || [];
+    let ordersMap: Record<string, any[]> = {};
+    
+    if (customerIds.length > 0) {
+      const { data: allOrders } = await supabaseAdmin
+        .from("shopify_orders")
+        .select("customer_id, total_price")
+        .in("customer_id", customerIds);
+      
+      (allOrders || []).forEach(o => {
+        const cid = String(o.customer_id);
+        if (cid && cid !== 'null') {
+          if (!ordersMap[cid]) ordersMap[cid] = [];
+          ordersMap[cid].push(o);
+        }
+      });
+    }
+
+    const rows = (customers || []).map(c => {
+      const cid = c.id ? String(c.id) : '';
+      const orders = cid ? (ordersMap[cid] || []) : [];
+      const totalSpent = orders.reduce((acc, o) => acc + Number(o.total_price || 0), 0);
+      return {
+        Nome: `${c.first_name || ""} ${c.last_name || ""}`.trim(),
+        Email: c.email || "",
+        Telefone: c.phone || "",
+        Cidade: c.city || "",
+        Estado: c.province || "",
+        Pedidos: orders.length,
+        TotalGasto: totalSpent.toFixed(2),
+        DataCriacao: c.created_at ? new Date(c.created_at).toLocaleDateString("pt-BR") : ""
+      };
+    });
+
+    if (rows.length === 0) return { csv: "" };
+
+    const firstRow = rows[0];
+    if (!firstRow) return { csv: "" };
+
+    const headers = Object.keys(firstRow);
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => headers.map(h => `"${String(row[h as keyof typeof row] || "").replace(/"/g, '""')}"`).join(","))
+    ].join("\n");
+
+    return { csv: csvContent };
+  });

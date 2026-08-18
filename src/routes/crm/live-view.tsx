@@ -5,14 +5,12 @@ import { Activity, Map as MapIcon, RefreshCw, BarChart3, Users, ShoppingBag, Cre
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import {
-  ComposableMap,
-  Geographies,
-  Geography,
-  Marker
-} from "react-simple-maps";
+import { lazy, Suspense } from "react";
 import { getShopifyDashboardData } from "@/lib/shopify-dashboard.functions";
 import { brl } from "@/lib/crm-mock";
+
+// Carregamento dinâmico do globo para evitar problemas com SSR e bibliotecas pesadas
+const LiveGlobe = lazy(() => import("@/components/crm/LiveGlobe"));
 
 export const Route = createFileRoute("/crm/live-view")({
   component: LiveViewPage,

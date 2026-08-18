@@ -33,7 +33,7 @@ export const brlCents = (v: number) =>
 /** Metas do semáforo (vermelho crítico / amarelo regular / verde dentro da meta) */
 export const GOALS = {
   taxaRecompra: { meta: 10, regular: 5 }, // %
-  tempoMedioEnvio: { meta: 1.5, regular: 2.5 }, // dias (menor é melhor)
+  tempoMedioEnvio: { meta: 3.0, regular: 3.5 }, // dias (menor é melhor)
   ticketMedio: { meta: 300, regular: 200 }, // R$
 };
 

@@ -176,9 +176,9 @@ export const getCustomersList = createServerFn({ method: "POST" })
             
             if (orderIds.length > 0) {
               const { data: ordersWithCustomers } = await supabaseAdmin
-                .from("shopify_orders")
-                .select("customer_id")
-                .in("id", orderIds);
+              .from("shopify_orders")
+              .select("customer_id")
+              .in("id", orderIds.filter((id): id is string => id !== null));
               
               const customerIds = Array.from(new Set(ordersWithCustomers?.map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
               

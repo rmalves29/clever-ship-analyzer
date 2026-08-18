@@ -11,11 +11,12 @@ export const testShopifyConnection = createServerFn({ method: "POST" }).handler(
     const data: any = await shopifyGraphQL(`
       query {
         shop { name myshopifyDomain }
-        currentAppInstallation { accessScopes { handle } }
+        currentAppInstallation { accessScopes { handle description } }
       }
     `);
 
-    const scopes: string[] = data.currentAppInstallation.accessScopes.map((s: any) => s.handle);
+    const scopesData = data.currentAppInstallation.accessScopes || [];
+    const scopes: string[] = scopesData.map((s: any) => s.handle);
 
     const requiredScopes = ["read_orders", "read_customers", "read_products", "read_fulfillments"];
     const missingScopes = requiredScopes.filter((s) => !scopes.includes(s));
@@ -33,7 +34,7 @@ export const testShopifyConnection = createServerFn({ method: "POST" }).handler(
       success: missingScopes.length === 0,
       shopName: data.shop.name,
       domain: data.shop.myshopifyDomain,
-      scopes,
+      scopes: scopesData,
       missingScopes,
       hasReadAll,
       message:

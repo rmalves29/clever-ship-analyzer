@@ -101,6 +101,7 @@ function CRMPage() {
   const runDeepSync = useServerFn(deepSyncCustomer);
   const runExport = useServerFn(exportSegmentCustomers);
   const runNormalizePhones = useServerFn(normalizeAllPhones);
+  const runIdentifyAbandoned = useServerFn(identifyAbandonedCheckouts);
   const [isExporting, setIsExporting] = useState(false);
 
   const handleExport = async () => {
@@ -251,6 +252,20 @@ function CRMPage() {
                   });
                 }}>
                   Ajustar todos os telefones
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={async () => {
+                  const promise = runIdentifyAbandoned();
+                  toast.promise(promise, {
+                    loading: "Analisando carrinhos abandonados...",
+                    success: (res: any) => {
+                      queryClient.invalidateQueries({ queryKey: ["crm-customers"] });
+                      queryClient.invalidateQueries({ queryKey: ["crm-stats"] });
+                      return res.message;
+                    },
+                    error: "Erro na análise de abandono."
+                  });
+                }}>
+                  Identificar Carrinhos Abandonados
                 </DropdownMenuItem>
                 <DropdownMenuItem>Sincronizar Shopify</DropdownMenuItem>
               </DropdownMenuContent>

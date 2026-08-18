@@ -166,6 +166,21 @@ function CRMPage() {
       toast.error("Erro ao excluir: " + err.message);
     }
   };
+  
+  const [isSyncing, setIsSyncing] = useState(false);
+  const runSync = useServerFn(syncShopifyData);
+  const handleSync = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await runSync({ data: { fullSync: false } });
+      toast.success(`Sincronização concluída: ${res.totalImported} pedido(s) atualizados.`);
+      queryClient.invalidateQueries();
+    } catch (err: any) {
+      toast.error("Erro ao sincronizar: " + (err?.message ?? "falha desconhecida"));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const handleFixPhone = async (email: string) => {
     const phone = prompt("Digite o telefone correto para " + email + " (formato: +55...):");

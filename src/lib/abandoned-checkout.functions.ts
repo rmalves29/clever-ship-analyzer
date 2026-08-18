@@ -19,7 +19,7 @@ export const identifyAbandonedCheckouts = createServerFn({ method: "POST" })
     const customerIdsWithExpired = Array.from(new Set(expiredOrders?.map(o => o.customer_id).filter(Boolean) as string[]));
     
     if (customerIdsWithExpired.length === 0) {
-      return { success: true, updatedCount: 0, message: "Nenhum carrinho abandonado (EXPIRED) encontrado." };
+      return { success: true, updatedCount: 0, message: "Nenhum checkout abandonado (EXPIRED) encontrado." };
     }
 
     // 2. Fetch customer data for these IDs
@@ -82,6 +82,6 @@ export const identifyAbandonedCheckouts = createServerFn({ method: "POST" })
     return { 
       success: true, 
       updatedCount, 
-      message: `${updatedCount} perfis atualizados para 'Carrinho Abandonado' e telefones corrigidos.` 
+      message: `${updatedCount} perfis atualizados para 'Checkout Abandonado' e telefones corrigidos.` 
     };
   });

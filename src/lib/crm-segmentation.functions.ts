@@ -15,57 +15,60 @@ export const getCustomersList = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Selecionamos primeiro os clientes com contagem total
-    let query = supabaseAdmin
-      .from("shopify_customers")
-      .select("*", { count: "exact" });
-
-    // Se houver um segmento, aplicamos as regras dele
+    // 1. Buscar regras do segmento se aplicável
+    let segmentRules: any = null;
     if (data.segmentId) {
       const { data: segment } = await supabaseAdmin
         .from("crm_segments")
         .select("regras")
         .eq("id", data.segmentId)
         .single();
+      segmentRules = segment?.regras;
+    }
 
-      if (segment?.regras) {
-        const rules = segment.regras as any;
-        if (rules.groups) {
-          // No Supabase, o default é 'AND' entre diferentes .eq() .gt() chamados na mesma query.
-          // Para suportar 'OR' entre grupos de regras, a lógica precisaria ser mais complexa (usando .or()).
-          // Por enquanto, focamos em fazer os filtros individuais funcionarem corretamente.
-          rules.groups.forEach((group: any) => {
-            group.conditions.forEach((condition: any) => {
-              const val = condition.value;
-              const op = condition.operator;
-              const field = condition.field;
+    // 2. Buscar IDs de clientes que possuem pedidos (para filtros de Leads/Clientes)
+    const { data: ordersData } = await supabaseAdmin
+      .from("shopify_orders")
+      .select("customer_id");
+    const customersWithOrdersSet = new Set(ordersData?.map(o => o.customer_id).filter(Boolean));
+    const customersWithOrdersList = Array.from(customersWithOrdersSet);
 
-              if (field === "cidade") {
-                if (op === "eq") query = query.eq("city", val);
-                else if (op === "neq") query = query.neq("city", val);
-                else if (op === "contains") query = query.ilike("city", `%${val}%`);
-              } else if (field === "estado") {
-                if (op === "eq") query = query.eq("province", val);
-                else if (op === "neq") query = query.neq("province", val);
-              } else if (field === "total_pedidos" || field === "recorrencia") {
-                // Filtro para quem já comprou ou não
-                const numVal = Number(val);
-                
-                // Estratégia: Filtramos os IDs dos clientes que possuem pedidos
-                // Para "Total de Pedidos = 0" (Leads), queremos clientes que NÃO estão na lista de pedidos.
-                // Como o PostgREST não suporta NOT IN (SELECT...) facilmente, 
-                // vamos precisar de uma abordagem de filtro baseada em dados já presentes ou processamento posterior.
-                // No entanto, para fins de query imediata, vamos implementar o filtro de 'contagem' se possível.
-                
-                if (field === "total_pedidos") {
-                  // Se o usuário quer 0 pedidos, ele quer LEADS.
-                  // Uma forma simples é usar o fato de que shopify_customers.updated_at 
-                  // é atualizado no sync. 
-                  // TODO: Adicionar coluna 'total_orders' na tabela shopify_customers para performance.
-                }
+    // 3. Construir query base
+    let query = supabaseAdmin
+      .from("shopify_customers")
+      .select("*", { count: "exact" });
+
+    // 4. Aplicar filtros baseados em regras
+    if (segmentRules?.groups) {
+      for (const group of segmentRules.groups) {
+        for (const condition of group.conditions) {
+          const { field, operator, value } = condition;
+          const val = value;
+
+          if (field === "cidade") {
+            if (operator === "eq") query = query.eq("city", val);
+            else if (operator === "neq") query = query.neq("city", val);
+            else if (operator === "contains") query = query.ilike("city", `%${val}%`);
+          } else if (field === "estado") {
+            if (operator === "eq") query = query.eq("province", val);
+            else if (operator === "neq") query = query.neq("province", val);
+          } else if (field === "total_pedidos" || field === "recorrencia") {
+            const numVal = Number(val);
+            if (field === "total_pedidos" && operator === "eq" && numVal === 0) {
+              // LEADS: Clientes que NÃO estão na lista de pedidos
+              if (customersWithOrdersList.length > 0) {
+                query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
               }
-            });
-          });
+            } else if ((field === "total_pedidos" && operator === "gt" && numVal >= 0) || (field === "recorrencia")) {
+              // CLIENTES: Clientes que ESTÃO na lista de pedidos
+              if (customersWithOrdersList.length > 0) {
+                query = query.in("id", customersWithOrdersList);
+              } else {
+                // Se não há pedidos, nenhum cliente atende ao critério "com pedidos"
+                return { customers: [], total: 0 };
+              }
+            }
+          }
         }
       }
     }
@@ -80,9 +83,8 @@ export const getCustomersList = createServerFn({ method: "POST" })
 
     if (error) throw error;
 
-    // Se temos clientes, buscamos os pedidos deles separadamente para evitar o erro de agregação
     const customerIds = customers?.map(c => c.id) || [];
-    let customersWithOrders = customers || [];
+    let customersWithOrders = (customers || []).map(c => ({ ...c, shopify_orders: [] }));
 
     if (customerIds.length > 0) {
       const { data: orders, error: ordersError } = await supabaseAdmin

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { SEGMENT_TYPES } from "./crm-mock";
+export { getSegmentsList } from "./crm-segmentation.functions";
 
 const segmentTypeSchema = z.string();
 const messageTypeSchema = z.enum(["marketing", "utility"]);

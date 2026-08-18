@@ -111,6 +111,7 @@ export const checkSpecificAbandonedCheckout = createServerFn({ method: "POST" })
               updatedAt
               email
               phone
+              totalPriceSet { presentmentMoney { amount currencyCode } }
               shippingAddress { phone firstName lastName city province country }
               customer { id email firstName lastName phone }
             }

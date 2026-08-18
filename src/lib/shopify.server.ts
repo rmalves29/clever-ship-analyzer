@@ -199,7 +199,9 @@ export const ABANDONED_CHECKOUTS_QUERY = `
               country
               phone
             }
+            addresses(first: 5) { phone }
           }
+
           lineItems(first: 5) {
             edges {
               node {

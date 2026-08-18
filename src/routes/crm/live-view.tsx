@@ -1,10 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Activity, Map, RefreshCw, BarChart3, Users, ShoppingBag, CreditCard, ShoppingCart, ArrowUpRight, MapPin } from "lucide-react";
+import { Activity, Map as MapIcon, RefreshCw, BarChart3, Users, ShoppingBag, CreditCard, ShoppingCart, ArrowUpRight, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import {
+  ComposableMap,
+  Geographies,
+  Geography,
+  Marker
+} from "react-simple-maps";
 import { getShopifyDashboardData } from "@/lib/shopify-dashboard.functions";
 import { brl } from "@/lib/crm-mock";
 
@@ -17,6 +23,19 @@ export const Route = createFileRoute("/crm/live-view")({
     ],
   }),
 });
+
+// TopoJSON do mapa mundi
+const geoUrl = "https://raw.githubusercontent.com/lotusms/world-map-data/main/world-110m.json";
+
+// Mock de localizações para o mapa (lat, long, type)
+const markers = [
+  { name: "São Paulo", coordinates: [-46.6333, -23.5505], type: "visitor" },
+  { name: "Belo Horizonte", coordinates: [-43.9378, -19.9209], type: "order" },
+  { name: "Brasília", coordinates: [-47.8828, -15.7942], type: "visitor" },
+  { name: "Rio de Janeiro", coordinates: [-43.1729, -22.9068], type: "visitor" },
+  { name: "Curitiba", coordinates: [-49.2733, -25.4284], type: "visitor" },
+  { name: "Salvador", coordinates: [-38.5014, -12.9714], type: "visitor" },
+];
 
 function LiveViewPage() {
   const fetchDashboard = useServerFn(getShopifyDashboardData);
@@ -104,16 +123,50 @@ function LiveViewPage() {
               <Button size="icon" variant="secondary" className="size-8 bg-background/80 backdrop-blur-sm"><RefreshCw className="size-4" /></Button>
             </div>
             
-            {/* Mock Map Image Representation or Canvas would go here */}
-            <div className="flex-1 flex items-center justify-center opacity-20 pointer-events-none">
-               <Map className="size-48 text-brand" />
+            {/* Interactive World Map */}
+            <div className="flex-1 w-full h-full min-h-[400px]">
+              <ComposableMap
+                projection="geoEqualEarth"
+                projectionConfig={{
+                  scale: 240,
+                  center: [-50, -10] // Centered more towards South America
+                }}
+                className="w-full h-full"
+              >
+                <Geographies geography={geoUrl}>
+                  {({ geographies }) =>
+                    geographies.map((geo) => (
+                      <Geography
+                        key={geo.rsmKey}
+                        geography={geo}
+                        fill="currentColor"
+                        className="text-muted/20 outline-none"
+                        stroke="currentColor"
+                        strokeWidth={0.5}
+                        strokeOpacity={0.1}
+                      />
+                    ))
+                  }
+                </Geographies>
+                {markers.map(({ name, coordinates, type }) => (
+                  <Marker key={name} coordinates={coordinates as [number, number]}>
+                    <g className={type === 'order' ? 'text-success' : 'text-brand'}>
+                      <circle
+                        r={4}
+                        fill="currentColor"
+                        className="animate-pulse"
+                      />
+                      <circle
+                        r={8}
+                        fill="currentColor"
+                        fillOpacity={0.2}
+                        className="animate-ping"
+                      />
+                    </g>
+                  </Marker>
+                ))}
+              </ComposableMap>
             </div>
-
-            {/* Pulsing points representing live activity */}
-            <div className="absolute top-[40%] left-[30%] size-3 bg-brand rounded-full animate-ping shadow-[0_0_10px_rgba(59,130,246,0.8)]"></div>
-            <div className="absolute top-[60%] left-[35%] size-4 bg-success rounded-full animate-ping delay-700 shadow-[0_0_10px_rgba(34,197,94,0.8)]"></div>
-            <div className="absolute top-[45%] left-[38%] size-2 bg-brand rounded-full animate-ping delay-1000 shadow-[0_0_10px_rgba(59,130,246,0.8)]"></div>
-            <div className="absolute top-[55%] left-[42%] size-3 bg-brand rounded-full animate-ping delay-300 shadow-[0_0_10px_rgba(59,130,246,0.8)]"></div>
 
             <div className="absolute bottom-6 right-6 z-20 flex gap-4">
               <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm px-3 py-1 rounded-full border border-border/50 text-[10px] font-medium">

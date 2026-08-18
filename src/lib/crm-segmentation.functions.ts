@@ -102,7 +102,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
           } else if (field === "perfil") {
             if (val === "carrinho") {
               if (operator === "eq") {
-                query = query.or('tags.cs.{"Carrinho Abandonado"},tags.cs.{"Checkout"}');
+                query = query.or('tags.cs.{"Carrinho Abandonado"},tags.cs.{"Checkout"},tags.cs.{"CAR24"}');
               }
               else if (operator === "neq") {
                 query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}");
@@ -113,7 +113,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
                 if (customersWithOrdersList.length > 0) {
                   query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
                 }
-                query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}");
+                query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}").not("tags", "cs", "{\"CAR24\"}");
               }
             }
           }
@@ -197,7 +197,7 @@ export const getCRMStats = createServerFn({ method: "GET" }).handler(async () =>
   const { count: abandonedCount } = await supabaseAdmin
     .from("shopify_customers")
     .select("*", { count: "exact", head: true })
-    .contains("tags", ["Carrinho Abandonado"]);
+    .or('tags.cs.{"Carrinho Abandonado"},tags.cs.{"CAR24"}');
 
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();

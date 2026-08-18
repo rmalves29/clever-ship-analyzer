@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment, exportSegmentCustomers } from "@/lib/crm-segmentation.functions";
+import { RFMAnalysis } from "@/components/crm/RFMAnalysis";
 import { fixCustomerPhone, deepSyncCustomer } from "@/lib/admin-maintenance.functions";
 import { normalizeAllPhones } from "@/lib/maintenance-scripts.functions";
 import { brl } from "@/lib/crm-mock";

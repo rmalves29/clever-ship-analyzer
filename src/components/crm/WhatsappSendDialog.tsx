@@ -84,9 +84,9 @@ export function WhatsappSendDialog({
   const bodyVarCount = selectedTemplate ? countBodyVars(selectedTemplate.components) : 0;
 
   const { data: preview, isLoading: loadingPreview } = useQuery({
-    queryKey: ["segment-preview", seed?.segmentType, open],
-    queryFn: () => runPreview({ data: { segmentType: seed!.segmentType } }),
-    enabled: Boolean(seed && open),
+    queryKey: ["segment-preview", segmentType, segmentId, open],
+    queryFn: () => runPreview({ data: { segmentType, segmentId } }),
+    enabled: Boolean(open),
   });
 
   const submit = async (requireApproval: boolean) => {

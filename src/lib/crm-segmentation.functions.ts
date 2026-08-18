@@ -337,13 +337,15 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
         .in("customer_id", customerIds);
       
       allOrders?.forEach(o => {
-        if (!ordersMap[o.customer_id]) ordersMap[o.customer_id] = [];
-        ordersMap[o.customer_id].push(o);
+        if (o.customer_id) {
+          if (!ordersMap[o.customer_id]) ordersMap[o.customer_id] = [];
+          ordersMap[o.customer_id].push(o);
+        }
       });
     }
 
     const rows = (customers || []).map(c => {
-      const orders = ordersMap[c.id] || [];
+      const orders = c.id ? (ordersMap[c.id] || []) : [];
       const totalSpent = orders.reduce((acc, o) => acc + Number(o.total_price || 0), 0);
       return {
         Nome: `${c.first_name || ""} ${c.last_name || ""}`.trim(),
@@ -359,10 +361,13 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
 
     if (rows.length === 0) return { csv: "" };
 
-    const headers = Object.keys(rows[0]);
+    const firstRow = rows[0];
+    if (!firstRow) return { csv: "" };
+
+    const headers = Object.keys(firstRow);
     const csvContent = [
       headers.join(","),
-      ...rows.map(row => headers.map(h => `"${String(row[h as keyof typeof row]).replace(/"/g, '""')}"`).join(","))
+      ...rows.map(row => headers.map(h => `"${String(row[h as keyof typeof row] || "").replace(/"/g, '""')}"`).join(","))
     ].join("\n");
 
     return { csv: csvContent };

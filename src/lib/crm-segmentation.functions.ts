@@ -197,7 +197,7 @@ export const getCRMStats = createServerFn({ method: "GET" }).handler(async () =>
   const { count: abandonedCount } = await supabaseAdmin
     .from("shopify_customers")
     .select("*", { count: "exact", head: true })
-    .contains("tags", ["Carrinho Abandonado"]);
+    .or('tags.cs.{"Carrinho Abandonado"},tags.cs.{"CAR24"}');
 
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();

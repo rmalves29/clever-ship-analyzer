@@ -58,6 +58,7 @@ const STATUS_CLASS: Record<string, string> = {
   aguardando_aprovacao: "bg-warning-soft text-warning",
   rejeitada: "bg-critical-soft text-critical",
   enviando: "bg-warning-soft text-warning",
+  agendada: "bg-brand-soft text-brand",
   finalizada: "bg-success-soft text-success",
   erro: "bg-critical-soft text-critical",
 };
@@ -112,6 +113,7 @@ function CampanhasWhatsapp() {
   const STATUS_FILTERS = [
     { value: "todas", label: "Todas" },
     { value: "enviando", label: "Enviando" },
+    { value: "agendada", label: "Agendadas" },
     { value: "finalizada", label: "Finalizadas" },
     { value: "erro", label: "Erro" },
   ];

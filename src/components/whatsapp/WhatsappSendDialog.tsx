@@ -440,7 +440,7 @@ export function WhatsappSendDialog({
                 
                 <Button 
                   onClick={() => step < 5 ? setStep(s => s + 1) : submit(false)}
-                  disabled={busy || (step === 3 && !templateName)}
+                  disabled={busy || (step === 3 && !templateName) || (step === 1 && !nome.trim())}
                   className="min-w-[120px] gap-2 shadow-[0_0_20px_rgba(var(--brand-rgb),0.3)]"
                 >
                   {busy ? "Processando..." : step === 5 ? "Confirmar Envio" : "Próximo"} 

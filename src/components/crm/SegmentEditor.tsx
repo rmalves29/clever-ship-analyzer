@@ -76,6 +76,9 @@ const CATEGORIES = [
       { id: "recorrencia", label: "Recorrência" },
       { id: "status_pagamento", label: "Status do Pagamento" },
       { id: "perfil", label: "Perfil do Cliente" },
+      { id: "data_pedido_hoje", label: "Compra Realizada Hoje" },
+      { id: "data_envio_hoje", label: "Pedido Enviado Hoje" },
+      { id: "acesso_sem_compra", label: "Acessou e não comprou" },
     ]
   },
   {
@@ -373,6 +376,21 @@ export function SegmentEditor({
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="carrinho">Checkout Abandonado</SelectItem>
+                            <SelectItem value="primeira_compra">Primeira Compra</SelectItem>
+                            <SelectItem value="acesso_sem_compra">Acessou e não comprou</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : condition.field === "data_pedido_hoje" || condition.field === "data_envio_hoje" ? (
+                        <Select
+                          value={condition.value as string}
+                          onValueChange={v => updateCondition(group.id, condition.id, { value: v })}
+                        >
+                          <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs">
+                            <SelectValue placeholder="Selecionar..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="sim">Sim</SelectItem>
+                            <SelectItem value="nao">Não</SelectItem>
                           </SelectContent>
                         </Select>
                       ) : (

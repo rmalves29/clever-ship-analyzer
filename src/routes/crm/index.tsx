@@ -38,7 +38,8 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment, exportSegmentCustomers } from "@/lib/crm-segmentation.functions";
+import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment, exportSegmentCustomers, saveSegment } from "@/lib/crm-segmentation.functions";
+import { syncShopifyData } from "@/lib/crm-sync.functions";
 import { RFMAnalysis } from "@/components/crm/RFMAnalysis";
 import { fixCustomerPhone, deepSyncCustomer, checkSpecificAbandonedCheckout } from "@/lib/admin-maintenance.functions";
 import { RFM_SEGMENTS_CONFIG } from "@/lib/crm-rfm.functions";
@@ -100,6 +101,7 @@ function CRMPage() {
   const runFixPhone = useServerFn(fixCustomerPhone);
   const runDeepSync = useServerFn(deepSyncCustomer);
   const runExport = useServerFn(exportSegmentCustomers);
+  const runSaveSegment = useServerFn(saveSegment);
   const runNormalizePhones = useServerFn(normalizeAllPhones);
   const runIdentifyAbandoned = useServerFn(identifyAbandonedCheckouts);
   const runCheckSpecificAbandoned = useServerFn(checkSpecificAbandonedCheckout);
@@ -164,6 +166,21 @@ function CRMPage() {
       refetchSegments();
     } catch (err: any) {
       toast.error("Erro ao excluir: " + err.message);
+    }
+  };
+  
+  const [isSyncing, setIsSyncing] = useState(false);
+  const runSync = useServerFn(syncShopifyData);
+  const handleSync = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await runSync({ data: { fullSync: false } });
+      toast.success(`Sincronização concluída: ${res.totalImported} pedido(s) atualizados.`);
+      queryClient.invalidateQueries();
+    } catch (err: any) {
+      toast.error("Erro ao sincronizar: " + (err?.message ?? "falha desconhecida"));
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -288,7 +305,7 @@ function CRMPage() {
                 }}>
                   Localizar Cliente Específico (Shopify)
                 </DropdownMenuItem>
-                <DropdownMenuItem>Sincronizar Shopify</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleSync}>Sincronizar Shopify</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -490,9 +507,56 @@ function CRMPage() {
                     <h2 className="text-lg font-bold">Biblioteca de Segmentos</h2>
                     <p className="text-sm text-muted-foreground">Públicos dinâmicos baseados em regras.</p>
                   </div>
-                  <Button onClick={() => setShowEditor(true)} className="gap-2 bg-brand hover:bg-brand/90 text-white">
-                    <Plus className="size-4" /> Criar segmento
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      className="gap-2 border-brand text-brand hover:bg-brand/5"
+                      onClick={async () => {
+                        const segmentsToCreate = [
+                          {
+                            nome: "Compraram Hoje",
+                            descricao: "Clientes que realizaram pedidos nas últimas 24 horas.",
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "data_pedido_hoje", operator: "eq", value: "sim", label: "Compra Realizada Hoje" }] }] }
+                          },
+                          {
+                            nome: "Enviados Hoje",
+                            descricao: "Pedidos que tiveram o envio processado hoje.",
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "data_envio_hoje", operator: "eq", value: "sim", label: "Pedido Enviado Hoje" }] }] }
+                          },
+                          {
+                            nome: "Checkouts Abandonados",
+                            descricao: "Clientes que iniciaram o checkout mas não finalizaram.",
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "perfil", operator: "eq", value: "carrinho", label: "Perfil do Cliente" }] }] }
+                          },
+                          {
+                            nome: "Acessou e Não Comprou",
+                            descricao: "Leads que interagiram mas ainda não possuem pedidos.",
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "perfil", operator: "eq", value: "acesso_sem_compra", label: "Perfil do Cliente" }] }] }
+                          },
+                          {
+                            nome: "Primeira Compra",
+                            descricao: "Clientes que realizaram sua primeira e única compra.",
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "perfil", operator: "eq", value: "primeira_compra", label: "Perfil do Cliente" }] }] }
+                          }
+                        ];
+                        
+                        try {
+                          for (const seg of segmentsToCreate) {
+                            await runSaveSegment({ data: { ...seg, tipo: "dinamico" } as any });
+                          }
+                          toast.success("Segmentos sugeridos criados com sucesso!");
+                          refetchSegments();
+                        } catch (err: any) {
+                          toast.error("Erro ao criar segmentos: " + err.message);
+                        }
+                      }}
+                    >
+                      <Sparkles className="size-4" /> Criar Segmentos Sugeridos
+                    </Button>
+                    <Button onClick={() => setShowEditor(true)} className="gap-2 bg-brand hover:bg-brand/90 text-white">
+                      <Plus className="size-4" /> Criar segmento
+                    </Button>
+                  </div>
                 </div>
                 
                 <div className="mt-8">

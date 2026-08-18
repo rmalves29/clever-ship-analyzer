@@ -8,11 +8,12 @@ export const testShopifyConnection = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.any().parse(data))
   .handler(async () => {
   try {
-    const { shopifyGraphQL } = await import("./shopify.server");
+    const { shopifyGraphQL, getShopifyCredentials } = await import("./shopify.server");
     
-    // Test if we can even get credentials (this handles token fetching errors)
-    const { domain } = await (await import("./shopify.server")).getShopifyCredentials();
+    // First, try to get credentials to check for auth issues
+    const { domain } = await getShopifyCredentials();
     
+    // Attempt the GraphQL query
     const data: any = await shopifyGraphQL(`
       query {
         shop { name myshopifyDomain }
@@ -29,8 +30,8 @@ export const testShopifyConnection = createServerFn({ method: "POST" })
 
     const requiredScopes = ["read_orders", "read_customers", "read_products", "read_fulfillments"];
     const missingScopes = requiredScopes.filter((s) => !scopes.includes(s));
-    const hasReadAll = scopes.includes("read_all_orders");
-
+    
+    // Update status in DB
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await supabaseAdmin
       .from("store_settings")
@@ -46,40 +47,38 @@ export const testShopifyConnection = createServerFn({ method: "POST" })
       domain: data.shop.myshopifyDomain,
       scopes: scopesData,
       missingScopes,
-      hasReadAll,
       message:
         missingScopes.length > 0
           ? `Conectado, mas faltam scopes: ${missingScopes.join(", ")}`
           : `Conectado à loja ${data.shop.name}.`,
     };
   } catch (error: any) {
-    console.error("Connection test failed:", error);
+    console.error("Connection test error:", error);
     
-    let errorMessage = error.message;
-    if (errorMessage.includes("INVALID_CLIENT_CREDENTIALS")) {
-      errorMessage = "Credenciais inválidas. Verifique o Client ID e Client Secret.";
-    } else if (errorMessage.includes("SHOP_NOT_FOUND")) {
-      errorMessage = "Loja não configurada corretamente no banco de dados.";
+    let userFriendlyMessage = error.message;
+    if (userFriendlyMessage.includes("INVALID_CLIENT_CREDENTIALS")) {
+      userFriendlyMessage = "Falha na autenticação. Verifique se o Client ID e Client Secret estão corretos e se o App está instalado na Shopify.";
+    } else if (userFriendlyMessage.includes("SHOP_NOT_FOUND")) {
+      userFriendlyMessage = "Configurações da loja não encontradas no banco de dados.";
+    } else if (userFriendlyMessage.includes("ENOTFOUND") || userFriendlyMessage.includes("fetch failed")) {
+      userFriendlyMessage = "Não foi possível alcançar o domínio da Shopify. Verifique se a URL está correta.";
     }
 
     try {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      // Use a safer update that doesn't rely on specific ID if not found
       await supabaseAdmin
         .from("store_settings")
         .update({ last_sync_error: error.message, sync_status: "error" })
         .order("created_at", { ascending: true })
         .limit(1);
     } catch (dbErr) {
-      console.error("Failed to update store settings with error:", dbErr);
+      console.error("Failed to update status in DB:", dbErr);
     }
 
     return {
       success: false,
-      scopes: [] as string[],
-      missingScopes: [] as string[],
       error: error.message,
-      message: `Erro ao conectar com a Shopify: ${errorMessage}`,
+      message: userFriendlyMessage,
     };
   }
 });

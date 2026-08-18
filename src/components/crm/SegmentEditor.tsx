@@ -75,6 +75,7 @@ const CATEGORIES = [
       { id: "ticket_medio", label: "Ticket Médio" },
       { id: "recorrencia", label: "Recorrência" },
       { id: "status_pagamento", label: "Status do Pagamento" },
+      { id: "perfil", label: "Perfil do Cliente" },
     ]
   },
   {

@@ -96,8 +96,13 @@ export const getCustomersList = createServerFn({ method: "POST" })
                 return { customers: [], total: 0 };
               }
             }
+          } else if (field === "rfm_segment") {
+            if (operator === "eq") query = query.eq("rfm_segment", val);
+            else if (operator === "neq") query = query.neq("rfm_segment", val);
           }
         }
+      }
+    }
       }
     }
 

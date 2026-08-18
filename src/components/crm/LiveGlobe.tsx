@@ -9,7 +9,7 @@ interface LiveGlobeProps {
 }
 
 export default function LiveGlobe({ markers }: LiveGlobeProps) {
-  const globeRef = useRef<any>();
+  const globeRef = useRef<any>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const containerRef = useRef<HTMLDivElement>(null);
 

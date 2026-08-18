@@ -36,7 +36,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
     // 3. Construir query base
     let query = supabaseAdmin
       .from("shopify_customers")
-      .select("*", { count: "exact" });
+      .select("*", { count: "exact" }) as any;
 
     // 4. Aplicar filtros baseados em regras
     if (segmentRules?.groups) {
@@ -298,7 +298,7 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
       .select("customer_id");
     const customersWithOrdersList = Array.from(new Set(ordersData?.map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
 
-    let query = supabaseAdmin.from("shopify_customers").select("*");
+    let query = supabaseAdmin.from("shopify_customers").select("*") as any;
 
     if (segmentRules?.groups) {
       for (const group of segmentRules.groups) {

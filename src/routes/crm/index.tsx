@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment } from "@/lib/crm-segmentation.functions";
-import { fixCustomerPhone, deepSyncCustomer } from "@/admin-maintenance.functions";
+import { fixCustomerPhone, deepSyncCustomer } from "@/lib/admin-maintenance.functions";
 import { brl } from "@/lib/crm-mock";
 import { SegmentEditor } from "@/components/crm/SegmentEditor";
 import { toast } from "sonner";
@@ -139,9 +139,9 @@ function CRMPage() {
     const promise = runDeepSync({ data: { customerId } });
     toast.promise(promise, {
       loading: "Buscando dados detalhados na Shopify...",
-      success: (res) => {
+      success: (res: any) => {
         if (res.success) {
-          queryClient.refetchQueries({ queryKey: ["crm-customers"] });
+          queryClient.invalidateQueries({ queryKey: ["crm-customers"] });
           return `Sincronizado! Telefone: ${res.phone || "Não encontrado"}`;
         }
         return "Cliente não encontrado na Shopify.";

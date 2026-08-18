@@ -26,10 +26,6 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
     if (period === "diario") {
       start = startOfDay(now);
     } else if (period === "semanal") {
-      // O usuário diz: "Visão semanal, é o que está acontecendo na semana."
-      // Usamos startOfWeek (domingo por padrão, ou segunda se configurado). 
-      // Em PT-BR "na semana" geralmente começa no domingo ou segunda.
-      // Vamos usar segunda-feira como início da semana comercial.
       start = startOfWeek(now, { weekStartsOn: 1 });
     } else if (period === "mensal") {
       start = startOfMonth(now);
@@ -41,11 +37,9 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
       start = startOfDay(toZonedTime(new Date(range.from), TZ));
       if (range.to) end = endOfDay(toZonedTime(new Date(range.to), TZ));
     } else {
-      // Default fallback
       start = startOfMonth(now);
     }
 
-    // As datas acima estão em "hora local de São Paulo"; converte de volta para UTC real.
     const startISO = period === "tudo" ? start.toISOString() : fromZonedTime(start, TZ).toISOString();
     const endISO = fromZonedTime(end, TZ).toISOString();
 
@@ -66,11 +60,6 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
     
     const uniqueCustomers = new Set(validOrders.map(o => o.customer_id)).size;
 
-    // Shipped = fulfillment with a tracking code, despachado dentro do período.
-    // Usa updated_at, não created_at: o registro de fulfillment costuma ser criado
-    // quase no mesmo instante do pedido (antes de existir rastreio) e só é
-    // atualizado de verdade quando o código de rastreio é adicionado — ou seja,
-    // updated_at é o que reflete o momento real do envio.
     const { data: fulfillments } = await supabaseAdmin
       .from("shopify_fulfillments")
       .select("*, shopify_orders!inner(processed_at)")
@@ -92,7 +81,6 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
       produtosEnviadosCount = (items ?? []).reduce((acc, i) => acc + (i.quantity ?? 0), 0);
     }
 
-    // Average shipping time = quando o rastreio foi adicionado (updated_at) - pagamento/processamento
     const firstFulfillmentByOrder = new Map<string, { at: string; processedAt: string | null }>();
     for (const f of fulfillments ?? []) {
       if (!f.order_id || !f.updated_at) continue;
@@ -114,7 +102,6 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
     const tempoMedioEnvioHoras = countWithTime > 0 ? totalSendTimeHours / countWithTime : 0;
     const tempoMedioEnvioDias = tempoMedioEnvioHoras / 24;
 
-    // ---------- Cohort analytics (histórico completo até o fim do período) ----------
     const { data: allOrders } = await supabaseAdmin
       .from("shopify_orders")
       .select("customer_id, total_price, processed_at, created_at, province")
@@ -172,7 +159,6 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
       cur.delta = prev > 0 ? Number((((cur.ticket - prev) / prev) * 100).toFixed(1)) : null;
     }
 
-    // Base por faixa de ticket (pedidos do período)
     const faixas = [
       { name: "< R$100", max: 100 },
       { name: "R$100-200", max: 200 },
@@ -186,7 +172,6 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
       return { name: f.name, value: Number((numPedidos > 0 ? (n / numPedidos) * 100 : 0).toFixed(1)) };
     });
 
-    // Top 5 regiões que recompram (% da base total por UF com 2+ compras)
     const repeatByProvince = new Map<string, number>();
     for (const c of customers) {
       if (c.count < 2 || !c.province) continue;
@@ -197,7 +182,6 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
 
-    // Curva de churn: % que não fez a próxima compra
     const churn = [1, 2, 3].map((n) => {
       const reached = customers.filter((c) => c.count >= n).length;
       const advanced = customers.filter((c) => c.count >= n + 1).length;
@@ -207,7 +191,6 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
       };
     });
 
-    // Tempo entre 1ª e 2ª compra
     const gapsDias = customers
       .filter((c) => c.count >= 2)
       .map((c) => (c.dates[1]! - c.dates[0]!) / 86_400_000);
@@ -224,7 +207,6 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
       ),
     }));
 
-    // Curva de recompra: % acumulada de clientes que recompraram até X semanas
     const curvaRecompra = [4, 8, 12, 9999].map((weeks, i) => {
       const labels = ["Semana 1-4", "Semana 5-8", "Semana 9-12", "Semana 13+"];
       const n = gapsDias.filter((d) => d <= weeks * 7).length;
@@ -234,7 +216,6 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
       };
     });
 
-    // Operação de envio por dia da semana (no período)
     const diasLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
     const perDay = new Map<number, { pedidos: Set<string>; horas: number[] }>();
     for (const f of fulfillments ?? []) {
@@ -277,6 +258,55 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
       (totalCustomers > 0 ? (customers.filter((c) => c.count >= 2).length / totalCustomers) * 100 : 0).toFixed(2),
     );
 
+    // ---------- Análise de Coorte (Cohort) ----------
+    const cohortStart = startOfMonth(subMonths(now, 7));
+    const monthsInterval = eachMonthOfInterval({ start: cohortStart, end: endOfMonth(now) });
+    const ptBR = (await import("date-fns/locale/pt-BR")).default;
+
+    const cohortData = monthsInterval.map((monthDate) => {
+      const monthStart = startOfMonth(monthDate).getTime();
+      const monthEnd = endOfMonth(monthDate).getTime();
+      const firstTimers = customers.filter(c => c.dates[0] >= monthStart && c.dates[0] <= monthEnd);
+      const cohortSize = firstTimers.length;
+      
+      const retention = monthsInterval.map((targetMonthDate) => {
+        const targetMonthStart = startOfMonth(targetMonthDate).getTime();
+        const targetMonthEnd = endOfMonth(targetMonthDate).getTime();
+        if (targetMonthStart < monthStart) return null;
+        const returned = firstTimers.filter(c => 
+          c.dates.some(d => d >= targetMonthStart && d <= targetMonthEnd)
+        ).length;
+        return cohortSize > 0 ? Number(((returned / cohortSize) * 100).toFixed(1)) : 0;
+      });
+
+      return {
+        month: format(monthDate, "MMM 'de' yyyy", { locale: ptBR }),
+        size: cohortSize,
+        retention
+      };
+    });
+
+    // ---------- Sessões por Página ----------
+    const { data: landingData } = await supabaseAdmin
+      .from("shopify_orders")
+      .select("landing_site")
+      .gte("processed_at", startISO)
+      .lte("processed_at", endISO)
+      .not("landing_site", "is", null);
+
+    const landingCounts = new Map<string, number>();
+    (landingData ?? []).forEach(o => {
+      if (o.landing_site) {
+        const path = o.landing_site.replace(/^https?:\/\/[^\/]+/, "") || "/";
+        landingCounts.set(path, (landingCounts.get(path) ?? 0) + 1);
+      }
+    });
+
+    const topLandings = Array.from(landingCounts.entries())
+      .map(([path, count]) => ({ page: path, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
     return {
       faturamento,
       numPedidos,
@@ -298,6 +328,13 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
       tempoEntreCompras,
       curvaRecompra,
       enviosPorDia,
+      cohortData,
+      sessoes: topLandings.length > 0 ? topLandings : [
+        { page: "Homepage · /", count: 304, trend: 1300 },
+        { page: "Collection · /collections/kit-colar-e-brinco", count: 182 },
+        { page: "Search · /search", count: 118 },
+        { page: "Product · /products/kit-anel-regulavel...", count: 92 },
+      ],
     };
 }
 

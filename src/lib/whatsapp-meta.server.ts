@@ -306,7 +306,7 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
   const settings = await loadSettings();
 
   const templateName = input.templateName?.trim() || settings.templateName;
-  const segmentId = (input as any).segmentId;
+  const segmentId = input.segmentId;
   
   if (!settings.accessToken || !settings.phoneNumberId || !templateName) {
     return {

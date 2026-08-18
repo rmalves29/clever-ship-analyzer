@@ -426,7 +426,7 @@ function CRMPage() {
                                 </Badge>
                               )}
                               <Badge variant="secondary" className="bg-muted text-[10px] font-medium uppercase tracking-wider w-fit">
-                                {c.totalOrders > 0 ? "Ativo" : "Lead"}
+                                {c.tags?.includes("Carrinho Abandonado") ? "Carrinho" : (c.totalOrders > 0 ? "Ativo" : "Lead")}
                               </Badge>
                             </div>
                           </TableCell>

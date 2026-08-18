@@ -3,7 +3,7 @@ import { Plus, Target, Workflow, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { DashboardData } from "@/lib/crm-mock";
 import { brl } from "@/lib/crm-mock";
-import { WhatsappSendDialog, type SendDialogSeed } from "./WhatsappSendDialog";
+import { WhatsappSendDialog, type SendDialogSeed } from "@/components/whatsapp/WhatsappSendDialog";
 import { AutomationDialog, type AutomationSeed } from "./AutomationDialog";
 
 export function SuggestedActions({ reguas, acoes }: { reguas: DashboardData["reguas"]; acoes: DashboardData["acoes"] }) {

@@ -53,12 +53,20 @@ export const Route = createFileRoute("/crm/")({
   validateSearch: (search: Record<string, unknown>) => ({
     tab: (VALID_TABS as readonly string[]).includes(search["tab"] as string) ? (search["tab"] as string) : "contatos",
   }),
-  head: () => ({
-    meta: [
-      { title: "Gestão de Clientes | CRM Insights" },
-      { name: "description", content: "Gerencie contatos, crie segmentos dinâmicos e organize listas estáticas para suas campanhas." },
-    ],
-  }),
+  head: ({ search }) => {
+    const titles: Record<string, string> = {
+      contatos: "Gestão de Clientes | CRM Insights",
+      segmentos: "Biblioteca de Segmentos | CRM Insights",
+      listas: "Listas Estáticas | CRM Insights",
+      rfm: "Análise RFM | CRM Insights",
+    };
+    return {
+      meta: [
+        { title: titles[search.tab as keyof typeof titles] || "CRM | Insights" },
+        { name: "description", content: "Gerencie contatos, crie segmentos dinâmicos e visualize análises RFM." },
+      ],
+    };
+  },
   component: CRMPage,
 });
 

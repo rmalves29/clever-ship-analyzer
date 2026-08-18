@@ -171,7 +171,7 @@ function CampanhasWhatsapp() {
     }
   };
 
-  const segments = (automations ?? []).map(a => ({ id: a.id, nome: a.nome })); // Fallback simples ou usar getSegmentsList
+  const segmentsList = (crmSegments ?? []).map(s => ({ id: s.id, nome: s.nome }));
 
   return (
     <div className="min-h-screen bg-background">

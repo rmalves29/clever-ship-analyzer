@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { lazy, Suspense } from "react";
 import { getShopifyDashboardData } from "@/lib/shopify-dashboard.functions";
 import { brl } from "@/lib/crm-mock";
+import { syncShopifyData } from "@/lib/crm-sync.functions";
 
 // Carregamento dinâmico do globo para evitar problemas com SSR e bibliotecas pesadas
 const LiveGlobe = lazy(() => import("@/components/crm/LiveGlobe"));
@@ -93,6 +94,7 @@ function getDynamicMarkers(data: any) {
 
 function LiveViewPage() {
   const fetchDashboard = useServerFn(getShopifyDashboardData);
+  const fetchSync = useServerFn(syncShopifyData);
   
   const { data, isLoading } = useQuery({
     queryKey: ["live-dashboard"],
@@ -120,10 +122,7 @@ function LiveViewPage() {
             variant="outline" 
             size="sm" 
             className="gap-2"
-            onClick={() => {
-              const fetchSync = useServerFn(syncShopifyData);
-              fetchSync({ data: { fullSync: false } });
-            }}
+            onClick={() => fetchSync({ data: { fullSync: false } })}
           >
             <RefreshCw className="size-4" /> Atualizar agora
           </Button>

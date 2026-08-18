@@ -43,6 +43,7 @@ import { RFMAnalysis } from "@/components/crm/RFMAnalysis";
 import { fixCustomerPhone, deepSyncCustomer } from "@/lib/admin-maintenance.functions";
 import { RFM_SEGMENTS_CONFIG } from "@/lib/crm-rfm.functions";
 import { normalizeAllPhones } from "@/lib/maintenance-scripts.functions";
+import { identifyAbandonedCheckouts } from "@/lib/abandoned-checkout.functions";
 import { brl } from "@/lib/crm-mock";
 import { SegmentEditor } from "@/components/crm/SegmentEditor";
 import { toast } from "sonner";
@@ -100,6 +101,7 @@ function CRMPage() {
   const runDeepSync = useServerFn(deepSyncCustomer);
   const runExport = useServerFn(exportSegmentCustomers);
   const runNormalizePhones = useServerFn(normalizeAllPhones);
+  const runIdentifyAbandoned = useServerFn(identifyAbandonedCheckouts);
   const [isExporting, setIsExporting] = useState(false);
 
   const handleExport = async () => {
@@ -251,6 +253,20 @@ function CRMPage() {
                 }}>
                   Ajustar todos os telefones
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={async () => {
+                  const promise = runIdentifyAbandoned();
+                  toast.promise(promise, {
+                    loading: "Analisando carrinhos abandonados...",
+                    success: (res: any) => {
+                      queryClient.invalidateQueries({ queryKey: ["crm-customers"] });
+                      queryClient.invalidateQueries({ queryKey: ["crm-stats"] });
+                      return res.message;
+                    },
+                    error: "Erro na análise de abandono."
+                  });
+                }}>
+                  Identificar Carrinhos Abandonados
+                </DropdownMenuItem>
                 <DropdownMenuItem>Sincronizar Shopify</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -278,10 +294,10 @@ function CRMPage() {
                 trend="+42%" 
               />
               <StatCard 
-                label="Leads" 
-                value={new Intl.NumberFormat().format(stats?.leads || 0)} 
-                hint="Contatos que nunca compraram" 
-                trend="+58%" 
+                label="Carrinhos Abandonados" 
+                value={new Intl.NumberFormat().format(stats?.abandoned || 0)} 
+                hint="Identificados por pedidos expirados" 
+                trend="+15%" 
               />
               <StatCard 
                 label="Clientes" 
@@ -410,7 +426,7 @@ function CRMPage() {
                                 </Badge>
                               )}
                               <Badge variant="secondary" className="bg-muted text-[10px] font-medium uppercase tracking-wider w-fit">
-                                {c.totalOrders > 0 ? "Ativo" : "Lead"}
+                                {c.tags?.includes("Carrinho Abandonado") ? "Carrinho" : (c.totalOrders > 0 ? "Ativo" : "Lead")}
                               </Badge>
                             </div>
                           </TableCell>

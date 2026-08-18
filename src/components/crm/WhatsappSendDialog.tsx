@@ -23,6 +23,7 @@ import { createAndSendCampaign, listMetaTemplates, previewSegment } from "@/lib/
 export type SendDialogSeed = {
   nome: string;
   segmentType: SegmentType;
+  segmentId?: string;
   oferta: string;
 };
 

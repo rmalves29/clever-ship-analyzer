@@ -131,6 +131,19 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
   const finalSegmentType = segmentId || segmentType;
   const isCustomSegment = isUuid(finalSegmentType);
 
+  // NOVO: Segmento de Carrinho Abandonado (Individual)
+  if (finalSegmentType === "carrinho" || finalSegmentType === "abandoned_cart") {
+    const { data: abandonedCheckouts } = await supabaseAdmin
+      .from("shopify_abandoned_checkouts")
+      .select("customer_id");
+    
+    const ids = new Set<string>();
+    abandonedCheckouts?.forEach(ac => {
+      if (ac.customer_id) ids.add(ac.customer_id);
+    });
+    return Array.from(ids);
+  }
+
   if (finalSegmentType === "envio_atrasado") {
     const cutoff = new Date(Date.now() - 30 * DAY_MS).toISOString();
     const { data: fulfillments } = await supabaseAdmin
@@ -417,13 +430,34 @@ export async function dispatchCampaign(campaignId: string) {
 
   const bodyParams = Array.isArray(campaign.body_params) ? (campaign.body_params as string[]) : [];
   const ids = await getSegmentCustomerIds(campaign.segment_type as SegmentType, campaign.segment_id || undefined);
-  const customers = await getCustomersWithPhone(ids);
+  
+  // Lógica especial para Carrinhos Abandonados: enviar para CADA abandono
+  const isAbandonedCartSegment = campaign.segment_type === "carrinho" || campaign.segment_type === "abandoned_cart";
+  
+  let recipients: { id: string; phone: string; first_name: string | null; checkout_url?: string | null }[] = [];
+
+  if (isAbandonedCartSegment) {
+    const { data: abandonedEvents } = await (supabaseAdmin
+      .from("shopify_abandoned_checkouts")
+      .select("customer_id, phone, checkout_url, shopify_customers(first_name)") as any)
+      .in("customer_id", ids);
+
+    recipients = (abandonedEvents ?? []).map((ae: any) => ({
+      id: ae.customer_id!,
+      phone: ae.phone!,
+      first_name: ae.shopify_customers?.first_name || null,
+      checkout_url: ae.checkout_url
+    })).filter((r: any) => Boolean(r.phone));
+  } else {
+    const customers = await getCustomersWithPhone(ids);
+    recipients = customers;
+  }
 
   let sent = 0;
   let failed = 0;
   const sampleErrors: string[] = [];
 
-  for (const c of customers) {
+  for (const c of recipients) {
     const to = toE164(c.phone);
     if (!to) {
       failed++;
@@ -460,12 +494,12 @@ export async function dispatchCampaign(campaignId: string) {
       status: "finalizada",
       enviadas: sent,
       falhas: failed,
-      total_destinatarios: customers.length,
+      total_destinatarios: recipients.length,
       sent_at: new Date().toISOString(),
     } as never)
     .eq("id", campaignId);
 
-  return { success: true as const, campaignId, total: customers.length, sent, failed, sampleErrors };
+  return { success: true as const, campaignId, total: recipients.length, sent, failed, sampleErrors };
 }
 
 const RANK: Record<string, number> = { sent: 0, delivered: 1, read: 2, failed: 3 };

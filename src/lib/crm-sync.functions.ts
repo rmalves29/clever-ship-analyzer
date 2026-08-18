@@ -266,7 +266,7 @@ export const syncShopifyData = createServerFn({ method: "POST" })
               const currentTags = existing?.tags || [];
               const newTags = Array.from(new Set([...currentTags, "Carrinho Abandonado", "Checkout", "CAR24"]));
 
-              // Update customer info and tag as abandoned
+              // 1. Update/Upsert customer info and tag as abandoned
               await supabaseAdmin.from("shopify_customers").upsert({
                 id: customerId,
                 email: email || null,
@@ -279,6 +279,21 @@ export const syncShopifyData = createServerFn({ method: "POST" })
                 tags: newTags,
                 updated_at: new Date().toISOString(),
               });
+
+              // 2. Insert individual abandoned checkout event for historical tracking
+              // This allows identifying EACH abandonment as a separate event
+              await supabaseAdmin.from("shopify_abandoned_checkouts").upsert({
+                id: checkout.id,
+                customer_id: customerId,
+                email: email || null,
+                phone: customerPhone,
+                total_price: parseFloat(checkout.totalPriceSet?.presentmentMoney?.amount ?? "0"),
+                checkout_url: checkout.abandonedCheckoutUrl || null,
+                created_at: checkout.createdAt,
+                updated_at: checkout.updatedAt,
+                raw_data: checkout,
+              });
+
               totalAbandoned++;
             }
           }

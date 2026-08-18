@@ -8,9 +8,8 @@ import { z } from "zod";
 export const testShopifyConnection = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.any().parse(data))
   .handler(async () => {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { shopifyGraphQL } = await import("./shopify.server");
   try {
+    const { shopifyGraphQL } = await import("./shopify.server");
     const data: any = await shopifyGraphQL(`
       query {
         shop { name myshopifyDomain }
@@ -25,6 +24,7 @@ export const testShopifyConnection = createServerFn({ method: "POST" })
     const missingScopes = requiredScopes.filter((s) => !scopes.includes(s));
     const hasReadAll = scopes.includes("read_all_orders");
 
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await supabaseAdmin
       .from("store_settings")
       .update({

@@ -31,6 +31,9 @@ export const getCustomersList = createServerFn({ method: "POST" })
       if (segment?.regras) {
         const rules = segment.regras as any;
         if (rules.groups) {
+          // No Supabase, o default é 'AND' entre diferentes .eq() .gt() chamados na mesma query.
+          // Para suportar 'OR' entre grupos de regras, a lógica precisaria ser mais complexa (usando .or()).
+          // Por enquanto, focamos em fazer os filtros individuais funcionarem corretamente.
           rules.groups.forEach((group: any) => {
             group.conditions.forEach((condition: any) => {
               const val = condition.value;
@@ -45,10 +48,20 @@ export const getCustomersList = createServerFn({ method: "POST" })
                 if (op === "eq") query = query.eq("province", val);
                 else if (op === "neq") query = query.neq("province", val);
               } else if (field === "total_pedidos" || field === "recorrencia") {
-                // Filtro para quem já comprou (Leads vs Clientes)
-                if (op === "gt" && Number(val) >= 0) {
-                  // shopify_customers não tem total_orders, mas podemos filtrar por quem tem pedidos no shopify_orders
-                  // Por enquanto, apenas registramos a intenção ou usamos um filtro básico
+                // Filtro para quem já comprou ou não
+                const numVal = Number(val);
+                
+                // Estratégia: Filtramos os IDs dos clientes que possuem pedidos
+                // Para "Total de Pedidos = 0" (Leads), queremos clientes que NÃO estão na lista de pedidos.
+                // Como o PostgREST não suporta NOT IN (SELECT...) facilmente, 
+                // vamos precisar de uma abordagem de filtro baseada em dados já presentes ou processamento posterior.
+                // No entanto, para fins de query imediata, vamos implementar o filtro de 'contagem' se possível.
+                
+                if (field === "total_pedidos") {
+                  // Se o usuário quer 0 pedidos, ele quer LEADS.
+                  // Uma forma simples é usar o fato de que shopify_customers.updated_at 
+                  // é atualizado no sync. 
+                  // TODO: Adicionar coluna 'total_orders' na tabela shopify_customers para performance.
                 }
               }
             });
@@ -156,8 +169,9 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
     if (seg.regras) {
       const rules = seg.regras as any;
       if (rules.groups) {
-        rules.groups.forEach((group: any) => {
-          group.conditions.forEach((condition: any) => {
+        // Coletar todas as condições de todos os grupos (simplificado para AND global no count por enquanto)
+        for (const group of rules.groups) {
+          for (const condition of group.conditions) {
             const val = condition.value;
             const op = condition.operator;
             const field = condition.field;
@@ -170,8 +184,13 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
               if (op === "eq") query = query.eq("province", val);
               else if (op === "neq") query = query.neq("province", val);
             }
-          });
-        });
+            // Adicionar suporte a total_pedidos no count
+            if (field === "total_pedidos" && op === "eq" && val === "0") {
+              // Esta é uma simplificação. O motor de segmentação precisa ser refatorado
+              // para suportar filtros baseados em relacionamentos (pedidos).
+            }
+          }
+        }
       }
     }
     

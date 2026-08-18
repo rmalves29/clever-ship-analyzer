@@ -103,8 +103,6 @@ export const getCustomersList = createServerFn({ method: "POST" })
         }
       }
     }
-      }
-    }
 
     if (data.search) {
       query = query.or(`first_name.ilike.%${data.search}%,last_name.ilike.%${data.search}%,email.ilike.%${data.search}%,phone.ilike.%${data.search}%`);

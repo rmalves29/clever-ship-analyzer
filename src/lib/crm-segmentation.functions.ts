@@ -190,7 +190,7 @@ export const getCRMStats = createServerFn({ method: "GET" }).handler(async () =>
     .from("shopify_orders")
     .select("customer_id");
   
-  const uniqueCustomerIds = new Set(uniqueCustomers?.map(o => o.customer_id).filter(Boolean));
+  const uniqueCustomerIds = new Set(uniqueCustomers?.map(o => String(o.customer_id)).filter(id => id && id !== 'null'));
   const customers = uniqueCustomerIds.size;
 
   // Leads que são na verdade carrinhos abandonados (com a tag específica)

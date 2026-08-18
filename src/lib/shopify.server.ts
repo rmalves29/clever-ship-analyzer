@@ -178,7 +178,7 @@ export const ORDERS_QUERY = `
 
 export const ABANDONED_CHECKOUTS_QUERY = `
   query getAbandonedCheckouts($cursor: String) {
-    abandonedCheckouts(first: 50, after: $cursor) {
+    abandonedCheckouts(first: 100, after: $cursor) {
       pageInfo { hasNextPage endCursor }
       edges {
         node {

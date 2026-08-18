@@ -160,6 +160,20 @@ export const getCustomersList = createServerFn({ method: "POST" })
               if (customerIds.length > 0) query = query.in("id", customerIds);
               else query = query.eq("id", "00000000-0000-0000-0000-000000000000");
             }
+          } else if (field === "data_pedido_24h") {
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+            const { data: recentOrders } = await supabaseAdmin
+              .from("shopify_orders")
+              .select("customer_id")
+              .gte("processed_at", twentyFourHoursAgo.toISOString());
+            
+            const customerIds = Array.from(new Set(recentOrders?.map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
+            
+            if (val === "sim") {
+              if (customerIds.length > 0) query = query.in("id", customerIds);
+              else query = query.eq("id", "00000000-0000-0000-0000-000000000000");
+            }
           } else if (field === "data_envio_hoje") {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
@@ -376,6 +390,14 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
               const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
               const { data: todaysOrders } = await supabaseAdmin.from("shopify_orders").select("customer_id").gte("processed_at", today.toISOString()).lt("processed_at", tomorrow.toISOString());
               const customerIds = Array.from(new Set(todaysOrders?.map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
+              if (val === "sim") {
+                if (customerIds.length > 0) query = query.in("id", customerIds);
+                else query = query.eq("id", "00000000-0000-0000-0000-000000000000");
+              }
+            } else if (field === "data_pedido_24h") {
+              const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+              const { data: recentOrders } = await supabaseAdmin.from("shopify_orders").select("customer_id").gte("processed_at", twentyFourHoursAgo.toISOString());
+              const customerIds = Array.from(new Set(recentOrders?.map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
               if (val === "sim") {
                 if (customerIds.length > 0) query = query.in("id", customerIds);
                 else query = query.eq("id", "00000000-0000-0000-0000-000000000000");

@@ -514,9 +514,14 @@ function CRMPage() {
                       onClick={async () => {
                         const segmentsToCreate = [
                           {
-                            nome: "Compraram Hoje",
-                            descricao: "Clientes que realizaram pedidos nas últimas 24 horas.",
+                            nome: "Compraram Hoje (Calendário)",
+                            descricao: "Clientes que realizaram pedidos no dia de hoje (00:00 às 23:59).",
                             regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "data_pedido_hoje", operator: "eq", value: "sim", label: "Compra Realizada Hoje" }] }] }
+                          },
+                          {
+                            nome: "Compraram nas últimas 24h",
+                            descricao: "Clientes que realizaram pedidos nas últimas 24 horas a partir de agora.",
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "data_pedido_24h", operator: "eq", value: "sim", label: "Compra Realizada (Últimas 24h)" }] }] }
                           },
                           {
                             nome: "Enviados Hoje",

@@ -228,56 +228,59 @@ export const syncShopifyData = createServerFn({ method: "POST" })
       while (hasNextPage) {
         try {
           const result: any = await shopifyGraphQL(ABANDONED_CHECKOUTS_QUERY, { cursor });
-          if (!result?.abandonedCheckouts) break;
+          if (!result?.abandonedCheckouts) {
+            console.warn("No abandoned checkouts field in result:", result);
+            break;
+          }
           
           const abandonedConnection = result.abandonedCheckouts;
           console.log(`Processing ${abandonedConnection.edges.length} abandoned checkouts`);
 
-
           for (const edge of abandonedConnection.edges) {
             const checkout = edge.node;
-            const customer = checkout.customer;
             
-            if (customer) {
-              const email = customer.email?.toLowerCase();
-              const customerId = email ? `email:${email}` : (customer.id ? `id:${customer.id.split('/').pop()}` : null);
+            // Checkouts abandonados podem não ter um objeto customer associado (usuário não logado/novo)
+            // Mas a Shopify ainda guarda o email e telefone no próprio checkout.
+            const checkoutEmail = checkout.email?.toLowerCase();
+            const customer = checkout.customer;
+            const email = checkoutEmail || customer?.email?.toLowerCase();
+            
+            if (email || customer?.id) {
+              const customerId = email ? `email:${email}` : `id:${customer.id.split('/').pop()}`;
               
-              if (customerId) {
-                const customerPhone = normalizePhone(
-                  checkout.phone ??
-                  checkout.shippingAddress?.phone ??
-                  customer.phone ?? 
-                  customer.defaultAddress?.phone ??
-                  customer.addresses?.find((a: any) => a.phone)?.phone
-                );
+              const customerPhone = normalizePhone(
+                checkout.phone ??
+                checkout.shippingAddress?.phone ??
+                customer?.phone ?? 
+                customer?.defaultAddress?.phone ??
+                customer?.addresses?.find((a: any) => a.phone)?.phone
+              );
 
+              // Get existing tags to avoid overwriting
+              const { data: existing } = await supabaseAdmin
+                .from("shopify_customers")
+                .select("tags, first_name, last_name, city, province, country")
+                .eq("id", customerId)
+                .maybeSingle();
+              
+              const currentTags = existing?.tags || [];
+              const newTags = Array.from(new Set([...currentTags, "Carrinho Abandonado", "Checkout", "CAR24"]));
 
-                // Get existing tags to avoid overwriting
-                const { data: existing } = await supabaseAdmin
-                  .from("shopify_customers")
-                  .select("tags")
-                  .eq("id", customerId)
-                  .maybeSingle();
-                
-                const currentTags = existing?.tags || [];
-                const newTags = Array.from(new Set([...currentTags, "Carrinho Abandonado", "Checkout", "CAR24"]));
-
-                // Update customer info and tag as abandoned
-                await supabaseAdmin.from("shopify_customers").upsert({
-                  id: customerId,
-                  email: customer.email || null,
-                  first_name: customer.firstName || null,
-                  last_name: customer.lastName || null,
-                  phone: customerPhone,
-                  city: customer.defaultAddress?.city ?? null,
-                  province: customer.defaultAddress?.province ?? null,
-                  country: customer.defaultAddress?.country ?? null,
-                  tags: newTags,
-                  updated_at: new Date().toISOString(),
-                });
-              }
+              // Update customer info and tag as abandoned
+              await supabaseAdmin.from("shopify_customers").upsert({
+                id: customerId,
+                email: email || null,
+                first_name: checkout.shippingAddress?.firstName || customer?.firstName || existing?.first_name || null,
+                last_name: checkout.shippingAddress?.lastName || customer?.lastName || existing?.last_name || null,
+                phone: customerPhone,
+                city: checkout.shippingAddress?.city || customer?.defaultAddress?.city || existing?.city || null,
+                province: checkout.shippingAddress?.province || customer?.defaultAddress?.province || existing?.province || null,
+                country: checkout.shippingAddress?.country || customer?.defaultAddress?.country || existing?.country || null,
+                tags: newTags,
+                updated_at: new Date().toISOString(),
+              });
+              totalAbandoned++;
             }
-            totalAbandoned++;
           }
 
           hasNextPage = abandonedConnection.pageInfo.hasNextPage;

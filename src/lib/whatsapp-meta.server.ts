@@ -359,6 +359,7 @@ export async function dispatchCampaign(campaignId: string) {
   const campaign = campaignRow as {
     id: string;
     segment_type: string;
+    segment_id: string | null;
     template_name: string;
     template_language: string | null;
     body_params: unknown;

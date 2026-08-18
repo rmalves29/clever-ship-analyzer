@@ -68,8 +68,8 @@ export async function getShopifyCredentials(): Promise<{ domain: string; accessT
   }
 
   if (!response.ok || !json?.access_token) {
-    console.error("Shopify Auth Error:", response.status, rawBody.slice(0, 1000));
-    throw new Error(`INVALID_CLIENT_CREDENTIALS: falha ao autenticar na Shopify (HTTP ${response.status}).`);
+    console.error("Shopify Auth Error Details:", { status: response.status, body: rawBody });
+    throw new Error(`INVALID_CLIENT_CREDENTIALS: falha ao autenticar na Shopify (HTTP ${response.status}). Detalhes: ${rawBody.slice(0, 200)}`);
   }
 
   TOKEN_CACHE[shop] = {

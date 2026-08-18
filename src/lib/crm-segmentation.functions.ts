@@ -30,7 +30,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
     const { data: ordersData } = await supabaseAdmin
       .from("shopify_orders")
       .select("customer_id");
-    const customersWithOrdersSet = new Set(ordersData?.map(o => o.customer_id).filter(Boolean));
+    const customersWithOrdersSet = new Set(ordersData?.map(o => String(o.customer_id)).filter(id => id && id !== 'null'));
     const customersWithOrdersList = Array.from(customersWithOrdersSet);
 
     // 3. Construir query base
@@ -164,6 +164,9 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
   const { data: segments, error } = await supabaseAdmin.from("crm_segments").select("*").order("criado_em", { ascending: false });
   if (error) throw error;
 
+  const { data: ordersData } = await supabaseAdmin.from("shopify_orders").select("customer_id");
+  const customersWithOrdersList = Array.from(new Set(ordersData?.map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
+
   // Para cada segmento, calcular a contagem de membros
   const segmentsWithCount = await Promise.all((segments || []).map(async (seg) => {
     let query = supabaseAdmin.from("shopify_customers").select("*", { count: "exact", head: true });
@@ -171,7 +174,6 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
     if (seg.regras) {
       const rules = seg.regras as any;
       if (rules.groups) {
-        // Coletar todas as condições de todos os grupos (simplificado para AND global no count por enquanto)
         for (const group of rules.groups) {
           for (const condition of group.conditions) {
             const val = condition.value;
@@ -185,11 +187,13 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
             } else if (field === "estado") {
               if (op === "eq") query = query.eq("province", val);
               else if (op === "neq") query = query.neq("province", val);
-            }
-            // Adicionar suporte a total_pedidos no count
-            if (field === "total_pedidos" && op === "eq" && val === "0") {
-              // Esta é uma simplificação. O motor de segmentação precisa ser refatorado
-              // para suportar filtros baseados em relacionamentos (pedidos).
+            } else if (field === "total_pedidos" || field === "recorrencia") {
+              const numVal = Number(val);
+              if (field === "total_pedidos" && op === "eq" && numVal === 0) {
+                if (customersWithOrdersList.length > 0) query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
+              } else if (customersWithOrdersList.length > 0) {
+                query = query.in("id", customersWithOrdersList);
+              }
             }
           }
         }

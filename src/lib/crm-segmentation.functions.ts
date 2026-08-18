@@ -113,7 +113,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
                 if (customersWithOrdersList.length > 0) {
                   query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
                 }
-                query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}");
+                query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}").not("tags", "cs", "{\"CAR24\"}");
               }
             }
           }

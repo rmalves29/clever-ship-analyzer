@@ -372,6 +372,9 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
             } else if (customersWithOrdersList.length > 0) {
               query = query.in("id", customersWithOrdersList);
             }
+          } else if (field === "rfm_segment") {
+            if (operator === "eq") query = query.eq("rfm_segment", value);
+            else if (operator === "neq") query = query.neq("rfm_segment", value);
           }
         }
       }

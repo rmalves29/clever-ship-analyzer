@@ -86,6 +86,8 @@ export type DashboardData = {
   tempoEntreCompras: AnalysisSeries;
   curvaRecompra: AnalysisSeries;
   enviosPorDia: { dia: string; pedidos: number; produtos: number; tempoMedio: number }[];
+  cohortData: { month: string; size: number; retention: (number | null)[] }[];
+  sessoes: { page: string; count: number; trend?: number }[];
   reguas: {
     titulo: string;
     tag: string;
@@ -267,6 +269,8 @@ export function getDashboardData(period: PeriodKey, customLabel?: string): Dashb
       produtos: Math.round((44 + i * 9) * (m / 6.4 || 1)),
       tempoMedio: Number((1.4 + ((i * 7) % 5) * 0.32).toFixed(1)),
     })),
+    cohortData: [],
+    sessoes: [],
     reguas: [
       {
         titulo: "Onboarding Pós-1ª Compra",

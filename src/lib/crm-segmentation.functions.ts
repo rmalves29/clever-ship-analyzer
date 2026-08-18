@@ -195,7 +195,7 @@ export const getCRMStats = createServerFn({ method: "GET" }).handler(async () =>
 
   return {
     total: total || 0,
-    leads: (total || 0) - (customers || 0),
+    leads: (total || 0) - (customers || 0) - (abandonedCount || 0),
     customers: customers || 0,
     abandoned: abandonedCount || 0,
     newContacts: newContacts || 0,

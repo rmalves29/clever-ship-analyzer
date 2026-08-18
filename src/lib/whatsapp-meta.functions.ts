@@ -83,7 +83,8 @@ export const previewSegment = createServerFn({ method: "POST" })
 
 const createCampaignSchema = z.object({
   nome: z.string().min(1),
-  segmentType: segmentTypeSchema,
+  segmentType: z.string(),
+  segmentId: z.string().uuid().optional(),
   messageType: messageTypeSchema.default("marketing"),
   templateName: z.string().optional(),
   templateLanguage: z.string().optional(),

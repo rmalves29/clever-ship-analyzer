@@ -18,6 +18,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { label: "Contatos", to: "/crm", search: { tab: "contatos" }, icon: Sparkles },
       { label: "Segmentos", to: "/crm", search: { tab: "segmentos" }, icon: Sparkles },
       { label: "Listas Estáticas", to: "/crm", search: { tab: "listas" }, icon: Sparkles },
+      { label: "Análise RFM", to: "/crm", search: { tab: "rfm" }, icon: BarChart3 },
     ],
   },
   {

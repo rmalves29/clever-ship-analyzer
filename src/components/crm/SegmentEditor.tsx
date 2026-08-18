@@ -87,6 +87,14 @@ const CATEGORIES = [
     ]
   },
   {
+    id: "rfm",
+    label: "Análise RFM",
+    icon: Zap,
+    fields: [
+      { id: "rfm_segment", label: "Segmento RFM" },
+    ]
+  },
+  {
     id: "whatsapp",
     label: "Whatsapp Marketing",
     icon: MessageSquare,
@@ -331,6 +339,27 @@ export function SegmentEditor({
                             <SelectItem value="voided">Anulado (Voided)</SelectItem>
                             <SelectItem value="authorized">Autorizado (Authorized)</SelectItem>
                             <SelectItem value="partially_paid">Parcialmente Pago</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : condition.field === "rfm_segment" ? (
+                        <Select
+                          value={condition.value as string}
+                          onValueChange={v => updateCondition(group.id, condition.id, { value: v })}
+                        >
+                          <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs">
+                            <SelectValue placeholder="Selecionar segmento..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Campeões">Campeões</SelectItem>
+                            <SelectItem value="Leais">Leais</SelectItem>
+                            <SelectItem value="Potencialmente Leais">Potencialmente Leais</SelectItem>
+                            <SelectItem value="Novos">Novos</SelectItem>
+                            <SelectItem value="Precisa de Atenção">Precisa de Atenção</SelectItem>
+                            <SelectItem value="Quase Hibernando">Quase Hibernando</SelectItem>
+                            <SelectItem value="Em Risco">Em Risco</SelectItem>
+                            <SelectItem value="Hibernando">Hibernando</SelectItem>
+                            <SelectItem value="Não pode perder">Não pode perder</SelectItem>
+                            <SelectItem value="Perdidos">Perdidos</SelectItem>
                           </SelectContent>
                         </Select>
                       ) : (

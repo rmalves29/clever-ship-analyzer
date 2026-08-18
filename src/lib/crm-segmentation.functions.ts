@@ -96,6 +96,9 @@ export const getCustomersList = createServerFn({ method: "POST" })
                 return { customers: [], total: 0 };
               }
             }
+          } else if (field === "rfm_segment") {
+            if (operator === "eq") query = query.eq("rfm_segment", val);
+            else if (operator === "neq") query = query.neq("rfm_segment", val);
           }
         }
       }
@@ -141,6 +144,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
         phone: c.phone,
         city: c.city,
         province: c.province,
+        rfmSegment: c.rfm_segment,
         totalOrders: orders.length,
         totalSpent,
         lastOrderAt: lastOrder?.processed_at || null,
@@ -236,6 +240,9 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
               } else {
                 query = query.eq("id", "00000000-0000-0000-0000-000000000000"); // Nenhum cliente se não há pedidos
               }
+            } else if (field === "rfm_segment") {
+              if (op === "eq") query = query.eq("rfm_segment", val);
+              else if (op === "neq") query = query.neq("rfm_segment", val);
             }
           }
         }
@@ -365,6 +372,9 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
             } else if (customersWithOrdersList.length > 0) {
               query = query.in("id", customersWithOrdersList);
             }
+          } else if (field === "rfm_segment") {
+            if (operator === "eq") query = query.eq("rfm_segment", value);
+            else if (operator === "neq") query = query.neq("rfm_segment", value);
           }
         }
       }

@@ -17,7 +17,8 @@ import {
   Sparkles,
   Trash2,
   X,
-  Download
+  Download,
+  BarChart3
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -38,13 +39,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment, exportSegmentCustomers } from "@/lib/crm-segmentation.functions";
+import { RFMAnalysis } from "@/components/crm/RFMAnalysis";
 import { fixCustomerPhone, deepSyncCustomer } from "@/lib/admin-maintenance.functions";
+import { RFM_SEGMENTS_CONFIG } from "@/lib/crm-rfm.functions";
 import { normalizeAllPhones } from "@/lib/maintenance-scripts.functions";
 import { brl } from "@/lib/crm-mock";
 import { SegmentEditor } from "@/components/crm/SegmentEditor";
 import { toast } from "sonner";
 
-const VALID_TABS = ["contatos", "segmentos", "listas"] as const;
+const VALID_TABS = ["contatos", "segmentos", "listas", "rfm"] as const;
 
 export const Route = createFileRoute("/crm/")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -53,7 +56,7 @@ export const Route = createFileRoute("/crm/")({
   head: () => ({
     meta: [
       { title: "Gestão de Clientes | CRM Insights" },
-      { name: "description", content: "Gerencie contatos, crie segmentos dinâmicos e organize listas estáticas para suas campanhas." },
+      { name: "description", content: "Gerencie contatos, crie segmentos dinâmicos e visualize análises RFM." },
     ],
   }),
   component: CRMPage,
@@ -257,9 +260,12 @@ function CRMPage() {
         <Tabs value={tab} onValueChange={setTab} className="mt-8">
           <div className="flex justify-center">
             <TabsList className="bg-muted/50 p-1">
-              <TabsTrigger value="contatos" className="px-8">Contatos</TabsTrigger>
-              <TabsTrigger value="segmentos" className="px-8">Segmentos</TabsTrigger>
-              <TabsTrigger value="listas" className="px-8">Listas Estáticas</TabsTrigger>
+              <TabsTrigger value="contatos" className="px-6">Contatos</TabsTrigger>
+              <TabsTrigger value="segmentos" className="px-6">Segmentos</TabsTrigger>
+              <TabsTrigger value="listas" className="px-6">Listas Estáticas</TabsTrigger>
+              <TabsTrigger value="rfm" className="px-6 flex gap-2 items-center">
+                <BarChart3 className="size-4" /> Análise RFM
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -347,7 +353,7 @@ function CRMPage() {
                       <TableHead className="w-12"></TableHead>
                       <TableHead>NOME / E-MAIL</TableHead>
                       <TableHead>TELEFONE</TableHead>
-                      <TableHead>PERFIL</TableHead>
+                      <TableHead>RFM / PERFIL</TableHead>
                       <TableHead className="text-center">COMPRAS</TableHead>
                       <TableHead className="text-right">TOTAL GASTO</TableHead>
                       <TableHead className="text-right">ÚLTIMA COMPRA</TableHead>
@@ -390,9 +396,23 @@ function CRMPage() {
                             ) : "—"}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="secondary" className="bg-muted text-[10px] font-medium uppercase tracking-wider">
-                              {c.totalOrders > 0 ? "Ativo" : "Lead"}
-                            </Badge>
+                            <div className="flex flex-col gap-1">
+                              {c.rfmSegment && (
+                                <Badge 
+                                  variant="outline" 
+                                  className="text-[9px] font-bold uppercase w-fit"
+                                  style={{ 
+                                    color: RFM_SEGMENTS_CONFIG[c.rfmSegment as keyof typeof RFM_SEGMENTS_CONFIG]?.color,
+                                    borderColor: `${RFM_SEGMENTS_CONFIG[c.rfmSegment as keyof typeof RFM_SEGMENTS_CONFIG]?.color}40`
+                                  }}
+                                >
+                                  {c.rfmSegment}
+                                </Badge>
+                              )}
+                              <Badge variant="secondary" className="bg-muted text-[10px] font-medium uppercase tracking-wider w-fit">
+                                {c.totalOrders > 0 ? "Ativo" : "Lead"}
+                              </Badge>
+                            </div>
                           </TableCell>
                           <TableCell className="text-center font-bold">{c.totalOrders}</TableCell>
                           <TableCell className="text-right font-bold">{brl(c.totalSpent)}</TableCell>
@@ -507,6 +527,9 @@ function CRMPage() {
               </p>
               <Button variant="outline" className="mt-4">Criar primeira lista</Button>
             </div>
+          </TabsContent>
+          <TabsContent value="rfm" className="mt-8">
+            <RFMAnalysis />
           </TabsContent>
         </Tabs>
       </div>

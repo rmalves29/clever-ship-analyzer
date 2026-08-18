@@ -189,7 +189,7 @@ function LiveViewPage() {
               </Suspense>
             </div>
 
-            <div className="absolute bottom-6 right-6 z-20 flex gap-4">
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex gap-4">
               <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm px-3 py-1 rounded-full border border-border/50 text-[10px] font-medium">
                 <span className="size-2 rounded-full bg-brand"></span> Visitantes agora
               </div>

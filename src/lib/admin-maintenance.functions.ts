@@ -90,3 +90,101 @@ export const deepSyncCustomer = createServerFn({ method: "POST" })
       return { success: false, error: err.message };
     }
   });
+
+export const checkSpecificAbandonedCheckout = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ query: z.string() }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { shopifyGraphQL } = await import("./shopify.server");
+
+    // 1. Search Shopify for orders/checkouts by name or email
+    const shopifyQuery = `
+      query ($query: String) {
+        orders(first: 5, query: $query) {
+          edges {
+            node {
+              id
+              name
+              displayFinancialStatus
+              displayFulfillmentStatus
+              createdAt
+              updatedAt
+              email
+              phone
+              shippingAddress { phone firstName lastName city province country }
+              customer { id email firstName lastName phone }
+            }
+          }
+        }
+      }
+    `;
+
+    try {
+      const result = await shopifyGraphQL(shopifyQuery, { query: data.query });
+      const orders = result?.orders?.edges?.map((e: any) => e.node) || [];
+      
+      if (orders.length === 0) {
+        return { success: false, message: "Nenhum pedido/checkout encontrado na Shopify para esta busca." };
+      }
+
+      let updatedCount = 0;
+      for (const order of orders) {
+        const email = order.email?.toLowerCase();
+        const customerId = email ? `email:${email}` : (order.customer?.id ? `id:${order.customer.id.split('/').pop()}` : null);
+        
+        if (!customerId) continue;
+
+        const phone = order.phone || order.shippingAddress?.phone || order.customer?.phone || null;
+        const financialStatus = order.displayFinancialStatus;
+        
+        // Upsert customer first
+        const { data: existingCust } = await supabaseAdmin
+          .from("shopify_customers")
+          .select("tags, phone")
+          .eq("id", customerId)
+          .maybeSingle();
+
+        const currentTags = existingCust?.tags || [];
+        const isAbandoned = ["EXPIRED", "VOIDED", "PENDING", "AUTHORIZED"].includes(financialStatus);
+        
+        const newTags = new Set([...currentTags]);
+        if (isAbandoned) {
+          newTags.add("Carrinho Abandonado");
+          newTags.add("Checkout");
+        }
+
+        await supabaseAdmin.from("shopify_customers").upsert({
+          id: customerId,
+          email,
+          first_name: order.shippingAddress?.firstName || order.customer?.firstName || null,
+          last_name: order.shippingAddress?.lastName || order.customer?.lastName || null,
+          phone: phone,
+          tags: Array.from(newTags),
+          updated_at: new Date().toISOString()
+        });
+
+        // Upsert order
+        await supabaseAdmin.from("shopify_orders").upsert({
+          id: order.id,
+          order_number: order.name,
+          customer_id: customerId,
+          email,
+          phone: order.phone,
+          created_at: order.createdAt,
+          updated_at: order.updatedAt,
+          financial_status: financialStatus,
+          fulfillment_status: order.displayFulfillmentStatus,
+          city: order.shippingAddress?.city,
+          province: order.shippingAddress?.province,
+          country: order.shippingAddress?.country,
+          raw_data: order
+        });
+        
+        updatedCount++;
+      }
+
+      return { success: true, message: `Sincronizados ${updatedCount} registros para '${data.query}'.` };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });

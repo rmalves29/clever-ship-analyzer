@@ -84,7 +84,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
     if (error) throw error;
 
     const customerIds = customers?.map(c => c.id) || [];
-    let customersWithOrders = (customers || []).map(c => ({ ...c, shopify_orders: [] }));
+    let customersWithOrders: any[] = (customers || []).map(c => ({ ...c, shopify_orders: [] }));
 
     if (customerIds.length > 0) {
       const { data: orders, error: ordersError } = await supabaseAdmin

@@ -101,8 +101,12 @@ export const getCustomersList = createServerFn({ method: "POST" })
             else if (operator === "neq") query = query.neq("rfm_segment", val);
           } else if (field === "perfil") {
             if (val === "carrinho") {
-              if (operator === "eq") query = query.contains("tags", ["Carrinho Abandonado"]);
-              else if (operator === "neq") query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}");
+              if (operator === "eq") {
+                query = query.or('tags.cs.{"Carrinho Abandonado"},tags.cs.{"Checkout"}');
+              }
+              else if (operator === "neq") {
+                query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}");
+              }
             }
           }
         }
@@ -185,7 +189,7 @@ export const getCRMStats = createServerFn({ method: "GET" }).handler(async () =>
   const { count: abandonedCount } = await supabaseAdmin
     .from("shopify_customers")
     .select("*", { count: "exact", head: true })
-    .contains("tags", ["Carrinho Abandonado"]);
+    .or('tags.cs.{"Carrinho Abandonado"},tags.cs.{"Checkout"}');
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
   const { count: newContacts } = await supabaseAdmin

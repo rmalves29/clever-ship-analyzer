@@ -40,7 +40,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment, exportSegmentCustomers } from "@/lib/crm-segmentation.functions";
 import { RFMAnalysis } from "@/components/crm/RFMAnalysis";
-import { fixCustomerPhone, deepSyncCustomer } from "@/lib/admin-maintenance.functions";
+import { fixCustomerPhone, deepSyncCustomer, checkSpecificAbandonedCheckout } from "@/lib/admin-maintenance.functions";
 import { RFM_SEGMENTS_CONFIG } from "@/lib/crm-rfm.functions";
 import { normalizeAllPhones } from "@/lib/maintenance-scripts.functions";
 import { identifyAbandonedCheckouts } from "@/lib/abandoned-checkout.functions";
@@ -102,6 +102,7 @@ function CRMPage() {
   const runExport = useServerFn(exportSegmentCustomers);
   const runNormalizePhones = useServerFn(normalizeAllPhones);
   const runIdentifyAbandoned = useServerFn(identifyAbandonedCheckouts);
+  const runCheckSpecificAbandoned = useServerFn(checkSpecificAbandonedCheckout);
   const [isExporting, setIsExporting] = useState(false);
 
   const handleExport = async () => {
@@ -266,6 +267,26 @@ function CRMPage() {
                   });
                 }}>
                   Identificar Carrinhos Abandonados
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={async () => {
+                  const query = prompt("Digite o nome ou e-mail da cliente para buscar na Shopify:");
+                  if (!query) return;
+                  
+                  const promise = runCheckSpecificAbandoned({ data: { query } });
+                  toast.promise(promise, {
+                    loading: `Buscando '${query}' na Shopify...`,
+                    success: (res: any) => {
+                      if (res.success) {
+                        queryClient.invalidateQueries({ queryKey: ["crm-customers"] });
+                        queryClient.invalidateQueries({ queryKey: ["crm-stats"] });
+                        return res.message;
+                      }
+                      return res.message || "Não encontrado.";
+                    },
+                    error: (err) => "Erro na busca: " + err.message
+                  });
+                }}>
+                  Localizar Cliente Específico (Shopify)
                 </DropdownMenuItem>
                 <DropdownMenuItem>Sincronizar Shopify</DropdownMenuItem>
               </DropdownMenuContent>

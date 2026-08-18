@@ -8,11 +8,11 @@ export const identifyAbandonedCheckouts = createServerFn({ method: "POST" })
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     
-    // 1. Find all customers with EXPIRED orders
+    // 1. Find all customers with EXPIRED, VOIDED or PENDING orders (common for abandoned/failed checkouts)
     const { data: expiredOrders, error: orderError } = await supabaseAdmin
       .from("shopify_orders")
       .select("customer_id, financial_status, phone")
-      .eq("financial_status", "EXPIRED");
+      .in("financial_status", ["EXPIRED", "VOIDED", "PENDING", "AUTHORIZED"]);
       
     if (orderError) throw orderError;
     
@@ -32,10 +32,11 @@ export const identifyAbandonedCheckouts = createServerFn({ method: "POST" })
 
     let updatedCount = 0;
     const tagToAdd = "Carrinho Abandonado";
+    const tagCheckout = "Checkout";
 
     for (const customer of (customers || [])) {
       const currentTags = Array.isArray(customer.tags) ? customer.tags : [];
-      const hasTag = currentTags.includes(tagToAdd);
+      const hasTag = currentTags.includes(tagToAdd) || currentTags.includes(tagCheckout);
       
       // Also check if we can fix the phone number while we are at it
       let newPhone = customer.phone;
@@ -60,7 +61,9 @@ export const identifyAbandonedCheckouts = createServerFn({ method: "POST" })
         };
         
         if (!hasTag) {
-          updateData.tags = [...currentTags, tagToAdd];
+          // Add both for better filtering coverage
+          const newTags = new Set([...currentTags, tagToAdd, tagCheckout]);
+          updateData.tags = Array.from(newTags);
         }
         
         if (newPhone && newPhone !== customer.phone) {

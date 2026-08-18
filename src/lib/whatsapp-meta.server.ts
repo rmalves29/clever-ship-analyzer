@@ -131,6 +131,19 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
   const finalSegmentType = segmentId || segmentType;
   const isCustomSegment = isUuid(finalSegmentType);
 
+  // NOVO: Segmento de Carrinho Abandonado (Individual)
+  if (finalSegmentType === "carrinho" || finalSegmentType === "abandoned_cart") {
+    const { data: abandonedCheckouts } = await supabaseAdmin
+      .from("shopify_abandoned_checkouts")
+      .select("customer_id");
+    
+    const ids = new Set<string>();
+    abandonedCheckouts?.forEach(ac => {
+      if (ac.customer_id) ids.add(ac.customer_id);
+    });
+    return Array.from(ids);
+  }
+
   if (finalSegmentType === "envio_atrasado") {
     const cutoff = new Date(Date.now() - 30 * DAY_MS).toISOString();
     const { data: fulfillments } = await supabaseAdmin

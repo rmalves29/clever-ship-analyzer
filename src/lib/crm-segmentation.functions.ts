@@ -107,6 +107,14 @@ export const getCustomersList = createServerFn({ method: "POST" })
               else if (operator === "neq") {
                 query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}");
               }
+            } else if (val === "lead") {
+              // Leads: clientes sem pedidos e que NÃO são carrinhos abandonados
+              if (operator === "eq") {
+                if (customersWithOrdersList.length > 0) {
+                  query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
+                }
+                query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}");
+              }
             }
           }
         }
@@ -199,7 +207,7 @@ export const getCRMStats = createServerFn({ method: "GET" }).handler(async () =>
 
   return {
     total: total || 0,
-    leads: (total || 0) - (customers || 0) - (abandonedCount || 0),
+    leads: Math.max(0, (total || 0) - (customers || 0) - (abandonedCount || 0)),
     customers: customers || 0,
     abandoned: abandonedCount || 0,
     newContacts: newContacts || 0,

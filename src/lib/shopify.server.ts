@@ -176,6 +176,46 @@ export const ORDERS_QUERY = `
   }
 `;
 
+export const ABANDONED_CHECKOUTS_QUERY = `
+  query getAbandonedCheckouts($cursor: String) {
+    abandonedCheckouts(first: 50, after: $cursor) {
+      pageInfo { hasNextPage endCursor }
+      edges {
+        node {
+          id
+          createdAt
+          updatedAt
+          abandonedCheckoutUrl
+          totalPriceSet { presentmentMoney { amount } }
+          customer {
+            id
+            email
+            firstName
+            lastName
+            phone
+            defaultAddress {
+              city
+              province
+              country
+              phone
+            }
+          }
+          lineItems(first: 5) {
+            edges {
+              node {
+                title
+                quantity
+                variant { title price }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+
 export const CUSTOMERS_QUERY = `
   query getCustomers($cursor: String) {
     customers(first: 50, after: $cursor) {

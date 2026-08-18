@@ -18,7 +18,7 @@ export const syncShopifyData = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.object({ fullSync: z.boolean().optional().default(false) }).parse(data))
   .handler(async ({ data: { fullSync } }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { shopifyGraphQL, ORDERS_QUERY, CUSTOMERS_QUERY } = await import("./shopify.server");
+    const { shopifyGraphQL, ORDERS_QUERY, CUSTOMERS_QUERY, ABANDONED_CHECKOUTS_QUERY } = await import("./shopify.server");
 
     const { data: settings } = await supabaseAdmin
       .from("store_settings")
@@ -218,6 +218,64 @@ export const syncShopifyData = createServerFn({ method: "POST" })
 
         if (totalImported > 5000) break;
       }
+
+      // 3. Sync Abandoned Checkouts
+      cursor = null;
+      hasNextPage = true;
+      let totalAbandoned = 0;
+
+      while (hasNextPage) {
+        const result: any = await shopifyGraphQL(ABANDONED_CHECKOUTS_QUERY, { cursor });
+        if (!result?.abandonedCheckouts) break;
+        
+        const abandonedConnection = result.abandonedCheckouts;
+
+        for (const edge of abandonedConnection.edges) {
+          const checkout = edge.node;
+          const customer = checkout.customer;
+          
+          if (customer) {
+            const customerId = customer.email ? `email:${customer.email.toLowerCase()}` : (customer.id ? `id:${customer.id.split('/').pop()}` : null);
+            
+            if (customerId) {
+              const customerPhone = normalizePhone(
+                customer.phone ?? 
+                customer.defaultAddress?.phone
+              );
+
+              // Get existing tags to avoid overwriting
+              const { data: existing } = await supabaseAdmin
+                .from("shopify_customers")
+                .select("tags")
+                .eq("id", customerId)
+                .single();
+              
+              const currentTags = existing?.tags || [];
+              const newTags = Array.from(new Set([...currentTags, "Carrinho Abandonado", "Checkout"]));
+
+              // Update customer info and tag as abandoned
+              await supabaseAdmin.from("shopify_customers").upsert({
+                id: customerId,
+                email: customer.email,
+                first_name: customer.firstName,
+                last_name: customer.lastName,
+                phone: customerPhone,
+                city: customer.defaultAddress?.city ?? null,
+                province: customer.defaultAddress?.province ?? null,
+                country: customer.defaultAddress?.country ?? null,
+                tags: newTags,
+                updated_at: new Date().toISOString(),
+              });
+            }
+          }
+          totalAbandoned++;
+        }
+
+        hasNextPage = abandonedConnection.pageInfo.hasNextPage;
+        cursor = abandonedConnection.pageInfo.endCursor;
+        if (totalAbandoned > 1000) break;
+      }
+
 
       await supabaseAdmin
         .from("store_settings")

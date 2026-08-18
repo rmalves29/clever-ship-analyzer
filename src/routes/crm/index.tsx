@@ -513,6 +513,9 @@ function CRMPage() {
               <Button variant="outline" className="mt-4">Criar primeira lista</Button>
             </div>
           </TabsContent>
+          <TabsContent value="rfm" className="mt-8">
+            <RFMAnalysis />
+          </TabsContent>
         </Tabs>
       </div>
     </div>

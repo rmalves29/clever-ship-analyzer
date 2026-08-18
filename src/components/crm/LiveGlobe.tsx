@@ -70,9 +70,10 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
         width={dimensions.width}
         height={dimensions.height}
         backgroundColor="rgba(0,0,0,0)"
-        globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
+        globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
         bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
         backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
+        showGraticules={true}
         pointsData={globeData}
         pointRadius="size"
         pointColor="color"

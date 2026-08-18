@@ -21,7 +21,7 @@ import {
 } from "@/lib/whatsapp-meta.functions";
 import { brl } from "@/lib/crm-mock";
 import { AutomationDialog, SEGMENT_LABEL, type AutomationSeed } from "@/components/crm/AutomationDialog";
-import { WhatsappSendDialog, type SendDialogSeed } from "@/components/crm/WhatsappSendDialog";
+import { WhatsappSendDialog, type SendDialogSeed } from "@/components/whatsapp/WhatsappSendDialog";
 import { CampaignDetailDialog } from "@/components/whatsapp/CampaignDetailDialog";
 import { TemplatesTab } from "@/components/whatsapp/TemplatesTab";
 import { ReportsTab } from "@/components/whatsapp/ReportsTab";

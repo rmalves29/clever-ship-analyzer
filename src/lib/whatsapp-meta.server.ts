@@ -411,15 +411,7 @@ export async function dispatchCampaign(campaignId: string) {
     return { success: false as const, error: "Credenciais do WhatsApp (Meta) não configuradas." };
   }
 
-  const campaign = campaignRow as {
-    id: string;
-    segment_type: string;
-    segment_id: string | null;
-    template_name: string;
-    template_language: string | null;
-    body_params: unknown;
-    campaign_tag: string | null;
-  };
+  const campaign = campaignRow as any;
 
   await supabaseAdmin.from("whatsapp_campaigns").update({ status: "enviando" } as never).eq("id", campaignId);
 

@@ -172,7 +172,7 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
   const { data: customSegment } = await supabaseAdmin
     .from("crm_segments")
     .select("id, regras")
-    .eq("id", segmentType)
+    .eq("id", finalSegmentType)
     .maybeSingle();
 
   if (customSegment) {

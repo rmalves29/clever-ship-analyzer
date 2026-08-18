@@ -346,7 +346,8 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
     }
 
     const rows = (customers || []).map(c => {
-      const orders = c.id ? (ordersMap[c.id] || []) : [];
+      const cid = c.id ? String(c.id) : '';
+      const orders = cid ? (ordersMap[cid] || []) : [];
       const totalSpent = orders.reduce((acc, o) => acc + Number(o.total_price || 0), 0);
       return {
         Nome: `${c.first_name || ""} ${c.last_name || ""}`.trim(),

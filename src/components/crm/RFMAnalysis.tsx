@@ -172,7 +172,13 @@ export function RFMAnalysis() {
                 />
                 <Tooltip 
                   cursor={{ fill: "rgba(255,255,255,0.05)" }}
-                  contentStyle={{ backgroundColor: "#1e1e2d", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px" }}
+                  contentStyle={{ 
+                    backgroundColor: "white", 
+                    border: "1px solid rgba(0,0,0,0.1)", 
+                    borderRadius: "8px",
+                    color: "#333"
+                  }}
+                  itemStyle={{ color: "#333" }}
                 />
                 <Bar dataKey="clientes" radius={[0, 4, 4, 0]}>
                   {chartData.map((entry, index) => (

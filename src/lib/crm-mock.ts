@@ -143,6 +143,7 @@ export function getDashboardData(period: PeriodKey, customLabel?: string): Dashb
         id: "recompra",
         label: "Taxa de recompra",
         value: `${taxaRecompra.toFixed(1)}%`,
+        hint: `0 clientes são recompras`,
         icon: "repeat",
         status: statusHigherIsBetter(taxaRecompra, GOALS.taxaRecompra.meta, GOALS.taxaRecompra.regular),
       },

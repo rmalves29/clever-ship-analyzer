@@ -220,7 +220,7 @@ export function SegmentEditor({
             <ArrowLeft className="size-5" />
           </Button>
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight">Criar Segmento</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">{initialData?.id ? "Editar Segmento" : "Criar Segmento"}</h2>
             <p className="text-sm text-muted-foreground">Defina regras para agrupar seus clientes automaticamente.</p>
           </div>
         </div>

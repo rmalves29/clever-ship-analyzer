@@ -183,6 +183,7 @@ export const ABANDONED_CHECKOUTS_QUERY = `
       edges {
         node {
           id
+          email
           createdAt
           updatedAt
           abandonedCheckoutUrl

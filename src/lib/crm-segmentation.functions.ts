@@ -240,6 +240,9 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
               } else {
                 query = query.eq("id", "00000000-0000-0000-0000-000000000000"); // Nenhum cliente se não há pedidos
               }
+            } else if (field === "rfm_segment") {
+              if (op === "eq") query = query.eq("rfm_segment", val);
+              else if (op === "neq") query = query.neq("rfm_segment", val);
             }
           }
         }

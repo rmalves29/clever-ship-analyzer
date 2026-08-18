@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { format, startOfDay, endOfDay, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfWeek } from "date-fns";
+import { format, startOfDay, endOfDay, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfWeek, subMonths, eachMonthOfInterval } from "date-fns";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
 
 const TZ = "America/Sao_Paulo";

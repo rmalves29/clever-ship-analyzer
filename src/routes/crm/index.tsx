@@ -315,7 +315,7 @@ function CRMPage() {
                 trend="+42%" 
               />
               <StatCard 
-                label="Carrinhos Abandonados" 
+                label="Checkouts Abandonados" 
                 value={new Intl.NumberFormat().format(stats?.abandoned || 0)} 
                 hint="Identificados por pedidos expirados" 
                 trend="+15%" 

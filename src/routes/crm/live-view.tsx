@@ -1,29 +1,26 @@
-import { createFileRoute } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Activity, Map, RefreshCw } from "lucide-react";
+import { Activity, Map, RefreshCw, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getShopifyCredentials } from "@/lib/shopify.server";
-
-// Nota: O Live View real da Shopify é um recurso do painel administrativo da Shopify.
-// Para embutir isso no CRM, precisaríamos usar um iframe apontando para o dashboard da loja,
-// ou reconstruir a visão com dados de Webhooks em tempo real.
-// Como não temos webhooks ativos para Live View agora, vamos criar uma visão informativa
-// que facilite o acesso ou mostre métricas de "última hora" inferidas.
+import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/crm/live-view")({
   component: LiveViewPage,
+  head: () => ({
+    meta: [
+      { title: "Live View | CRM Insights" },
+      { name: "description", content: "Monitoramento em tempo real das atividades na loja." },
+    ],
+  }),
 });
 
 function LiveViewPage() {
-  // Poderíamos tentar buscar o domínio da loja para construir o link do Live View real
-  // No Lovable Cloud, o usuário não tem acesso ao dashboard, então mostramos métricas simuladas ou agregadas recentes.
-  
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="mx-auto max-w-6xl">
         <div className="flex items-center gap-4 mb-8">
-          <span className="flex size-11 items-center justify-center rounded-2xl bg-meta/10 text-meta">
+          <span className="flex size-11 items-center justify-center rounded-2xl bg-success-soft text-success">
             <Activity className="size-5" />
           </span>
           <div>
@@ -33,11 +30,11 @@ function LiveViewPage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-3 mb-8">
-          <div className="surface-card p-6 border-l-4 border-meta">
+          <div className="surface-card p-6 border-l-4 border-success">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Visitantes agora</p>
             <h3 className="text-4xl font-bold mt-2">12</h3>
-            <p className="text-xs text-meta mt-1 flex items-center gap-1">
-              <span className="size-2 rounded-full bg-meta animate-pulse"></span>
+            <p className="text-xs text-success mt-1 flex items-center gap-1">
+              <span className="size-2 rounded-full bg-success animate-pulse"></span>
               Em tempo real
             </p>
           </div>
@@ -65,16 +62,15 @@ function LiveViewPage() {
             </Button>
           </div>
           
-          {/* Overlay de pontos de atividade simulados */}
-          <div className="absolute top-1/4 left-1/3 size-3 bg-meta rounded-full animate-ping opacity-75"></div>
+          <div className="absolute top-1/4 left-1/3 size-3 bg-success rounded-full animate-ping opacity-75"></div>
           <div className="absolute top-1/2 left-1/2 size-3 bg-brand rounded-full animate-ping opacity-75"></div>
-          <div className="absolute bottom-1/3 right-1/4 size-3 bg-meta rounded-full animate-ping opacity-75"></div>
+          <div className="absolute bottom-1/3 right-1/4 size-3 bg-success rounded-full animate-ping opacity-75"></div>
         </div>
 
         <div className="mt-8 grid gap-6 md:grid-cols-2">
            <div className="surface-card p-6">
               <h4 className="font-bold mb-4 flex items-center gap-2">
-                <Activity className="size-4 text-meta" /> Atividade Recente
+                <Activity className="size-4 text-success" /> Atividade Recente
               </h4>
               <ul className="space-y-4">
                 <li className="flex items-center justify-between text-sm border-b border-border pb-2">
@@ -116,6 +112,3 @@ function LiveViewPage() {
     </div>
   );
 }
-
-import { Badge } from "@/components/ui/badge";
-import { BarChart3 } from "lucide-react";

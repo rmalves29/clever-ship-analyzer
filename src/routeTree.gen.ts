@@ -15,6 +15,7 @@ import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as CrmIndexRouteImport } from './routes/crm/index'
 import { Route as CrmContatosRouteImport } from './routes/crm/contatos'
 import { Route as CrmListasEstaticasRouteImport } from './routes/crm/listas-estaticas'
+import { Route as CrmLiveViewRouteImport } from './routes/crm/live-view'
 import { Route as CrmSegmentosRouteImport } from './routes/crm/segmentos'
 
 const IndexRoute = IndexRouteImport.update({
@@ -47,6 +48,11 @@ const CrmListasEstaticasRoute = CrmListasEstaticasRouteImport.update({
   path: '/crm/listas-estaticas',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CrmLiveViewRoute = CrmLiveViewRouteImport.update({
+  id: '/crm/live-view',
+  path: '/crm/live-view',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CrmSegmentosRoute = CrmSegmentosRouteImport.update({
   id: '/crm/segmentos',
   path: '/crm/segmentos',
@@ -59,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/configuracoes': typeof ConfiguracoesRoute
   '/crm/contatos': typeof CrmContatosRoute
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
+  '/crm/live-view': typeof CrmLiveViewRoute
   '/crm/segmentos': typeof CrmSegmentosRoute
   '/crm/': typeof CrmIndexRoute
 }
@@ -68,6 +75,7 @@ export interface FileRoutesByTo {
   '/configuracoes': typeof ConfiguracoesRoute
   '/crm/contatos': typeof CrmContatosRoute
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
+  '/crm/live-view': typeof CrmLiveViewRoute
   '/crm/segmentos': typeof CrmSegmentosRoute
   '/crm': typeof CrmIndexRoute
 }
@@ -78,6 +86,7 @@ export interface FileRoutesById {
   '/configuracoes': typeof ConfiguracoesRoute
   '/crm/contatos': typeof CrmContatosRoute
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
+  '/crm/live-view': typeof CrmLiveViewRoute
   '/crm/segmentos': typeof CrmSegmentosRoute
   '/crm/': typeof CrmIndexRoute
 }
@@ -89,6 +98,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/crm/contatos'
     | '/crm/listas-estaticas'
+    | '/crm/live-view'
     | '/crm/segmentos'
     | '/crm/'
   fileRoutesByTo: FileRoutesByTo
@@ -98,6 +108,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/crm/contatos'
     | '/crm/listas-estaticas'
+    | '/crm/live-view'
     | '/crm/segmentos'
     | '/crm'
   id:
@@ -107,6 +118,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/crm/contatos'
     | '/crm/listas-estaticas'
+    | '/crm/live-view'
     | '/crm/segmentos'
     | '/crm/'
   fileRoutesById: FileRoutesById
@@ -117,6 +129,7 @@ export interface RootRouteChildren {
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   CrmContatosRoute: typeof CrmContatosRoute
   CrmListasEstaticasRoute: typeof CrmListasEstaticasRoute
+  CrmLiveViewRoute: typeof CrmLiveViewRoute
   CrmSegmentosRoute: typeof CrmSegmentosRoute
   CrmIndexRoute: typeof CrmIndexRoute
 }
@@ -165,6 +178,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CrmListasEstaticasRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/crm/live-view': {
+      id: '/crm/live-view'
+      path: '/crm/live-view'
+      fullPath: '/crm/live-view'
+      preLoaderRoute: typeof CrmLiveViewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/crm/segmentos': {
       id: '/crm/segmentos'
       path: '/crm/segmentos'
@@ -181,6 +201,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConfiguracoesRoute: ConfiguracoesRoute,
   CrmContatosRoute: CrmContatosRoute,
   CrmListasEstaticasRoute: CrmListasEstaticasRoute,
+  CrmLiveViewRoute: CrmLiveViewRoute,
   CrmSegmentosRoute: CrmSegmentosRoute,
   CrmIndexRoute: CrmIndexRoute,
 }

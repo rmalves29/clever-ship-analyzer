@@ -17,10 +17,10 @@ export const Route = createFileRoute("/crm/live-view")({
 
 function LiveViewPage() {
   return (
-    <div className="min-h-screen bg-background p-8">
-      <div className="mx-auto max-w-6xl">
+    <div className="min-h-screen bg-background pb-8">
+      <div className="mx-auto max-w-[1400px] px-4 py-8 md:px-8">
         <div className="flex items-center gap-4 mb-8">
-          <span className="flex size-11 items-center justify-center rounded-2xl bg-success-soft text-success">
+          <span className="gradient-brand flex size-11 items-center justify-center rounded-2xl text-primary-foreground">
             <Activity className="size-5" />
           </span>
           <div>

@@ -193,11 +193,12 @@ export const getCRMStats = createServerFn({ method: "GET" }).handler(async () =>
   const uniqueCustomerIds = new Set(uniqueCustomers?.map(o => o.customer_id).filter(Boolean));
   const customers = uniqueCustomerIds.size;
 
-  // Leads que são na verdade carrinhos abandonados (com orders EXPIRED)
+  // Leads que são na verdade carrinhos abandonados (com a tag específica)
   const { count: abandonedCount } = await supabaseAdmin
     .from("shopify_customers")
     .select("*", { count: "exact", head: true })
-    .or('tags.cs.{"Carrinho Abandonado"},tags.cs.{"Checkout"}');
+    .contains("tags", ["Carrinho Abandonado"]);
+
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
   const { count: newContacts } = await supabaseAdmin

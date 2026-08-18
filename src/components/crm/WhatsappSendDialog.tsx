@@ -41,11 +41,13 @@ export function WhatsappSendDialog({
   open,
   onOpenChange,
   onDone,
+  segments = [],
 }: {
   seed: SendDialogSeed | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onDone?: () => void;
+  segments?: { id: string; nome: string }[];
 }) {
   const runCreateCampaign = useServerFn(createAndSendCampaign);
   const runPreview = useServerFn(previewSegment);

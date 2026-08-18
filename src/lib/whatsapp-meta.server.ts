@@ -179,7 +179,7 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
     const { data: staticMembers } = await supabaseAdmin
       .from("crm_list_members")
       .select("customer_id")
-      .eq("lista_id", segmentType);
+      .eq("lista_id", finalSegmentType);
     
     if (staticMembers?.length) return staticMembers.map(m => m.customer_id);
 

@@ -66,11 +66,19 @@ export const testShopifyConnection = createServerFn({ method: "POST" })
 
     try {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      await supabaseAdmin
+      const { data: existing } = await supabaseAdmin
         .from("store_settings")
-        .update({ last_sync_error: error.message, sync_status: "error" })
+        .select("id")
         .order("created_at", { ascending: true })
-        .limit(1);
+        .limit(1)
+        .maybeSingle();
+
+      if (existing) {
+        await supabaseAdmin
+          .from("store_settings")
+          .update({ last_sync_error: error.message, sync_status: "error" })
+          .eq("id", existing.id);
+      }
     } catch (dbErr) {
       console.error("Failed to update status in DB:", dbErr);
     }

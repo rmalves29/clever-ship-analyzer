@@ -463,13 +463,49 @@ export async function dispatchCampaign(campaignId: string) {
       failed++;
       continue;
     }
+
+    // Resolvendo variáveis dinâmicas se existirem
+    let resolvedParams = [...bodyParams];
+    if (resolvedParams.some(p => p.includes("{{"))) {
+      const { data: lastOrder } = await supabaseAdmin
+        .from("shopify_orders")
+        .select("*")
+        .eq("customer_id", c.id)
+        .order("processed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const order = lastOrder as any;
+      const rawData = order?.raw_data as any;
+      
+      const replacements: Record<string, string> = {
+        "{{NOME_CLIENTE}}": c.first_name || "Cliente",
+        "{{NUMERO_PEDIDO}}": order?.order_number || order?.name || "—",
+        "{{VALOR_TOTAL}}": order?.total_price ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(order.total_price) : "—",
+        "{{ITENS_COMPRADOS}}": order?.line_items_summary || "—",
+        "{{CUPOM_DESCONTO}}": rawData?.discount_codes?.[0]?.code || "—",
+        "{{FRETE_ESCOLHIDO}}": rawData?.shipping_lines?.[0]?.title || "—",
+        "{{RASTREIO}}": order?.tracking_number || "—",
+        "{{STATUS_PEDIDO}}": order?.fulfillment_status === "fulfilled" ? "Enviado" : "Processando",
+        "{{LINK_CHECKOUT}}": (c as any).checkout_url || "—",
+      };
+
+      resolvedParams = resolvedParams.map(p => {
+        let text = p;
+        for (const [key, val] of Object.entries(replacements)) {
+          text = text.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), val);
+        }
+        return text;
+      });
+    }
+
     const result = await sendTemplateMessage({
       accessToken: settings.accessToken,
       phoneNumberId: settings.phoneNumberId,
       to,
       templateName: campaign.template_name,
       templateLanguage: campaign.template_language ?? settings.templateLanguage,
-      bodyParams,
+      bodyParams: resolvedParams,
     });
 
     await supabaseAdmin.from("whatsapp_campaign_recipients").insert({

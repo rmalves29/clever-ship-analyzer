@@ -317,11 +317,17 @@ export function WhatsappSendDialog({
                       {selectedTemplate && bodyVarCount > 0 && (
                         <div className="space-y-4 pt-2 border-t mt-4">
                           <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Variáveis Dinâmicas</p>
+                          <div className="rounded-lg bg-blue-50/50 dark:bg-blue-900/10 p-3 mb-2">
+                            <p className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 mb-1">Dica: Atalhos disponíveis</p>
+                            <p className="text-[9px] text-blue-500/80 leading-relaxed">
+                              Use: {"{{NOME_CLIENTE}}"}, {"{{NUMERO_PEDIDO}}"}, {"{{ITENS_COMPRADOS}}"}, {"{{VALOR_TOTAL}}"}, {"{{CUPOM_DESCONTO}}"}, {"{{FRETE_ESCOLHIDO}}"}, {"{{RASTREIO}}"}, {"{{STATUS_PEDIDO}}"}, {"{{LINK_CHECKOUT}}"}
+                            </p>
+                          </div>
                           {Array.from({ length: bodyVarCount }).map((_, i) => (
                             <div key={i} className="space-y-1.5">
                               <Label className="text-xs font-bold">{`Variável {{${i + 1}}}`}</Label>
                               <Input
-                                placeholder={`Insira o valor para {{${i+1}}}`}
+                                placeholder={`Ex: {{NOME_CLIENTE}}`}
                                 value={bodyParams[i] ?? ""}
                                 onChange={(e) => {
                                   const next = [...bodyParams];

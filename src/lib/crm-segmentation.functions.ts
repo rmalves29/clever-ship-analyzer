@@ -36,7 +36,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
     // 3. Construir query base
     let query = supabaseAdmin
       .from("shopify_customers")
-      .select("*", { count: "exact" });
+      .select("*", { count: "exact" }) as any;
 
     // 4. Aplicar filtros baseados em regras
     if (segmentRules?.groups) {
@@ -52,6 +52,10 @@ export const getCustomersList = createServerFn({ method: "POST" })
           } else if (field === "estado") {
             if (operator === "eq") query = query.eq("province", val);
             else if (operator === "neq") query = query.neq("province", val);
+          } else if (field === "customer_tag") {
+            if (operator === "contains") query = query.contains("tags", [val]);
+            else if (operator === "not_contains") query = query.not("tags", "cs", `{${val}}`);
+            else if (operator === "eq") query = query.eq("tags", `{${val}}`);
           } else if (field === "total_pedidos" || field === "recorrencia") {
             const numVal = Number(val);
             // LEADS: total_pedidos == 0
@@ -86,8 +90,8 @@ export const getCustomersList = createServerFn({ method: "POST" })
 
     if (error) throw error;
 
-    const customerIds = customers?.map(c => c.id) || [];
-    let customersWithOrders: any[] = (customers || []).map(c => ({ ...c, shopify_orders: [] }));
+    const customerIds = (customers as any[])?.map((c: any) => c.id) || [];
+    let customersWithOrders: any[] = ((customers as any[]) || []).map((c: any) => ({ ...c, shopify_orders: [] }));
 
     if (customerIds.length > 0) {
       const { data: orders, error: ordersError } = await supabaseAdmin
@@ -96,7 +100,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
         .in("customer_id", customerIds);
 
       if (!ordersError && orders) {
-        customersWithOrders = (customers || []).map(c => ({
+        customersWithOrders = ((customers as any[]) || []).map((c: any) => ({
           ...c,
           shopify_orders: orders.filter(o => o.customer_id === c.id)
         }));
@@ -294,7 +298,7 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
       .select("customer_id");
     const customersWithOrdersList = Array.from(new Set(ordersData?.map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
 
-    let query = supabaseAdmin.from("shopify_customers").select("*");
+    let query = supabaseAdmin.from("shopify_customers").select("*") as any;
 
     if (segmentRules?.groups) {
       for (const group of segmentRules.groups) {
@@ -307,6 +311,8 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
           } else if (field === "estado") {
             if (operator === "eq") query = query.eq("province", value);
             else if (operator === "neq") query = query.neq("province", value);
+          } else if (field === "customer_tag") {
+            if (operator === "contains") query = query.contains("tags", [value]);
           } else if (field === "total_pedidos" || field === "recorrencia") {
             const numVal = Number(value);
             if (field === "total_pedidos" && operator === "eq" && numVal === 0) {
@@ -327,7 +333,7 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
     if (error) throw error;
 
     // Buscar todos os pedidos para calcular totalSpent e totalOrders
-    const customerIds = customers?.map(c => c.id) || [];
+    const customerIds = (customers as any[])?.map((c: any) => c.id) || [];
     let ordersMap: Record<string, any[]> = {};
     
     if (customerIds.length > 0) {
@@ -345,7 +351,7 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
       });
     }
 
-    const rows = (customers || []).map(c => {
+    const rows = ((customers as any[]) || []).map((c: any) => {
       const cid = c.id ? String(c.id) : '';
       const orders = cid ? (ordersMap[cid] || []) : [];
       const totalSpent = orders.reduce((acc, o) => acc + Number(o.total_price || 0), 0);
@@ -369,7 +375,7 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
     const headers = Object.keys(firstRow);
     const csvContent = [
       headers.join(","),
-      ...rows.map(row => headers.map(h => `"${String(row[h as keyof typeof row] || "").replace(/"/g, '""')}"`).join(","))
+      ...rows.map((row: any) => headers.map(h => `"${String(row[h as keyof typeof row] || "").replace(/"/g, '""')}"`).join(","))
     ].join("\n");
 
     return { csv: csvContent };

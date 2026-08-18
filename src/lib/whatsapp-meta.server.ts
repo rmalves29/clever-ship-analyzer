@@ -351,6 +351,7 @@ export type NewCampaignInput = {
   couponCode?: string | undefined;
   origem?: string | undefined;
   automationId?: string | undefined;
+  campaignTag?: string | undefined;
 };
 
 /** Cria a campanha no banco (sem enviar). Status inicial define se vai pra fila de aprovação. */
@@ -385,7 +386,8 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
       origem: input.origem ?? "crm",
       automation_id: input.automationId ?? null,
       total_destinatarios: destinatarios,
-    } as never)
+      campaign_tag: input.campaignTag || null,
+    } as any)
     .select("id")
     .single();
 
@@ -400,7 +402,7 @@ export async function dispatchCampaign(campaignId: string) {
 
   const { data: campaignRow } = await supabaseAdmin
     .from("whatsapp_campaigns")
-    .select("id, segment_type, segment_id, template_name, template_language, body_params")
+    .select("id, segment_type, segment_id, template_name, template_language, body_params, campaign_tag")
     .eq("id", campaignId)
     .maybeSingle();
 
@@ -409,14 +411,7 @@ export async function dispatchCampaign(campaignId: string) {
     return { success: false as const, error: "Credenciais do WhatsApp (Meta) não configuradas." };
   }
 
-  const campaign = campaignRow as {
-    id: string;
-    segment_type: string;
-    segment_id: string | null;
-    template_name: string;
-    template_language: string | null;
-    body_params: unknown;
-  };
+  const campaign = campaignRow as any;
 
   await supabaseAdmin.from("whatsapp_campaigns").update({ status: "enviando" } as never).eq("id", campaignId);
 

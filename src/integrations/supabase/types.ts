@@ -102,6 +102,7 @@ export type Database = {
           last_name: string | null
           phone: string | null
           province: string | null
+          tags: string[] | null
           updated_at: string
         }
         Insert: {
@@ -114,6 +115,7 @@ export type Database = {
           last_name?: string | null
           phone?: string | null
           province?: string | null
+          tags?: string[] | null
           updated_at?: string
         }
         Update: {
@@ -126,6 +128,7 @@ export type Database = {
           last_name?: string | null
           phone?: string | null
           province?: string | null
+          tags?: string[] | null
           updated_at?: string
         }
         Relationships: []
@@ -513,6 +516,7 @@ export type Database = {
           approved_by: string | null
           automation_id: string | null
           body_params: Json
+          campaign_tag: string | null
           coupon_code: string | null
           created_at: string
           enviadas: number
@@ -536,6 +540,7 @@ export type Database = {
           approved_by?: string | null
           automation_id?: string | null
           body_params?: Json
+          campaign_tag?: string | null
           coupon_code?: string | null
           created_at?: string
           enviadas?: number
@@ -559,6 +564,7 @@ export type Database = {
           approved_by?: string | null
           automation_id?: string | null
           body_params?: Json
+          campaign_tag?: string | null
           coupon_code?: string | null
           created_at?: string
           enviadas?: number

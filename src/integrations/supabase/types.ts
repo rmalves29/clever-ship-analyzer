@@ -102,6 +102,7 @@ export type Database = {
           last_name: string | null
           phone: string | null
           province: string | null
+          rfm_segment: string | null
           tags: string[] | null
           updated_at: string
         }
@@ -115,6 +116,7 @@ export type Database = {
           last_name?: string | null
           phone?: string | null
           province?: string | null
+          rfm_segment?: string | null
           tags?: string[] | null
           updated_at?: string
         }
@@ -128,6 +130,7 @@ export type Database = {
           last_name?: string | null
           phone?: string | null
           province?: string | null
+          rfm_segment?: string | null
           tags?: string[] | null
           updated_at?: string
         }

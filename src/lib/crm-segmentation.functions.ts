@@ -54,17 +54,20 @@ export const getCustomersList = createServerFn({ method: "POST" })
             else if (operator === "neq") query = query.neq("province", val);
           } else if (field === "total_pedidos" || field === "recorrencia") {
             const numVal = Number(val);
+            // LEADS: total_pedidos == 0
             if (field === "total_pedidos" && operator === "eq" && numVal === 0) {
-              // LEADS: Clientes que NÃO estão na lista de pedidos
               if (customersWithOrdersList.length > 0) {
                 query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
               }
-            } else if ((field === "total_pedidos" && operator === "gt" && numVal >= 0) || (field === "recorrencia")) {
-              // CLIENTES: Clientes que ESTÃO na lista de pedidos
+            } 
+            // CLIENTES COM PEDIDOS: total_pedidos > 0 ou recorrencia
+            else if (
+              (field === "total_pedidos" && (operator === "gt" || operator === "gte") && numVal >= 0) || 
+              field === "recorrencia"
+            ) {
               if (customersWithOrdersList.length > 0) {
                 query = query.in("id", customersWithOrdersList);
               } else {
-                // Se não há pedidos, nenhum cliente atende ao critério "com pedidos"
                 return { customers: [], total: 0 };
               }
             }

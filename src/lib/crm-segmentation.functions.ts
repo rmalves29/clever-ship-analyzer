@@ -190,11 +190,13 @@ export const getCustomersList = createServerFn({ method: "POST" })
               query = query.eq("id", "00000000-0000-0000-0000-000000000000");
             }
           } else if (field === "acesso_sem_compra") {
-             // Tratado via perfil lead, mas aqui como campo específico se desejar
-             if (customersWithOrdersList.length > 0) {
+            if (operator === "eq") {
+              if (customersWithOrdersList.length > 0) {
                 query = query.not("id", "in", `(${customersWithOrdersList.join(",")})`);
-             }
-             query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}").not("tags", "cs", "{\"CAR24\"}");
+              }
+              query = query.not("tags", "cs", "{\"Carrinho Abandonado\"}").not("tags", "cs", "{\"Checkout\"}").not("tags", "cs", "{\"CAR24\"}");
+            }
+          }
         }
       }
     }

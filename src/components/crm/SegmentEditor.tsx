@@ -87,6 +87,14 @@ const CATEGORIES = [
     ]
   },
   {
+    id: "rfm",
+    label: "Análise RFM",
+    icon: Zap,
+    fields: [
+      { id: "rfm_segment", label: "Segmento RFM" },
+    ]
+  },
+  {
     id: "whatsapp",
     label: "Whatsapp Marketing",
     icon: MessageSquare,

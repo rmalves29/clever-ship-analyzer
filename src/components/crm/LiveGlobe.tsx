@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import Globe from 'react-globe.gl';
 import * as THREE from 'three';
+
+let Globe: any = () => null;
+if (typeof window !== 'undefined') {
+  Globe = require('react-globe.gl').default;
+}
 
 interface LiveGlobeProps {
   markers: any[];

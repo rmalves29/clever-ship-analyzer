@@ -6,19 +6,41 @@ interface LiveGlobeProps {
   markers: any[];
 }
 
-// Material escuro sólido (navy) em vez da textura foto-realista — visual próximo do
-// globo da Shopify (esfera escura + marcadores brilhando por cima, sem grade nem texto).
-const DARK_GLOBE_MATERIAL = new THREE.MeshPhongMaterial({
-  color: '#0b1229',
-  emissive: '#0b1229',
+// Oceano escuro sólido — os continentes entram por cima via polygonsData (hexPolygons ficaria
+// pesado demais só pra contorno). Visual final: oceano escuro + terra num azul mais claro,
+// parecido com o globo da Shopify.
+const OCEAN_MATERIAL = new THREE.MeshPhongMaterial({
+  color: '#060a17',
+  emissive: '#060a17',
   emissiveIntensity: 0.2,
-  shininess: 12,
+  shininess: 8,
 });
+
+// Mesmo dataset (Natural Earth 110m, via three-globe) usado nos exemplos oficiais da lib —
+// contorno de todos os países do mundo em GeoJSON.
+const COUNTRIES_GEOJSON_URL =
+  'https://raw.githubusercontent.com/vasturiano/three-globe/master/example/datasets/ne_110m_admin_0_countries.geojson';
 
 export default function LiveGlobe({ markers }: LiveGlobeProps) {
   const globeRef = useRef<any>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [countries, setCountries] = useState<any[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(COUNTRIES_GEOJSON_URL)
+      .then((res) => res.json())
+      .then((geojson) => {
+        if (!cancelled) setCountries(geojson.features ?? []);
+      })
+      .catch(() => {
+        // Sem contorno de países se o fetch falhar — o globo continua funcional, só mais liso.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const globeData = useMemo(() => {
     return markers.map((m) => ({
@@ -81,15 +103,20 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
         width={dimensions.width}
         height={dimensions.height}
         backgroundColor="rgba(0,0,0,0)"
-        globeMaterial={DARK_GLOBE_MATERIAL}
+        globeMaterial={OCEAN_MATERIAL}
         showAtmosphere={true}
         atmosphereColor="#38bdf8"
         atmosphereAltitude={0.22}
         showGraticules={false}
+        polygonsData={countries}
+        polygonCapColor={() => 'rgba(96, 165, 250, 0.35)'}
+        polygonSideColor={() => 'rgba(15, 23, 42, 0)'}
+        polygonStrokeColor={() => 'rgba(148, 197, 253, 0.55)'}
+        polygonAltitude={0.006}
         pointsData={globeData}
         pointRadius="size"
         pointColor="color"
-        pointAltitude={0.012}
+        pointAltitude={0.015}
         pointResolution={16}
         pointLabel={(d: any) => `<div style="font:12px sans-serif;color:#fff;background:rgba(15,23,42,.9);padding:4px 8px;border-radius:6px">${d.label}</div>`}
         ringsData={ringsData}

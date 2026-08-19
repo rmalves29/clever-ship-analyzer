@@ -98,11 +98,17 @@ export const getLiveViewData = createServerFn({ method: "GET" }).handler(async (
   const startISO = fromZonedTime(startOfDay(now), TZ).toISOString();
   const endISO = fromZonedTime(endOfDay(now), TZ).toISOString();
 
-  // DEBUG temporário: confirma quais scopes o token do NOSSO app realmente tem.
+  // DEBUG temporário: confirma se o token do NOSSO app tem read_reports, e testa a query mínima.
   try {
     const { shopifyGraphQL } = await import("./shopify.server");
     const scopesResult = await shopifyGraphQL(`{ currentAppInstallation { accessScopes { handle } } }`);
-    lastShopifyQLError = "SCOPES: " + JSON.stringify(scopesResult).slice(0, 800);
+    const scopes: string[] = scopesResult?.data?.currentAppInstallation?.accessScopes?.map((s: any) => s.handle) ?? [];
+    const hasReadReports = scopes.includes("read_reports");
+
+    const testGql = `{ shopifyqlQuery(query: "FROM sessions SHOW sessions DURING today") { tableData { columns { name } rows } parseErrors } }`;
+    const testResult = await shopifyGraphQL(testGql, undefined, SHOPIFYQL_API_VERSION);
+
+    lastShopifyQLError = JSON.stringify({ hasReadReports, testResult }).slice(0, 900);
   } catch (e) {
     lastShopifyQLError = "SCOPES_CHECK_FAILED: " + (e instanceof Error ? e.message : String(e));
   }

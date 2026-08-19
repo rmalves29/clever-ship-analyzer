@@ -2,15 +2,33 @@
  *  (esperar + enviar) e estado por cliente pra nunca reenviar duas vezes. Chamado tanto pelo
  *  endpoint de tick (src/server.ts, disparado pelo pg_cron) quanto por "Executar agora". */
 
-export type AutomationStep = {
+export type SendStep = {
   id: string;
+  type: "send";
   waitHours: number;
   templateName: string;
   templateLanguage: string;
   messageType: "marketing" | "utility";
   bodyParams: string[];
   couponCode: string | null;
+  /** Próxima etapa depois desse envio — null encerra o fluxo pro cliente. */
+  nextStepId: string | null;
 };
+
+export type DecisionCondition =
+  | { kind: "novo_pedido" }
+  | { kind: "pedido_status"; field: "financial_status" | "fulfillment_status"; value: string }
+  | { kind: "segmento"; segmentType: string; segmentId?: string };
+
+export type DecisionStep = {
+  id: string;
+  type: "decision";
+  condition: DecisionCondition;
+  yesStepId: string | null;
+  noStepId: string | null;
+};
+
+export type AutomationStep = SendStep | DecisionStep;
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -26,28 +44,123 @@ export async function getAutomationTickSecret(): Promise<string | null> {
 
 type RawStep = {
   id?: unknown;
+  type?: unknown;
   waitHours?: unknown;
   templateName?: unknown;
   templateLanguage?: unknown;
   messageType?: unknown;
   bodyParams?: unknown;
   couponCode?: unknown;
+  nextStepId?: unknown;
+  condition?: unknown;
+  yesStepId?: unknown;
+  noStepId?: unknown;
 };
+
+function parseCondition(raw: unknown): DecisionCondition {
+  const c = (raw ?? {}) as Record<string, unknown>;
+  if (c["kind"] === "pedido_status") {
+    return {
+      kind: "pedido_status",
+      field: c["field"] === "fulfillment_status" ? "fulfillment_status" : "financial_status",
+      value: String(c["value"] ?? ""),
+    };
+  }
+  if (c["kind"] === "segmento") {
+    const segmentId = c["segmentId"] ? String(c["segmentId"]) : undefined;
+    return {
+      kind: "segmento",
+      segmentType: String(c["segmentType"] ?? ""),
+      ...(segmentId ? { segmentId } : {}),
+    };
+  }
+  return { kind: "novo_pedido" };
+}
 
 export function parseSteps(raw: unknown): AutomationStep[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .filter((s): s is RawStep => typeof s === "object" && s !== null)
-    .map((s) => ({
-      id: String(s.id ?? ""),
-      waitHours: Number(s.waitHours ?? 0),
-      templateName: String(s.templateName ?? ""),
-      templateLanguage: String(s.templateLanguage ?? "pt_BR"),
-      messageType: (s.messageType === "utility" ? "utility" : "marketing") as "marketing" | "utility",
-      bodyParams: Array.isArray(s.bodyParams) ? (s.bodyParams as string[]) : [],
-      couponCode: (s.couponCode ?? null) as string | null,
-    }))
-    .filter((s) => s.id && s.templateName);
+    .map((s): AutomationStep | null => {
+      const id = String(s.id ?? "");
+      if (!id) return null;
+      if (s.type === "decision") {
+        return {
+          id,
+          type: "decision",
+          condition: parseCondition(s.condition),
+          yesStepId: s.yesStepId ? String(s.yesStepId) : null,
+          noStepId: s.noStepId ? String(s.noStepId) : null,
+        };
+      }
+      const templateName = String(s.templateName ?? "");
+      if (!templateName) return null;
+      return {
+        id,
+        type: "send",
+        waitHours: Number(s.waitHours ?? 0),
+        templateName,
+        templateLanguage: String(s.templateLanguage ?? "pt_BR"),
+        messageType: (s.messageType === "utility" ? "utility" : "marketing") as "marketing" | "utility",
+        bodyParams: Array.isArray(s.bodyParams) ? (s.bodyParams as string[]) : [],
+        couponCode: (s.couponCode ?? null) as string | null,
+        nextStepId: s.nextStepId ? String(s.nextStepId) : null,
+      };
+    })
+    .filter((s): s is AutomationStep => s !== null);
+}
+
+/** Avalia uma condição de decisão pra um cliente específico. */
+async function evaluateDecision(condition: DecisionCondition, run: { customer_id: string; enrolled_at: string }): Promise<boolean> {
+  const supabaseAdmin = await admin();
+
+  if (condition.kind === "novo_pedido") {
+    const { data } = await supabaseAdmin
+      .from("shopify_orders")
+      .select("id")
+      .eq("customer_id", run.customer_id)
+      .gt("created_at", run.enrolled_at)
+      .limit(1);
+    return (data ?? []).length > 0;
+  }
+
+  if (condition.kind === "pedido_status") {
+    const { data } = await supabaseAdmin
+      .from("shopify_orders")
+      .select("financial_status, fulfillment_status")
+      .eq("customer_id", run.customer_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const order = data as { financial_status: string | null; fulfillment_status: string | null } | null;
+    if (!order) return false;
+    return (condition.field === "fulfillment_status" ? order.fulfillment_status : order.financial_status) === condition.value;
+  }
+
+  // segmento
+  const { getSegmentCustomerIds } = await import("./whatsapp-meta.server");
+  const ids = await getSegmentCustomerIds(condition.segmentType, condition.segmentId);
+  return ids.includes(run.customer_id);
+}
+
+/** A partir de um step id, resolve decisões em cadeia (instantâneas, sem espera) até cair num
+ *  envio (retorna esse SendStep) ou no fim do fluxo (retorna null). */
+async function resolveNextActiveStep(
+  steps: AutomationStep[],
+  startStepId: string | null,
+  run: { customer_id: string; enrolled_at: string },
+): Promise<SendStep | null> {
+  let currentId = startStepId;
+  let guard = 0;
+  while (currentId && guard < 50) {
+    guard++;
+    const step = steps.find((s) => s.id === currentId);
+    if (!step) return null;
+    if (step.type === "send") return step;
+    const isYes = await evaluateDecision(step.condition, run);
+    currentId = isYes ? step.yesStepId : step.noStepId;
+  }
+  return null;
 }
 
 /** Matricula clientes novos do segmento que ainda não têm run nessa automação. Devolve quantos entraram. */
@@ -75,7 +188,7 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
   if (recipients.length === 0) return 0;
 
   const firstStep = steps[0];
-  if (!firstStep) return 0;
+  if (!firstStep || firstStep.type !== "send") return 0;
 
   if (automation.requer_aprovacao) {
     const created = await createCampaignRow(
@@ -127,13 +240,16 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
 }
 
 /** Avança um lote de runs pra próxima etapa (ou marca completed se não houver mais). Reaproveitado
- *  tanto pelo processamento normal (Fase B) quanto pela aprovação manual de um lote pendente. */
+ *  tanto pelo processamento normal (Fase B) quanto pela aprovação manual de um lote pendente.
+ *  Cada run resolve seu próprio caminho — decisões dependem do cliente, então dois runs na mesma
+ *  etapa atual podem seguir pra etapas diferentes. */
 async function advanceRuns(runs: any[], steps: AutomationStep[], campaignId: string | null): Promise<number> {
   const supabaseAdmin = await admin();
   let count = 0;
   for (const r of runs) {
-    const idx = steps.findIndex((s) => s.id === r.current_step_id);
-    const next = idx >= 0 ? steps[idx + 1] : undefined;
+    const current = steps.find((s) => s.id === r.current_step_id);
+    const startId = current?.type === "send" ? current.nextStepId : null;
+    const next = await resolveNextActiveStep(steps, startId, { customer_id: r.customer_id, enrolled_at: r.enrolled_at });
     const patch = next
       ? {
           current_step_id: next.id,
@@ -182,8 +298,9 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
   let processed = 0;
   for (const [stepId, stepRuns] of byStep) {
     const step = steps.find((s) => s.id === stepId);
-    if (!step) {
-      // Etapa não existe mais (automação foi editada) — marca falha pra não travar o cliente pra sempre.
+    if (!step || step.type !== "send") {
+      // Etapa não existe mais, ou virou uma decisão numa edição (não deveria — current_step_id só
+      // aponta pra send) — marca falha pra não travar o cliente pra sempre.
       await supabaseAdmin
         .from("whatsapp_automation_runs")
         .update({ status: "failed", last_error: "Etapa não encontrada (automação editada)" } as never)

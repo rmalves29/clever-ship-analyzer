@@ -731,15 +731,30 @@ export async function listCampaignsWithMetrics() {
   });
 }
 
-export type AutomationStepInput = {
-  id: string;
-  waitHours: number;
-  templateName: string;
-  templateLanguage?: string | undefined;
-  messageType: MessageType;
-  bodyParams: string[];
-  couponCode?: string | undefined;
-};
+export type AutomationDecisionCondition =
+  | { kind: "novo_pedido" }
+  | { kind: "pedido_status"; field: "financial_status" | "fulfillment_status"; value: string }
+  | { kind: "segmento"; segmentType: string; segmentId?: string | undefined };
+
+export type AutomationStepInput =
+  | {
+      id: string;
+      type: "send";
+      waitHours: number;
+      templateName: string;
+      templateLanguage?: string | undefined;
+      messageType: MessageType;
+      bodyParams: string[];
+      couponCode?: string | undefined;
+      nextStepId: string | null;
+    }
+  | {
+      id: string;
+      type: "decision";
+      condition: AutomationDecisionCondition;
+      yesStepId: string | null;
+      noStepId: string | null;
+    };
 
 export type AutomationInput = {
   id?: string | undefined;
@@ -761,16 +776,40 @@ export async function upsertAutomation(input: AutomationInput) {
   if (!firstStep) {
     return { success: false as const, error: "A automação precisa de pelo menos uma etapa." };
   }
+  if (firstStep.type !== "send") {
+    return { success: false as const, error: "A primeira etapa precisa ser um envio (não pode começar direto numa decisão)." };
+  }
 
-  const steps = input.steps.map((s) => ({
-    id: s.id,
-    waitHours: s.waitHours,
-    templateName: s.templateName.trim(),
-    templateLanguage: s.templateLanguage?.trim() || settings.templateLanguage,
-    messageType: s.messageType,
-    bodyParams: s.bodyParams,
-    couponCode: s.couponCode?.trim() || null,
-  }));
+  const stepIds = new Set(input.steps.map((s) => s.id));
+  const badRef = input.steps.find((s) => {
+    if (s.type === "send") return s.nextStepId !== null && !stepIds.has(s.nextStepId);
+    return (s.yesStepId !== null && !stepIds.has(s.yesStepId)) || (s.noStepId !== null && !stepIds.has(s.noStepId));
+  });
+  if (badRef) {
+    return { success: false as const, error: `A etapa "${badRef.id}" aponta pra uma etapa que não existe mais.` };
+  }
+
+  const steps = input.steps.map((s) =>
+    s.type === "send"
+      ? {
+          id: s.id,
+          type: "send" as const,
+          waitHours: s.waitHours,
+          templateName: s.templateName.trim(),
+          templateLanguage: s.templateLanguage?.trim() || settings.templateLanguage,
+          messageType: s.messageType,
+          bodyParams: s.bodyParams,
+          couponCode: s.couponCode?.trim() || null,
+          nextStepId: s.nextStepId,
+        }
+      : {
+          id: s.id,
+          type: "decision" as const,
+          condition: s.condition,
+          yesStepId: s.yesStepId,
+          noStepId: s.noStepId,
+        },
+  );
 
   const row = {
     nome: input.nome,

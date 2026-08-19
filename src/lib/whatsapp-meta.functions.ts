@@ -255,15 +255,41 @@ export const deleteMetaTemplate = createServerFn({ method: "POST" })
     return deleteTemplateByName(data.name);
   });
 
-const automationStepSchema = z.object({
+const decisionConditionSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("novo_pedido") }),
+  z.object({
+    kind: z.literal("pedido_status"),
+    field: z.enum(["financial_status", "fulfillment_status"]),
+    value: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal("segmento"),
+    segmentType: z.string().min(1),
+    segmentId: z.string().uuid().optional(),
+  }),
+]);
+
+const sendStepSchema = z.object({
   id: z.string().min(1),
+  type: z.literal("send"),
   waitHours: z.number().int().min(0).max(720),
   templateName: z.string().min(1),
   templateLanguage: z.string().optional(),
   messageType: messageTypeSchema.default("marketing"),
   bodyParams: z.array(z.string()).max(10).default([]),
   couponCode: z.string().optional(),
+  nextStepId: z.string().nullable().default(null),
 });
+
+const decisionStepSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal("decision"),
+  condition: decisionConditionSchema,
+  yesStepId: z.string().nullable().default(null),
+  noStepId: z.string().nullable().default(null),
+});
+
+const automationStepSchema = z.discriminatedUnion("type", [sendStepSchema, decisionStepSchema]);
 
 const automationSchema = z.object({
   id: z.string().uuid().optional(),

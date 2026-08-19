@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Plus, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Trash2, GitBranch } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -29,15 +29,34 @@ export const SEGMENT_LABEL: Record<string, string> = {
   envio_atrasado: "Envio atrasado",
 };
 
-export type AutomationStepSeed = {
+const END_FLOW = "__end__";
+
+type DecisionCondition =
+  | { kind: "novo_pedido" }
+  | { kind: "pedido_status"; field: "financial_status" | "fulfillment_status"; value: string }
+  | { kind: "segmento"; segmentType: string; segmentId?: string | undefined };
+
+export type SendStepSeed = {
   id: string;
+  type: "send";
   waitHours: number;
   templateName: string;
   templateLanguage?: string | undefined;
   messageType: "marketing" | "utility";
   bodyParams: string[];
   couponCode?: string | undefined;
+  nextStepId: string | null;
 };
+
+export type DecisionStepSeed = {
+  id: string;
+  type: "decision";
+  condition: DecisionCondition;
+  yesStepId: string | null;
+  noStepId: string | null;
+};
+
+export type AutomationStepSeed = SendStepSeed | DecisionStepSeed;
 
 export type AutomationSeed = {
   id?: string | undefined;
@@ -50,13 +69,29 @@ export type AutomationSeed = {
   ativo?: boolean | undefined;
 };
 
-function newStep(): AutomationStepSeed {
+function newId() {
+  return `step_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function newSendStep(): SendStepSeed {
   return {
-    id: `step_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    id: newId(),
+    type: "send",
     waitHours: 0,
     templateName: "",
     messageType: "marketing",
     bodyParams: [],
+    nextStepId: null,
+  };
+}
+
+function newDecisionStep(): DecisionStepSeed {
+  return {
+    id: newId(),
+    type: "decision",
+    condition: { kind: "novo_pedido" },
+    yesStepId: null,
+    noStepId: null,
   };
 }
 
@@ -67,6 +102,9 @@ function countTemplateVars(components: { type: string; text?: string }[] | undef
   const matches = body.text.match(/\{\{\d+\}\}/g);
   return matches ? new Set(matches).size : 0;
 }
+
+const FINANCIAL_STATUSES = ["PAID", "PENDING", "PARTIALLY_PAID", "REFUNDED", "PARTIALLY_REFUNDED", "VOIDED", "EXPIRED"];
+const FULFILLMENT_STATUSES = ["FULFILLED", "UNFULFILLED", "IN_PROGRESS", "PARTIAL", "RESTOCKED"];
 
 export function AutomationDialog({
   seed,
@@ -85,7 +123,7 @@ export function AutomationDialog({
   const [descricao, setDescricao] = useState("");
   const [segmentType, setSegmentType] = useState<SegmentType>("sem_recompra");
   const [segmentId, setSegmentId] = useState<string | undefined>(undefined);
-  const [steps, setSteps] = useState<AutomationStepSeed[]>([newStep()]);
+  const [steps, setSteps] = useState<AutomationStepSeed[]>([newSendStep()]);
   const [requerAprovacao, setRequerAprovacao] = useState(true);
   const [ativo, setAtivo] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -96,7 +134,7 @@ export function AutomationDialog({
     setDescricao(seed?.descricao ?? "");
     setSegmentType((seed?.segmentId ? "sem_recompra" : (seed?.segmentType as SegmentType)) ?? "sem_recompra");
     setSegmentId(seed?.segmentId ?? undefined);
-    setSteps(seed?.steps?.length ? seed.steps : [newStep()]);
+    setSteps(seed?.steps?.length ? seed.steps : [newSendStep()]);
     setRequerAprovacao(seed?.requerAprovacao ?? true);
     setAtivo(seed?.ativo ?? true);
   }, [seed, open]);
@@ -118,26 +156,82 @@ export function AutomationDialog({
   const customSegments = (segmentsResult ?? []) as { id: string; nome: string }[];
 
   const updateStep = (index: number, patch: Partial<AutomationStepSeed>) => {
-    setSteps((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
-  };
-
-  const moveStep = (index: number, dir: -1 | 1) => {
-    setSteps((prev) => {
-      const next = [...prev];
-      const target = index + dir;
-      if (target < 0 || target >= next.length) return prev;
-      [next[index], next[target]] = [next[target]!, next[index]!];
-      return next;
-    });
+    setSteps((prev) => prev.map((s, i) => (i === index ? ({ ...s, ...patch } as AutomationStepSeed) : s)));
   };
 
   const removeStep = (index: number) => {
-    setSteps((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
+    setSteps((prev) => {
+      if (prev.length <= 1) return prev;
+      const removedId = prev[index]?.id;
+      const rest = prev.filter((_, i) => i !== index);
+      // Limpa qualquer referência que apontava pra etapa removida, senão a gravação falha na validação.
+      return rest.map((s) =>
+        s.type === "send"
+          ? { ...s, nextStepId: s.nextStepId === removedId ? null : s.nextStepId }
+          : {
+              ...s,
+              yesStepId: s.yesStepId === removedId ? null : s.yesStepId,
+              noStepId: s.noStepId === removedId ? null : s.noStepId,
+            },
+      );
+    });
   };
 
+  const addStep = (kind: "send" | "decision") => {
+    setSteps((prev) => {
+      const created = kind === "send" ? newSendStep() : newDecisionStep();
+      // Se a última etapa termina em "Finalizar fluxo", encadeia automaticamente nela —
+      // mantém o caso comum (ir clicando em adicionar) funcionando sem religar nada na mão.
+      const last = prev[prev.length - 1];
+      let updatedPrev = prev;
+      if (last) {
+        if (last.type === "send" && last.nextStepId === null) {
+          updatedPrev = prev.map((s, i) => (i === prev.length - 1 ? { ...s, nextStepId: created.id } : s));
+        } else if (last.type === "decision" && last.noStepId === null) {
+          updatedPrev = prev.map((s, i) => (i === prev.length - 1 ? { ...s, noStepId: created.id } : s));
+        }
+      }
+      return [...updatedPrev, created];
+    });
+  };
+
+  const stepLabel = (s: AutomationStepSeed, index: number) =>
+    s.type === "send" ? `Etapa ${index + 1} — Enviar (${s.templateName || "sem template"})` : `Etapa ${index + 1} — Decisão`;
+
+  const RouteSelect = ({
+    value,
+    excludeId,
+    onChange,
+  }: {
+    value: string | null;
+    excludeId: string;
+    onChange: (v: string | null) => void;
+  }) => (
+    <Select value={value ?? END_FLOW} onValueChange={(v) => onChange(v === END_FLOW ? null : v)}>
+      <SelectTrigger>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={END_FLOW}>Finalizar fluxo</SelectItem>
+        {steps
+          .map((s, i) => ({ s, i }))
+          .filter(({ s }) => s.id !== excludeId)
+          .map(({ s, i }) => (
+            <SelectItem key={s.id} value={s.id}>
+              {stepLabel(s, i)}
+            </SelectItem>
+          ))}
+      </SelectContent>
+    </Select>
+  );
+
   const save = async () => {
-    if (steps.some((s) => !s.templateName)) {
-      toast.error("Escolha um template pra cada etapa.");
+    if (steps.some((s) => s.type === "send" && !s.templateName)) {
+      toast.error("Escolha um template pra cada etapa de envio.");
+      return;
+    }
+    if (steps[0]?.type !== "send") {
+      toast.error("A primeira etapa precisa ser um envio.");
       return;
     }
     setBusy(true);
@@ -149,15 +243,27 @@ export function AutomationDialog({
           descricao: descricao.trim() || undefined,
           segmentType: segmentId ? "custom" : segmentType,
           segmentId,
-          steps: steps.map((s) => ({
-            id: s.id,
-            waitHours: s.waitHours,
-            templateName: s.templateName,
-            templateLanguage: s.templateLanguage,
-            messageType: s.messageType,
-            bodyParams: s.bodyParams,
-            couponCode: s.couponCode?.trim() || undefined,
-          })),
+          steps: steps.map((s) =>
+            s.type === "send"
+              ? {
+                  id: s.id,
+                  type: "send" as const,
+                  waitHours: s.waitHours,
+                  templateName: s.templateName,
+                  templateLanguage: s.templateLanguage,
+                  messageType: s.messageType,
+                  bodyParams: s.bodyParams,
+                  couponCode: s.couponCode?.trim() || undefined,
+                  nextStepId: s.nextStepId,
+                }
+              : {
+                  id: s.id,
+                  type: "decision" as const,
+                  condition: s.condition,
+                  yesStepId: s.yesStepId,
+                  noStepId: s.noStepId,
+                },
+          ),
           requerAprovacao,
           ativo,
         },
@@ -182,8 +288,8 @@ export function AutomationDialog({
         <DialogHeader>
           <DialogTitle>{seed?.id ? "Editar automação" : "Instalar automação"}</DialogTitle>
           <DialogDescription>
-            Cada etapa espera um tempo e dispara um template — o motor roda sozinho, matriculando clientes novos do
-            segmento e avançando quem já está na fila.
+            Cada etapa espera um tempo e dispara um template, ou decide (Sim/Não) qual caminho seguir — o motor roda
+            sozinho, matriculando clientes novos do segmento e avançando quem já está na fila.
           </DialogDescription>
         </DialogHeader>
 
@@ -233,57 +339,185 @@ export function AutomationDialog({
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label className="text-sm font-semibold">Etapas</Label>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="gap-1"
-                onClick={() => setSteps((prev) => [...prev, newStep()])}
-              >
-                <Plus className="size-3.5" /> Adicionar etapa
-              </Button>
+              <div className="flex gap-2">
+                <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => addStep("send")}>
+                  <Plus className="size-3.5" /> Enviar mensagem
+                </Button>
+                <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => addStep("decision")}>
+                  <GitBranch className="size-3.5" /> Decisão
+                </Button>
+              </div>
             </div>
 
             {steps.map((step, index) => {
+              if (step.type === "decision") {
+                return (
+                  <div key={step.id} className="space-y-3 rounded-xl border border-border p-4 bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium flex items-center gap-1.5">
+                        <GitBranch className="size-3.5" /> {stepLabel(step, index)}
+                      </p>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="size-7 text-critical"
+                        disabled={steps.length <= 1 || index === 0}
+                        onClick={() => removeStep(index)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Condição</Label>
+                      <Select
+                        value={step.condition.kind}
+                        onValueChange={(v) => {
+                          const condition: DecisionCondition =
+                            v === "pedido_status"
+                              ? { kind: "pedido_status", field: "financial_status", value: FINANCIAL_STATUSES[0]! }
+                              : v === "segmento"
+                                ? { kind: "segmento", segmentType: SEGMENT_TYPES[0]! }
+                                : { kind: "novo_pedido" };
+                          updateStep(index, { condition });
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="novo_pedido">Fez um novo pedido desde que entrou</SelectItem>
+                          <SelectItem value="pedido_status">Pedido mais recente tem um status</SelectItem>
+                          <SelectItem value="segmento">Está em um segmento</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {step.condition.kind === "pedido_status" && (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Tipo de status</Label>
+                          <Select
+                            value={step.condition.field}
+                            onValueChange={(v) =>
+                              updateStep(index, {
+                                condition: {
+                                  kind: "pedido_status",
+                                  field: v as "financial_status" | "fulfillment_status",
+                                  value: (v === "fulfillment_status" ? FULFILLMENT_STATUSES[0] : FINANCIAL_STATUSES[0])!,
+                                },
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="financial_status">Pagamento</SelectItem>
+                              <SelectItem value="fulfillment_status">Envio</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Valor</Label>
+                          <Select
+                            value={step.condition.value}
+                            onValueChange={(v) =>
+                              updateStep(index, {
+                                condition: { ...(step.condition as { kind: "pedido_status"; field: any; value: string }), value: v },
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(step.condition.field === "fulfillment_status" ? FULFILLMENT_STATUSES : FINANCIAL_STATUSES).map(
+                                (v) => (
+                                  <SelectItem key={v} value={v}>
+                                    {v}
+                                  </SelectItem>
+                                ),
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+
+                    {step.condition.kind === "segmento" && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Segmento</Label>
+                        <Select
+                          value={step.condition.segmentId || step.condition.segmentType}
+                          onValueChange={(v) => {
+                            const isCustom = customSegments.some((s) => s.id === v);
+                            updateStep(index, {
+                              condition: isCustom
+                                ? { kind: "segmento", segmentType: "custom", segmentId: v }
+                                : { kind: "segmento", segmentType: v },
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SEGMENT_TYPES.map((s) => (
+                              <SelectItem key={s} value={s}>
+                                {SEGMENT_LABEL[s]}
+                              </SelectItem>
+                            ))}
+                            {customSegments.map((s) => (
+                              <SelectItem key={s.id} value={s.id}>
+                                {s.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-success">Se sim, vá para</Label>
+                        <RouteSelect
+                          value={step.yesStepId}
+                          excludeId={step.id}
+                          onChange={(v) => updateStep(index, { yesStepId: v })}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-critical">Se não, vá para</Label>
+                        <RouteSelect
+                          value={step.noStepId}
+                          excludeId={step.id}
+                          onChange={(v) => updateStep(index, { noStepId: v })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
               const template = approved.find((t: { name: string }) => t.name === step.templateName);
               const varCount = countTemplateVars(template?.components);
 
               return (
                 <div key={step.id} className="space-y-3 rounded-xl border border-border p-4">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium">Etapa {index + 1}</p>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        className="size-7"
-                        disabled={index === 0}
-                        onClick={() => moveStep(index, -1)}
-                      >
-                        <ArrowUp className="size-3.5" />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        className="size-7"
-                        disabled={index === steps.length - 1}
-                        onClick={() => moveStep(index, 1)}
-                      >
-                        <ArrowDown className="size-3.5" />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        className="size-7 text-critical"
-                        disabled={steps.length <= 1}
-                        onClick={() => removeStep(index)}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
+                    <p className="text-sm font-medium">{stepLabel(step, index)}</p>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="size-7 text-critical"
+                      disabled={steps.length <= 1}
+                      onClick={() => removeStep(index)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -358,6 +592,15 @@ export function AutomationDialog({
                     <Input
                       value={step.couponCode ?? ""}
                       onChange={(e) => updateStep(index, { couponCode: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Depois, vá para</Label>
+                    <RouteSelect
+                      value={step.nextStepId}
+                      excludeId={step.id}
+                      onChange={(v) => updateStep(index, { nextStepId: v })}
                     />
                   </div>
                 </div>

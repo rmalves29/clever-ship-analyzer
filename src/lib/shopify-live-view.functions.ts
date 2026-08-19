@@ -86,9 +86,9 @@ export type LiveViewData = {
   topProdutosHoje: { nome: string; total: number }[];
   atividadeRecente: { tipo: "pedido" | "carrinho_abandonado"; cidade: string | null; valor: number | null; createdAt: string }[];
   marcadoresGlobo: { name: string; coordinates: [number, number]; type: "order" | "visitor" }[];
-  /** Quando true, o token do app não retornou dados de sessão/visitante via ShopifyQL (silenciosamente,
-   *  sem erro) — provavelmente uma restrição do fluxo client_credentials de custom app. A UI mostra
-   *  "indisponível" nesses campos em vez de 0, pra não passar a impressão de "zero atividade real". */
+  /** Quando true, as 3 consultas ShopifyQL não retornaram nenhuma linha (erro/instabilidade
+   *  pontual da API). A UI mostra "indisponível" nesses campos em vez de 0, pra não passar a
+   *  impressão de "zero atividade real". */
   sessoesIndisponiveis: boolean;
 };
 
@@ -103,11 +103,13 @@ export const getLiveViewData = createServerFn({ method: "GET" }).handler(async (
       "FROM sessions SHOW sessions, online_store_visitors, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout DURING today",
     ),
     runShopifyQL("FROM sessions SHOW sessions GROUP BY session_region, session_city DURING today ORDER BY sessions DESC LIMIT 8"),
-    runShopifyQL("FROM sessions SHOW sessions SINCE -5m UNTIL now"),
+    // "m" no ShopifyQL é mês, não minuto (confirmado testando: -5m devolvia ~3000 sessões,
+    // um valor de meses, não de minutos) — a unidade certa pra minutos é "min".
+    runShopifyQL("FROM sessions SHOW sessions SINCE -30min UNTIL now"),
   ]);
 
-  // Sem nenhuma linha em nenhuma das 3 queries de sessão = quase certo que é a restrição de acesso
-  // do custom app, não "zero sessões hoje" (uma loja com pedidos reais sempre tem sessões).
+  // Sem nenhuma linha em nenhuma das 3 queries de sessão = provável falta de acesso do token
+  // (ex: escopo faltando) — não "zero sessões hoje" (uma loja com pedidos reais sempre tem sessões).
   const sessoesIndisponiveis = funilRows.length === 0 && localRows.length === 0 && agoraRows.length === 0;
 
   const funil = funilRows[0];

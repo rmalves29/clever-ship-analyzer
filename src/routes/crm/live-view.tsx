@@ -73,11 +73,9 @@ function LiveViewPage() {
         {data?.sessoesIndisponiveis && (
           <div className="mb-6 rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs text-warning">
             Sessões, visitantes e o funil de carrinho/checkout estão marcados como <strong>indisponível</strong> —
-            a API de sessões da Shopify (ShopifyQL) não retorna dados para o token deste app.
-            <br /><br />
-            <strong>Por que antes aparecia e agora não?</strong>
-            <br />
-            Recentemente, a Shopify restringiu o acesso a dados de "Analytics em Tempo Real" via API para aplicativos que utilizam o fluxo de autenticação simplificado (*Custom App*). Como o sistema usa essa conexão direta para maior segurança, a Shopify bloqueou o envio desses dados específicos de visitantes online. Pedidos, vendas e o restante do CRM continuam funcionando normalmente com dados reais.
+            a consulta de sessões (ShopifyQL) não retornou dados dessa vez, provavelmente um erro temporário da API
+            ou de credenciais. Pedidos, vendas, produtos e atividade recente abaixo continuam 100% reais (vêm da
+            base sincronizada, não dependem dessa consulta). Tente atualizar a página em alguns minutos.
           </div>
         )}
 
@@ -93,7 +91,7 @@ function LiveViewPage() {
             <p className="mt-2 text-[10px] text-muted-foreground">
               {data?.sessoesIndisponiveis
                 ? "Indisponível — ver aviso acima."
-                : "Estimativa: sessões iniciadas nos últimos 5 min — a Shopify usa um contador ao vivo interno que nenhuma API pública expõe, então esse número pode divergir do admin."}
+                : "Estimativa: sessões iniciadas nos últimos 30 min — a Shopify usa um contador ao vivo interno que nenhuma API pública expõe, então esse número pode divergir do admin."}
             </p>
           </div>
           <div className="surface-card p-5 border-l-4 border-brand">

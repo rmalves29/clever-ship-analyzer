@@ -56,7 +56,14 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
   const globeRef = useRef<any>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [countries, setCountries] = useState<any[]>([]);
+  const [GlobeComponent, setGlobeComponent] = useState<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    import('react-globe.gl').then(mod => {
+      setGlobeComponent(() => mod.default);
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

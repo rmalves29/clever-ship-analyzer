@@ -45,27 +45,26 @@ async function admin() {
 type ShopifyQLRow = Record<string, string | undefined>;
 
 /** Roda uma query ShopifyQL e devolve as linhas já como objetos simples {coluna: valor}.
- *  Observado em produção: o token do custom app (fluxo client_credentials) devolve tableData.rows
- *  vazio, sem erro nenhum (nem parseErrors nem GraphQL errors), mesmo pra queries que funcionam
- *  perfeitamente com um app instalado via OAuth padrão — provável restrição do ShopifyQL a esse
- *  tipo de app. Por isso não dá pra distinguir "sem sessões hoje" de "sem acesso" só pelo resultado;
- *  ver `sessoesIndisponiveis` em getLiveViewData. */
+ *  `shopifyGraphQL` já devolve o `data` desembrulhado, então o campo da query fica direto em
+ *  `data.shopifyqlQuery` (não `data.data.shopifyqlQuery`). Em caso de erro (ex: escopo faltando),
+ *  `shopifyGraphQL` lança — capturamos aqui pra essa métrica falhar isolada, sem derrubar o resto
+ *  do Live View (pedidos/produtos continuam vindo do Supabase, não dependem disso). */
 async function runShopifyQL(query: string): Promise<ShopifyQLRow[]> {
   const { shopifyGraphQL } = await import("./shopify.server");
   const gql = `{ shopifyqlQuery(query: ${JSON.stringify(query)}) { tableData { columns { name } rows } parseErrors } }`;
-  const result = await shopifyGraphQL(gql, undefined, SHOPIFYQL_API_VERSION);
-  if (result?.errors?.length) {
-    console.error("ShopifyQL GraphQL error:", result.errors);
-    console.error("ShopifyQL GraphQL error details:", JSON.stringify(result.errors, null, 2));
+  try {
+    const data = await shopifyGraphQL(gql, undefined, SHOPIFYQL_API_VERSION);
+    const payload = data?.shopifyqlQuery;
+    if (payload?.parseErrors?.length) {
+      console.error("ShopifyQL parse error:", payload.parseErrors);
+      return [];
+    }
+    // A Shopify já devolve cada linha como objeto {coluna: valor} pronto, não array posicional.
+    return (payload?.tableData?.rows ?? []) as ShopifyQLRow[];
+  } catch (error) {
+    console.error("ShopifyQL falhou:", error instanceof Error ? error.message : error);
     return [];
   }
-  const payload = result?.shopifyqlQuery;
-  if (payload?.parseErrors?.length) {
-    console.error("ShopifyQL parse error:", payload.parseErrors);
-    return [];
-  }
-  // A Shopify já devolve cada linha como objeto {coluna: valor} pronto, não array posicional.
-  return (payload?.tableData?.rows ?? []) as ShopifyQLRow[];
 }
 
 function num(v: string | undefined): number {

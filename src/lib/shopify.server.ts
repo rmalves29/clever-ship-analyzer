@@ -121,7 +121,9 @@ export async function shopifyGraphQL(
     throw new Error(`INVALID_QUERY: ${result.errors[0]?.message ?? "GraphQL error"}`);
   }
 
-  return result;
+  // Devolve o `data` já desembrulhado — todos os callers (crm-sync.functions.ts, etc.) esperam
+  // acessar os campos direto (ex: result.orders), não result.data.orders.
+  return result.data;
 }
 
 export const ORDERS_QUERY = `

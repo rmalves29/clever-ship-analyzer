@@ -98,19 +98,16 @@ export const getLiveViewData = createServerFn({ method: "GET" }).handler(async (
   const startISO = fromZonedTime(startOfDay(now), TZ).toISOString();
   const endISO = fromZonedTime(endOfDay(now), TZ).toISOString();
 
-  // DEBUG temporário: confirma se o token do NOSSO app tem read_reports, e testa a query mínima.
+  // DEBUG temporário: testa isoladamente cada variação da query real de produção.
   try {
-    const { shopifyGraphQL } = await import("./shopify.server");
-    const scopesResult = await shopifyGraphQL(`{ currentAppInstallation { accessScopes { handle } } }`);
-    const scopes: string[] = scopesResult?.data?.currentAppInstallation?.accessScopes?.map((s: any) => s.handle) ?? [];
-    const hasReadReports = scopes.includes("read_reports");
-
-    const testGql = `{ shopifyqlQuery(query: "FROM sessions SHOW sessions DURING today") { tableData { columns { name } rows } parseErrors } }`;
-    const testResult = await shopifyGraphQL(testGql, undefined, SHOPIFYQL_API_VERSION);
-
-    lastShopifyQLError = JSON.stringify({ hasReadReports, testResult }).slice(0, 900);
+    const q1 = await runShopifyQL(
+      "FROM sessions SHOW sessions, online_store_visitors, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout DURING today",
+    );
+    const q2 = await runShopifyQL("FROM sessions SHOW sessions GROUP BY session_region, session_city DURING today ORDER BY sessions DESC LIMIT 8");
+    const q3 = await runShopifyQL("FROM sessions SHOW sessions SINCE -5m UNTIL now");
+    lastShopifyQLError = JSON.stringify({ q1, q2, q3, lastErr: lastShopifyQLError }).slice(0, 900);
   } catch (e) {
-    lastShopifyQLError = "SCOPES_CHECK_FAILED: " + (e instanceof Error ? e.message : String(e));
+    lastShopifyQLError = "ISOLATED_TEST_FAILED: " + (e instanceof Error ? e.message : String(e));
   }
 
   const [funilRows, localRows, agoraRows] = await Promise.all([

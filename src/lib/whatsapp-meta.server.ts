@@ -620,6 +620,123 @@ export async function getStoredVerifyToken(): Promise<string | null> {
   return settings.verifyToken;
 }
 
+export type TemplateComponentInput =
+  | { type: "HEADER"; format: "TEXT"; text: string }
+  | { type: "BODY"; text: string }
+  | { type: "FOOTER"; text: string }
+  | { type: "BUTTONS"; buttons: { type: "QUICK_REPLY"; text: string }[] };
+
+/** Cria um template novo no WABA e manda pra fila de revisão da Meta (fica "PENDING" até ela decidir). */
+export async function createTemplate(input: {
+  name: string;
+  category: "MARKETING" | "UTILITY" | "AUTHENTICATION";
+  language: string;
+  components: TemplateComponentInput[];
+}) {
+  const settings = await loadSettings();
+  if (!settings.accessToken || !settings.wabaId) {
+    return { success: false as const, error: "Configure o token de acesso e o WABA ID em Configurações." };
+  }
+
+  const name = input.name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  if (!name) return { success: false as const, error: "Nome inválido." };
+
+  const res = await fetch(`https://graph.facebook.com/v20.0/${settings.wabaId}/message_templates`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
+    body: JSON.stringify({ name, category: input.category, language: input.language, components: input.components }),
+  });
+  const json: any = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error("[createTemplate] Error", { status: res.status, body: json });
+    return { success: false as const, error: json?.error?.error_user_msg ?? json?.error?.message ?? `Meta respondeu ${res.status}` };
+  }
+
+  const supabaseAdmin = await admin();
+  await supabaseAdmin.from("whatsapp_template_events").insert({
+    template_id: json.id ?? null,
+    template_name: name,
+    template_language: input.language,
+    category: input.category,
+    event: json.status ?? "PENDING",
+    reason: null,
+  } as never);
+
+  return { success: true as const, id: json.id as string | undefined, name, status: (json.status as string) ?? "PENDING" };
+}
+
+/** Grava o evento de aprovação/rejeição vindo do webhook `message_template_status_update` da Meta —
+ *  a lista de templates em si sempre vem ao vivo da Meta (listMetaTemplates), isso aqui é só o
+ *  histórico/feed pra avisar que algo mudou, sem precisar o usuário ficar clicando "Atualizar". */
+export async function applyMetaTemplateStatusUpdate(event: {
+  templateId?: string | undefined;
+  name: string;
+  language?: string | undefined;
+  category?: string | undefined;
+  event: string;
+  reason?: string | null | undefined;
+}): Promise<void> {
+  const supabaseAdmin = await admin();
+  await supabaseAdmin.from("whatsapp_template_events").insert({
+    template_id: event.templateId ?? null,
+    template_name: event.name,
+    template_language: event.language ?? null,
+    category: event.category ?? null,
+    event: event.event,
+    reason: event.reason ?? null,
+  } as never);
+}
+
+/** Últimos eventos de aprovação/rejeição — feed que a aba Templates mostra pro usuário. */
+export async function getRecentTemplateEvents(limit = 20) {
+  const supabaseAdmin = await admin();
+  const { data } = await supabaseAdmin
+    .from("whatsapp_template_events")
+    .select("id, template_name, template_language, event, reason, received_at")
+    .order("received_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as { id: string; template_name: string; template_language: string | null; event: string; reason: string | null; received_at: string }[];
+}
+
+/** Registra (ou reforça) a inscrição do App no campo `message_template_status_update` do webhook,
+ *  sem derrubar os campos já inscritos (ex: `messages`, usado por status de entrega/leitura) —
+ *  a Meta substitui a lista inteira de campos a cada POST, então primeiro lê o que já tem. */
+export async function ensureTemplateStatusWebhookSubscribed() {
+  const settings = await loadSettings();
+  if (!settings.appId || !settings.appSecret) {
+    return { success: false as const, error: "Configure o App ID e o App Secret da Meta em Configurações." };
+  }
+  const appToken = `${settings.appId}|${settings.appSecret}`;
+  const callbackUrl = "https://clever-ship-analyzer.lovable.app/api/whatsapp-webhook";
+  const verifyToken = settings.verifyToken;
+  if (!verifyToken) return { success: false as const, error: "Configure o Verify Token em Configurações." };
+
+  const currentRes = await fetch(
+    `https://graph.facebook.com/v20.0/${settings.appId}/subscriptions?access_token=${encodeURIComponent(appToken)}`,
+  );
+  const currentJson: any = await currentRes.json().catch(() => ({}));
+  const wabaSub = (currentJson.data ?? []).find((s: any) => s.object === "whatsapp_business_account");
+  const existingFields: string[] = (wabaSub?.fields ?? []).map((f: any) => f.name);
+  const fields = Array.from(new Set([...existingFields, "messages", "message_template_status_update"]));
+
+  const params = new URLSearchParams({
+    object: "whatsapp_business_account",
+    callback_url: callbackUrl,
+    verify_token: verifyToken,
+    fields: fields.join(","),
+    access_token: appToken,
+  });
+  const res = await fetch(`https://graph.facebook.com/v20.0/${settings.appId}/subscriptions`, {
+    method: "POST",
+    body: params,
+  });
+  const json: any = await res.json().catch(() => ({}));
+  if (!res.ok || !json?.success) {
+    return { success: false as const, error: json?.error?.message ?? `Meta respondeu ${res.status}` };
+  }
+  return { success: true as const, fields };
+}
+
 /** Campanhas com métricas reais: envios/entregues/lidas, vendas/receita por atribuição e custo. */
 export async function listCampaignsWithMetrics() {
   const supabaseAdmin = await admin();

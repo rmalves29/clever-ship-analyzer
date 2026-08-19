@@ -743,6 +743,39 @@ export type Database = {
           },
         ]
       }
+      whatsapp_template_events: {
+        Row: {
+          category: string | null
+          event: string
+          id: string
+          reason: string | null
+          received_at: string
+          template_id: string | null
+          template_language: string | null
+          template_name: string
+        }
+        Insert: {
+          category?: string | null
+          event: string
+          id?: string
+          reason?: string | null
+          received_at?: string
+          template_id?: string | null
+          template_language?: string | null
+          template_name: string
+        }
+        Update: {
+          category?: string | null
+          event?: string
+          id?: string
+          reason?: string | null
+          received_at?: string
+          template_id?: string | null
+          template_language?: string | null
+          template_name?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

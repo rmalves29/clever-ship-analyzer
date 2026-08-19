@@ -229,6 +229,46 @@ export const getTemplateStats = createServerFn({ method: "POST" })
     return getTemplateStatsRows(data.templateName);
   });
 
+const templateComponentSchema = z.union([
+  z.object({ type: z.literal("HEADER"), format: z.literal("TEXT"), text: z.string().min(1) }),
+  z.object({ type: z.literal("BODY"), text: z.string().min(1) }),
+  z.object({ type: z.literal("FOOTER"), text: z.string().min(1) }),
+  z.object({
+    type: z.literal("BUTTONS"),
+    buttons: z.array(z.object({ type: z.literal("QUICK_REPLY"), text: z.string().min(1) })).min(1),
+  }),
+]);
+
+/** Cria um template novo no WABA — entra em revisão da Meta, some do "PENDING" quando ela decide. */
+export const createMetaTemplate = createServerFn({ method: "POST" })
+  .validator((data: unknown) =>
+    z
+      .object({
+        name: z.string().min(1),
+        category: z.enum(["MARKETING", "UTILITY", "AUTHENTICATION"]),
+        language: z.string().min(2),
+        components: z.array(templateComponentSchema).min(1),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { createTemplate } = await import("./whatsapp-meta.server");
+    return createTemplate(data);
+  });
+
+/** Liga o campo `message_template_status_update` no webhook do App — sem isso a Meta nunca manda
+ *  o evento de aprovação/rejeição de template (o webhook de status de entrega já funciona à parte). */
+export const activateTemplateStatusWebhook = createServerFn({ method: "POST" }).handler(async () => {
+  const { ensureTemplateStatusWebhookSubscribed } = await import("./whatsapp-meta.server");
+  return ensureTemplateStatusWebhookSubscribed();
+});
+
+/** Feed de aprovações/rejeições recentes — pra aba Templates não depender só do botão "Atualizar". */
+export const getRecentTemplateEvents = createServerFn({ method: "GET" }).handler(async () => {
+  const { getRecentTemplateEvents: getEvents } = await import("./whatsapp-meta.server");
+  return getEvents();
+});
+
 /** Duplica um template aprovado como novo rascunho. */
 export const duplicateMetaTemplate = createServerFn({ method: "POST" })
   .validator((data: unknown) =>

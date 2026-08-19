@@ -24,7 +24,7 @@ import { testShopifyConnection } from "@/lib/shopify-operations.functions";
 import { syncShopifyData } from "@/lib/crm-sync.functions";
 import { getStoreSettings, saveStoreSettings } from "@/lib/store-settings.functions";
 import { getLatestAiAnalysis, saveOpenAiApiKey } from "@/lib/ai-analysis.functions";
-import { getWhatsappMetaStatus, saveWhatsappMetaSettings } from "@/lib/whatsapp-meta.functions";
+import { getWhatsappMetaStatus, saveWhatsappMetaSettings, activateTemplateStatusWebhook } from "@/lib/whatsapp-meta.functions";
 import { EmbeddedSignupButton } from "@/components/crm/EmbeddedSignupButton";
 
 export const Route = createFileRoute("/configuracoes")({
@@ -154,6 +154,15 @@ function Configuracoes() {
       } else {
         toast.error(res.error || "Erro ao salvar.");
       }
+    },
+    onError: (err: any) => toast.error("Erro: " + err.message),
+  });
+
+  const activateTemplateWebhookMutation = useMutation({
+    mutationFn: () => activateTemplateStatusWebhook(),
+    onSuccess: (res: any) => {
+      if (res.success) toast.success("Notificações de aprovação de template ativadas.");
+      else toast.error(res.error || "Erro ao ativar.");
     },
     onError: (err: any) => toast.error("Erro: " + err.message),
   });
@@ -571,14 +580,26 @@ function Configuracoes() {
               >
                 Guia de configuração da Meta <ExternalLink className="size-3" />
               </a>
-              <Button type="button" onClick={() => saveWaMutation.mutate()} disabled={saveWaMutation.isPending}>
-                {saveWaMutation.isPending ? (
-                  <RefreshCw className="mr-2 size-4 animate-spin" />
-                ) : (
-                  <Save className="mr-2 size-4" />
-                )}
-                Salvar
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => activateTemplateWebhookMutation.mutate()}
+                  disabled={activateTemplateWebhookMutation.isPending}
+                  title="Liga o aviso automático de aprovação/rejeição de template (rodar 1x, depois de salvar Verify Token e App Secret)"
+                >
+                  {activateTemplateWebhookMutation.isPending && <RefreshCw className="mr-2 size-4 animate-spin" />}
+                  Ativar notificações de aprovação
+                </Button>
+                <Button type="button" onClick={() => saveWaMutation.mutate()} disabled={saveWaMutation.isPending}>
+                  {saveWaMutation.isPending ? (
+                    <RefreshCw className="mr-2 size-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 size-4" />
+                  )}
+                  Salvar
+                </Button>
+              </div>
             </CardFooter>
           </Card>
 

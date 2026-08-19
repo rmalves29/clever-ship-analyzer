@@ -2,7 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
-import { applyMetaStatusUpdate, getStoredVerifyToken } from "./lib/whatsapp-meta.server";
+import { applyMetaStatusUpdate, applyMetaTemplateStatusUpdate, getStoredVerifyToken } from "./lib/whatsapp-meta.server";
 import { getAutomationTickSecret, runAutomationsTickWithLog } from "./lib/automations-engine.server";
 
 const WHATSAPP_WEBHOOK_PATH = "/api/whatsapp-webhook";
@@ -28,11 +28,28 @@ async function handleWhatsappWebhook(request: Request): Promise<Response> {
   if (request.method === "POST") {
     try {
       const body: any = await request.json();
-      const statuses =
-        body?.entry?.flatMap((e: any) => e?.changes?.flatMap((c: any) => c?.value?.statuses ?? []) ?? []) ?? [];
+      const changes: any[] = body?.entry?.flatMap((e: any) => e?.changes ?? []) ?? [];
+
+      const statuses = changes.flatMap((c) => (c?.field === "messages" ? (c?.value?.statuses ?? []) : []));
       for (const s of statuses) {
         if (s?.id && s?.status) {
           await applyMetaStatusUpdate({ id: s.id, status: s.status, timestamp: s.timestamp, errors: s.errors });
+        }
+      }
+
+      // Aprovação/rejeição de template — Meta manda isso separado do campo "messages" acima.
+      const templateUpdates = changes.filter((c) => c?.field === "message_template_status_update");
+      for (const c of templateUpdates) {
+        const v = c?.value;
+        if (v?.message_template_name && v?.event) {
+          await applyMetaTemplateStatusUpdate({
+            templateId: v.message_template_id != null ? String(v.message_template_id) : undefined,
+            name: v.message_template_name,
+            language: v.message_template_language,
+            category: v.message_template_category,
+            event: v.event,
+            reason: v.reason ?? null,
+          });
         }
       }
     } catch (error) {

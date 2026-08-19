@@ -109,11 +109,6 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
   }, [markers]);
 
   useEffect(() => {
-    if (containerRef.current) {
-      const { clientWidth, clientHeight } = containerRef.current;
-      setDimensions({ width: clientWidth, height: clientHeight });
-    }
-
     const handleResize = () => {
       if (containerRef.current) {
         const { clientWidth, clientHeight } = containerRef.current;
@@ -121,10 +116,13 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
       }
     };
 
+    handleResize();
+
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', handleResize);
       return () => window.removeEventListener('resize', handleResize);
     }
+    return undefined;
   }, []);
 
   useEffect(() => {

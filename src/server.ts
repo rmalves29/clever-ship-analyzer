@@ -3,6 +3,7 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { applyMetaStatusUpdate, applyMetaTemplateStatusUpdate, getStoredVerifyToken } from "./lib/whatsapp-meta.server";
+import { matchIncomingMessage } from "./lib/conversational-flows.server";
 import { getAutomationTickSecret, runAutomationsTickWithLog } from "./lib/automations-engine.server";
 
 const WHATSAPP_WEBHOOK_PATH = "/api/whatsapp-webhook";
@@ -34,6 +35,14 @@ async function handleWhatsappWebhook(request: Request): Promise<Response> {
       for (const s of statuses) {
         if (s?.id && s?.status) {
           await applyMetaStatusUpdate({ id: s.id, status: s.status, timestamp: s.timestamp, errors: s.errors });
+        }
+      }
+
+      // Mensagens recebidas (cliente respondeu ou clicou num botão) — dispara fluxo conversacional.
+      const messages = changes.flatMap((c) => (c?.field === "messages" ? (c?.value?.messages ?? []) : []));
+      for (const m of messages) {
+        if (m?.from) {
+          await matchIncomingMessage(m).catch((error) => console.error("Falha ao casar mensagem recebida com fluxo:", error));
         }
       }
 

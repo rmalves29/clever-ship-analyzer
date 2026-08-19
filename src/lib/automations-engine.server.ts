@@ -131,8 +131,10 @@ export function parseSteps(raw: unknown): AutomationStep[] {
     .filter((s): s is AutomationStep => s !== null);
 }
 
-/** Avalia uma condição de decisão pra um cliente específico. */
-async function evaluateDecision(condition: DecisionCondition, run: { customer_id: string; enrolled_at: string }): Promise<boolean> {
+/** Avalia uma condição de decisão pra um cliente específico. Exportada pra reuso no motor de
+ *  fluxos conversacionais (conversational-flows.server.ts) — mesmas 6 condições fazem sentido
+ *  lá também, o único ponto novo naquele motor é o gatilho (mensagem recebida, não segmento). */
+export async function evaluateDecision(condition: DecisionCondition, run: { customer_id: string; enrolled_at: string }): Promise<boolean> {
   const supabaseAdmin = await admin();
 
   if (condition.kind === "novo_pedido") {
@@ -197,7 +199,7 @@ async function evaluateDecision(condition: DecisionCondition, run: { customer_id
 
 /** A partir de um step id, resolve decisões em cadeia (instantâneas, sem espera) até cair num
  *  envio (retorna esse SendStep) ou no fim do fluxo (retorna null). */
-async function resolveNextActiveStep(
+export async function resolveNextActiveStep(
   steps: AutomationStep[],
   startStepId: string | null,
   run: { customer_id: string; enrolled_at: string },
@@ -509,6 +511,8 @@ export async function runAutomationsTickWithLog() {
 
   try {
     const result = await runAutomationsTick();
+    const { processDueConversationRuns } = await import("./conversational-flows.server");
+    await processDueConversationRuns();
     if (logId) {
       await supabaseAdmin
         .from("automation_tick_runs")

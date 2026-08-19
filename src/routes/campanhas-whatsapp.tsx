@@ -25,6 +25,7 @@ import { AutomationDialog, SEGMENT_LABEL, type AutomationSeed } from "@/componen
 import { WhatsappSendDialog, type SendDialogSeed } from "@/components/whatsapp/WhatsappSendDialog";
 import { CampaignDetailDialog } from "@/components/whatsapp/CampaignDetailDialog";
 import { TemplatesTab } from "@/components/whatsapp/TemplatesTab";
+import { ConversationalFlowsTab } from "@/components/whatsapp/ConversationalFlowsTab";
 import { ReportsTab } from "@/components/whatsapp/ReportsTab";
 
 const VALID_TABS = ["campanhas", "aprovacoes", "automacoes", "templates", "relatorios"] as const;
@@ -229,6 +230,7 @@ function CampanhasWhatsapp() {
             <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
             <TabsTrigger value="aprovacoes">Aprovações {pendentes.length > 0 && `(${pendentes.length})`}</TabsTrigger>
             <TabsTrigger value="automacoes">Automações</TabsTrigger>
+            <TabsTrigger value="fluxo-api">Fluxo API</TabsTrigger>
             <TabsTrigger value="templates">Templates</TabsTrigger>
             <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
           </TabsList>
@@ -457,6 +459,10 @@ function CampanhasWhatsapp() {
                 </article>
               ))}
             </div>
+          </TabsContent>
+
+          <TabsContent value="fluxo-api">
+            <ConversationalFlowsTab />
           </TabsContent>
 
           <TabsContent value="templates">

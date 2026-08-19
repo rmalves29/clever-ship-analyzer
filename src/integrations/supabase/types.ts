@@ -743,6 +743,101 @@ export type Database = {
           },
         ]
       }
+      whatsapp_conversation_runs: {
+        Row: {
+          completed_at: string | null
+          current_step_id: string
+          customer_id: string | null
+          flow_id: string
+          id: string
+          last_error: string | null
+          next_run_at: string | null
+          phone: string
+          started_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          current_step_id: string
+          customer_id?: string | null
+          flow_id: string
+          id?: string
+          last_error?: string | null
+          next_run_at?: string | null
+          phone: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          current_step_id?: string
+          customer_id?: string | null
+          flow_id?: string
+          id?: string
+          last_error?: string | null
+          next_run_at?: string | null
+          phone?: string
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_conversation_runs_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_conversational_flows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_conversational_flows: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          descricao: string | null
+          id: string
+          last_run_at: string | null
+          nome: string
+          steps: Json
+          total_execucoes: number
+          trigger_template_name: string | null
+          trigger_type: string
+          trigger_values: string[]
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          last_run_at?: string | null
+          nome: string
+          steps?: Json
+          total_execucoes?: number
+          trigger_template_name?: string | null
+          trigger_type: string
+          trigger_values?: string[]
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          last_run_at?: string | null
+          nome?: string
+          steps?: Json
+          total_execucoes?: number
+          trigger_template_name?: string | null
+          trigger_type?: string
+          trigger_values?: string[]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       whatsapp_template_events: {
         Row: {
           category: string | null

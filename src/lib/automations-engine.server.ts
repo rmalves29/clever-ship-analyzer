@@ -306,6 +306,26 @@ export async function getAutomationRunMetrics(automationId: string) {
   return { total: rows.length, byStatus, byStepActive };
 }
 
+/** Mesmas métricas, mas de uma vez pra todas as automações — usado na listagem, pra não disparar
+ *  uma query por card (evita hook-em-loop e faz uma leitura só). */
+export async function getAllAutomationRunMetrics(): Promise<
+  Record<string, { total: number; byStatus: Record<string, number>; byStepActive: Record<string, number> }>
+> {
+  const supabaseAdmin = await admin();
+  const { data } = await supabaseAdmin.from("whatsapp_automation_runs").select("automation_id, status, current_step_id");
+
+  const rows = (data ?? []) as { automation_id: string; status: string; current_step_id: string }[];
+  const result: Record<string, { total: number; byStatus: Record<string, number>; byStepActive: Record<string, number> }> = {};
+  for (const r of rows) {
+    const entry = result[r.automation_id] ?? { total: 0, byStatus: {}, byStepActive: {} };
+    entry.total++;
+    entry.byStatus[r.status] = (entry.byStatus[r.status] ?? 0) + 1;
+    if (r.status === "active") entry.byStepActive[r.current_step_id] = (entry.byStepActive[r.current_step_id] ?? 0) + 1;
+    result[r.automation_id] = entry;
+  }
+  return result;
+}
+
 /** Chamado pelo endpoint /api/automations/tick (src/server.ts, disparado pelo pg_cron). Roda o
  *  tick de todas as automações e grava uma linha em automation_tick_runs — como o pg_net que
  *  chama esse endpoint é assíncrono, essa tabela é o jeito real de confirmar que o motor rodou. */

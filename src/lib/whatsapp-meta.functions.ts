@@ -255,17 +255,23 @@ export const deleteMetaTemplate = createServerFn({ method: "POST" })
     return deleteTemplateByName(data.name);
   });
 
+const automationStepSchema = z.object({
+  id: z.string().min(1),
+  waitHours: z.number().int().min(0).max(720),
+  templateName: z.string().min(1),
+  templateLanguage: z.string().optional(),
+  messageType: messageTypeSchema.default("marketing"),
+  bodyParams: z.array(z.string()).max(10).default([]),
+  couponCode: z.string().optional(),
+});
+
 const automationSchema = z.object({
   id: z.string().uuid().optional(),
   nome: z.string().min(1),
   descricao: z.string().optional(),
   segmentType: segmentTypeSchema,
-  templateName: z.string().optional(),
-  templateLanguage: z.string().optional(),
-  messageType: messageTypeSchema.default("marketing"),
-  bodyParams: z.array(z.string()).max(5).default([]),
-  couponCode: z.string().optional(),
-  janelaHoras: z.number().int().min(1).max(720).default(24),
+  segmentId: z.string().uuid().optional(),
+  steps: z.array(automationStepSchema).min(1),
   requerAprovacao: z.boolean().default(true),
   ativo: z.boolean().default(true),
   origem: z.string().optional(),
@@ -314,6 +320,12 @@ export const runAutomationNow = createServerFn({ method: "POST" })
     const result = await runAutomationsTick({ automationId: data.id, force: true });
     return { success: true as const, ...result };
   });
+
+/** Contagem de runs por status/etapa de todas as automações — badges e "ver funil" na UI. */
+export const getAutomationRunMetrics = createServerFn({ method: "GET" }).handler(async () => {
+  const { getAllAutomationRunMetrics } = await import("./automations-engine.server");
+  return getAllAutomationRunMetrics();
+});
 
 /** Recebe o "code" do popup de Embedded Signup da Meta e troca por token, salvando tudo automaticamente. */
 export const finishEmbeddedSignup = createServerFn({ method: "POST" })

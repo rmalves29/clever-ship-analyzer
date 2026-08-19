@@ -21,7 +21,6 @@ export function SuggestedActions({ reguas, acoes }: { reguas: DashboardData["reg
     setAutoSeed({
       nome: r.titulo,
       descricao: r.descricao,
-      bodyParams: [r.descricao],
       requerAprovacao: true,
       ativo: true,
     });
@@ -31,9 +30,8 @@ export function SuggestedActions({ reguas, acoes }: { reguas: DashboardData["reg
   const openInstallFromAction = (a: DashboardData["acoes"][number]) => {
     setAutoSeed({
       nome: a.cluster,
-      descricao: a.criterio,
+      descricao: a.criterio ? `${a.criterio} — oferta sugerida: ${a.oferta}` : a.oferta,
       segmentType: a.segmentType,
-      bodyParams: [a.oferta],
       requerAprovacao: true,
       ativo: true,
     });

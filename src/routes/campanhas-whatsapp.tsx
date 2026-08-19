@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   approveCampaign,
   deleteAutomation,
+  getAutomationRunMetrics,
   getCampaigns,
   getSegmentsList,
   listAutomations,
@@ -105,6 +106,12 @@ function CampanhasWhatsapp() {
   const { data: crmSegments } = useQuery({
     queryKey: ["crm-segments"],
     queryFn: () => getSegmentsList(),
+  });
+
+  const { data: automationMetrics } = useQuery({
+    queryKey: ["whatsapp-automation-run-metrics"],
+    queryFn: () => getAutomationRunMetrics(),
+    refetchInterval: 30_000,
   });
 
   const list = campanhas ?? [];
@@ -375,12 +382,38 @@ function CampanhasWhatsapp() {
                     />
                   </div>
                   <div className="flex flex-wrap gap-2 text-xs">
-                    <Badge variant="outline">{SEGMENT_LABEL[a.segmentType] ?? a.segmentType}</Badge>
-                    <Badge variant="outline">{a.templateName}</Badge>
-                    <Badge variant="outline">{a.messageType === "utility" ? "Utilidade" : "Marketing"}</Badge>
-                    <Badge variant="outline">janela {a.janelaHoras}h</Badge>
+                    <Badge variant="outline">
+                      {a.segmentId
+                        ? (crmSegments ?? []).find((s) => s.id === a.segmentId)?.nome ?? "Segmento customizado"
+                        : SEGMENT_LABEL[a.segmentType] ?? a.segmentType}
+                    </Badge>
+                    <Badge variant="outline">
+                      {a.steps.length} etapa{a.steps.length !== 1 ? "s" : ""}
+                    </Badge>
                     <Badge variant="outline">{a.requerAprovacao ? "Com aprovação" : "Envio direto"}</Badge>
                   </div>
+                  {(() => {
+                    const metrics = automationMetrics?.[a.id];
+                    if (!metrics || metrics.total === 0) return null;
+                    return (
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        {metrics.byStatus["pending_approval"] ? (
+                          <Badge className="bg-warning-soft text-warning">
+                            Aguardando aprovação: {metrics.byStatus["pending_approval"]}
+                          </Badge>
+                        ) : null}
+                        {metrics.byStatus["active"] ? (
+                          <Badge className="bg-brand-soft text-brand">Em andamento: {metrics.byStatus["active"]}</Badge>
+                        ) : null}
+                        {metrics.byStatus["completed"] ? (
+                          <Badge className="bg-success-soft text-success">Concluídos: {metrics.byStatus["completed"]}</Badge>
+                        ) : null}
+                        {metrics.byStatus["failed"] ? (
+                          <Badge className="bg-critical-soft text-critical">Falhas: {metrics.byStatus["failed"]}</Badge>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
                   <p className="text-xs text-muted-foreground">
                     {a.totalExecucoes} execuções ·{" "}
                     {a.lastRunAt ? `última em ${new Date(a.lastRunAt).toLocaleString("pt-BR")}` : "nunca executada"}
@@ -398,11 +431,8 @@ function CampanhasWhatsapp() {
                           nome: a.nome,
                           descricao: a.descricao ?? "",
                           segmentType: a.segmentType as AutomationSeed["segmentType"],
-                          templateName: a.templateName,
-                          messageType: a.messageType as "marketing" | "utility",
-                          bodyParams: a.bodyParams,
-                          couponCode: a.couponCode ?? "",
-                          janelaHoras: a.janelaHoras,
+                          segmentId: a.segmentId ?? undefined,
+                          steps: a.steps,
                           requerAprovacao: a.requerAprovacao,
                           ativo: a.ativo,
                         });

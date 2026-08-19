@@ -731,17 +731,23 @@ export async function listCampaignsWithMetrics() {
   });
 }
 
-export type AutomationInput = {
-  id?: string | undefined;
-  nome: string;
-  descricao?: string | undefined;
-  segmentType: SegmentType;
-  templateName?: string | undefined;
+export type AutomationStepInput = {
+  id: string;
+  waitHours: number;
+  templateName: string;
   templateLanguage?: string | undefined;
   messageType: MessageType;
   bodyParams: string[];
   couponCode?: string | undefined;
-  janelaHoras: number;
+};
+
+export type AutomationInput = {
+  id?: string | undefined;
+  nome: string;
+  descricao?: string | undefined;
+  segmentType: string;
+  segmentId?: string | undefined;
+  steps: AutomationStepInput[];
   requerAprovacao: boolean;
   ativo: boolean;
   origem?: string | undefined;
@@ -750,21 +756,28 @@ export type AutomationInput = {
 export async function upsertAutomation(input: AutomationInput) {
   const supabaseAdmin = await admin();
   const settings = await loadSettings();
-  const templateName = input.templateName?.trim() || settings.templateName;
-  if (!templateName) {
-    return { success: false as const, error: "Configure um template do WhatsApp (Meta) em Configurações." };
+
+  const firstStep = input.steps[0];
+  if (!firstStep) {
+    return { success: false as const, error: "A automação precisa de pelo menos uma etapa." };
   }
+
+  const steps = input.steps.map((s) => ({
+    id: s.id,
+    waitHours: s.waitHours,
+    templateName: s.templateName.trim(),
+    templateLanguage: s.templateLanguage?.trim() || settings.templateLanguage,
+    messageType: s.messageType,
+    bodyParams: s.bodyParams,
+    couponCode: s.couponCode?.trim() || null,
+  }));
 
   const row = {
     nome: input.nome,
     descricao: input.descricao?.trim() || null,
     segment_type: input.segmentType,
-    template_name: templateName,
-    template_language: input.templateLanguage?.trim() || settings.templateLanguage,
-    message_type: input.messageType,
-    body_params: input.bodyParams,
-    coupon_code: input.couponCode?.trim() || null,
-    janela_horas: input.janelaHoras,
+    segment_id: input.segmentId || null,
+    steps,
     requer_aprovacao: input.requerAprovacao,
     ativo: input.ativo,
     origem: input.origem ?? "crm",
@@ -798,12 +811,8 @@ export async function listAutomationsRows() {
     nome: a.nome as string,
     descricao: (a.descricao ?? null) as string | null,
     segmentType: a.segment_type as string,
-    templateName: a.template_name as string,
-    templateLanguage: (a.template_language ?? "pt_BR") as string,
-    messageType: a.message_type as string,
-    bodyParams: (Array.isArray(a.body_params) ? a.body_params : []) as string[],
-    couponCode: (a.coupon_code ?? null) as string | null,
-    janelaHoras: a.janela_horas as number,
+    segmentId: (a.segment_id ?? null) as string | null,
+    steps: (Array.isArray(a.steps) ? a.steps : []) as AutomationStepInput[],
     requerAprovacao: a.requer_aprovacao as boolean,
     ativo: a.ativo as boolean,
     origem: (a.origem ?? "crm") as string,

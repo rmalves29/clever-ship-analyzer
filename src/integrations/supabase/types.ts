@@ -553,64 +553,46 @@ export type Database = {
       whatsapp_automations: {
         Row: {
           ativo: boolean
-          body_params: Json
-          coupon_code: string | null
           created_at: string
           descricao: string | null
           id: string
-          janela_horas: number
           last_run_at: string | null
-          message_type: string
           nome: string
           origem: string
           requer_aprovacao: boolean
           segment_id: string | null
           segment_type: string
           steps: Json
-          template_language: string
-          template_name: string
           total_execucoes: number
           updated_at: string
         }
         Insert: {
           ativo?: boolean
-          body_params?: Json
-          coupon_code?: string | null
           created_at?: string
           descricao?: string | null
           id?: string
-          janela_horas?: number
           last_run_at?: string | null
-          message_type?: string
           nome: string
           origem?: string
           requer_aprovacao?: boolean
           segment_id?: string | null
           segment_type: string
           steps?: Json
-          template_language?: string
-          template_name: string
           total_execucoes?: number
           updated_at?: string
         }
         Update: {
           ativo?: boolean
-          body_params?: Json
-          coupon_code?: string | null
           created_at?: string
           descricao?: string | null
           id?: string
-          janela_horas?: number
           last_run_at?: string | null
-          message_type?: string
           nome?: string
           origem?: string
           requer_aprovacao?: boolean
           segment_id?: string | null
           segment_type?: string
           steps?: Json
-          template_language?: string
-          template_name?: string
           total_execucoes?: number
           updated_at?: string
         }

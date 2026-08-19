@@ -399,6 +399,8 @@ export function AutomationDialog({
       data: { label: segmentLabel },
       selected: selectedNodeId === TRIGGER_ID,
       deletable: false,
+      width: 256,
+      height: 84,
     };
     const stepNodes: Node[] = steps.map((s) => ({
       id: s.id,
@@ -406,6 +408,8 @@ export function AutomationDialog({
       position: manualPositions[s.id] ?? layout[s.id] ?? { x: 0, y: 0 },
       data: { step: s },
       selected: selectedNodeId === s.id,
+      width: 256,
+      height: s.type === "decision" ? 118 : 100,
     }));
     return [triggerNode, ...stepNodes];
   }, [layout, steps, manualPositions, selectedNodeId, rootStepId, segmentLabel]);
@@ -569,7 +573,7 @@ export function AutomationDialog({
         </div>
 
         <div className="flex flex-1 min-h-0">
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 h-full">
             <ReactFlowProvider>
               <ReactFlow
                 nodes={nodes}

@@ -7,12 +7,12 @@ interface LiveGlobeProps {
 }
 
 // Material escuro sólido (navy) em vez da textura foto-realista — visual próximo do
-// globo da Shopify (esfera escura + linhas de grade + marcadores brilhando por cima).
+// globo da Shopify (esfera escura + marcadores brilhando por cima, sem grade nem texto).
 const DARK_GLOBE_MATERIAL = new THREE.MeshPhongMaterial({
-  color: '#0b1120',
-  emissive: '#0b1120',
-  emissiveIntensity: 0.15,
-  shininess: 4,
+  color: '#0b1229',
+  emissive: '#0b1229',
+  emissiveIntensity: 0.2,
+  shininess: 12,
 });
 
 export default function LiveGlobe({ markers }: LiveGlobeProps) {
@@ -21,23 +21,27 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const globeData = useMemo(() => {
-    return markers.map(m => ({
+    return markers.map((m) => ({
       lat: m.coordinates[1],
       lng: m.coordinates[0],
-      size: m.type === 'order' ? 0.8 : 0.4,
-      color: m.type === 'order' ? '#10b981' : '#3b82f6',
-      label: m.name
+      size: m.type === 'order' ? 0.55 : 0.35,
+      color: m.type === 'order' ? '#34d399' : '#38bdf8',
+      label: m.name,
     }));
   }, [markers]);
 
+  // Só as cidades com pedido pulsam — um anel só, sutil, pra não virar bagunça visual
+  // quando várias cidades estão perto umas das outras.
   const ringsData = useMemo(() => {
-    return markers.filter(m => m.type === 'order').map(m => ({
-      lat: m.coordinates[1],
-      lng: m.coordinates[0],
-      maxR: 5,
-      propagationSpeed: 2,
-      repeatPeriod: 1000
-    }));
+    return markers
+      .filter((m) => m.type === 'order')
+      .map((m) => ({
+        lat: m.coordinates[1],
+        lng: m.coordinates[0],
+        maxR: 2.2,
+        propagationSpeed: 1.4,
+        repeatPeriod: 1800,
+      }));
   }, [markers]);
 
   useEffect(() => {
@@ -60,14 +64,13 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
   useEffect(() => {
     if (globeRef.current) {
       const globe = globeRef.current;
-      
-      // Auto-rotação suave
+
       globe.controls().autoRotate = true;
-      globe.controls().autoRotateSpeed = 0.5;
+      globe.controls().autoRotateSpeed = 0.4;
       globe.controls().enableZoom = true;
-      
-      // Focar na América do Sul inicialmente (foco no Brasil)
-      globe.pointOfView({ lat: -15, lng: -55, altitude: 2 }, 1000);
+
+      // Mais próximo do Brasil, pra separar visualmente as cidades vizinhas.
+      globe.pointOfView({ lat: -16, lng: -50, altitude: 1.4 }, 1000);
     }
   }, []);
 
@@ -81,26 +84,19 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
         globeMaterial={DARK_GLOBE_MATERIAL}
         showAtmosphere={true}
         atmosphereColor="#38bdf8"
-        atmosphereAltitude={0.2}
-        showGraticules={true}
+        atmosphereAltitude={0.22}
+        showGraticules={false}
         pointsData={globeData}
         pointRadius="size"
         pointColor="color"
-        pointAltitude={0.01}
+        pointAltitude={0.012}
+        pointResolution={16}
+        pointLabel={(d: any) => `<div style="font:12px sans-serif;color:#fff;background:rgba(15,23,42,.9);padding:4px 8px;border-radius:6px">${d.label}</div>`}
         ringsData={ringsData}
-        ringColor={() => "#10b981"}
+        ringColor={() => (t: number) => `rgba(52,211,153,${1 - t})`}
         ringMaxRadius="maxR"
         ringPropagationSpeed="propagationSpeed"
         ringRepeatPeriod="repeatPeriod"
-        labelsData={globeData}
-        labelLat={d => (d as any).lat}
-        labelLng={d => (d as any).lng}
-        labelText={d => (d as any).label}
-        labelSize={1.5}
-        labelDotRadius={0.5}
-        labelColor={() => 'rgba(255, 255, 255, 0.9)'}
-        labelResolution={2}
-        labelAltitude={0.02}
       />
     </div>
   );

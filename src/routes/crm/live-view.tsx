@@ -70,9 +70,12 @@ function LiveViewPage() {
           </Button>
         </div>
 
-        {data?.shopifyqlDebugError && (
-          <div className="mb-6 rounded-lg border border-critical/40 bg-critical/5 p-3 text-xs text-critical">
-            <strong>Debug ShopifyQL:</strong> {data.shopifyqlDebugError}
+        {data?.sessoesIndisponiveis && (
+          <div className="mb-6 rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs text-warning">
+            Sessões, visitantes e o funil de carrinho/checkout estão marcados como <strong>indisponível</strong> —
+            a API de sessões da Shopify (ShopifyQL) não retorna dados pro token deste app (fluxo client_credentials
+            de custom app), mesmo com os escopos de analytics concedidos. Pedidos, vendas, produtos e atividade
+            recente abaixo continuam 100% reais.
           </div>
         )}
 
@@ -81,11 +84,14 @@ function LiveViewPage() {
           <div className="surface-card p-5 border-l-4 border-success">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Visitantes agora</p>
             <div className="flex items-end justify-between mt-2">
-              <h3 className="text-3xl font-bold leading-none">{data?.visitantesAgora ?? (isLoading ? "…" : 0)}</h3>
+              <h3 className="text-3xl font-bold leading-none">
+                {data?.sessoesIndisponiveis ? "—" : (data?.visitantesAgora ?? (isLoading ? "…" : 0))}
+              </h3>
             </div>
             <p className="mt-2 text-[10px] text-muted-foreground">
-              Estimativa: sessões iniciadas nos últimos 5 min — a Shopify usa um contador ao vivo interno que
-              nenhuma API pública expõe, então esse número pode divergir do admin.
+              {data?.sessoesIndisponiveis
+                ? "Indisponível — ver aviso acima."
+                : "Estimativa: sessões iniciadas nos últimos 5 min — a Shopify usa um contador ao vivo interno que nenhuma API pública expõe, então esse número pode divergir do admin."}
             </p>
           </div>
           <div className="surface-card p-5 border-l-4 border-brand">
@@ -97,9 +103,11 @@ function LiveViewPage() {
           <div className="surface-card p-5 border-l-4 border-warning">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Sessões (hoje)</p>
             <div className="flex items-end justify-between mt-2">
-              <h3 className="text-3xl font-bold leading-none">{data?.sessoesHoje ?? 0}</h3>
+              <h3 className="text-3xl font-bold leading-none">{data?.sessoesIndisponiveis ? "—" : (data?.sessoesHoje ?? 0)}</h3>
             </div>
-            <p className="mt-2 text-[10px] text-muted-foreground">{data?.visitantesUnicosHoje ?? 0} visitantes únicos</p>
+            <p className="mt-2 text-[10px] text-muted-foreground">
+              {data?.sessoesIndisponiveis ? "Indisponível" : `${data?.visitantesUnicosHoje ?? 0} visitantes únicos`}
+            </p>
           </div>
           <div className="surface-card p-5 border-l-4 border-info">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pedidos (hoje)</p>
@@ -146,29 +154,33 @@ function LiveViewPage() {
             {/* Customer Behavior Funnel */}
             <div className="surface-card p-6">
               <h4 className="text-sm font-bold mb-6">Comportamento do cliente (hoje)</h4>
-              <div className="space-y-6">
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-muted-foreground">Carrinhos com adição</span>
-                    <span className="text-sm font-bold">{data?.carrinhosAtivosHoje ?? 0}</span>
+              {data?.sessoesIndisponiveis ? (
+                <p className="text-xs text-muted-foreground">Indisponível — ver aviso no topo da página.</p>
+              ) : (
+                <div className="space-y-6">
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs text-muted-foreground">Carrinhos com adição</span>
+                      <span className="text-sm font-bold">{data?.carrinhosAtivosHoje ?? 0}</span>
+                    </div>
+                    <Progress value={100} className="h-1.5 bg-muted" />
                   </div>
-                  <Progress value={100} className="h-1.5 bg-muted" />
-                </div>
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-muted-foreground">Chegaram no checkout</span>
-                    <span className="text-sm font-bold">{data?.noCheckoutHoje ?? 0}</span>
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs text-muted-foreground">Chegaram no checkout</span>
+                      <span className="text-sm font-bold">{data?.noCheckoutHoje ?? 0}</span>
+                    </div>
+                    <Progress value={data ? Math.min(100, (data.noCheckoutHoje / funilTotal) * 100) : 0} className="h-1.5 bg-muted" />
                   </div>
-                  <Progress value={data ? Math.min(100, (data.noCheckoutHoje / funilTotal) * 100) : 0} className="h-1.5 bg-muted" />
-                </div>
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-muted-foreground">Comprado</span>
-                    <span className="text-sm font-bold">{data?.compradoHoje ?? 0}</span>
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs text-muted-foreground">Comprado</span>
+                      <span className="text-sm font-bold">{data?.compradoHoje ?? 0}</span>
+                    </div>
+                    <Progress value={data ? Math.min(100, (data.compradoHoje / funilTotal) * 100) : 0} className="h-1.5 bg-muted" />
                   </div>
-                  <Progress value={data ? Math.min(100, (data.compradoHoje / funilTotal) * 100) : 0} className="h-1.5 bg-muted" />
                 </div>
-              </div>
+              )}
             </div>
 
             {/* New vs Recurring */}
@@ -253,7 +265,10 @@ function LiveViewPage() {
               <MapPin className="size-4 text-brand" /> Sessões por local (hoje)
             </h4>
             <div className="space-y-5">
-              {(data?.sessoesPorLocal ?? []).length === 0 && (
+              {data?.sessoesIndisponiveis && (
+                <p className="text-xs text-muted-foreground">Indisponível — ver aviso no topo da página.</p>
+              )}
+              {!data?.sessoesIndisponiveis && (data?.sessoesPorLocal ?? []).length === 0 && (
                 <p className="text-xs text-muted-foreground">Sem sessões registradas hoje ainda.</p>
               )}
               {(data?.sessoesPorLocal ?? []).slice(0, 5).map((s, i) => {

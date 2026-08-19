@@ -44,23 +44,22 @@ async function admin() {
 
 type ShopifyQLRow = Record<string, string | undefined>;
 
-let lastShopifyQLError: string | null = null;
-
 /** Roda uma query ShopifyQL e devolve as linhas já como objetos simples {coluna: valor}.
- *  Guarda o último erro (parse ou GraphQL-level, ex: scope faltando) em `lastShopifyQLError`
- *  pra diagnóstico — `shopifyqlQuery` costuma falhar silenciosamente do ponto de vista da UI. */
+ *  Observado em produção: o token do custom app (fluxo client_credentials) devolve tableData.rows
+ *  vazio, sem erro nenhum (nem parseErrors nem GraphQL errors), mesmo pra queries que funcionam
+ *  perfeitamente com um app instalado via OAuth padrão — provável restrição do ShopifyQL a esse
+ *  tipo de app. Por isso não dá pra distinguir "sem sessões hoje" de "sem acesso" só pelo resultado;
+ *  ver `sessoesIndisponiveis` em getLiveViewData. */
 async function runShopifyQL(query: string): Promise<ShopifyQLRow[]> {
   const { shopifyGraphQL } = await import("./shopify.server");
   const gql = `{ shopifyqlQuery(query: ${JSON.stringify(query)}) { tableData { columns { name } rows } parseErrors } }`;
   const result = await shopifyGraphQL(gql, undefined, SHOPIFYQL_API_VERSION);
   if (result?.errors?.length) {
-    lastShopifyQLError = JSON.stringify(result.errors).slice(0, 500);
     console.error("ShopifyQL GraphQL error:", result.errors);
     return [];
   }
   const payload = result?.data?.shopifyqlQuery;
   if (payload?.parseErrors?.length) {
-    lastShopifyQLError = JSON.stringify(payload.parseErrors).slice(0, 500);
     console.error("ShopifyQL parse error:", payload.parseErrors);
     return [];
   }
@@ -87,8 +86,10 @@ export type LiveViewData = {
   topProdutosHoje: { nome: string; total: number }[];
   atividadeRecente: { tipo: "pedido" | "carrinho_abandonado"; cidade: string | null; valor: number | null; createdAt: string }[];
   marcadoresGlobo: { name: string; coordinates: [number, number]; type: "order" | "visitor" }[];
-  /** Diagnóstico temporário — erro da última chamada ShopifyQL, se houver. Remover depois de confirmar que funciona. */
-  shopifyqlDebugError?: string | null;
+  /** Quando true, o token do app não retornou dados de sessão/visitante via ShopifyQL (silenciosamente,
+   *  sem erro) — provavelmente uma restrição do fluxo client_credentials de custom app. A UI mostra
+   *  "indisponível" nesses campos em vez de 0, pra não passar a impressão de "zero atividade real". */
+  sessoesIndisponiveis: boolean;
 };
 
 export const getLiveViewData = createServerFn({ method: "GET" }).handler(async (): Promise<LiveViewData> => {
@@ -97,18 +98,6 @@ export const getLiveViewData = createServerFn({ method: "GET" }).handler(async (
   const startISO = fromZonedTime(startOfDay(now), TZ).toISOString();
   const endISO = fromZonedTime(endOfDay(now), TZ).toISOString();
 
-  // DEBUG temporário: isola qual campo/cláusula zera o resultado.
-  try {
-    const a = await runShopifyQL("FROM sessions SHOW sessions, online_store_visitors DURING today");
-    const b = await runShopifyQL("FROM sessions SHOW sessions, sessions_with_cart_additions DURING today");
-    const c = await runShopifyQL("FROM sessions SHOW sessions GROUP BY session_region DURING today LIMIT 5");
-    const d = await runShopifyQL("FROM sessions SHOW sessions SINCE -5m UNTIL now");
-    const e = await runShopifyQL("FROM sessions SHOW sessions DURING today ORDER BY sessions DESC LIMIT 5");
-    lastShopifyQLError = JSON.stringify({ a, b, c, d, e }).slice(0, 900);
-  } catch (e) {
-    lastShopifyQLError = "ISOLATED_TEST_FAILED: " + (e instanceof Error ? e.message : String(e));
-  }
-
   const [funilRows, localRows, agoraRows] = await Promise.all([
     runShopifyQL(
       "FROM sessions SHOW sessions, online_store_visitors, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout DURING today",
@@ -116,6 +105,10 @@ export const getLiveViewData = createServerFn({ method: "GET" }).handler(async (
     runShopifyQL("FROM sessions SHOW sessions GROUP BY session_region, session_city DURING today ORDER BY sessions DESC LIMIT 8"),
     runShopifyQL("FROM sessions SHOW sessions SINCE -5m UNTIL now"),
   ]);
+
+  // Sem nenhuma linha em nenhuma das 3 queries de sessão = quase certo que é a restrição de acesso
+  // do custom app, não "zero sessões hoje" (uma loja com pedidos reais sempre tem sessões).
+  const sessoesIndisponiveis = funilRows.length === 0 && localRows.length === 0 && agoraRows.length === 0;
 
   const funil = funilRows[0];
   const sessoesHoje = num(funil?.["sessions"]);
@@ -248,6 +241,6 @@ export const getLiveViewData = createServerFn({ method: "GET" }).handler(async (
     topProdutosHoje,
     atividadeRecente,
     marcadoresGlobo,
-    shopifyqlDebugError: lastShopifyQLError,
+    sessoesIndisponiveis,
   };
 });

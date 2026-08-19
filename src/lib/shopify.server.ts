@@ -121,7 +121,7 @@ export async function shopifyGraphQL(
     throw new Error(`INVALID_QUERY: ${result.errors[0]?.message ?? "GraphQL error"}`);
   }
 
-  return result.data;
+  return result;
 }
 
 export const ORDERS_QUERY = `

@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      automation_tick_runs: {
+        Row: {
+          automations_processed: number
+          error: string | null
+          finished_at: string | null
+          id: string
+          runs_processed: number
+          started_at: string
+        }
+        Insert: {
+          automations_processed?: number
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          runs_processed?: number
+          started_at?: string
+        }
+        Update: {
+          automations_processed?: number
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          runs_processed?: number
+          started_at?: string
+        }
+        Relationships: []
+      }
       crm_list_members: {
         Row: {
           adicionado_em: string
@@ -450,33 +477,6 @@ export type Database = {
           whatsapp_meta_template_name?: string | null
           whatsapp_meta_verify_token?: string | null
           whatsapp_meta_waba_id?: string | null
-        }
-        Relationships: []
-      }
-      automation_tick_runs: {
-        Row: {
-          automations_processed: number
-          error: string | null
-          finished_at: string | null
-          id: string
-          runs_processed: number
-          started_at: string
-        }
-        Insert: {
-          automations_processed?: number
-          error?: string | null
-          finished_at?: string | null
-          id?: string
-          runs_processed?: number
-          started_at?: string
-        }
-        Update: {
-          automations_processed?: number
-          error?: string | null
-          finished_at?: string | null
-          id?: string
-          runs_processed?: number
-          started_at?: string
         }
         Relationships: []
       }

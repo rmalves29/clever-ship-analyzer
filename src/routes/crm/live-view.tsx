@@ -76,6 +76,8 @@ function LiveViewPage() {
             a API de sessões da Shopify (ShopifyQL) não retorna dados pro token deste app (fluxo client_credentials
             de custom app), mesmo com os escopos de analytics concedidos. Pedidos, vendas, produtos e atividade
             recente abaixo continuam 100% reais.
+            <br /><br />
+            <strong>Aviso:</strong> A funcionalidade de "Visitantes agora" depende desta API da Shopify. Se você está vendo um traço (—) ou o aviso de indisponibilidade, é devido a esta restrição técnica do tipo de conexão entre o CRM e a sua loja.
           </div>
         )}
 

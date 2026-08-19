@@ -18,7 +18,10 @@ export type SendStep = {
 export type DecisionCondition =
   | { kind: "novo_pedido" }
   | { kind: "pedido_status"; field: "financial_status" | "fulfillment_status"; value: string }
-  | { kind: "segmento"; segmentType: string; segmentId?: string };
+  | { kind: "segmento"; segmentType: string; segmentId?: string }
+  | { kind: "valor_pedido"; operator: "gt" | "gte" | "lt" | "lte"; value: number }
+  | { kind: "localizacao"; field: "city" | "province"; value: string }
+  | { kind: "tag"; value: string };
 
 export type DecisionStep = {
   id: string;
@@ -73,6 +76,24 @@ function parseCondition(raw: unknown): DecisionCondition {
       segmentType: String(c["segmentType"] ?? ""),
       ...(segmentId ? { segmentId } : {}),
     };
+  }
+  if (c["kind"] === "valor_pedido") {
+    const op = c["operator"];
+    return {
+      kind: "valor_pedido",
+      operator: op === "gte" || op === "lt" || op === "lte" ? op : "gt",
+      value: Number(c["value"] ?? 0),
+    };
+  }
+  if (c["kind"] === "localizacao") {
+    return {
+      kind: "localizacao",
+      field: c["field"] === "province" ? "province" : "city",
+      value: String(c["value"] ?? ""),
+    };
+  }
+  if (c["kind"] === "tag") {
+    return { kind: "tag", value: String(c["value"] ?? "") };
   }
   return { kind: "novo_pedido" };
 }
@@ -135,6 +156,37 @@ async function evaluateDecision(condition: DecisionCondition, run: { customer_id
     const order = data as { financial_status: string | null; fulfillment_status: string | null } | null;
     if (!order) return false;
     return (condition.field === "fulfillment_status" ? order.fulfillment_status : order.financial_status) === condition.value;
+  }
+
+  if (condition.kind === "valor_pedido") {
+    const { data } = await supabaseAdmin
+      .from("shopify_orders")
+      .select("total_price")
+      .eq("customer_id", run.customer_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const total = Number((data as { total_price: number | null } | null)?.total_price ?? 0);
+    if (condition.operator === "gt") return total > condition.value;
+    if (condition.operator === "gte") return total >= condition.value;
+    if (condition.operator === "lt") return total < condition.value;
+    return total <= condition.value;
+  }
+
+  if (condition.kind === "localizacao") {
+    const { data } = await supabaseAdmin
+      .from("shopify_customers")
+      .select("city, province")
+      .eq("id", run.customer_id)
+      .maybeSingle();
+    const val = String((data as { city: string | null; province: string | null } | null)?.[condition.field] ?? "").toLowerCase();
+    return val === condition.value.trim().toLowerCase();
+  }
+
+  if (condition.kind === "tag") {
+    const { data } = await supabaseAdmin.from("shopify_customers").select("tags").eq("id", run.customer_id).maybeSingle();
+    const tags = ((data as { tags: string[] | null } | null)?.tags ?? []).map((t) => t.toLowerCase());
+    return tags.includes(condition.value.trim().toLowerCase());
   }
 
   // segmento

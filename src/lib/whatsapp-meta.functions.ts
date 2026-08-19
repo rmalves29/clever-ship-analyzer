@@ -267,6 +267,20 @@ const decisionConditionSchema = z.discriminatedUnion("kind", [
     segmentType: z.string().min(1),
     segmentId: z.string().uuid().optional(),
   }),
+  z.object({
+    kind: z.literal("valor_pedido"),
+    operator: z.enum(["gt", "gte", "lt", "lte"]),
+    value: z.number(),
+  }),
+  z.object({
+    kind: z.literal("localizacao"),
+    field: z.enum(["city", "province"]),
+    value: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal("tag"),
+    value: z.string().min(1),
+  }),
 ]);
 
 const sendStepSchema = z.object({

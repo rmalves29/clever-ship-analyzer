@@ -10,6 +10,7 @@ import {
   Controls,
   Handle,
   Position,
+  useReactFlow,
   type Node,
   type Edge,
   type Connection,
@@ -40,7 +41,24 @@ export const SEGMENT_LABEL: Record<string, string> = {
 type DecisionCondition =
   | { kind: "novo_pedido" }
   | { kind: "pedido_status"; field: "financial_status" | "fulfillment_status"; value: string }
-  | { kind: "segmento"; segmentType: string; segmentId?: string | undefined };
+  | { kind: "segmento"; segmentType: string; segmentId?: string | undefined }
+  | { kind: "valor_pedido"; operator: "gt" | "gte" | "lt" | "lte"; value: number }
+  | { kind: "localizacao"; field: "city" | "province"; value: string }
+  | { kind: "tag"; value: string };
+
+/** Tokens dinâmicos que o motor de envio resolve por destinatário (dispatchCampaign,
+ *  whatsapp-meta.server.ts) — funcionam nos campos de variável de qualquer etapa "Enviar". */
+const DYNAMIC_VARS: { token: string; label: string }[] = [
+  { token: "{{NOME_CLIENTE}}", label: "Primeiro nome do cliente" },
+  { token: "{{NUMERO_PEDIDO}}", label: "Número do pedido mais recente" },
+  { token: "{{VALOR_TOTAL}}", label: "Valor total do pedido mais recente" },
+  { token: "{{ITENS_COMPRADOS}}", label: "Resumo dos itens comprados" },
+  { token: "{{CUPOM_DESCONTO}}", label: "Código de cupom do pedido (se houver)" },
+  { token: "{{FRETE_ESCOLHIDO}}", label: "Método de frete escolhido" },
+  { token: "{{RASTREIO}}", label: "Código de rastreio" },
+  { token: "{{STATUS_PEDIDO}}", label: "Status do envio (Enviado/Processando)" },
+  { token: "{{LINK_CHECKOUT}}", label: "Link do checkout (carrinho abandonado)" },
+];
 
 export type SendStepSeed = {
   id: string;
@@ -106,10 +124,14 @@ function countTemplateVars(components: { type: string; text?: string }[] | undef
 const FINANCIAL_STATUSES = ["PAID", "PENDING", "PARTIALLY_PAID", "REFUNDED", "PARTIALLY_REFUNDED", "VOIDED", "EXPIRED"];
 const FULFILLMENT_STATUSES = ["FULFILLED", "UNFULFILLED", "IN_PROGRESS", "PARTIAL", "RESTOCKED"];
 
+const OPERATOR_LABEL: Record<"gt" | "gte" | "lt" | "lte", string> = { gt: ">", gte: "≥", lt: "<", lte: "≤" };
+
 function conditionLabel(c: DecisionCondition): string {
   if (c.kind === "novo_pedido") return "Fez um novo pedido?";
-  if (c.kind === "pedido_status")
-    return `Pedido ${c.field === "financial_status" ? "pagamento" : "envio"} = ${c.value}`;
+  if (c.kind === "pedido_status") return `Pedido ${c.field === "financial_status" ? "pagamento" : "envio"} = ${c.value}`;
+  if (c.kind === "valor_pedido") return `Valor do pedido ${OPERATOR_LABEL[c.operator]} R$ ${c.value}`;
+  if (c.kind === "localizacao") return `${c.field === "city" ? "Cidade" : "Estado"} = ${c.value || "..."}`;
+  if (c.kind === "tag") return `Tem a tag "${c.value || "..."}"`;
   return "Está em segmento?";
 }
 
@@ -211,6 +233,20 @@ function DecisionNode({ data, selected }: NodeProps) {
 
 const nodeTypes = { trigger: TriggerNode, send: SendNode, decision: DecisionNode };
 const TRIGGER_ID = "__trigger__";
+
+/** Força a sincronização imperativa nodes/edges -> store interno do React Flow.
+ *  Necessário porque o sync automático via props (StoreUpdater) não estava repassando
+ *  as edges pro store em alguns casos observados aqui — isso garante convergência. */
+function CanvasSync({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) {
+  const { setNodes, setEdges } = useReactFlow();
+  useEffect(() => {
+    setNodes(nodes);
+  }, [nodes, setNodes]);
+  useEffect(() => {
+    setEdges(edges);
+  }, [edges, setEdges]);
+  return null;
+}
 
 export function AutomationDialog({
   seed,
@@ -419,6 +455,7 @@ export function AutomationDialog({
     if (rootStepId) {
       list.push({
         id: `trigger-${rootStepId}`,
+        type: "smoothstep",
         source: TRIGGER_ID,
         sourceHandle: "out",
         target: rootStepId,
@@ -456,6 +493,11 @@ export function AutomationDialog({
     }
     return list;
   }, [steps, rootStepId]);
+
+  /** Força o React Flow a remontar do zero sempre que a estrutura do grafo muda (nova etapa,
+   *  nova conexão, remoção). Contorna um caso em que o sync incremental nodes/edges->store
+   *  interno não repassava as arestas pro render em algumas atualizações. */
+  const graphKey = useMemo(() => edges.map((e) => e.id).join(",") + "|" + nodes.map((n) => n.id).join(","), [edges, nodes]);
 
   const save = async () => {
     if (steps.some((s) => s.type === "send" && !s.templateName)) {
@@ -575,7 +617,9 @@ export function AutomationDialog({
         <div className="flex flex-1 min-h-0">
           <div className="flex-1 min-w-0 h-full">
             <ReactFlowProvider>
+              <CanvasSync nodes={nodes} edges={edges} />
               <ReactFlow
+                key={graphKey}
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
@@ -639,6 +683,21 @@ export function AutomationDialog({
                         cond: { kind: "segmento", segmentType: SEGMENT_TYPES[0]! } as DecisionCondition,
                         label: "Cliente está em segmento?",
                         sub: "Checa se o cliente pertence a um segmento.",
+                      },
+                      {
+                        cond: { kind: "valor_pedido", operator: "gt", value: 100 } as DecisionCondition,
+                        label: "Valor do pedido?",
+                        sub: "Compara o valor do pedido mais recente com um número.",
+                      },
+                      {
+                        cond: { kind: "localizacao", field: "city", value: "" } as DecisionCondition,
+                        label: "Cidade ou estado?",
+                        sub: "Filtra pela localização cadastrada do cliente.",
+                      },
+                      {
+                        cond: { kind: "tag", value: "" } as DecisionCondition,
+                        label: "Tem uma tag?",
+                        sub: "Checa se o cliente tem uma tag específica na Shopify.",
                       },
                     ].map((opt) => (
                       <button
@@ -824,6 +883,32 @@ function SendStepPanel({
               }}
             />
           ))}
+          <div className="rounded-lg border border-dashed border-border p-2 space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Tokens que viram dados reais do cliente no envio
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {DYNAMIC_VARS.map((v) => (
+                <button
+                  key={v.token}
+                  type="button"
+                  title={v.label}
+                  className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-muted/40 hover:bg-muted hover:border-primary text-muted-foreground font-mono transition-colors"
+                  onClick={() => {
+                    const next = [...step.bodyParams];
+                    next[0] = (next[0] ?? "") + v.token;
+                    onChange({ bodyParams: next });
+                  }}
+                >
+                  {v.token}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Clique pra inserir na 1ª variável, ou digite direto em qualquer campo acima. Cada cliente recebe o valor dele — ex:
+              "Oi {"{{NOME_CLIENTE}}"}, seu pedido {"{{NUMERO_PEDIDO}}"} já foi enviado!".
+            </p>
+          </div>
         </div>
       )}
 
@@ -869,7 +954,13 @@ function DecisionStepPanel({
                 ? { kind: "pedido_status", field: "financial_status", value: FINANCIAL_STATUSES[0]! }
                 : v === "segmento"
                   ? { kind: "segmento", segmentType: SEGMENT_TYPES[0]! }
-                  : { kind: "novo_pedido" };
+                  : v === "valor_pedido"
+                    ? { kind: "valor_pedido", operator: "gt", value: 100 }
+                    : v === "localizacao"
+                      ? { kind: "localizacao", field: "city", value: "" }
+                      : v === "tag"
+                        ? { kind: "tag", value: "" }
+                        : { kind: "novo_pedido" };
             onChange({ condition });
           }}
         >
@@ -880,6 +971,9 @@ function DecisionStepPanel({
             <SelectItem value="novo_pedido">Fez um novo pedido desde que entrou</SelectItem>
             <SelectItem value="pedido_status">Pedido mais recente tem um status</SelectItem>
             <SelectItem value="segmento">Está em um segmento</SelectItem>
+            <SelectItem value="valor_pedido">Valor do pedido mais recente</SelectItem>
+            <SelectItem value="localizacao">Cidade ou estado do cliente</SelectItem>
+            <SelectItem value="tag">Tem uma tag na Shopify</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -960,6 +1054,86 @@ function DecisionStepPanel({
               ))}
             </SelectContent>
           </Select>
+        </div>
+      )}
+
+      {step.condition.kind === "valor_pedido" && (
+        <div className="grid gap-3 grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Comparação</Label>
+            <Select
+              value={step.condition.operator}
+              onValueChange={(v) =>
+                onChange({ condition: { ...(step.condition as { kind: "valor_pedido"; operator: any; value: number }), operator: v as any } })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="gt">Maior que</SelectItem>
+                <SelectItem value="gte">Maior ou igual a</SelectItem>
+                <SelectItem value="lt">Menor que</SelectItem>
+                <SelectItem value="lte">Menor ou igual a</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Valor (R$)</Label>
+            <Input
+              type="number"
+              min={0}
+              value={step.condition.value}
+              onChange={(e) =>
+                onChange({
+                  condition: { ...(step.condition as { kind: "valor_pedido"; operator: any; value: number }), value: Number(e.target.value) || 0 },
+                })
+              }
+            />
+          </div>
+        </div>
+      )}
+
+      {step.condition.kind === "localizacao" && (
+        <div className="grid gap-3 grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Campo</Label>
+            <Select
+              value={step.condition.field}
+              onValueChange={(v) =>
+                onChange({ condition: { ...(step.condition as { kind: "localizacao"; field: any; value: string }), field: v as any } })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="city">Cidade</SelectItem>
+                <SelectItem value="province">Estado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Valor</Label>
+            <Input
+              value={step.condition.value}
+              placeholder={step.condition.field === "city" ? "Ex: Belo Horizonte" : "Ex: MG"}
+              onChange={(e) =>
+                onChange({ condition: { ...(step.condition as { kind: "localizacao"; field: any; value: string }), value: e.target.value } })
+              }
+            />
+          </div>
+        </div>
+      )}
+
+      {step.condition.kind === "tag" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">Tag (exatamente como está na Shopify)</Label>
+          <Input
+            value={step.condition.value}
+            placeholder="Ex: VIP"
+            onChange={(e) => onChange({ condition: { kind: "tag", value: e.target.value } })}
+          />
         </div>
       )}
 

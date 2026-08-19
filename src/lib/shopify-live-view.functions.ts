@@ -56,9 +56,10 @@ async function runShopifyQL(query: string): Promise<ShopifyQLRow[]> {
   const result = await shopifyGraphQL(gql, undefined, SHOPIFYQL_API_VERSION);
   if (result?.errors?.length) {
     console.error("ShopifyQL GraphQL error:", result.errors);
+    console.error("ShopifyQL GraphQL error details:", JSON.stringify(result.errors, null, 2));
     return [];
   }
-  const payload = result?.data?.shopifyqlQuery;
+  const payload = result?.shopifyqlQuery;
   if (payload?.parseErrors?.length) {
     console.error("ShopifyQL parse error:", payload.parseErrors);
     return [];

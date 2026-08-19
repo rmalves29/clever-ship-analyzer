@@ -365,6 +365,8 @@ export type NewCampaignInput = {
   origem?: string | undefined;
   automationId?: string | undefined;
   campaignTag?: string | undefined;
+  /** Usado por lotes de automação, onde o tamanho real do lote já é conhecido — evita recalcular o segmento inteiro. */
+  totalDestinatariosOverride?: number | undefined;
 };
 
 /** Cria a campanha no banco (sem enviar). Status inicial define se vai pra fila de aprovação. */
@@ -374,7 +376,7 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
 
   const templateName = input.templateName?.trim() || settings.templateName;
   const segmentId = input.segmentId;
-  
+
   if (!settings.accessToken || !settings.phoneNumberId || !templateName) {
     return {
       success: false as const,
@@ -382,7 +384,8 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
     };
   }
 
-  const { destinatarios } = await countSegmentRecipients(input.segmentType, segmentId);
+  const destinatarios =
+    input.totalDestinatariosOverride ?? (await countSegmentRecipients(input.segmentType, segmentId)).destinatarios;
 
   const { data: campaign, error } = await supabaseAdmin
     .from("whatsapp_campaigns")
@@ -408,8 +411,36 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
   return { success: true as const, campaignId: (campaign as { id: string }).id, destinatarios };
 }
 
-/** Dispara de fato a campanha já criada e loga cada envio. */
-export async function dispatchCampaign(campaignId: string) {
+/** Resolve os destinatários reais de um segmento — inclui a lógica especial de Carrinho Abandonado
+ *  (que puxa de `shopify_abandoned_checkouts`, não de `shopify_customers`). Reaproveitado por
+ *  `dispatchCampaign` e pelo motor de automação (`automations-engine.server.ts`). */
+export async function resolveSegmentRecipients(segmentType: string, ids: string[]) {
+  const supabaseAdmin = await admin();
+  const isAbandonedCartSegment = segmentType === "carrinho" || segmentType === "abandoned_cart";
+
+  if (isAbandonedCartSegment) {
+    const { data: abandonedEvents } = await (supabaseAdmin
+      .from("shopify_abandoned_checkouts")
+      .select("customer_id, phone, checkout_url, shopify_customers(first_name)") as any)
+      .in("customer_id", ids);
+
+    return (abandonedEvents ?? [])
+      .map((ae: any) => ({
+        id: ae.customer_id as string,
+        phone: ae.phone as string,
+        first_name: (ae.shopify_customers?.first_name ?? null) as string | null,
+        checkout_url: ae.checkout_url as string | null,
+      }))
+      .filter((r: { phone: string }) => Boolean(r.phone));
+  }
+
+  return getCustomersWithPhone(ids);
+}
+
+/** Dispara de fato a campanha já criada e loga cada envio.
+ *  `restrictToCustomerIds`, quando informado, pula o recálculo do segmento inteiro e manda só
+ *  pra essa lista — usado pelo motor de automação pra não reenviar pra quem já recebeu antes. */
+export async function dispatchCampaign(campaignId: string, restrictToCustomerIds?: string[]) {
   const supabaseAdmin = await admin();
   const settings = await loadSettings();
 
@@ -429,29 +460,13 @@ export async function dispatchCampaign(campaignId: string) {
   await supabaseAdmin.from("whatsapp_campaigns").update({ status: "enviando" } as never).eq("id", campaignId);
 
   const bodyParams = Array.isArray(campaign.body_params) ? (campaign.body_params as string[]) : [];
-  const ids = await getSegmentCustomerIds(campaign.segment_type as SegmentType, campaign.segment_id || undefined);
-  
-  // Lógica especial para Carrinhos Abandonados: enviar para CADA abandono
-  const isAbandonedCartSegment = campaign.segment_type === "carrinho" || campaign.segment_type === "abandoned_cart";
-  
-  let recipients: { id: string; phone: string; first_name: string | null; checkout_url?: string | null }[] = [];
-
-  if (isAbandonedCartSegment) {
-    const { data: abandonedEvents } = await (supabaseAdmin
-      .from("shopify_abandoned_checkouts")
-      .select("customer_id, phone, checkout_url, shopify_customers(first_name)") as any)
-      .in("customer_id", ids);
-
-    recipients = (abandonedEvents ?? []).map((ae: any) => ({
-      id: ae.customer_id!,
-      phone: ae.phone!,
-      first_name: ae.shopify_customers?.first_name || null,
-      checkout_url: ae.checkout_url
-    })).filter((r: any) => Boolean(r.phone));
-  } else {
-    const customers = await getCustomersWithPhone(ids);
-    recipients = customers;
+  let ids = await getSegmentCustomerIds(campaign.segment_type as SegmentType, campaign.segment_id || undefined);
+  if (restrictToCustomerIds) {
+    const restrictSet = new Set(restrictToCustomerIds);
+    ids = ids.filter((id) => restrictSet.has(id));
   }
+
+  const recipients = await resolveSegmentRecipients(campaign.segment_type, ids);
 
   let sent = 0;
   let failed = 0;
@@ -796,56 +811,6 @@ export async function listAutomationsRows() {
     totalExecucoes: (a.total_execucoes ?? 0) as number,
     createdAt: a.created_at as string,
   }));
-}
-
-/** Executa uma automação agora: cria a campanha e envia (ou manda pra aprovação). */
-export async function runAutomation(automationId: string, force = false) {
-  const supabaseAdmin = await admin();
-  const { data } = await supabaseAdmin
-    .from("whatsapp_automations")
-    .select("*")
-    .eq("id", automationId)
-    .maybeSingle();
-  if (!data) return { success: false as const, error: "Automação não encontrada." };
-
-  const a = data as any;
-  if (!a.ativo && !force) return { success: false as const, error: "Automação está pausada." };
-
-  const created = await createCampaignRow(
-    {
-      nome: a.nome,
-      segmentType: a.segment_type as SegmentType,
-      messageType: a.message_type as MessageType,
-      templateName: a.template_name,
-      templateLanguage: a.template_language,
-      bodyParams: Array.isArray(a.body_params) ? (a.body_params as string[]) : [],
-      couponCode: a.coupon_code ?? undefined,
-      origem: "automacao",
-      automationId,
-    },
-    a.requer_aprovacao ? "aguardando_aprovacao" : "enviando",
-  );
-  if (!created.success) return created;
-
-  await supabaseAdmin
-    .from("whatsapp_automations")
-    .update({
-      last_run_at: new Date().toISOString(),
-      total_execucoes: (a.total_execucoes ?? 0) + 1,
-    } as never)
-    .eq("id", automationId);
-
-  if (a.requer_aprovacao) {
-    return {
-      success: true as const,
-      pendingApproval: true as const,
-      campaignId: created.campaignId,
-      destinatarios: created.destinatarios,
-    };
-  }
-
-  const dispatched = await dispatchCampaign(created.campaignId);
-  return { ...dispatched, pendingApproval: false as const };
 }
 
 /** Detalhe de 1 campanha — lista de destinatários com status, pra tela de "ver campanha". */

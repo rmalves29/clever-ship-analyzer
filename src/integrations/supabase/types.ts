@@ -359,6 +359,7 @@ export type Database = {
       }
       store_settings: {
         Row: {
+          automation_tick_secret: string | null
           created_at: string
           id: string
           last_imported_order_at: string | null
@@ -389,6 +390,7 @@ export type Database = {
           whatsapp_meta_waba_id: string | null
         }
         Insert: {
+          automation_tick_secret?: string | null
           created_at?: string
           id?: string
           last_imported_order_at?: string | null
@@ -419,6 +421,7 @@ export type Database = {
           whatsapp_meta_waba_id?: string | null
         }
         Update: {
+          automation_tick_secret?: string | null
           created_at?: string
           id?: string
           last_imported_order_at?: string | null
@@ -450,6 +453,103 @@ export type Database = {
         }
         Relationships: []
       }
+      automation_tick_runs: {
+        Row: {
+          automations_processed: number
+          error: string | null
+          finished_at: string | null
+          id: string
+          runs_processed: number
+          started_at: string
+        }
+        Insert: {
+          automations_processed?: number
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          runs_processed?: number
+          started_at?: string
+        }
+        Update: {
+          automations_processed?: number
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          runs_processed?: number
+          started_at?: string
+        }
+        Relationships: []
+      }
+      whatsapp_automation_runs: {
+        Row: {
+          automation_id: string
+          campaign_id: string | null
+          completed_at: string | null
+          created_at: string
+          current_step_id: string
+          customer_id: string
+          enrolled_at: string
+          id: string
+          last_error: string | null
+          next_run_at: string | null
+          phone: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          automation_id: string
+          campaign_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          current_step_id: string
+          customer_id: string
+          enrolled_at?: string
+          id?: string
+          last_error?: string | null
+          next_run_at?: string | null
+          phone: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          automation_id?: string
+          campaign_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          current_step_id?: string
+          customer_id?: string
+          enrolled_at?: string
+          id?: string
+          last_error?: string | null
+          next_run_at?: string | null
+          phone?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_automation_runs_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_automations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_automation_runs_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_automation_runs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_automations: {
         Row: {
           ativo: boolean
@@ -464,7 +564,9 @@ export type Database = {
           nome: string
           origem: string
           requer_aprovacao: boolean
+          segment_id: string | null
           segment_type: string
+          steps: Json
           template_language: string
           template_name: string
           total_execucoes: number
@@ -483,7 +585,9 @@ export type Database = {
           nome: string
           origem?: string
           requer_aprovacao?: boolean
+          segment_id?: string | null
           segment_type: string
+          steps?: Json
           template_language?: string
           template_name: string
           total_execucoes?: number
@@ -502,13 +606,23 @@ export type Database = {
           nome?: string
           origem?: string
           requer_aprovacao?: boolean
+          segment_id?: string | null
           segment_type?: string
+          steps?: Json
           template_language?: string
           template_name?: string
           total_execucoes?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_automations_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "crm_segments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       whatsapp_campaign_recipients: {
         Row: {

@@ -3,8 +3,10 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { applyMetaStatusUpdate, getStoredVerifyToken } from "./lib/whatsapp-meta.server";
+import { getAutomationTickSecret, runAutomationsTickWithLog } from "./lib/automations-engine.server";
 
 const WHATSAPP_WEBHOOK_PATH = "/api/whatsapp-webhook";
+const AUTOMATIONS_TICK_PATH = "/api/automations/tick";
 
 // Webhook da Meta é chamado diretamente por eles, fora do protocolo de RPC do
 // createServerFn — por isso é tratado aqui, antes do handler SSR do TanStack Start.
@@ -40,6 +42,30 @@ async function handleWhatsappWebhook(request: Request): Promise<Response> {
   }
 
   return new Response("Method Not Allowed", { status: 405 });
+}
+
+// Chamado periodicamente pelo pg_cron+pg_net (ver migração do motor de automação) — fora do
+// protocolo de RPC do createServerFn pelo mesmo motivo do webhook acima: precisa responder a uma
+// chamada HTTP crua vinda de fora da aplicação, autenticada por um segredo compartilhado.
+async function handleAutomationsTick(request: Request): Promise<Response> {
+  if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+
+  const provided = request.headers.get("X-Automation-Secret");
+  const storedSecret = await getAutomationTickSecret();
+  if (!storedSecret || !provided || provided !== storedSecret) {
+    return new Response("Forbidden", { status: 401 });
+  }
+
+  try {
+    const result = await runAutomationsTickWithLog();
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  } catch (error) {
+    console.error("Falha ao rodar o tick de automações:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
 }
 
 type ServerEntry = {
@@ -85,8 +111,12 @@ function isH3SwallowedErrorBody(body: string): boolean {
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
-    if (new URL(request.url).pathname === WHATSAPP_WEBHOOK_PATH) {
+    const pathname = new URL(request.url).pathname;
+    if (pathname === WHATSAPP_WEBHOOK_PATH) {
       return handleWhatsappWebhook(request);
+    }
+    if (pathname === AUTOMATIONS_TICK_PATH) {
+      return handleAutomationsTick(request);
     }
     try {
       const handler = await getServerEntry();

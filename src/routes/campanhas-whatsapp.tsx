@@ -161,10 +161,8 @@ function CampanhasWhatsapp() {
     setBusyId(id);
     try {
       const res = await runNow({ data: { id } });
-      if (!res.success) toast.error(res.error);
-      else if ("pendingApproval" in res && res.pendingApproval)
-        toast.success("Campanha criada e enviada pra fila de aprovação.");
-      else toast.success(`Automação executada: ${(res as any).sent}/${(res as any).total} mensagens.`);
+      if (res.runsProcessed === 0) toast.success("Nenhum cliente novo pra matricular ou etapa vencida agora.");
+      else toast.success(`${res.runsProcessed} cliente(s) processado(s) nesta execução.`);
       refetch();
       refetchAutomations();
     } catch (err: any) {

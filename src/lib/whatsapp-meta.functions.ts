@@ -133,12 +133,15 @@ export const createAndSendCampaign = createServerFn({ method: "POST" })
     return { ...result, pendingApproval: false as const };
   });
 
-/** Aprova uma campanha pendente e dispara os envios. */
+/** Aprova uma campanha pendente e dispara os envios. Se a campanha for um lote de automação
+ *  (tem runs em `whatsapp_automation_runs` vinculados), restringe o disparo a esses clientes e
+ *  avança os runs pra próxima etapa — etapas seguintes desse fluxo não pedem aprovação de novo. */
 export const approveCampaign = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.object({ campaignId: z.string().uuid(), approvedBy: z.string().optional() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { dispatchCampaign } = await import("./whatsapp-meta.server");
+    const { advanceRunsForApprovedCampaign } = await import("./automations-engine.server");
 
     const { data: row } = await supabaseAdmin
       .from("whatsapp_campaigns")
@@ -155,24 +158,39 @@ export const approveCampaign = createServerFn({ method: "POST" })
       .update({ approved_at: new Date().toISOString(), approved_by: data.approvedBy ?? "painel" } as never)
       .eq("id", data.campaignId);
 
-    return dispatchCampaign(data.campaignId);
+    const { data: pendingRuns } = await supabaseAdmin
+      .from("whatsapp_automation_runs")
+      .select("customer_id")
+      .eq("campaign_id", data.campaignId)
+      .eq("status", "pending_approval");
+    const runCustomerIds = ((pendingRuns ?? []) as { customer_id: string }[]).map((r) => r.customer_id);
+
+    const result = await dispatchCampaign(data.campaignId, runCustomerIds.length > 0 ? runCustomerIds : undefined);
+    if (runCustomerIds.length > 0) await advanceRunsForApprovedCampaign(data.campaignId);
+    return result;
   });
 
-/** Rejeita uma campanha pendente — nada é enviado. */
+/** Rejeita uma campanha pendente — nada é enviado. Se for um lote de automação, os runs pendentes
+ *  ficam `failed` (não removidos — a trava de matrícula única impede reenrollment automático). */
 export const rejectCampaign = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.object({ campaignId: z.string().uuid(), reason: z.string().optional() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { failRunsForRejectedCampaign } = await import("./automations-engine.server");
+    const reason = data.reason?.trim() || "rejeitado";
+
     const { error } = await supabaseAdmin
       .from("whatsapp_campaigns")
       .update({
         status: "rejeitada",
         rejected_at: new Date().toISOString(),
-        reject_reason: data.reason?.trim() || null,
+        reject_reason: reason,
       } as never)
       .eq("id", data.campaignId)
       .eq("status", "aguardando_aprovacao");
     if (error) return { success: false as const, error: error.message };
+
+    await failRunsForRejectedCampaign(data.campaignId, reason);
     return { success: true as const };
   });
 
@@ -287,12 +305,14 @@ export const deleteAutomation = createServerFn({ method: "POST" })
     return { success: true as const };
   });
 
-/** Roda a automação agora — cria a campanha e envia, ou coloca na fila de aprovação. */
+/** Roda a automação agora: matricula clientes novos do segmento e processa quem já pode avançar
+ *  de etapa — mesmo motor do tick agendado, só que escopado a essa automação e ignorando "pausada". */
 export const runAutomationNow = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
-    const { runAutomation } = await import("./whatsapp-meta.server");
-    return runAutomation(data.id, true);
+    const { runAutomationsTick } = await import("./automations-engine.server");
+    const result = await runAutomationsTick({ automationId: data.id, force: true });
+    return { success: true as const, ...result };
   });
 
 /** Recebe o "code" do popup de Embedded Signup da Meta e troca por token, salvando tudo automaticamente. */

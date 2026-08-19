@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
-
-let Globe: any = () => null;
+import { RefreshCw } from 'lucide-react';
 
 interface LiveGlobeProps {
   markers: any[];
@@ -122,8 +121,10 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
       }
     };
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
   }, []);
 
   useEffect(() => {
@@ -136,20 +137,18 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
 
       globe.pointOfView({ lat: -16, lng: -50, altitude: 1.4 }, 1000);
     }
-  }, []);
+  }, [GlobeComponent]);
 
-  return (
-    <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-transparent rounded-xl">
   if (!GlobeComponent) {
     return (
-      <div ref={containerRef} className="w-full h-full flex items-center justify-center bg-transparent rounded-xl">
+      <div ref={containerRef} className="w-full h-full flex items-center justify-center bg-transparent rounded-xl min-h-[500px]">
         <RefreshCw className="size-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-transparent rounded-xl">
+    <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-transparent rounded-xl min-h-[500px]">
       <GlobeComponent
         ref={globeRef}
         width={dimensions.width}

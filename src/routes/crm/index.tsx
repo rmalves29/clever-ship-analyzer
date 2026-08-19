@@ -546,7 +546,15 @@ function CRMPage() {
                         ];
                         
                         try {
-                          for (const seg of segmentsToCreate) {
+                          const existingNames = new Set((segments || []).map((s: any) => s.nome));
+                          const toCreate = segmentsToCreate.filter(seg => !existingNames.has(seg.nome));
+
+                          if (toCreate.length === 0) {
+                            toast.info("Os segmentos sugeridos já existem.");
+                            return;
+                          }
+
+                          for (const seg of toCreate) {
                             await runSaveSegment({ data: { ...seg, tipo: "dinamico" } as any });
                           }
                           toast.success("Segmentos sugeridos criados com sucesso!");

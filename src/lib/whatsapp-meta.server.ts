@@ -215,11 +215,12 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
 
     const { data: allCustomers } = await supabaseAdmin
       .from("shopify_customers")
-      .select("id, email, city, province, phone");
+      .select("id, email, city, province, phone, tags");
 
     if (allCustomers && (customSegment.regras as any)?.groups) {
       const groups = (customSegment.regras as any).groups;
-      
+      const customerIdsWithOrders = new Set((orders ?? []).map((o) => o.customer_id).filter(Boolean));
+
       // Mapear regras para ids
       const filtered = allCustomers.filter(c => {
         return groups.some((g: any) => {
@@ -233,7 +234,7 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
             if (field === "total_pedidos" || field === "recorrencia") {
               const numVal = Number(value);
               const orderCount = orders?.filter(o => o.customer_id === c.id).length || 0;
-              
+
               if (field === "total_pedidos") {
                 if (operator === "eq") return orderCount === numVal;
                 if (operator === "gt") return orderCount > numVal;
@@ -247,6 +248,31 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
               }
             }
 
+            // "perfil" não é uma coluna de shopify_customers — replica a mesma lógica usada em
+            // crm-segmentation.functions.ts (editor de segmentos) pros valores conhecidos, senão
+            // esse filtro sempre bate vazio (c["perfil"] é sempre undefined).
+            if (field === "perfil") {
+              const hasOrders = customerIdsWithOrders.has(c.id);
+              const tags = ((c as any).tags ?? []) as string[];
+              const hasExcludedTag = tags.includes("Carrinho Abandonado") || tags.includes("Checkout") || tags.includes("CAR24");
+
+              if (value === "acesso_sem_compra" || value === "lead") {
+                const isMatch = !hasOrders && !hasExcludedTag;
+                return operator === "eq" ? isMatch : !isMatch;
+              }
+              if (value === "primeira_compra") {
+                const orderCount = orders?.filter(o => o.customer_id === c.id).length || 0;
+                const isMatch = orderCount === 1;
+                return operator === "eq" ? isMatch : !isMatch;
+              }
+              if (value === "carrinho") {
+                // Já coberto pelo branch dedicado "carrinho"/"abandoned_cart" acima; mantido aqui
+                // só pra combinações de segmento que decidam checar via crm_segments mesmo assim.
+                return operator === "eq" ? hasExcludedTag : !hasExcludedTag;
+              }
+              return false;
+            }
+
             const val = String(c[field as keyof typeof c] || "").toLowerCase();
             if (operator === "eq") return val === target;
             if (operator === "neq") return val !== target;
@@ -256,7 +282,7 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
           });
         });
       });
-      
+
       return filtered.map(c => c.id);
     }
   }

@@ -140,7 +140,17 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
 
   return (
     <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-transparent rounded-xl">
-      <Globe
+  if (!GlobeComponent) {
+    return (
+      <div ref={containerRef} className="w-full h-full flex items-center justify-center bg-transparent rounded-xl">
+        <RefreshCw className="size-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-transparent rounded-xl">
+      <GlobeComponent
         ref={globeRef}
         width={dimensions.width}
         height={dimensions.height}

@@ -80,11 +80,17 @@ export async function getShopifyCredentials(): Promise<{ domain: string; accessT
   return { domain: shop, accessToken: json.access_token };
 }
 
-/** Server-only helper: executes a GraphQL query against the Shopify Admin API. */
-export async function shopifyGraphQL(query: string, variables?: Record<string, unknown>): Promise<any> {
+/** Server-only helper: executes a GraphQL query against the Shopify Admin API.
+ *  `apiVersion` sobrescreve a versão padrão só pra essa chamada — usado por `shopifyqlQuery`,
+ *  que exige API 2025-10+, sem subir a versão global (usada por outros callers já testados). */
+export async function shopifyGraphQL(
+  query: string,
+  variables?: Record<string, unknown>,
+  apiVersion?: string,
+): Promise<any> {
   const { domain, accessToken } = await getShopifyCredentials();
 
-  const response = await fetch(`https://${domain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+  const response = await fetch(`https://${domain}/admin/api/${apiVersion ?? SHOPIFY_API_VERSION}/graphql.json`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

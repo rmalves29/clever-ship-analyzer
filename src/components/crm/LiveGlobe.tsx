@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import Globe from 'react-globe.gl';
-import { scaleSequential } from 'd3-scale';
-import { interpolateYlOrRd } from 'd3-scale-chromatic';
+import * as THREE from 'three';
 
 interface LiveGlobeProps {
   markers: any[];
 }
+
+// Material escuro sólido (navy) em vez da textura foto-realista — visual próximo do
+// globo da Shopify (esfera escura + linhas de grade + marcadores brilhando por cima).
+const DARK_GLOBE_MATERIAL = new THREE.MeshPhongMaterial({
+  color: '#0b1120',
+  emissive: '#0b1120',
+  emissiveIntensity: 0.15,
+  shininess: 4,
+});
 
 export default function LiveGlobe({ markers }: LiveGlobeProps) {
   const globeRef = useRef<any>(null);
@@ -70,9 +78,10 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
         width={dimensions.width}
         height={dimensions.height}
         backgroundColor="rgba(0,0,0,0)"
-        globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
-        bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-        backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
+        globeMaterial={DARK_GLOBE_MATERIAL}
+        showAtmosphere={true}
+        atmosphereColor="#38bdf8"
+        atmosphereAltitude={0.2}
         showGraticules={true}
         pointsData={globeData}
         pointRadius="size"

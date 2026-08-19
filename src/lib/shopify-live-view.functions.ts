@@ -44,13 +44,23 @@ async function admin() {
 
 type ShopifyQLRow = Record<string, string | undefined>;
 
-/** Roda uma query ShopifyQL e devolve as linhas já como objetos simples {coluna: valor}. */
+let lastShopifyQLError: string | null = null;
+
+/** Roda uma query ShopifyQL e devolve as linhas já como objetos simples {coluna: valor}.
+ *  Guarda o último erro (parse ou GraphQL-level, ex: scope faltando) em `lastShopifyQLError`
+ *  pra diagnóstico — `shopifyqlQuery` costuma falhar silenciosamente do ponto de vista da UI. */
 async function runShopifyQL(query: string): Promise<ShopifyQLRow[]> {
   const { shopifyGraphQL } = await import("./shopify.server");
   const gql = `{ shopifyqlQuery(query: ${JSON.stringify(query)}) { tableData { columns { name } rows } parseErrors } }`;
   const result = await shopifyGraphQL(gql, undefined, SHOPIFYQL_API_VERSION);
+  if (result?.errors?.length) {
+    lastShopifyQLError = JSON.stringify(result.errors).slice(0, 500);
+    console.error("ShopifyQL GraphQL error:", result.errors);
+    return [];
+  }
   const payload = result?.data?.shopifyqlQuery;
   if (payload?.parseErrors?.length) {
+    lastShopifyQLError = JSON.stringify(payload.parseErrors).slice(0, 500);
     console.error("ShopifyQL parse error:", payload.parseErrors);
     return [];
   }
@@ -78,6 +88,8 @@ export type LiveViewData = {
   topProdutosHoje: { nome: string; total: number }[];
   atividadeRecente: { tipo: "pedido" | "carrinho_abandonado"; cidade: string | null; valor: number | null; createdAt: string }[];
   marcadoresGlobo: { name: string; coordinates: [number, number]; type: "order" | "visitor" }[];
+  /** Diagnóstico temporário — erro da última chamada ShopifyQL, se houver. Remover depois de confirmar que funciona. */
+  shopifyqlDebugError?: string | null;
 };
 
 export const getLiveViewData = createServerFn({ method: "GET" }).handler(async (): Promise<LiveViewData> => {
@@ -225,5 +237,6 @@ export const getLiveViewData = createServerFn({ method: "GET" }).handler(async (
     topProdutosHoje,
     atividadeRecente,
     marcadoresGlobo,
+    shopifyqlDebugError: lastShopifyQLError,
   };
 });

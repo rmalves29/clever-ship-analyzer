@@ -141,10 +141,10 @@ function LiveViewPage() {
 
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex gap-4">
               <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm px-3 py-1 rounded-full border border-border/50 text-[10px] font-medium">
-                <span className="size-2 rounded-full bg-brand"></span> Sessões
+                <span className="size-2 rounded-full" style={{ backgroundColor: '#ef4444' }}></span> Sessões
               </div>
               <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm px-3 py-1 rounded-full border border-border/50 text-[10px] font-medium">
-                <span className="size-2 rounded-full bg-success"></span> Pedidos
+                <span className="size-2 rounded-full" style={{ backgroundColor: '#9333ea' }}></span> Pedidos
               </div>
             </div>
           </div>

@@ -6,20 +6,50 @@ interface LiveGlobeProps {
   markers: any[];
 }
 
-// Oceano escuro sólido — os continentes entram por cima via polygonsData (hexPolygons ficaria
-// pesado demais só pra contorno). Visual final: oceano escuro + terra num azul mais claro,
-// parecido com o globo da Shopify.
+// Globo claro com oceano suave — o continente entra por cima via hexPolygonsData
+// (pontilhado hexagonal), copiando o visual do Live View da própria Shopify.
 const OCEAN_MATERIAL = new THREE.MeshPhongMaterial({
-  color: '#060a17',
-  emissive: '#060a17',
-  emissiveIntensity: 0.2,
-  shininess: 8,
+  color: '#eaf5fb',
+  emissive: '#dbeefc',
+  emissiveIntensity: 0.35,
+  shininess: 15,
 });
 
-// Mesmo dataset (Natural Earth 110m, via three-globe) usado nos exemplos oficiais da lib —
-// contorno de todos os países do mundo em GeoJSON.
+// Mesmo dataset usado nos exemplos oficiais da three-globe (Natural Earth 110m).
 const COUNTRIES_GEOJSON_URL =
   'https://raw.githubusercontent.com/vasturiano/three-globe/master/example/country-polygons/ne_110m_admin_0_countries.geojson';
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+
+// Latitude média (aproximada) dos pontos da geometria — só pra escolher a cor do país
+// no degradê, não precisa de precisão geográfica de verdade.
+function featureCentroidLat(feature: any): number {
+  const coords: number[][] = [];
+  const flatten = (arr: any): void => {
+    if (!Array.isArray(arr)) return;
+    if (typeof arr[0] === 'number') {
+      coords.push(arr);
+      return;
+    }
+    arr.forEach(flatten);
+  };
+  flatten(feature?.geometry?.coordinates);
+  if (coords.length === 0) return 0;
+  return coords.reduce((sum, c) => sum + (c[1] ?? 0), 0) / coords.length;
+}
+
+// Degradê azul (equador) → verde-água (polos), igual ao globo da Shopify.
+function hexColorForLat(lat: number): string {
+  const t = Math.min(1, Math.abs(lat) / 55);
+  const blue: [number, number, number] = [56, 189, 248];
+  const teal: [number, number, number] = [45, 212, 191];
+  const r = lerp(blue[0], teal[0], t) | 0;
+  const g = lerp(blue[1], teal[1], t) | 0;
+  const b = lerp(blue[2], teal[2], t) | 0;
+  return `rgb(${r},${g},${b})`;
+}
 
 export default function LiveGlobe({ markers }: LiveGlobeProps) {
   const globeRef = useRef<any>(null);
@@ -42,18 +72,23 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
     };
   }, []);
 
+  const colorByFeature = useMemo(() => {
+    const map = new Map<any, string>();
+    for (const f of countries) map.set(f, hexColorForLat(featureCentroidLat(f)));
+    return map;
+  }, [countries]);
+
   const globeData = useMemo(() => {
     return markers.map((m) => ({
       lat: m.coordinates[1],
       lng: m.coordinates[0],
-      size: m.type === 'order' ? 0.55 : 0.35,
-      color: m.type === 'order' ? '#34d399' : '#38bdf8',
+      size: m.type === 'order' ? 0.5 : 0.4,
+      // Pedidos em roxo, sessões/visitantes em vermelho — igual pedido do usuário.
+      color: m.type === 'order' ? '#9333ea' : '#ef4444',
       label: m.name,
     }));
   }, [markers]);
 
-  // Só as cidades com pedido pulsam — um anel só, sutil, pra não virar bagunça visual
-  // quando várias cidades estão perto umas das outras.
   const ringsData = useMemo(() => {
     return markers
       .filter((m) => m.type === 'order')
@@ -91,7 +126,6 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
       globe.controls().autoRotateSpeed = 0.4;
       globe.controls().enableZoom = true;
 
-      // Mais próximo do Brasil, pra separar visualmente as cidades vizinhas.
       globe.pointOfView({ lat: -16, lng: -50, altitude: 1.4 }, 1000);
     }
   }, []);
@@ -105,22 +139,22 @@ export default function LiveGlobe({ markers }: LiveGlobeProps) {
         backgroundColor="rgba(0,0,0,0)"
         globeMaterial={OCEAN_MATERIAL}
         showAtmosphere={true}
-        atmosphereColor="#38bdf8"
-        atmosphereAltitude={0.22}
+        atmosphereColor="#5eead4"
+        atmosphereAltitude={0.2}
         showGraticules={false}
-        polygonsData={countries}
-        polygonCapColor={() => 'rgba(96, 165, 250, 0.35)'}
-        polygonSideColor={() => 'rgba(15, 23, 42, 0)'}
-        polygonStrokeColor={() => 'rgba(148, 197, 253, 0.55)'}
-        polygonAltitude={0.006}
+        hexPolygonsData={countries}
+        hexPolygonResolution={3}
+        hexPolygonMargin={0.32}
+        hexPolygonAltitude={0.006}
+        hexPolygonColor={(d: any) => colorByFeature.get(d) ?? '#38bdf8'}
         pointsData={globeData}
         pointRadius="size"
         pointColor="color"
-        pointAltitude={0.015}
+        pointAltitude={0.02}
         pointResolution={16}
         pointLabel={(d: any) => `<div style="font:12px sans-serif;color:#fff;background:rgba(15,23,42,.9);padding:4px 8px;border-radius:6px">${d.label}</div>`}
         ringsData={ringsData}
-        ringColor={() => (t: number) => `rgba(52,211,153,${1 - t})`}
+        ringColor={() => (t: number) => `rgba(147,51,234,${1 - t})`}
         ringMaxRadius="maxR"
         ringPropagationSpeed="propagationSpeed"
         ringRepeatPeriod="repeatPeriod"

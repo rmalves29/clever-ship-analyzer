@@ -64,9 +64,8 @@ async function runShopifyQL(query: string): Promise<ShopifyQLRow[]> {
     console.error("ShopifyQL parse error:", payload.parseErrors);
     return [];
   }
-  const columns: { name: string }[] = payload?.tableData?.columns ?? [];
-  const rows: string[][] = payload?.tableData?.rows ?? [];
-  return rows.map((row) => Object.fromEntries(columns.map((c, i) => [c.name, row[i]])));
+  // A Shopify já devolve cada linha como objeto {coluna: valor} pronto, não array posicional.
+  return (payload?.tableData?.rows ?? []) as ShopifyQLRow[];
 }
 
 function num(v: string | undefined): number {
@@ -98,14 +97,14 @@ export const getLiveViewData = createServerFn({ method: "GET" }).handler(async (
   const startISO = fromZonedTime(startOfDay(now), TZ).toISOString();
   const endISO = fromZonedTime(endOfDay(now), TZ).toISOString();
 
-  // DEBUG temporário: testa isoladamente cada variação da query real de produção.
+  // DEBUG temporário: isola qual campo/cláusula zera o resultado.
   try {
-    const q1 = await runShopifyQL(
-      "FROM sessions SHOW sessions, online_store_visitors, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout DURING today",
-    );
-    const q2 = await runShopifyQL("FROM sessions SHOW sessions GROUP BY session_region, session_city DURING today ORDER BY sessions DESC LIMIT 8");
-    const q3 = await runShopifyQL("FROM sessions SHOW sessions SINCE -5m UNTIL now");
-    lastShopifyQLError = JSON.stringify({ q1, q2, q3, lastErr: lastShopifyQLError }).slice(0, 900);
+    const a = await runShopifyQL("FROM sessions SHOW sessions, online_store_visitors DURING today");
+    const b = await runShopifyQL("FROM sessions SHOW sessions, sessions_with_cart_additions DURING today");
+    const c = await runShopifyQL("FROM sessions SHOW sessions GROUP BY session_region DURING today LIMIT 5");
+    const d = await runShopifyQL("FROM sessions SHOW sessions SINCE -5m UNTIL now");
+    const e = await runShopifyQL("FROM sessions SHOW sessions DURING today ORDER BY sessions DESC LIMIT 5");
+    lastShopifyQLError = JSON.stringify({ a, b, c, d, e }).slice(0, 900);
   } catch (e) {
     lastShopifyQLError = "ISOLATED_TEST_FAILED: " + (e instanceof Error ? e.message : String(e));
   }

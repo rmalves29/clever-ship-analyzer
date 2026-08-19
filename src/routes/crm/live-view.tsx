@@ -70,6 +70,12 @@ function LiveViewPage() {
           </Button>
         </div>
 
+        {data?.shopifyqlDebugError && (
+          <div className="mb-6 rounded-lg border border-critical/40 bg-critical/5 p-3 text-xs text-critical">
+            <strong>Debug ShopifyQL:</strong> {data.shopifyqlDebugError}
+          </div>
+        )}
+
         {/* Top Row Cards */}
         <div className="grid gap-6 md:grid-cols-4 mb-8">
           <div className="surface-card p-5 border-l-4 border-success">

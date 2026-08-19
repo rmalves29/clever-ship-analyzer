@@ -19,7 +19,7 @@ const OCEAN_MATERIAL = new THREE.MeshPhongMaterial({
 // Mesmo dataset (Natural Earth 110m, via three-globe) usado nos exemplos oficiais da lib —
 // contorno de todos os países do mundo em GeoJSON.
 const COUNTRIES_GEOJSON_URL =
-  'https://raw.githubusercontent.com/vasturiano/three-globe/master/example/datasets/ne_110m_admin_0_countries.geojson';
+  'https://raw.githubusercontent.com/vasturiano/three-globe/master/example/country-polygons/ne_110m_admin_0_countries.geojson';
 
 export default function LiveGlobe({ markers }: LiveGlobeProps) {
   const globeRef = useRef<any>(null);

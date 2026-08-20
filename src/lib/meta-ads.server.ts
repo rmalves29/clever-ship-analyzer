@@ -101,23 +101,29 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** `actions`/`action_values` vêm como array [{action_type, value}] — soma os tipos de compra
- *  conhecidos (a Meta reporta pixel puro como "purchase" e pixel+catálogo como "omni_purchase",
- *  nunca os dois ao mesmo tempo pro mesmo evento, então somar ambos não duplica). */
-function sumAction(actions: { action_type: string; value: string }[] | undefined, types: string[]): number {
+/** `actions`/`action_values` vêm como array [{action_type, value}]. A Meta costuma listar VÁRIOS
+ *  action_types pro mesmo evento de compra ao mesmo tempo (ex: "purchase" E "omni_purchase" juntos
+ *  — "omni_purchase" já é a métrica unificada, que INCLUI o que está em "purchase"). Somar os dois
+ *  duplica a contagem e a receita. Por isso aqui é "pega o primeiro tipo que existir" (por prioridade),
+ *  nunca soma vários tipos. */
+function pickAction(actions: { action_type: string; value: string }[] | undefined, typesByPriority: string[]): number {
   if (!actions) return 0;
-  return actions.filter((a) => types.includes(a.action_type)).reduce((acc, a) => acc + num(a.value), 0);
+  for (const type of typesByPriority) {
+    const match = actions.find((a) => a.action_type === type);
+    if (match) return num(match.value);
+  }
+  return 0;
 }
 
-const PURCHASE_TYPES = ["purchase", "omni_purchase"];
+const PURCHASE_TYPES = ["omni_purchase", "purchase"];
 const LINK_CLICK_TYPES = ["link_click"];
 
 function rowFromInsight(raw: any, idField: string, nameField: string): MetaAdsRow {
   const spend = num(raw.spend);
   const impressions = num(raw.impressions);
-  const linkClicks = sumAction(raw.actions, LINK_CLICK_TYPES) || num(raw.inline_link_clicks);
-  const purchases = sumAction(raw.actions, PURCHASE_TYPES);
-  const revenue = sumAction(raw.action_values, PURCHASE_TYPES);
+  const linkClicks = pickAction(raw.actions, LINK_CLICK_TYPES) || num(raw.inline_link_clicks);
+  const purchases = pickAction(raw.actions, PURCHASE_TYPES);
+  const revenue = pickAction(raw.action_values, PURCHASE_TYPES);
 
   return {
     id: raw[idField],
@@ -202,9 +208,9 @@ export async function getMetaAdsSummary(datePreset: MetaAdsDatePreset): Promise<
 
     const spend = num(raw.spend);
     const impressions = num(raw.impressions);
-    const linkClicks = sumAction(raw.actions, LINK_CLICK_TYPES) || num(raw.inline_link_clicks);
-    const purchases = sumAction(raw.actions, PURCHASE_TYPES);
-    const revenue = sumAction(raw.action_values, PURCHASE_TYPES);
+    const linkClicks = pickAction(raw.actions, LINK_CLICK_TYPES) || num(raw.inline_link_clicks);
+    const purchases = pickAction(raw.actions, PURCHASE_TYPES);
+    const revenue = pickAction(raw.action_values, PURCHASE_TYPES);
 
     return {
       success: true,

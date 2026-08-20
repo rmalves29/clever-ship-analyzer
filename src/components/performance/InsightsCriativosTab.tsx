@@ -45,7 +45,7 @@ function Thumb({ url, name }: { url: string | null; name: string }) {
       </div>
     );
   }
-  return <img src={url} alt={name} className="aspect-square w-full rounded-lg object-cover" loading="lazy" />;
+  return <img src={url} alt={name} className="aspect-square w-full rounded-lg object-cover" />;
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {

@@ -231,6 +231,156 @@ export async function getMetaAdsSummary(datePreset: MetaAdsDatePreset): Promise<
   }
 }
 
+export type DaypartAction = "escalar" | "reduzir" | "cortar" | "zero_venda";
+
+export type DaypartHour = {
+  hour: number;
+  spend: number;
+  purchases: number;
+  revenue: number;
+  cpa: number;
+  roas: number;
+  pctSpend: number;
+  action: DaypartAction;
+};
+
+export type DaypartBlock = {
+  label: string;
+  spend: number;
+  purchases: number;
+  revenue: number;
+  cpa: number;
+  roas: number;
+  pctSpend: number;
+};
+
+export type DaypartingResult = {
+  hours: DaypartHour[];
+  blocks: DaypartBlock[];
+  totalSpend: number;
+  accountRoas: number;
+  bestHour: { hour: number; roas: number } | null;
+  wasteSpend: number;
+  worstHour: { hour: number; spend: number } | null;
+};
+
+const DAYPART_BLOCKS: { label: string; hours: number[] }[] = [
+  { label: "Madrugada 0-5h", hours: [0, 1, 2, 3, 4, 5] },
+  { label: "Manhã 6-11h", hours: [6, 7, 8, 9, 10, 11] },
+  { label: "Tarde 12-17h", hours: [12, 13, 14, 15, 16, 17] },
+  { label: "Noite 18-23h", hours: [18, 19, 20, 21, 22, 23] },
+];
+
+/** Classifica a hora comparando o ROAS dela com o ROAS da conta no período — mesma lógica de
+ *  "ação sugerida" observada no Dayparting da Axoly (usada como referência). Sem venda na hora =
+ *  alerta máximo; acima do ROAS da conta = escalar; bem abaixo = cortar; moderadamente abaixo = reduzir. */
+function classifyHour(purchases: number, roas: number, accountRoas: number): DaypartAction {
+  if (purchases === 0) return "zero_venda";
+  if (accountRoas <= 0) return roas > 0 ? "escalar" : "zero_venda";
+  const ratio = roas / accountRoas;
+  if (ratio >= 1) return "escalar";
+  if (ratio >= 0.7) return "reduzir";
+  return "cortar";
+}
+
+/** Eficiência por horário do dia — usa o breakdown nativo da Meta (fuso do anunciante, já não
+ *  precisa converter timezone na mão) pra achar horário de pico, horas sem venda e sugerir ação. */
+export async function getMetaAdsDayparting(datePreset: MetaAdsDatePreset): Promise<{ success: true; result: DaypartingResult } | { success: false; error: string }> {
+  const { accessToken, accountId } = await loadMetaAdsSettings();
+  if (!accessToken || !accountId) {
+    return { success: false, error: "Meta Ads não conectado. Configure em Configurações." };
+  }
+
+  try {
+    const insightsRes = await graphGET(
+      `/${accountId}/insights`,
+      {
+        level: "account",
+        date_preset: datePreset,
+        breakdowns: "hourly_stats_aggregated_by_advertiser_time_zone",
+        fields: "spend,actions,action_values",
+        limit: "50",
+      },
+      accessToken,
+    );
+
+    const byHour = new Map<number, { spend: number; purchases: number; revenue: number }>();
+    for (let h = 0; h < 24; h++) byHour.set(h, { spend: 0, purchases: 0, revenue: 0 });
+
+    for (const raw of (insightsRes.data ?? []) as any[]) {
+      const bucket = raw.hourly_stats_aggregated_by_advertiser_time_zone as string | undefined;
+      const hour = bucket ? Number(bucket.slice(0, 2)) : NaN;
+      if (!Number.isFinite(hour)) continue;
+      const agg = byHour.get(hour)!;
+      agg.spend += num(raw.spend);
+      agg.purchases += pickAction(raw.actions, PURCHASE_TYPES);
+      agg.revenue += pickAction(raw.action_values, PURCHASE_TYPES);
+    }
+
+    const totalSpend = Array.from(byHour.values()).reduce((acc, v) => acc + v.spend, 0);
+    const totalRevenue = Array.from(byHour.values()).reduce((acc, v) => acc + v.revenue, 0);
+    const accountRoas = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+
+    const hours: DaypartHour[] = Array.from(byHour.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([hour, v]) => {
+        const roas = v.spend > 0 ? v.revenue / v.spend : 0;
+        return {
+          hour,
+          spend: v.spend,
+          purchases: v.purchases,
+          revenue: v.revenue,
+          cpa: v.purchases > 0 ? v.spend / v.purchases : 0,
+          roas,
+          pctSpend: totalSpend > 0 ? v.spend / totalSpend : 0,
+          action: classifyHour(v.purchases, roas, accountRoas),
+        };
+      });
+
+    const blocks: DaypartBlock[] = DAYPART_BLOCKS.map((b) => {
+      const rows = hours.filter((h) => b.hours.includes(h.hour));
+      const spend = rows.reduce((acc, r) => acc + r.spend, 0);
+      const purchases = rows.reduce((acc, r) => acc + r.purchases, 0);
+      const revenue = rows.reduce((acc, r) => acc + r.revenue, 0);
+      return {
+        label: b.label,
+        spend,
+        purchases,
+        revenue,
+        cpa: purchases > 0 ? spend / purchases : 0,
+        roas: spend > 0 ? revenue / spend : 0,
+        pctSpend: totalSpend > 0 ? spend / totalSpend : 0,
+      };
+    });
+
+    const hoursWithSales = hours.filter((h) => h.purchases > 0);
+    const bestHour = hoursWithSales.length
+      ? hoursWithSales.reduce((best, h) => (h.roas > best.roas ? h : best))
+      : null;
+
+    const zeroSaleHours = hours.filter((h) => h.purchases === 0 && h.spend > 0);
+    const wasteSpend = zeroSaleHours.reduce((acc, h) => acc + h.spend, 0);
+    const worstHour = zeroSaleHours.length
+      ? zeroSaleHours.reduce((worst, h) => (h.spend > worst.spend ? h : worst))
+      : null;
+
+    return {
+      success: true,
+      result: {
+        hours,
+        blocks,
+        totalSpend,
+        accountRoas,
+        bestHour: bestHour ? { hour: bestHour.hour, roas: bestHour.roas } : null,
+        wasteSpend,
+        worstHour: worstHour ? { hour: worstHour.hour, spend: worstHour.spend } : null,
+      },
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar a Meta." };
+  }
+}
+
 /** Ativa/pausa uma campanha, conjunto ou anúncio direto na Meta. */
 export async function setMetaAdsStatus(id: string, status: "ACTIVE" | "PAUSED"): Promise<{ success: true } | { success: false; error: string }> {
   const { accessToken } = await loadMetaAdsSettings();

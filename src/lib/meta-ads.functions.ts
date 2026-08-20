@@ -23,6 +23,13 @@ export const getMetaAdsRows = createServerFn({ method: "POST" })
     return getRows(data.level, data.datePreset);
   });
 
+export const getMetaAdsDayparting = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ datePreset: datePresetSchema }).parse(data))
+  .handler(async ({ data }) => {
+    const { getMetaAdsDayparting: getDayparting } = await import("./meta-ads.server");
+    return getDayparting(data.datePreset);
+  });
+
 export const setMetaAdsStatus = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.object({ id: z.string().min(1), status: z.enum(["ACTIVE", "PAUSED"]) }).parse(data))
   .handler(async ({ data }) => {

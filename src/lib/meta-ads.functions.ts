@@ -65,6 +65,13 @@ export const deleteMetaAdsRule = createServerFn({ method: "POST" })
     return del(data.id);
   });
 
+export const getMetaAdsCreatives = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ datePreset: datePresetSchema }).parse(data))
+  .handler(async ({ data }) => {
+    const { getMetaAdsCreatives: getCreatives } = await import("./meta-ads.server");
+    return getCreatives(data.datePreset);
+  });
+
 export const setMetaAdsStatus = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.object({ id: z.string().min(1), status: z.enum(["ACTIVE", "PAUSED"]) }).parse(data))
   .handler(async ({ data }) => {

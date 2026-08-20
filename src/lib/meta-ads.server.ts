@@ -484,6 +484,179 @@ export async function getMetaAdsPulse(datePreset: MetaAdsDatePreset): Promise<{ 
   }
 }
 
+export type CreativeFreshness = "fresco" | "maduro" | "fadigado";
+export type CreativeSuggestion = "escalar" | "testar_mais";
+
+export type CreativeInsight = {
+  id: string;
+  name: string;
+  status: string;
+  thumbnailUrl: string | null;
+  ageDays: number | null;
+  freshness: CreativeFreshness | null;
+  frequency: number;
+  spend: number;
+  impressions: number;
+  cpm: number;
+  thumbstop: number;
+  ctrAll: number;
+  ctrLink: number;
+  cps: number;
+  cvr: number;
+  ticket: number;
+  cpa: number;
+  purchases: number;
+  revenue: number;
+  roas: number;
+  suggestion: CreativeSuggestion;
+};
+
+export type CreativesSummary = {
+  cpm: number;
+  thumbstop: number;
+  ctrAll: number;
+  ctrLink: number;
+  purchases: number;
+  cpa: number;
+  roas: number;
+  spend: number;
+};
+
+export type CreativesResult = {
+  summary: CreativesSummary;
+  topGancho: CreativeInsight | null;
+  topCtr: CreativeInsight | null;
+  topCompras: CreativeInsight | null;
+  topRoas: CreativeInsight | null;
+  creatives: CreativeInsight[];
+};
+
+/** <7 dias = fresco, 7-60 = maduro, >60 = fadigado — limiar nosso, não vem de nenhum campo da
+ *  Meta (ela não expõe "idade do criativo" pronta, só created_time do anúncio). */
+function classifyFreshness(ageDays: number | null): CreativeFreshness | null {
+  if (ageDays === null) return null;
+  if (ageDays < 7) return "fresco";
+  if (ageDays <= 60) return "maduro";
+  return "fadigado";
+}
+
+/** Insights por criativo: métricas de vídeo/thumb-stop, idade e um preview real (imagem ou frame
+ *  do vídeo) — a Meta devolve o mesmo campo `thumbnail_url` pros dois tipos de criativo. */
+export async function getMetaAdsCreatives(datePreset: MetaAdsDatePreset): Promise<{ success: true; result: CreativesResult } | { success: false; error: string }> {
+  const { accessToken, accountId } = await loadMetaAdsSettings();
+  if (!accessToken || !accountId) {
+    return { success: false, error: "Meta Ads não conectado. Configure em Configurações." };
+  }
+
+  try {
+    const [insightsRes, adsRes] = await Promise.all([
+      graphGET(
+        `/${accountId}/insights`,
+        {
+          level: "ad",
+          date_preset: datePreset,
+          fields:
+            "ad_id,ad_name,spend,impressions,inline_link_clicks,ctr,cpm,frequency,actions,action_values,video_play_actions",
+          limit: "500",
+        },
+        accessToken,
+      ),
+      graphGET(
+        `/${accountId}/ads`,
+        { fields: "id,effective_status,created_time,creative{thumbnail_url}", limit: "500" },
+        accessToken,
+      ),
+    ]);
+
+    const adsById = new Map<string, { status: string; createdTime: string | null; thumbnailUrl: string | null }>(
+      ((adsRes.data ?? []) as any[]).map((a) => [
+        a.id,
+        { status: a.effective_status, createdTime: a.created_time ?? null, thumbnailUrl: a.creative?.thumbnail_url ?? null },
+      ]),
+    );
+
+    const now = Date.now();
+    const creatives: CreativeInsight[] = ((insightsRes.data ?? []) as any[])
+      .filter((raw) => num(raw.spend) > 0)
+      .map((raw) => {
+        const base = rowFromInsight(raw, "ad_id", "ad_name");
+        const meta = adsById.get(base.id);
+        const ctrLink = base.impressions > 0 ? base.linkClicks / base.impressions : 0;
+        const thumbstop = base.impressions > 0 ? pickAction(raw.video_play_actions, ["video_view"]) / base.impressions : 0;
+        const ageDays = meta?.createdTime ? Math.floor((now - new Date(meta.createdTime).getTime()) / 86_400_000) : null;
+
+        return {
+          id: base.id,
+          name: base.name,
+          status: meta?.status ?? base.status,
+          thumbnailUrl: meta?.thumbnailUrl ?? null,
+          ageDays,
+          freshness: classifyFreshness(ageDays),
+          frequency: num(raw.frequency),
+          spend: base.spend,
+          impressions: base.impressions,
+          cpm: base.cpm,
+          thumbstop,
+          ctrAll: base.ctr / 100,
+          ctrLink,
+          cps: base.cps,
+          cvr: base.cvr,
+          ticket: base.ticket,
+          cpa: base.cpa,
+          purchases: base.purchases,
+          revenue: base.revenue,
+          roas: base.roas,
+          suggestion: "testar_mais" as CreativeSuggestion,
+        };
+      });
+
+    const totalSpend = creatives.reduce((acc, c) => acc + c.spend, 0);
+    const totalRevenue = creatives.reduce((acc, c) => acc + c.revenue, 0);
+    const accountRoas = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+    const totalPurchases = creatives.reduce((acc, c) => acc + c.purchases, 0);
+    const totalImpressions = creatives.reduce((acc, c) => acc + c.impressions, 0);
+    const totalLinkClicks = creatives.reduce((acc, c) => acc + c.impressions * c.ctrLink, 0);
+
+    for (const c of creatives) {
+      c.suggestion = c.purchases > 0 && c.roas >= accountRoas ? "escalar" : "testar_mais";
+    }
+    creatives.sort((a, b) => b.spend - a.spend);
+
+    const withPurchases = creatives.filter((c) => c.purchases > 0);
+    const topGancho = creatives.length ? creatives.reduce((best, c) => (c.thumbstop > best.thumbstop ? c : best)) : null;
+    const topCtr = creatives.length ? creatives.reduce((best, c) => (c.ctrAll > best.ctrAll ? c : best)) : null;
+    const topCompras = withPurchases.length ? withPurchases.reduce((best, c) => (c.purchases > best.purchases ? c : best)) : null;
+    const topRoas = withPurchases.length ? withPurchases.reduce((best, c) => (c.roas > best.roas ? c : best)) : null;
+
+    return {
+      success: true,
+      result: {
+        summary: {
+          cpm: average(creatives.map((c) => c.cpm)),
+          thumbstop: average(creatives.map((c) => c.thumbstop)),
+          ctrAll: average(creatives.map((c) => c.ctrAll)),
+          ctrLink: totalImpressions > 0 ? totalLinkClicks / totalImpressions : 0,
+          purchases: totalPurchases,
+          cpa: totalPurchases > 0 ? totalSpend / totalPurchases : 0,
+          roas: accountRoas,
+          spend: totalSpend,
+        },
+        topGancho,
+        topCtr,
+        topCompras,
+        topRoas,
+        creatives,
+      },
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar a Meta." };
+  }
+}
+
+function average(values: number[]): number {
+  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+}
+
 /** Ativa/pausa uma campanha, conjunto ou anúncio direto na Meta. */
 export async function setMetaAdsStatus(id: string, status: "ACTIVE" | "PAUSED"): Promise<{ success: true } | { success: false; error: string }> {
   const { accessToken } = await loadMetaAdsSettings();

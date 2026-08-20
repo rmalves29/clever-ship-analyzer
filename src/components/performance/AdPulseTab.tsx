@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertTriangle, Play, Pause, Plus, Trash2 } from "lucide-react";
@@ -27,6 +27,33 @@ const STATUS_CLASS: Record<string, string> = {
   DELETED: "bg-critical-soft text-critical",
 };
 
+type Tone = "good" | "mid" | "bad";
+const TONE_CLASS: Record<Tone, string> = {
+  good: "bg-success-soft text-success",
+  mid: "bg-warning-soft text-warning",
+  bad: "bg-critical-soft text-critical",
+};
+
+/** Compara o valor do anúncio com a média do que está sendo exibido na tabela (não um benchmark
+ *  fixo) — mesmo espírito do semáforo de cores visto na Axoly. >=15% melhor que a média = verde,
+ *  >=15% pior = vermelho, no meio = laranja. */
+function metricTone(value: number, avg: number, lowerIsBetter: boolean): Tone {
+  if (avg <= 0) return "mid";
+  const ratio = value / avg;
+  if (lowerIsBetter) {
+    if (ratio <= 0.85) return "good";
+    if (ratio >= 1.15) return "bad";
+    return "mid";
+  }
+  if (ratio >= 1.15) return "good";
+  if (ratio <= 0.85) return "bad";
+  return "mid";
+}
+
+function average(values: number[]): number {
+  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+}
+
 function ruleLabel(r: MetaAdsRule): string {
   const metric = r.metric === "roas" ? "ROAS" : "CPA";
   const op = r.operator === "gt" ? "acima de" : "abaixo de";
@@ -43,6 +70,7 @@ export function AdPulseTab({ datePreset }: { datePreset: MetaAdsDatePreset }) {
   const runDeleteRule = useServerFn(deleteMetaAdsRule);
   const runSetStatus = useServerFn(setMetaAdsStatus);
 
+  const [onlyActive, setOnlyActive] = useState(false);
   const [ruleOpen, setRuleOpen] = useState(false);
   const [ruleMetric, setRuleMetric] = useState<"cpa" | "roas">("roas");
   const [ruleOperator, setRuleOperator] = useState<"gt" | "lt">("lt");
@@ -106,6 +134,21 @@ export function AdPulseTab({ datePreset }: { datePreset: MetaAdsDatePreset }) {
 
   const result = pulseResult?.success ? pulseResult.result : null;
 
+  const rows = useMemo(() => {
+    const all = result?.rows ?? [];
+    return onlyActive ? all.filter((r) => r.status === "ACTIVE") : all;
+  }, [result, onlyActive]);
+
+  const averages = useMemo(() => {
+    const withSpend = rows.filter((r) => r.spend > 0);
+    return {
+      cps: average(withSpend.map((r) => r.cps)),
+      cvr: average(withSpend.map((r) => r.cvr)),
+      ticket: average(withSpend.map((r) => r.ticket)),
+      roas: average(withSpend.map((r) => r.roas)),
+    };
+  }, [rows]);
+
   return (
     <div className="mt-4">
       <p className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
@@ -164,7 +207,13 @@ export function AdPulseTab({ datePreset }: { datePreset: MetaAdsDatePreset }) {
         )}
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+      <div className="mt-4 flex items-center justify-end">
+        <label className="flex items-center gap-2 text-sm">
+          <Switch checked={onlyActive} onCheckedChange={setOnlyActive} /> Só ativas
+        </label>
+      </div>
+
+      <div className="mt-2 overflow-x-auto rounded-xl border border-border">
         <table className="w-full min-w-[1100px] text-sm">
           <thead className="bg-muted/60 text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
@@ -185,54 +234,58 @@ export function AdPulseTab({ datePreset }: { datePreset: MetaAdsDatePreset }) {
             </tr>
           </thead>
           <tbody>
-            {result?.rows.length === 0 && (
+            {rows.length === 0 && (
               <tr>
                 <td colSpan={14} className="px-4 py-8 text-center text-muted-foreground">Nenhum anúncio nesse período.</td>
               </tr>
             )}
-            {result?.rows.map((r) => (
-              <tr key={r.id} className={`border-t border-border ${r.brokenRules.length > 0 ? "bg-critical-soft/30" : ""}`}>
-                <td className="max-w-[260px] px-4 py-3 font-medium">
-                  <div className="flex items-center gap-1.5">
-                    {r.brokenRules.length > 0 && (
-                      <AlertTriangle className="size-3.5 shrink-0 text-critical" />
-                    )}
-                    <span className="truncate" title={r.brokenRules.length > 0 ? r.brokenRules.map(ruleLabel).join(" · ") : r.name}>
-                      {r.name}
+            {rows.map((r) => {
+              const cpsTone = metricTone(r.cps, averages.cps, true);
+              const cvrTone = metricTone(r.cvr, averages.cvr, false);
+              const ticketTone = metricTone(r.ticket, averages.ticket, false);
+              const roasTone = metricTone(r.roas, averages.roas, false);
+              return (
+                <tr key={r.id} className={`border-t border-border ${r.brokenRules.length > 0 ? "bg-critical-soft/30" : ""}`}>
+                  <td className="max-w-[260px] px-4 py-3 font-medium">
+                    <div className="flex items-center gap-1.5">
+                      {r.brokenRules.length > 0 && (
+                        <AlertTriangle className="size-3.5 shrink-0 text-critical" />
+                      )}
+                      <span className="truncate" title={r.brokenRules.length > 0 ? r.brokenRules.map(ruleLabel).join(" · ") : r.name}>
+                        {r.name}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_CLASS[r.status] ?? "bg-muted text-muted-foreground"}`}>
+                      {r.status}
                     </span>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_CLASS[r.status] ?? "bg-muted text-muted-foreground"}`}>
-                    {r.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right">{brl(r.spend)}</td>
-                <td className="px-4 py-3 text-right">{pct(r.pctAccount)}</td>
-                <td className="px-4 py-3 text-right">{brl(r.cpm)}</td>
-                <td className="px-4 py-3 text-right">{pct(r.thumbstop)}</td>
-                <td className="px-4 py-3 text-right">{pct(r.ctr / 100)}</td>
-                <td className="px-4 py-3 text-right">{brl(r.cps)}</td>
-                <td className="px-4 py-3 text-right">{pct(r.cvr)}</td>
-                <td className="px-4 py-3 text-right">{brl(r.ticket)}</td>
-                <td className="px-4 py-3 text-right">{brl(r.cpa)}</td>
-                <td className="px-4 py-3 text-right">{r.purchases}</td>
-                <td className={`px-4 py-3 text-right font-semibold ${r.roas >= 2 ? "text-success" : r.roas > 0 ? "text-warning" : "text-critical"}`}>
-                  {r.roas.toFixed(2)}x
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8"
-                    title={r.status === "ACTIVE" ? "Pausar" : "Ativar"}
-                    onClick={() => handleToggleStatus(r)}
-                  >
-                    {r.status === "ACTIVE" ? <Pause className="size-4" /> : <Play className="size-4" />}
-                  </Button>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="px-4 py-3 text-right">{brl(r.spend)}</td>
+                  <td className="px-4 py-3 text-right">{pct(r.pctAccount)}</td>
+                  <td className="px-4 py-3 text-right">{brl(r.cpm)}</td>
+                  <td className="px-4 py-3 text-right">{pct(r.thumbstop)}</td>
+                  <td className="px-4 py-3 text-right">{pct(r.ctr / 100)}</td>
+                  <td className={`px-4 py-3 text-right font-medium ${TONE_CLASS[cpsTone]}`}>{brl(r.cps)}</td>
+                  <td className={`px-4 py-3 text-right font-medium ${TONE_CLASS[cvrTone]}`}>{pct(r.cvr)}</td>
+                  <td className={`px-4 py-3 text-right font-medium ${TONE_CLASS[ticketTone]}`}>{brl(r.ticket)}</td>
+                  <td className="px-4 py-3 text-right">{brl(r.cpa)}</td>
+                  <td className="px-4 py-3 text-right">{r.purchases}</td>
+                  <td className={`px-4 py-3 text-right font-semibold ${TONE_CLASS[roasTone]}`}>{r.roas.toFixed(2)}x</td>
+                  <td className="px-4 py-3 text-right">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      title={r.status === "ACTIVE" ? "Pausar" : "Ativar"}
+                      onClick={() => handleToggleStatus(r)}
+                    >
+                      {r.status === "ACTIVE" ? <Pause className="size-4" /> : <Play className="size-4" />}
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

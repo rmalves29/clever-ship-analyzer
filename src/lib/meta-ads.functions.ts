@@ -77,6 +77,11 @@ export const getMetaAdsPlanningBaseline = createServerFn({ method: "GET" }).hand
   return getBaseline();
 });
 
+export const getMetaAdsPlanningRanges = createServerFn({ method: "GET" }).handler(async () => {
+  const { getMetaAdsPlanningRanges: getRanges } = await import("./meta-ads.server");
+  return getRanges();
+});
+
 export const getMetaAdsPlan = createServerFn({ method: "GET" }).handler(async () => {
   const { getMetaAdsPlan: getPlan } = await import("./meta-ads.server");
   return getPlan();

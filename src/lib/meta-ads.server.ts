@@ -680,6 +680,60 @@ export async function getMetaAdsPlanningBaseline(): Promise<{ success: true; bas
   return { success: true, baseline: { cps, cvr, ticket, cpa, roas } };
 }
 
+export type PlanRange = { min: number; max: number };
+export type PlanRanges = { cps: PlanRange; cvr: PlanRange; ticket: PlanRange; cpa: PlanRange; roas: PlanRange };
+
+/** Faixa de referência por métrica — não é benchmark de mercado (não temos isso), é o range real
+ *  dia-a-dia da própria conta nos últimos 30 dias (do dia mais fraco ao mais forte, ignorando dias
+ *  sem nenhuma venda pra CPA/ROAS não virarem infinito/zero artificial). */
+export async function getMetaAdsPlanningRanges(): Promise<{ success: true; ranges: PlanRanges } | { success: false; error: string }> {
+  const { accessToken, accountId } = await loadMetaAdsSettings();
+  if (!accessToken || !accountId) {
+    return { success: false, error: "Meta Ads não conectado. Configure em Configurações." };
+  }
+
+  try {
+    const res = await graphGET(
+      `/${accountId}/insights`,
+      {
+        level: "account",
+        date_preset: "last_30d",
+        time_increment: "1",
+        fields: "spend,inline_link_clicks,actions,action_values",
+        limit: "31",
+      },
+      accessToken,
+    );
+
+    const days = ((res.data ?? []) as any[]).map((raw) => {
+      const spend = num(raw.spend);
+      const linkClicks = pickAction(raw.actions, LINK_CLICK_TYPES) || num(raw.inline_link_clicks);
+      const purchases = pickAction(raw.actions, PURCHASE_TYPES);
+      const revenue = pickAction(raw.action_values, PURCHASE_TYPES);
+      return {
+        cps: linkClicks > 0 ? spend / linkClicks : null,
+        cvr: linkClicks > 0 ? purchases / linkClicks : null,
+        ticket: purchases > 0 ? revenue / purchases : null,
+        cpa: purchases > 0 ? spend / purchases : null,
+        roas: spend > 0 ? revenue / spend : null,
+      };
+    });
+
+    const rangeOf = (key: keyof (typeof days)[number]): PlanRange => {
+      const values = days.map((d) => d[key]).filter((v): v is number => v !== null && v > 0);
+      if (values.length === 0) return { min: 0, max: 0 };
+      return { min: Math.min(...values), max: Math.max(...values) };
+    };
+
+    return {
+      success: true,
+      ranges: { cps: rangeOf("cps"), cvr: rangeOf("cvr"), ticket: rangeOf("ticket"), cpa: rangeOf("cpa"), roas: rangeOf("roas") },
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar a Meta." };
+  }
+}
+
 export async function getMetaAdsPlan(): Promise<MetaAdsPlan | null> {
   const supabaseAdmin = await admin();
   const { data } = await supabaseAdmin

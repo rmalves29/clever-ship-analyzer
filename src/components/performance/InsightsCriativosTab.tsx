@@ -154,15 +154,37 @@ export function InsightsCriativosTab({ datePreset }: { datePreset: MetaAdsDatePr
                 </span>
               )}
             </div>
-            <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <span>CPM {brl(c.cpm)}</span>
-              <span>ThumbStop {pct(c.thumbstop)}</span>
-              <span>CTR {pct(c.ctrAll)}</span>
-              <span>CPS {brl(c.cps)}</span>
-              <span>CVR {pct(c.cvr)}</span>
-              <span>CPA {brl(c.cpa)}</span>
-              <span>Compras {c.purchases}</span>
-              <span className="font-semibold text-foreground">ROAS {c.roas.toFixed(2)}x</span>
+            <div className="mt-2 space-y-1 text-xs">
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>CPM</span><span className="text-foreground">{brl(c.cpm)}</span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Thumb Stop Rate</span><span className="text-foreground">{pct(c.thumbstop)}</span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>CTR (Todos)</span><span className="text-foreground">{pct(c.ctrAll)}</span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>CTR (Link)</span><span className="text-foreground">{pct(c.ctrLink)}</span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>CPS</span><span className="text-foreground">{brl(c.cps)}</span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Taxa de Conversão</span><span className="text-foreground">{c.purchases > 0 ? pct(c.cvr) : "—"}</span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Compras</span><span className="text-foreground">{c.purchases}</span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>CPA</span><span className="text-foreground">{c.purchases > 0 ? brl(c.cpa) : brl(0)}</span>
+              </div>
+              <div className="flex items-center justify-between font-semibold">
+                <span className="text-muted-foreground">ROAS</span><span>{c.roas.toFixed(2)}x</span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Valor Gasto</span><span className="text-foreground">{brl(c.spend)}</span>
+              </div>
             </div>
             <span
               className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${

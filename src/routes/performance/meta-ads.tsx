@@ -17,6 +17,7 @@ import {
 import { brl } from "@/lib/crm-mock";
 import type { MetaAdsDatePreset, MetaAdsLevel, MetaAdsRow, DaypartAction } from "@/lib/meta-ads.server";
 import { AdPulseTab } from "@/components/performance/AdPulseTab";
+import { GestaoInsights } from "@/components/performance/GestaoInsights";
 
 export const Route = createFileRoute("/performance/meta-ads")({
   component: MetaAdsPage,
@@ -304,6 +305,8 @@ function MetaAdsPage() {
               </tbody>
             </table>
           </div>
+
+          <GestaoInsights datePreset={datePreset} summary={summary} />
         </>
       )}
 

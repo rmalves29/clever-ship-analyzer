@@ -17,6 +17,7 @@ import { Route as CrmContatosRouteImport } from './routes/crm/contatos'
 import { Route as CrmListasEstaticasRouteImport } from './routes/crm/listas-estaticas'
 import { Route as CrmLiveViewRouteImport } from './routes/crm/live-view'
 import { Route as CrmSegmentosRouteImport } from './routes/crm/segmentos'
+import { Route as PerformanceMetaAdsRouteImport } from './routes/performance/meta-ads'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -58,6 +59,11 @@ const CrmSegmentosRoute = CrmSegmentosRouteImport.update({
   path: '/crm/segmentos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PerformanceMetaAdsRoute = PerformanceMetaAdsRouteImport.update({
+  id: '/performance/meta-ads',
+  path: '/performance/meta-ads',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -67,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
   '/crm/live-view': typeof CrmLiveViewRoute
   '/crm/segmentos': typeof CrmSegmentosRoute
+  '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/crm/': typeof CrmIndexRoute
 }
 export interface FileRoutesByTo {
@@ -77,6 +84,7 @@ export interface FileRoutesByTo {
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
   '/crm/live-view': typeof CrmLiveViewRoute
   '/crm/segmentos': typeof CrmSegmentosRoute
+  '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/crm': typeof CrmIndexRoute
 }
 export interface FileRoutesById {
@@ -88,6 +96,7 @@ export interface FileRoutesById {
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
   '/crm/live-view': typeof CrmLiveViewRoute
   '/crm/segmentos': typeof CrmSegmentosRoute
+  '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/crm/': typeof CrmIndexRoute
 }
 export interface FileRouteTypes {
@@ -100,6 +109,7 @@ export interface FileRouteTypes {
     | '/crm/listas-estaticas'
     | '/crm/live-view'
     | '/crm/segmentos'
+    | '/performance/meta-ads'
     | '/crm/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -110,6 +120,7 @@ export interface FileRouteTypes {
     | '/crm/listas-estaticas'
     | '/crm/live-view'
     | '/crm/segmentos'
+    | '/performance/meta-ads'
     | '/crm'
   id:
     | '__root__'
@@ -120,6 +131,7 @@ export interface FileRouteTypes {
     | '/crm/listas-estaticas'
     | '/crm/live-view'
     | '/crm/segmentos'
+    | '/performance/meta-ads'
     | '/crm/'
   fileRoutesById: FileRoutesById
 }
@@ -131,6 +143,7 @@ export interface RootRouteChildren {
   CrmListasEstaticasRoute: typeof CrmListasEstaticasRoute
   CrmLiveViewRoute: typeof CrmLiveViewRoute
   CrmSegmentosRoute: typeof CrmSegmentosRoute
+  PerformanceMetaAdsRoute: typeof PerformanceMetaAdsRoute
   CrmIndexRoute: typeof CrmIndexRoute
 }
 
@@ -192,6 +205,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CrmSegmentosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/performance/meta-ads': {
+      id: '/performance/meta-ads'
+      path: '/performance/meta-ads'
+      fullPath: '/performance/meta-ads'
+      preLoaderRoute: typeof PerformanceMetaAdsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -203,6 +223,7 @@ const rootRouteChildren: RootRouteChildren = {
   CrmListasEstaticasRoute: CrmListasEstaticasRoute,
   CrmLiveViewRoute: CrmLiveViewRoute,
   CrmSegmentosRoute: CrmSegmentosRoute,
+  PerformanceMetaAdsRoute: PerformanceMetaAdsRoute,
   CrmIndexRoute: CrmIndexRoute,
 }
 export const routeTree = rootRouteImport

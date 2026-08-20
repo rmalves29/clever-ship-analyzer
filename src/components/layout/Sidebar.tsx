@@ -1,10 +1,10 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Settings, Sparkles, Megaphone, FileText, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Settings, Sparkles, Megaphone, FileText, BarChart3, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
   label: string;
-  to: "/" | "/configuracoes" | "/campanhas-whatsapp" | "/crm" | "/crm/live-view";
+  to: "/" | "/configuracoes" | "/campanhas-whatsapp" | "/crm" | "/crm/live-view" | "/performance/meta-ads";
   search?: Record<string, string>;
   icon: typeof LayoutDashboard;
 };
@@ -27,6 +27,12 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { label: "Campanhas", to: "/campanhas-whatsapp", search: { tab: "campanhas" }, icon: Megaphone },
       { label: "Templates", to: "/campanhas-whatsapp", search: { tab: "templates" }, icon: FileText },
       { label: "Relatórios", to: "/campanhas-whatsapp", search: { tab: "relatorios" }, icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Performance",
+    items: [
+      { label: "Meta Ads", to: "/performance/meta-ads", icon: TrendingUp },
     ],
   },
   {

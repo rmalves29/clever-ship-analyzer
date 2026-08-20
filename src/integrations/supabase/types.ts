@@ -70,6 +70,33 @@ export type Database = {
           },
         ]
       }
+      meta_ads_rules: {
+        Row: {
+          ativa: boolean
+          created_at: string
+          id: string
+          metric: string
+          operator: string
+          value: number
+        }
+        Insert: {
+          ativa?: boolean
+          created_at?: string
+          id?: string
+          metric: string
+          operator: string
+          value: number
+        }
+        Update: {
+          ativa?: boolean
+          created_at?: string
+          id?: string
+          metric?: string
+          operator?: string
+          value?: number
+        }
+        Relationships: []
+      }
       crm_segments: {
         Row: {
           atualizado_em: string

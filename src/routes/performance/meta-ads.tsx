@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { RefreshCw, Megaphone, Layers, Image as ImageIcon, Play, Pause, Clock, TrendingUp } from "lucide-react";
+import { RefreshCw, Megaphone, Layers, Image as ImageIcon, Play, Pause, Clock, TrendingUp, Activity } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -16,6 +16,7 @@ import {
 } from "@/lib/meta-ads.functions";
 import { brl } from "@/lib/crm-mock";
 import type { MetaAdsDatePreset, MetaAdsLevel, MetaAdsRow, DaypartAction } from "@/lib/meta-ads.server";
+import { AdPulseTab } from "@/components/performance/AdPulseTab";
 
 export const Route = createFileRoute("/performance/meta-ads")({
   component: MetaAdsPage,
@@ -73,7 +74,7 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint?:
 
 function MetaAdsPage() {
   const queryClient = useQueryClient();
-  const [view, setView] = useState<"gestao" | "dayparting">("gestao");
+  const [view, setView] = useState<"gestao" | "dayparting" | "adpulse">("gestao");
   const [datePreset, setDatePreset] = useState<MetaAdsDatePreset>("last_7d");
   const [level, setLevel] = useState<MetaAdsLevel>("campaign");
   const [onlyActive, setOnlyActive] = useState(true);
@@ -158,7 +159,16 @@ function MetaAdsPage() {
                 : "Conectado"}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => (view === "gestao" ? refetchRows() : refetchDaypart())} className="gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            if (view === "gestao") refetchRows();
+            else if (view === "dayparting") refetchDaypart();
+            else queryClient.invalidateQueries({ queryKey: ["meta-ads-pulse"] });
+          }}
+          className="gap-2"
+        >
           <RefreshCw className="size-3.5" /> Atualizar
         </Button>
       </div>
@@ -171,6 +181,9 @@ function MetaAdsPage() {
             </TabsTrigger>
             <TabsTrigger value="dayparting" className="gap-1.5">
               <Clock className="size-3.5" /> Dayparting
+            </TabsTrigger>
+            <TabsTrigger value="adpulse" className="gap-1.5">
+              <Activity className="size-3.5" /> Ad Pulse
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -406,6 +419,8 @@ function MetaAdsPage() {
           )}
         </>
       )}
+
+      {view === "adpulse" && <AdPulseTab datePreset={datePreset} />}
     </div>
   );
 }

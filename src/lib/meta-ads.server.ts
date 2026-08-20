@@ -381,6 +381,109 @@ export async function getMetaAdsDayparting(datePreset: MetaAdsDatePreset): Promi
   }
 }
 
+export type MetaAdsRule = { id: string; metric: "cpa" | "roas"; operator: "gt" | "lt"; value: number; ativa: boolean };
+
+export async function listMetaAdsRules(): Promise<MetaAdsRule[]> {
+  const supabaseAdmin = await admin();
+  const { data } = await supabaseAdmin.from("meta_ads_rules").select("id, metric, operator, value, ativa").order("created_at", { ascending: false });
+  return ((data ?? []) as any[]).map((r) => ({ ...r, value: Number(r.value) }));
+}
+
+export async function createMetaAdsRule(input: { metric: "cpa" | "roas"; operator: "gt" | "lt"; value: number }): Promise<{ success: true } | { success: false; error: string }> {
+  const supabaseAdmin = await admin();
+  const { error } = await supabaseAdmin.from("meta_ads_rules").insert(input as never);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+export async function toggleMetaAdsRule(id: string, ativa: boolean): Promise<{ success: true } | { success: false; error: string }> {
+  const supabaseAdmin = await admin();
+  const { error } = await supabaseAdmin.from("meta_ads_rules").update({ ativa } as never).eq("id", id);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+export async function deleteMetaAdsRule(id: string): Promise<{ success: true } | { success: false; error: string }> {
+  const supabaseAdmin = await admin();
+  const { error } = await supabaseAdmin.from("meta_ads_rules").delete().eq("id", id);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+export type AdPulseRow = MetaAdsRow & { pctAccount: number; thumbstop: number; brokenRules: MetaAdsRule[] };
+
+export type AdPulseResult = {
+  rows: AdPulseRow[];
+  totalSpend: number;
+  noReturnSpend: number;
+  noReturnCount: number;
+  upsideEstimate: number;
+};
+
+/** "Ad Pulse": visão a nível de anúncio com % da verba da conta, thumb-stop rate (views de 3s ÷
+ *  impressões) e destaque de quais anúncios quebram alguma regra ativa de CPA/ROAS — tudo
+ *  informativo, nenhuma ação automática é tomada (o usuário decide, igual ao aviso da Axoly). */
+export async function getMetaAdsPulse(datePreset: MetaAdsDatePreset): Promise<{ success: true; result: AdPulseResult } | { success: false; error: string }> {
+  const { accessToken, accountId } = await loadMetaAdsSettings();
+  if (!accessToken || !accountId) {
+    return { success: false, error: "Meta Ads não conectado. Configure em Configurações." };
+  }
+
+  try {
+    const [insightsRes, statusRes, rules] = await Promise.all([
+      graphGET(
+        `/${accountId}/insights`,
+        {
+          level: "ad",
+          date_preset: datePreset,
+          fields: "ad_id,ad_name,spend,impressions,inline_link_clicks,ctr,cpm,actions,action_values,video_play_actions",
+          limit: "500",
+        },
+        accessToken,
+      ),
+      graphGET(`/${accountId}/ads`, { fields: "id,effective_status", limit: "500" }, accessToken),
+      listMetaAdsRules(),
+    ]);
+
+    const statusById = new Map<string, string>((statusRes.data ?? []).map((s: any) => [s.id, s.effective_status]));
+    const activeRules = rules.filter((r) => r.ativa);
+
+    const base = ((insightsRes.data ?? []) as any[]).map((raw) => {
+      const row = rowFromInsight(raw, "ad_id", "ad_name");
+      const thumbstop = row.impressions > 0 ? pickAction(raw.video_play_actions, ["video_view"]) / row.impressions : 0;
+      return { ...row, status: statusById.get(row.id) ?? row.status, thumbstop };
+    });
+
+    const totalSpend = base.reduce((acc, r) => acc + r.spend, 0);
+
+    const rows: AdPulseRow[] = base.map((row) => {
+      const brokenRules = activeRules.filter((rule) => {
+        const value = rule.metric === "cpa" ? row.cpa : row.roas;
+        return rule.operator === "gt" ? value > rule.value : value < rule.value;
+      });
+      return { ...row, pctAccount: totalSpend > 0 ? row.spend / totalSpend : 0, brokenRules };
+    });
+    rows.sort((a, b) => b.spend - a.spend);
+
+    const noReturn = rows.filter((r) => r.purchases === 0 && r.spend > 0);
+    const noReturnSpend = noReturn.reduce((acc, r) => acc + r.spend, 0);
+
+    const accountRoas = totalSpend > 0 ? rows.reduce((acc, r) => acc + r.revenue, 0) / totalSpend : 0;
+    // Estimativa: quanto a mais de receita cada anúncio acima da média da conta já está gerando por
+    // real investido — serve como indicativo de "quanto vale a pena escalar", não uma previsão exata.
+    const upsideEstimate = rows
+      .filter((r) => r.roas > accountRoas && r.spend > 0)
+      .reduce((acc, r) => acc + r.spend * (r.roas / accountRoas - 1), 0);
+
+    return {
+      success: true,
+      result: { rows, totalSpend, noReturnSpend, noReturnCount: noReturn.length, upsideEstimate },
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar a Meta." };
+  }
+}
+
 /** Ativa/pausa uma campanha, conjunto ou anúncio direto na Meta. */
 export async function setMetaAdsStatus(id: string, status: "ACTIVE" | "PAUSED"): Promise<{ success: true } | { success: false; error: string }> {
   const { accessToken } = await loadMetaAdsSettings();

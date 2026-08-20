@@ -19,3 +19,15 @@ export const getInstagramOverview = createServerFn({ method: "POST" })
     const { getInstagramOverview: getOverview } = await import("./instagram.server");
     return getOverview(data.datePreset);
   });
+
+export const getInstagramAudience = createServerFn({ method: "GET" }).handler(async () => {
+  const { getInstagramAudience: getAudience } = await import("./instagram.server");
+  return getAudience();
+});
+
+export const getInstagramTopContent = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ datePreset: datePresetSchema }).parse(data))
+  .handler(async ({ data }) => {
+    const { getInstagramTopContent: getTopContent } = await import("./instagram.server");
+    return getTopContent(data.datePreset);
+  });

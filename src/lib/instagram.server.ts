@@ -48,11 +48,14 @@ function datePresetToRange(preset: InstagramDatePreset): { since: string; until:
   };
 
   switch (preset) {
+    // `until` é exclusivo pra métricas diárias do Instagram (confirmado testando: since=13/until=20
+    // devolveu os dias 13..19, nunca o 20) — since === until sempre resulta em zero dias, por isso
+    // "hoje"/"ontem" precisam do dia seguinte como until, não o próprio dia.
     case "today":
-      return { since: toISO(now), until: toISO(now) };
+      return { since: toISO(now), until: toISO(daysAgo(-1)) };
     case "yesterday": {
       const y = daysAgo(1);
-      return { since: toISO(y), until: toISO(y) };
+      return { since: toISO(y), until: toISO(now) };
     }
     case "last_7d":
       return { since: toISO(daysAgo(7)), until: toISO(now) };
@@ -188,6 +191,133 @@ export async function getInstagramOverview(datePreset: InstagramDatePreset): Pro
         reachByDay,
       },
     };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar o Instagram." };
+  }
+}
+
+const COUNTRY_NAMES: Record<string, string> = {
+  BR: "Brasil", US: "Estados Unidos", PT: "Portugal", DE: "Alemanha", RU: "Rússia", BD: "Bangladesh",
+  BE: "Bélgica", AR: "Argentina", MX: "México", ES: "Espanha", FR: "França", IT: "Itália", GB: "Reino Unido",
+  CA: "Canadá", AU: "Austrália", JP: "Japão", CN: "China", IN: "Índia", NG: "Nigéria", PK: "Paquistão",
+  ID: "Indonésia", PH: "Filipinas", CL: "Chile", CO: "Colômbia", PE: "Peru", UY: "Uruguai", PY: "Paraguai",
+};
+function countryName(code: string): string {
+  return COUNTRY_NAMES[code] ?? code;
+}
+
+export type AudienceBucket = { label: string; value: number; pct: number };
+export type InstagramAudience = {
+  age: AudienceBucket[];
+  gender: AudienceBucket[];
+  topCountries: AudienceBucket[];
+  topCities: AudienceBucket[];
+};
+
+async function fetchDemographic(igId: string, pageToken: string, breakdown: string): Promise<{ label: string; value: number }[]> {
+  const res = await graphGET(
+    `/${igId}/insights`,
+    { metric: "follower_demographics", period: "lifetime", metric_type: "total_value", breakdown },
+    pageToken,
+  );
+  const results = (res.data?.[0]?.total_value?.breakdowns?.[0]?.results ?? []) as { dimension_values: string[]; value: number }[];
+  return results.map((r) => ({ label: r.dimension_values[0] ?? "—", value: r.value }));
+}
+
+const AGE_ORDER = ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
+
+export async function getInstagramAudience(): Promise<{ success: true; audience: InstagramAudience } | { success: false; error: string }> {
+  const { pageToken, igId } = await loadInstagramSettings();
+  if (!pageToken || !igId) return { success: false, error: "Instagram não conectado. Configure em Configurações." };
+
+  try {
+    const [ageRaw, genderRaw, countryRaw, cityRaw] = await Promise.all([
+      fetchDemographic(igId, pageToken, "age"),
+      fetchDemographic(igId, pageToken, "gender"),
+      fetchDemographic(igId, pageToken, "country"),
+      fetchDemographic(igId, pageToken, "city"),
+    ]);
+
+    const withPct = (rows: { label: string; value: number }[]): AudienceBucket[] => {
+      const total = rows.reduce((acc, r) => acc + r.value, 0);
+      return rows.map((r) => ({ ...r, pct: total > 0 ? r.value / total : 0 }));
+    };
+
+    const age = withPct(ageRaw.sort((a, b) => AGE_ORDER.indexOf(a.label) - AGE_ORDER.indexOf(b.label)));
+    const genderLabel: Record<string, string> = { F: "Mulheres", M: "Homens", U: "Não informado" };
+    const gender = withPct(genderRaw.map((r) => ({ ...r, label: genderLabel[r.label] ?? r.label })));
+    const topCountries = withPct(countryRaw.map((r) => ({ ...r, label: countryName(r.label) })).sort((a, b) => b.value - a.value).slice(0, 10));
+    const topCities = withPct(cityRaw.sort((a, b) => b.value - a.value).slice(0, 10));
+
+    return { success: true, audience: { age, gender, topCountries, topCities } };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar o Instagram." };
+  }
+}
+
+export type InstagramMedia = {
+  id: string;
+  caption: string | null;
+  mediaType: string;
+  productType: string;
+  permalink: string | null;
+  thumbnailUrl: string | null;
+  timestamp: string;
+  reach: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saved: number;
+  totalInteractions: number;
+};
+
+export async function getInstagramTopContent(datePreset: InstagramDatePreset): Promise<{ success: true; media: InstagramMedia[] } | { success: false; error: string }> {
+  const { pageToken, igId } = await loadInstagramSettings();
+  if (!pageToken || !igId) return { success: false, error: "Instagram não conectado. Configure em Configurações." };
+
+  const { since } = datePresetToRange(datePreset);
+  const sinceTs = Math.floor(new Date(since + "T00:00:00Z").getTime() / 1000);
+
+  try {
+    const listRes = await graphGET(
+      `/${igId}/media`,
+      { fields: "id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp", limit: "50" },
+      pageToken,
+    );
+    const items = ((listRes.data ?? []) as any[]).filter((m) => Math.floor(new Date(m.timestamp).getTime() / 1000) >= sinceTs);
+
+    const withInsights = await Promise.all(
+      items.map(async (m) => {
+        try {
+          const insRes = await graphGET(`/${m.id}/insights`, { metric: "reach,likes,comments,shares,saved,total_interactions" }, pageToken);
+          const byName = new Map<string, number>(((insRes.data ?? []) as any[]).map((row) => [row.name, row.values?.[0]?.value ?? row.total_value?.value ?? 0]));
+          return {
+            id: m.id,
+            caption: m.caption ?? null,
+            mediaType: m.media_type,
+            productType: m.media_product_type,
+            permalink: m.permalink ?? null,
+            thumbnailUrl: m.thumbnail_url ?? m.media_url ?? null,
+            timestamp: m.timestamp,
+            reach: byName.get("reach") ?? 0,
+            likes: byName.get("likes") ?? 0,
+            comments: byName.get("comments") ?? 0,
+            shares: byName.get("shares") ?? 0,
+            saved: byName.get("saved") ?? 0,
+            totalInteractions: byName.get("total_interactions") ?? 0,
+          } as InstagramMedia;
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    const media = withInsights
+      .filter((m): m is InstagramMedia => m !== null)
+      .sort((a, b) => b.totalInteractions - a.totalInteractions)
+      .slice(0, 10);
+
+    return { success: true, media };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar o Instagram." };
   }

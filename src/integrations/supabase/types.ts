@@ -70,6 +70,36 @@ export type Database = {
           },
         ]
       }
+      meta_ads_planning: {
+        Row: {
+          cps: number
+          id: string
+          investimento_mensal: number
+          meta_receita: number | null
+          taxa_conversao: number
+          ticket_medio: number
+          updated_at: string
+        }
+        Insert: {
+          cps: number
+          id?: string
+          investimento_mensal: number
+          meta_receita?: number | null
+          taxa_conversao: number
+          ticket_medio: number
+          updated_at?: string
+        }
+        Update: {
+          cps?: number
+          id?: string
+          investimento_mensal?: number
+          meta_receita?: number | null
+          taxa_conversao?: number
+          ticket_medio?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       meta_ads_rules: {
         Row: {
           ativa: boolean

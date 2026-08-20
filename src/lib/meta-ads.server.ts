@@ -436,7 +436,7 @@ export async function getMetaAdsPulse(datePreset: MetaAdsDatePreset): Promise<{ 
         {
           level: "ad",
           date_preset: datePreset,
-          fields: "ad_id,ad_name,spend,impressions,inline_link_clicks,ctr,cpm,actions,action_values,video_play_actions",
+          fields: "ad_id,ad_name,spend,impressions,inline_link_clicks,ctr,cpm,actions,action_values",
           limit: "500",
         },
         accessToken,
@@ -450,7 +450,10 @@ export async function getMetaAdsPulse(datePreset: MetaAdsDatePreset): Promise<{ 
 
     const base = ((insightsRes.data ?? []) as any[]).map((raw) => {
       const row = rowFromInsight(raw, "ad_id", "ad_name");
-      const thumbstop = row.impressions > 0 ? pickAction(raw.video_play_actions, ["video_view"]) / row.impressions : 0;
+      // "video_view" dentro de `actions` = visualização de verdade (~3s contínuos). O campo separado
+      // `video_play_actions` conta qualquer play, incluindo o autoplay mudo do Feed — por isso ficava
+      // perto de 100% dos casos (quase toda impressão vira "play" automaticamente, não é engajamento real).
+      const thumbstop = row.impressions > 0 ? pickAction(raw.actions, ["video_view"]) / row.impressions : 0;
       return { ...row, status: statusById.get(row.id) ?? row.status, thumbstop };
     });
 
@@ -555,8 +558,7 @@ export async function getMetaAdsCreatives(datePreset: MetaAdsDatePreset): Promis
         {
           level: "ad",
           date_preset: datePreset,
-          fields:
-            "ad_id,ad_name,spend,impressions,inline_link_clicks,ctr,cpm,frequency,actions,action_values,video_play_actions",
+          fields: "ad_id,ad_name,spend,impressions,inline_link_clicks,ctr,cpm,frequency,actions,action_values",
           limit: "500",
         },
         accessToken,
@@ -582,7 +584,7 @@ export async function getMetaAdsCreatives(datePreset: MetaAdsDatePreset): Promis
         const base = rowFromInsight(raw, "ad_id", "ad_name");
         const meta = adsById.get(base.id);
         const ctrLink = base.impressions > 0 ? base.linkClicks / base.impressions : 0;
-        const thumbstop = base.impressions > 0 ? pickAction(raw.video_play_actions, ["video_view"]) / base.impressions : 0;
+        const thumbstop = base.impressions > 0 ? pickAction(raw.actions, ["video_view"]) / base.impressions : 0;
         const ageDays = meta?.createdTime ? Math.floor((now - new Date(meta.createdTime).getTime()) / 86_400_000) : null;
 
         return {
@@ -655,6 +657,74 @@ export async function getMetaAdsCreatives(datePreset: MetaAdsDatePreset): Promis
 
 function average(values: number[]): number {
   return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+}
+
+export type MetaAdsPlan = {
+  investimentoMensal: number;
+  metaReceita: number | null;
+  ticketMedio: number;
+  taxaConversao: number;
+  cps: number;
+  updatedAt: string;
+};
+
+export type PlanBaseline = { cps: number; cvr: number; ticket: number; cpa: number; roas: number };
+
+/** Baseline real da conta (últimos 30 dias) — usado tanto pra pré-preencher o planejamento quanto
+ *  pra validar se as metas batem com o que a conta de fato entrega hoje. */
+export async function getMetaAdsPlanningBaseline(): Promise<{ success: true; baseline: PlanBaseline } | { success: false; error: string }> {
+  const res = await getMetaAdsSummary("last_30d");
+  if (!res.success) return res;
+  const { spend, revenue, purchases, linkClicks, cvr, ticket, cpa, roas } = res.summary;
+  const cps = linkClicks > 0 ? spend / linkClicks : 0;
+  return { success: true, baseline: { cps, cvr, ticket, cpa, roas } };
+}
+
+export async function getMetaAdsPlan(): Promise<MetaAdsPlan | null> {
+  const supabaseAdmin = await admin();
+  const { data } = await supabaseAdmin
+    .from("meta_ads_planning")
+    .select("investimento_mensal, meta_receita, ticket_medio, taxa_conversao, cps, updated_at")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return null;
+  const row = data as any;
+  return {
+    investimentoMensal: Number(row.investimento_mensal),
+    metaReceita: row.meta_receita != null ? Number(row.meta_receita) : null,
+    ticketMedio: Number(row.ticket_medio),
+    taxaConversao: Number(row.taxa_conversao),
+    cps: Number(row.cps),
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function saveMetaAdsPlan(input: {
+  investimentoMensal: number;
+  metaReceita: number | null;
+  ticketMedio: number;
+  taxaConversao: number;
+  cps: number;
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const supabaseAdmin = await admin();
+  const { data: existing } = await supabaseAdmin.from("meta_ads_planning").select("id").limit(1).maybeSingle();
+
+  const row = {
+    investimento_mensal: input.investimentoMensal,
+    meta_receita: input.metaReceita,
+    ticket_medio: input.ticketMedio,
+    taxa_conversao: input.taxaConversao,
+    cps: input.cps,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = existing
+    ? await supabaseAdmin.from("meta_ads_planning").update(row as never).eq("id", (existing as any).id)
+    : await supabaseAdmin.from("meta_ads_planning").insert(row as never);
+
+  if (error) return { success: false, error: error.message };
+  return { success: true };
 }
 
 /** Ativa/pausa uma campanha, conjunto ou anúncio direto na Meta. */

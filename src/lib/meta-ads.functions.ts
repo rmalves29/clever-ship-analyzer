@@ -72,6 +72,33 @@ export const getMetaAdsCreatives = createServerFn({ method: "POST" })
     return getCreatives(data.datePreset);
   });
 
+export const getMetaAdsPlanningBaseline = createServerFn({ method: "GET" }).handler(async () => {
+  const { getMetaAdsPlanningBaseline: getBaseline } = await import("./meta-ads.server");
+  return getBaseline();
+});
+
+export const getMetaAdsPlan = createServerFn({ method: "GET" }).handler(async () => {
+  const { getMetaAdsPlan: getPlan } = await import("./meta-ads.server");
+  return getPlan();
+});
+
+export const saveMetaAdsPlan = createServerFn({ method: "POST" })
+  .validator((data: unknown) =>
+    z
+      .object({
+        investimentoMensal: z.number().positive(),
+        metaReceita: z.number().positive().nullable(),
+        ticketMedio: z.number().positive(),
+        taxaConversao: z.number().positive(),
+        cps: z.number().positive(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { saveMetaAdsPlan: save } = await import("./meta-ads.server");
+    return save(data);
+  });
+
 export const setMetaAdsStatus = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.object({ id: z.string().min(1), status: z.enum(["ACTIVE", "PAUSED"]) }).parse(data))
   .handler(async ({ data }) => {

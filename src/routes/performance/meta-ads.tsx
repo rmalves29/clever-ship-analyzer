@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { RefreshCw, Megaphone, Layers, Image as ImageIcon, Play, Pause, Clock, TrendingUp, Activity, Sparkles } from "lucide-react";
+import { RefreshCw, Megaphone, Layers, Image as ImageIcon, Play, Pause, Clock, TrendingUp, Activity, Sparkles, Calculator } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -19,6 +19,7 @@ import type { MetaAdsDatePreset, MetaAdsLevel, MetaAdsRow, DaypartAction } from 
 import { AdPulseTab } from "@/components/performance/AdPulseTab";
 import { GestaoInsights } from "@/components/performance/GestaoInsights";
 import { InsightsCriativosTab } from "@/components/performance/InsightsCriativosTab";
+import { PlanejamentoTab } from "@/components/performance/PlanejamentoTab";
 
 export const Route = createFileRoute("/performance/meta-ads")({
   component: MetaAdsPage,
@@ -76,7 +77,7 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint?:
 
 function MetaAdsPage() {
   const queryClient = useQueryClient();
-  const [view, setView] = useState<"gestao" | "dayparting" | "adpulse" | "criativos">("gestao");
+  const [view, setView] = useState<"gestao" | "dayparting" | "adpulse" | "criativos" | "planejamento">("gestao");
   const [datePreset, setDatePreset] = useState<MetaAdsDatePreset>("last_7d");
   const [level, setLevel] = useState<MetaAdsLevel>("campaign");
   const [onlyActive, setOnlyActive] = useState(true);
@@ -168,7 +169,8 @@ function MetaAdsPage() {
             if (view === "gestao") refetchRows();
             else if (view === "dayparting") refetchDaypart();
             else if (view === "adpulse") queryClient.invalidateQueries({ queryKey: ["meta-ads-pulse"] });
-            else queryClient.invalidateQueries({ queryKey: ["meta-ads-creatives"] });
+            else if (view === "criativos") queryClient.invalidateQueries({ queryKey: ["meta-ads-creatives"] });
+            else queryClient.invalidateQueries({ queryKey: ["meta-ads-planning-baseline"] });
           }}
           className="gap-2"
         >
@@ -191,10 +193,14 @@ function MetaAdsPage() {
             <TabsTrigger value="criativos" className="gap-1.5">
               <Sparkles className="size-3.5" /> Insights Criativos
             </TabsTrigger>
+            <TabsTrigger value="planejamento" className="gap-1.5">
+              <Calculator className="size-3.5" /> Planejamento
+            </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
+      {view !== "planejamento" && (
       <div className="mt-4 flex flex-wrap gap-1.5">
         {DATE_PRESETS.map((p) => (
           <Button
@@ -207,6 +213,7 @@ function MetaAdsPage() {
           </Button>
         ))}
       </div>
+      )}
 
       {view === "gestao" && (
         <>
@@ -430,6 +437,7 @@ function MetaAdsPage() {
 
       {view === "adpulse" && <AdPulseTab datePreset={datePreset} />}
       {view === "criativos" && <InsightsCriativosTab datePreset={datePreset} />}
+      {view === "planejamento" && <PlanejamentoTab />}
     </div>
   );
 }

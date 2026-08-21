@@ -256,8 +256,8 @@ export async function getInstagramAudience(): Promise<{ success: true; audience:
     cityRaw.forEach(c => {
       const parts = c.label.split(',').map(s => s.trim());
       if (parts.length > 1) {
-        const state = parts[parts.length - 1];
-        stateMap.set(state, (stateMap.get(state) || 0) + c.value);
+        const state = parts[parts.length - 1]!;
+        stateMap.set(state, (stateMap.get(state) ?? 0) + c.value);
       }
     });
     const topStates = withPct(Array.from(stateMap.entries()).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 10));

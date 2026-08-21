@@ -6,8 +6,10 @@ import { applyMetaStatusUpdate, applyMetaTemplateStatusUpdate, getStoredVerifyTo
 import { matchIncomingMessage } from "./lib/conversational-flows.server";
 import { getAutomationTickSecret, runAutomationsTickWithLog } from "./lib/automations-engine.server";
 import { runDailyEventsAnalysis } from "./lib/events.server";
+import { getFlowWebhookVerifyToken, processInstagramWebhookBody, verifyMetaSignature } from "./lib/flow-engine.server";
 
 const WHATSAPP_WEBHOOK_PATH = "/api/whatsapp-webhook";
+const INSTAGRAM_WEBHOOK_PATH = "/api/instagram-webhook";
 const AUTOMATIONS_TICK_PATH = "/api/automations/tick";
 const DAILY_EVENTS_ANALYSIS_PATH = "/api/events/daily-analysis";
 
@@ -66,6 +68,36 @@ async function handleWhatsappWebhook(request: Request): Promise<Response> {
     } catch (error) {
       console.error("Falha ao processar webhook do WhatsApp:", error);
     }
+    return new Response("EVENT_RECEIVED", { status: 200 });
+  }
+
+  return new Response("Method Not Allowed", { status: 405 });
+}
+
+// Webhook do Instagram (comentários em post/reel/live e mensagens diretas) — motor do menu
+// ManyChat. Mesmo padrão do webhook do WhatsApp acima, mas valida a assinatura HMAC do corpo
+// cru (a Meta assina com o App Secret) antes de processar.
+async function handleInstagramWebhook(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+
+  if (request.method === "GET") {
+    const mode = url.searchParams.get("hub.mode");
+    const token = url.searchParams.get("hub.verify_token");
+    const challenge = url.searchParams.get("hub.challenge");
+    const storedToken = await getFlowWebhookVerifyToken();
+
+    if (mode === "subscribe" && storedToken && token === storedToken && challenge) {
+      return new Response(challenge, { status: 200 });
+    }
+    return new Response("Forbidden", { status: 403 });
+  }
+
+  if (request.method === "POST") {
+    const rawBody = await request.text();
+    const signatureValid = await verifyMetaSignature(rawBody, request.headers.get("x-hub-signature-256"));
+    await processInstagramWebhookBody(rawBody, signatureValid).catch((error) =>
+      console.error("Falha ao processar webhook do Instagram:", error),
+    );
     return new Response("EVENT_RECEIVED", { status: 200 });
   }
 
@@ -167,6 +199,9 @@ export default {
     const pathname = new URL(request.url).pathname;
     if (pathname === WHATSAPP_WEBHOOK_PATH) {
       return handleWhatsappWebhook(request);
+    }
+    if (pathname === INSTAGRAM_WEBHOOK_PATH) {
+      return handleInstagramWebhook(request);
     }
     if (pathname === AUTOMATIONS_TICK_PATH) {
       return handleAutomationsTick(request);

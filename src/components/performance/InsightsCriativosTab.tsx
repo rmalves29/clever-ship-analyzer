@@ -29,6 +29,33 @@ const STATUS_CLASS: Record<string, string> = {
   ADSET_PAUSED: "bg-muted text-muted-foreground",
 };
 
+type Tone = "good" | "mid" | "bad";
+const TONE_CLASS: Record<Tone, string> = {
+  good: "text-success",
+  mid: "text-warning",
+  bad: "text-critical",
+};
+
+/** Farol comparando o criativo com a média dos criativos exibidos no período (não um benchmark
+ *  fixo de internet) — mesmo espírito do semáforo já usado no Ad Pulse. >=15% melhor que a média
+ *  = verde, >=15% pior = vermelho, no meio = amarelo (atenção). */
+function metricTone(value: number, avg: number, lowerIsBetter: boolean): Tone {
+  if (avg <= 0) return "mid";
+  const ratio = value / avg;
+  if (lowerIsBetter) {
+    if (ratio <= 0.85) return "good";
+    if (ratio >= 1.15) return "bad";
+    return "mid";
+  }
+  if (ratio >= 1.15) return "good";
+  if (ratio <= 0.85) return "bad";
+  return "mid";
+}
+
+function average(values: number[]): number {
+  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+}
+
 function ageLabel(days: number | null): string {
   if (days === null) return "—";
   if (days < 1) return "hoje";
@@ -106,6 +133,20 @@ export function InsightsCriativosTab({ datePreset }: { datePreset: MetaAdsDatePr
     return onlyActive ? all.filter((c) => c.status === "ACTIVE") : all;
   }, [data, onlyActive]);
 
+  const averages = useMemo(() => {
+    const withPurchases = creatives.filter((c) => c.purchases > 0);
+    return {
+      cpm: average(creatives.map((c) => c.cpm)),
+      thumbstop: average(creatives.map((c) => c.thumbstop)),
+      ctrAll: average(creatives.map((c) => c.ctrAll)),
+      ctrLink: average(creatives.map((c) => c.ctrLink)),
+      cps: average(creatives.map((c) => c.cps)),
+      cvr: average(withPurchases.map((c) => c.cvr)),
+      cpa: average(withPurchases.map((c) => c.cpa)),
+      roas: average(creatives.map((c) => c.roas)),
+    };
+  }, [creatives]);
+
   if (isLoading) return <p className="mt-6 text-center text-muted-foreground">Carregando...</p>;
   if (result && !result.success) return <p className="mt-6 text-center text-muted-foreground">{result.error}</p>;
   if (!data) return null;
@@ -140,7 +181,16 @@ export function InsightsCriativosTab({ datePreset }: { datePreset: MetaAdsDatePr
 
       <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {creatives.length === 0 && <p className="col-span-full py-8 text-center text-muted-foreground">Nenhum criativo nesse período.</p>}
-        {creatives.map((c) => (
+        {creatives.map((c) => {
+          const cpmTone = metricTone(c.cpm, averages.cpm, true);
+          const thumbstopTone = metricTone(c.thumbstop, averages.thumbstop, false);
+          const ctrAllTone = metricTone(c.ctrAll, averages.ctrAll, false);
+          const ctrLinkTone = metricTone(c.ctrLink, averages.ctrLink, false);
+          const cpsTone = metricTone(c.cps, averages.cps, true);
+          const cvrTone = c.purchases > 0 ? metricTone(c.cvr, averages.cvr, false) : "mid";
+          const cpaTone = c.purchases > 0 ? metricTone(c.cpa, averages.cpa, true) : "mid";
+          const roasTone = metricTone(c.roas, averages.roas, false);
+          return (
           <div key={c.id} className="rounded-xl border border-border bg-card p-3">
             <Thumb url={c.thumbnailUrl} name={c.name} />
             <p className="mt-2 truncate text-sm font-medium" title={c.name}>{c.name}</p>
@@ -156,34 +206,34 @@ export function InsightsCriativosTab({ datePreset }: { datePreset: MetaAdsDatePr
             </div>
             <div className="mt-2 space-y-1 text-xs">
               <div className="flex items-center justify-between text-muted-foreground">
-                <span>CPM</span><span className="text-foreground">{brl(c.cpm)}</span>
+                <span>CPM</span><span className={`font-bold ${TONE_CLASS[cpmTone]}`}>{brl(c.cpm)}</span>
               </div>
               <div className="flex items-center justify-between text-muted-foreground">
-                <span>Thumb Stop Rate</span><span className="text-foreground">{pct(c.thumbstop)}</span>
+                <span>Thumb Stop Rate</span><span className={`font-bold ${TONE_CLASS[thumbstopTone]}`}>{pct(c.thumbstop)}</span>
               </div>
               <div className="flex items-center justify-between text-muted-foreground">
-                <span>CTR (Todos)</span><span className="text-foreground">{pct(c.ctrAll)}</span>
+                <span>CTR (Todos)</span><span className={`font-bold ${TONE_CLASS[ctrAllTone]}`}>{pct(c.ctrAll)}</span>
               </div>
               <div className="flex items-center justify-between text-muted-foreground">
-                <span>CTR (Link)</span><span className="text-foreground">{pct(c.ctrLink)}</span>
+                <span>CTR (Link)</span><span className={`font-bold ${TONE_CLASS[ctrLinkTone]}`}>{pct(c.ctrLink)}</span>
               </div>
               <div className="flex items-center justify-between text-muted-foreground">
-                <span>CPS</span><span className="text-foreground">{brl(c.cps)}</span>
+                <span>CPS</span><span className={`font-bold ${TONE_CLASS[cpsTone]}`}>{brl(c.cps)}</span>
               </div>
               <div className="flex items-center justify-between text-muted-foreground">
-                <span>Taxa de Conversão</span><span className="text-foreground">{c.purchases > 0 ? pct(c.cvr) : "—"}</span>
+                <span>Taxa de Conversão</span><span className={`font-bold ${c.purchases > 0 ? TONE_CLASS[cvrTone] : "text-foreground"}`}>{c.purchases > 0 ? pct(c.cvr) : "—"}</span>
               </div>
               <div className="flex items-center justify-between text-muted-foreground">
-                <span>Compras</span><span className="text-foreground">{c.purchases}</span>
+                <span>Compras</span><span className="font-bold text-foreground">{c.purchases}</span>
               </div>
               <div className="flex items-center justify-between text-muted-foreground">
-                <span>CPA</span><span className="text-foreground">{c.purchases > 0 ? brl(c.cpa) : brl(0)}</span>
+                <span>CPA</span><span className={`font-bold ${c.purchases > 0 ? TONE_CLASS[cpaTone] : "text-foreground"}`}>{c.purchases > 0 ? brl(c.cpa) : brl(0)}</span>
               </div>
-              <div className="flex items-center justify-between font-semibold">
-                <span className="text-muted-foreground">ROAS</span><span>{c.roas.toFixed(2)}x</span>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">ROAS</span><span className={`font-bold ${TONE_CLASS[roasTone]}`}>{c.roas.toFixed(2)}x</span>
               </div>
               <div className="flex items-center justify-between text-muted-foreground">
-                <span>Valor Gasto</span><span className="text-foreground">{brl(c.spend)}</span>
+                <span>Valor Gasto</span><span className="font-bold text-foreground">{brl(c.spend)}</span>
               </div>
             </div>
             <span
@@ -194,7 +244,8 @@ export function InsightsCriativosTab({ datePreset }: { datePreset: MetaAdsDatePr
               {c.suggestion === "escalar" ? "Escalar" : "Testar mais"}
             </span>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

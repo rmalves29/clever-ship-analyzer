@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { format, subDays, addDays } from "date-fns";
+import { format, subDays, addDays, startOfMonth, differenceInCalendarDays } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 
 const GRAPH_VERSION = "v21.0";
@@ -236,6 +236,79 @@ function yesterdayInSaoPaulo(): string {
   return format(subDays(nowSP, 1), "yyyy-MM-dd");
 }
 
+type MonthBaseline = {
+  daysCounted: number;
+  avgFaturamento: number;
+  avgPedidos: number;
+  avgMetaSpend: number | null;
+  avgMetaRoas: number | null;
+  igMonthAvgReach: number | null;
+  igMonthAvgInteractions: number | null;
+  whatsappCampanhasNoMes: number;
+};
+
+/** Média do mês corrente até o dia anterior ao alvo (exclui o próprio dia analisado) — é a régua
+ *  usada pra dizer se o D-1 ficou acima/abaixo do normal, não um benchmark de mercado. */
+async function getMonthBaseline(dateISO: string): Promise<MonthBaseline> {
+  const target = new Date(`${dateISO}T12:00:00Z`);
+  const monthStartISO = format(startOfMonth(target), "yyyy-MM-dd");
+  const dayBeforeISO = format(subDays(target, 1), "yyyy-MM-dd");
+
+  if (dayBeforeISO < monthStartISO) {
+    return {
+      daysCounted: 0,
+      avgFaturamento: 0,
+      avgPedidos: 0,
+      avgMetaSpend: null,
+      avgMetaRoas: null,
+      igMonthAvgReach: null,
+      igMonthAvgInteractions: null,
+      whatsappCampanhasNoMes: 0,
+    };
+  }
+
+  const { days } = await getEventsTimeline({ from: monthStartISO, to: dayBeforeISO });
+  const n = Math.max(1, days.length);
+  const avgFaturamento = days.reduce((a, d) => a + d.faturamento, 0) / n;
+  const avgPedidos = days.reduce((a, d) => a + d.pedidos, 0) / n;
+  const metaSpendDays = days.filter((d): d is typeof d & { metaSpend: number } => d.metaSpend != null);
+  const avgMetaSpend = metaSpendDays.length ? metaSpendDays.reduce((a, d) => a + d.metaSpend, 0) / metaSpendDays.length : null;
+  const roasDays = days.filter((d): d is typeof d & { metaRoas: number } => d.metaRoas != null);
+  const avgMetaRoas = roasDays.length ? roasDays.reduce((a, d) => a + d.metaRoas, 0) / roasDays.length : null;
+
+  let igMonthAvgReach: number | null = null;
+  let igMonthAvgInteractions: number | null = null;
+  try {
+    const { getInstagramOverview } = await import("./instagram.server");
+    const igRes = await getInstagramOverview("this_month");
+    if (igRes.success) {
+      const daysElapsed = Math.max(1, differenceInCalendarDays(target, startOfMonth(target)));
+      igMonthAvgReach = igRes.overview.reachTotal / daysElapsed;
+      igMonthAvgInteractions = igRes.overview.totalInteractions / daysElapsed;
+    }
+  } catch {
+    // Instagram indisponível não deve travar o baseline.
+  }
+
+  const supabaseAdmin = await admin();
+  const { data: campaignsThisMonth } = await supabaseAdmin
+    .from("whatsapp_campaigns")
+    .select("id")
+    .gte("sent_at", new Date(`${monthStartISO}T00:00:00-03:00`).toISOString())
+    .lt("sent_at", new Date(`${dateISO}T00:00:00-03:00`).toISOString());
+
+  return {
+    daysCounted: days.length,
+    avgFaturamento,
+    avgPedidos,
+    avgMetaSpend,
+    avgMetaRoas,
+    igMonthAvgReach,
+    igMonthAvgInteractions,
+    whatsappCampanhasNoMes: campaignsThisMonth?.length ?? 0,
+  };
+}
+
 async function getShopifySessionsForDate(dateISO: string): Promise<{ sessions: number; visitors: number } | null> {
   const { runShopifyQL } = await import("./shopify-live-view.functions");
   const nextDay = format(addDays(new Date(`${dateISO}T12:00:00Z`), 1), "yyyy-MM-dd");
@@ -283,8 +356,17 @@ const dailyAutoEventSchema = z.object({
 
 const dailyAnalysisSchema = z.object({
   resumo_texto: z.string(),
+  pontos_positivos: z.array(z.string()).max(4).default([]),
+  pontos_negativos: z.array(z.string()).max(4).default([]),
   destaques: z.array(dailyAutoEventSchema).max(3).default([]),
 });
+
+function pct(value: number, base: number): string {
+  if (!base) return "sem base de comparação";
+  const delta = ((value - base) / base) * 100;
+  const sign = delta >= 0 ? "+" : "";
+  return `${sign}${delta.toFixed(0)}% vs média do mês`;
+}
 
 function buildDailyPrompt(
   dateISO: string,
@@ -293,22 +375,34 @@ function buildDailyPrompt(
     sessions: { sessions: number; visitors: number } | null;
     instagram: { reachTotal: number; accountsEngaged: number; totalInteractions: number; profileViews: number } | null;
     whatsapp: { templateName: string; messageType: string; recipients: number }[];
+    baseline: MonthBaseline;
   },
 ) {
-  return `Você é um analista de e-commerce. Analise o dia ${dateISO} (ontem) com base SOMENTE nos dados reais abaixo — nunca invente números. Conecte o resultado de vendas do dia com o desempenho de cada canal.
+  const b = ctx.baseline;
+  return `Você é um analista de e-commerce sênior. Analise o dia ${dateISO} (ontem) comparando com a MÉDIA DO MÊS corrente até esse dia, com base SOMENTE nos dados reais abaixo — nunca invente números. O objetivo é apontar o que ajudou ou atrapalhou o faturamento desse dia especificamente, canal por canal.
 
-DADOS REAIS DO DIA:
+DADOS DO DIA (D-1):
 - Site/Shopify: faturamento R$${ctx.shopify.faturamento.toFixed(2)}, ${ctx.shopify.pedidos} pedidos${ctx.sessions ? `, ${ctx.sessions.sessions} sessões, ${ctx.sessions.visitors} visitantes únicos` : " (sessões do site indisponíveis)"}.
 - Meta Ads: ${ctx.shopify.metaSpend != null ? `gasto R$${ctx.shopify.metaSpend.toFixed(2)}, ${ctx.shopify.metaPurchases ?? 0} compras atribuídas, ROAS ${ctx.shopify.metaRoas?.toFixed(2) ?? "0"}` : "não conectado ou sem dados nesse dia"}.
 - Instagram: ${ctx.instagram ? `alcance ${ctx.instagram.reachTotal}, contas engajadas ${ctx.instagram.accountsEngaged}, interações ${ctx.instagram.totalInteractions}, visitas ao perfil ${ctx.instagram.profileViews}` : "não conectado ou sem dados nesse dia"}.
 - WhatsApp: ${ctx.whatsapp.length ? ctx.whatsapp.map((c) => `campanha "${c.templateName}" (${c.messageType}) enviada pra ${c.recipients} contatos`).join("; ") : "nenhuma campanha enviada nesse dia"}.
 
-Escreva um "resumo_texto" (2 a 4 frases, português do Brasil) explicando o resultado do dia canal por canal — cite os canais que tiverem dado disponível (ex: "o faturamento foi de RX com N pedidos; o Meta Ads teve ROAS de Y (gasto RZ); o site teve M sessões; o Instagram teve alcance de A"). Se um canal não tiver dado, diga que não há dado ao invés de inventar. Não repita a mesma frase genérica todo dia — descreva o que realmente aconteceu nesse dia específico.
+MÉDIA DO MÊS ATÉ ANTES DE ONTEM (baseline, ${b.daysCounted} dia(s) considerados):
+- Site/Shopify: faturamento médio R$${b.avgFaturamento.toFixed(2)}/dia (D-1 ficou ${pct(ctx.shopify.faturamento, b.avgFaturamento)}), ${b.avgPedidos.toFixed(1)} pedidos/dia em média (D-1 ficou ${pct(ctx.shopify.pedidos, b.avgPedidos)}).
+- Meta Ads: ${b.avgMetaSpend != null ? `gasto médio R$${b.avgMetaSpend.toFixed(2)}/dia` : "sem baseline de gasto"}${ctx.shopify.metaSpend != null && b.avgMetaSpend != null ? ` (D-1 ficou ${pct(ctx.shopify.metaSpend, b.avgMetaSpend)})` : ""}; ${b.avgMetaRoas != null ? `ROAS médio ${b.avgMetaRoas.toFixed(2)}` : "sem baseline de ROAS"}${ctx.shopify.metaRoas != null && b.avgMetaRoas != null ? ` (D-1 ficou ${pct(ctx.shopify.metaRoas, b.avgMetaRoas)})` : ""}.
+- Instagram: ${b.igMonthAvgReach != null ? `alcance médio ${b.igMonthAvgReach.toFixed(0)}/dia` : "sem baseline"}${ctx.instagram && b.igMonthAvgReach != null ? ` (D-1 ficou ${pct(ctx.instagram.reachTotal, b.igMonthAvgReach)})` : ""}.
+- WhatsApp: ${b.whatsappCampanhasNoMes} campanha(s) enviada(s) no mês até antes de ontem.
 
-Além disso, SE houver algo realmente digno de nota (gasto atipicamente alto/baixo, zero vendas, pico de engajamento incomum, campanha enviada), liste em "destaques" (0 a 3 itens). Se o dia foi normal, retorne destaques vazio — não invente eventos triviais.
+Com base nessa comparação, escreva:
+1. "resumo_texto" (2 a 4 frases, português do Brasil): o resultado do dia canal por canal, sempre relativo à média do mês (acima/abaixo/na média). Se um canal não tiver dado ou baseline, diga isso em vez de inventar.
+2. "pontos_positivos" (0 a 4 itens curtos): o que especificamente ajudou o faturamento nesse dia (ex: "ROAS do Meta Ads 40% acima da média do mês").
+3. "pontos_negativos" (0 a 4 itens curtos): o que especificamente atrapalhou (ex: "zero campanhas de WhatsApp enviadas, diferente do padrão do mês").
+4. "destaques" (0 a 3 itens, só se houver algo realmente fora do padrão): eventos candidatos a registrar formalmente no CRM.
+
+Não invente pontos triviais só pra preencher — se não houver nada relevante numa das listas, retorne vazio.
 
 Responda em JSON estrito:
-{ "resumo_texto": string, "destaques": [ { "title": string, "category": "preco"|"campanha"|"criativo"|"estoque"|"feriado"|"concorrencia"|"conteudo"|"outro", "canais": ["shopify"|"meta_ads"|"instagram"|"whatsapp"], "description": string } ] }`;
+{ "resumo_texto": string, "pontos_positivos": [string], "pontos_negativos": [string], "destaques": [ { "title": string, "category": "preco"|"campanha"|"criativo"|"estoque"|"feriado"|"concorrencia"|"conteudo"|"outro", "canais": ["shopify"|"meta_ads"|"instagram"|"whatsapp"], "description": string } ] }`;
 }
 
 async function callOpenAiDaily(apiKey: string, prompt: string) {
@@ -339,17 +433,23 @@ async function callOpenAiDaily(apiKey: string, prompt: string) {
  *  canais (Shopify/site, Meta Ads, Instagram, WhatsApp) e cria um evento de resumo automaticamente,
  *  além de destaques pontuais quando houver algo fora do padrão. Idempotente: não roda de novo se já
  *  existe um evento 'auto' pra essa data (evita duplicar se o cron disparar mais de uma vez). */
-export async function runDailyEventsAnalysis(targetDateOverride?: string): Promise<{ created: number; skipped: boolean; date: string }> {
+export async function runDailyEventsAnalysis(
+  targetDateOverride?: string,
+  force = false,
+): Promise<{ created: number; skipped: boolean; date: string }> {
   const supabaseAdmin = await admin();
   const dateISO = targetDateOverride ?? yesterdayInSaoPaulo();
 
   const { data: existingAuto } = await (supabaseAdmin.from("crm_events" as any) as any)
     .select("id")
     .eq("event_date", dateISO)
-    .eq("source", "auto")
-    .limit(1);
+    .eq("source", "auto");
+
   if (existingAuto && existingAuto.length > 0) {
-    return { created: 0, skipped: true, date: dateISO };
+    if (!force) return { created: 0, skipped: true, date: dateISO };
+    await (supabaseAdmin.from("crm_events" as any) as any)
+      .delete()
+      .in("id", existingAuto.map((r: any) => r.id));
   }
 
   const { data: settings } = await supabaseAdmin
@@ -388,8 +488,9 @@ export async function runDailyEventsAnalysis(targetDateOverride?: string): Promi
   }
 
   const whatsapp = await getWhatsappActivityForDate(dateISO);
+  const baseline = await getMonthBaseline(dateISO);
 
-  const prompt = buildDailyPrompt(dateISO, { shopify: shopifyDay, sessions, instagram, whatsapp });
+  const prompt = buildDailyPrompt(dateISO, { shopify: shopifyDay, sessions, instagram, whatsapp, baseline });
 
   let analysis: z.infer<typeof dailyAnalysisSchema>;
   try {
@@ -406,11 +507,19 @@ export async function runDailyEventsAnalysis(targetDateOverride?: string): Promi
     whatsapp.length > 0 ? "whatsapp" : null,
   ].filter((c): c is string => Boolean(c));
 
+  const descricaoPartes = [analysis.resumo_texto];
+  if (analysis.pontos_positivos.length) {
+    descricaoPartes.push(`O que ajudou: ${analysis.pontos_positivos.join("; ")}.`);
+  }
+  if (analysis.pontos_negativos.length) {
+    descricaoPartes.push(`O que atrapalhou: ${analysis.pontos_negativos.join("; ")}.`);
+  }
+
   await createEvent(
     {
       eventDate: dateISO,
       title: `Resumo do dia ${format(new Date(`${dateISO}T12:00:00Z`), "dd/MM")}`,
-      description: analysis.resumo_texto,
+      description: descricaoPartes.join(" "),
       category: "outro",
       canais: canaisComDados,
     },

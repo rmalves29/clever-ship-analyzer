@@ -108,7 +108,9 @@ async function handleDailyEventsAnalysis(request: Request): Promise<Response> {
   }
 
   try {
-    const result = await runDailyEventsAnalysis();
+    const url = new URL(request.url);
+    const force = url.searchParams.get("force") === "1";
+    const result = await runDailyEventsAnalysis(undefined, force);
     return new Response(JSON.stringify(result), {
       status: 200,
       headers: { "content-type": "application/json" },

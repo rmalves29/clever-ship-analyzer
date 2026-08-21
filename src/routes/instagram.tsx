@@ -378,6 +378,12 @@ function InstagramPage() {
                 </div>
               </div>
               <div className="rounded-xl border border-border bg-card p-4">
+                <p className="font-semibold">Top 10 estados</p>
+                <div className="mt-3 space-y-2.5">
+                  {audience.topStates.map((c) => <BarRow key={c.label} label={c.label} value={c.value} pct={c.pct} />)}
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-4">
                 <p className="font-semibold">Top 10 cidades</p>
                 <div className="mt-3 space-y-2.5">
                   {audience.topCities.map((c) => <BarRow key={c.label} label={c.label} value={c.value} pct={c.pct} />)}

@@ -158,7 +158,7 @@ async function findActiveAutomation(triggerKind: FlowTriggerKind, text: string):
   const { data, error } = await (supabaseAdmin.from("flow_automations" as any) as any)
     .select("id, canvas_data, keywords, match_any_comment")
     .eq("status", "active")
-    .eq("trigger_kind", triggerKind)
+    .contains("trigger_kinds", [triggerKind])
     .order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
 

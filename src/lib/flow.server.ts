@@ -63,6 +63,7 @@ export interface FlowAutomation {
   name: string;
   status: FlowAutomationStatus;
   trigger_kind: FlowTriggerKind;
+  trigger_kinds: FlowTriggerKind[];
   media_id: string | null;
   media_thumbnail_url: string | null;
   keywords: string[];
@@ -131,6 +132,7 @@ export async function updateFlowAutomation(input: {
   name?: string;
   status?: FlowAutomationStatus;
   trigger_kind?: FlowTriggerKind;
+  trigger_kinds?: FlowTriggerKind[];
   keywords?: string[];
   match_any_comment?: boolean;
   media_id?: string | null;

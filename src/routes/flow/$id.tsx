@@ -136,6 +136,7 @@ function Editor() {
 
   const aggregatedKeywords = useMemo(() => {
     const kws = new Set<string>();
+    const kinds = new Set<NonNullable<FlowNodeData["triggerKind"]>>();
     let anyMatch = false;
     let triggerKind: FlowCanvasNode["data"]["triggerKind"] = "post_or_reel_comment";
     for (const n of nodes) {
@@ -144,9 +145,12 @@ function Editor() {
         (d.keywords ?? []).forEach((k) => kws.add(k));
         if (d.matchAny) anyMatch = true;
         if (d.triggerKind) triggerKind = d.triggerKind;
+        (d.triggerKinds && d.triggerKinds.length > 0 ? d.triggerKinds : d.triggerKind ? [d.triggerKind] : []).forEach((k) =>
+          kinds.add(k),
+        );
       }
     }
-    return { keywords: Array.from(kws), matchAny: anyMatch, triggerKind };
+    return { keywords: Array.from(kws), matchAny: anyMatch, triggerKind, triggerKinds: Array.from(kinds) };
   }, [nodes]);
 
   const saveMut = useMutation({
@@ -159,6 +163,7 @@ function Editor() {
           keywords: aggregatedKeywords.keywords,
           match_any_comment: aggregatedKeywords.matchAny,
           trigger_kind: aggregatedKeywords.triggerKind,
+          trigger_kinds: aggregatedKeywords.triggerKinds,
           ...(status ? { status } : {}),
         },
       }),

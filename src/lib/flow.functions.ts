@@ -68,6 +68,7 @@ export const updateFlowAutomation = createServerFn({ method: "POST" })
       name: z.string().max(120).optional(),
       status: z.enum(["draft", "active", "paused"]).optional(),
       trigger_kind: z.enum(["post_or_reel_comment", "story_reply", "live_comment", "dm_message"]).optional(),
+      trigger_kinds: z.array(z.enum(["post_or_reel_comment", "story_reply", "live_comment", "dm_message"])).optional(),
       keywords: z.array(z.string().max(60)).max(30).optional(),
       match_any_comment: z.boolean().optional(),
       media_id: z.string().max(200).nullable().optional(),

@@ -19,6 +19,8 @@ import { Route as CrmContatosRouteImport } from './routes/crm/contatos'
 import { Route as CrmListasEstaticasRouteImport } from './routes/crm/listas-estaticas'
 import { Route as CrmLiveViewRouteImport } from './routes/crm/live-view'
 import { Route as CrmSegmentosRouteImport } from './routes/crm/segmentos'
+import { Route as FlowIndexRouteImport } from './routes/flow/index'
+import { Route as FlowIdRouteImport } from './routes/flow/$id'
 import { Route as PerformanceMetaAdsRouteImport } from './routes/performance/meta-ads'
 
 const IndexRoute = IndexRouteImport.update({
@@ -71,6 +73,16 @@ const CrmSegmentosRoute = CrmSegmentosRouteImport.update({
   path: '/crm/segmentos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FlowIndexRoute = FlowIndexRouteImport.update({
+  id: '/flow/',
+  path: '/flow/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FlowIdRoute = FlowIdRouteImport.update({
+  id: '/flow/$id',
+  path: '/flow/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PerformanceMetaAdsRoute = PerformanceMetaAdsRouteImport.update({
   id: '/performance/meta-ads',
   path: '/performance/meta-ads',
@@ -87,8 +99,10 @@ export interface FileRoutesByFullPath {
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
   '/crm/live-view': typeof CrmLiveViewRoute
   '/crm/segmentos': typeof CrmSegmentosRoute
+  '/flow/$id': typeof FlowIdRoute
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/crm/': typeof CrmIndexRoute
+  '/flow/': typeof FlowIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -100,8 +114,10 @@ export interface FileRoutesByTo {
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
   '/crm/live-view': typeof CrmLiveViewRoute
   '/crm/segmentos': typeof CrmSegmentosRoute
+  '/flow/$id': typeof FlowIdRoute
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/crm': typeof CrmIndexRoute
+  '/flow': typeof FlowIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -114,8 +130,10 @@ export interface FileRoutesById {
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
   '/crm/live-view': typeof CrmLiveViewRoute
   '/crm/segmentos': typeof CrmSegmentosRoute
+  '/flow/$id': typeof FlowIdRoute
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/crm/': typeof CrmIndexRoute
+  '/flow/': typeof FlowIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -129,8 +147,10 @@ export interface FileRouteTypes {
     | '/crm/listas-estaticas'
     | '/crm/live-view'
     | '/crm/segmentos'
+    | '/flow/$id'
     | '/performance/meta-ads'
     | '/crm/'
+    | '/flow/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -142,8 +162,10 @@ export interface FileRouteTypes {
     | '/crm/listas-estaticas'
     | '/crm/live-view'
     | '/crm/segmentos'
+    | '/flow/$id'
     | '/performance/meta-ads'
     | '/crm'
+    | '/flow'
   id:
     | '__root__'
     | '/'
@@ -155,8 +177,10 @@ export interface FileRouteTypes {
     | '/crm/listas-estaticas'
     | '/crm/live-view'
     | '/crm/segmentos'
+    | '/flow/$id'
     | '/performance/meta-ads'
     | '/crm/'
+    | '/flow/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -169,8 +193,10 @@ export interface RootRouteChildren {
   CrmListasEstaticasRoute: typeof CrmListasEstaticasRoute
   CrmLiveViewRoute: typeof CrmLiveViewRoute
   CrmSegmentosRoute: typeof CrmSegmentosRoute
+  FlowIdRoute: typeof FlowIdRoute
   PerformanceMetaAdsRoute: typeof PerformanceMetaAdsRoute
   CrmIndexRoute: typeof CrmIndexRoute
+  FlowIndexRoute: typeof FlowIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -245,6 +271,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CrmSegmentosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/flow/': {
+      id: '/flow/'
+      path: '/flow'
+      fullPath: '/flow/'
+      preLoaderRoute: typeof FlowIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/flow/$id': {
+      id: '/flow/$id'
+      path: '/flow/$id'
+      fullPath: '/flow/$id'
+      preLoaderRoute: typeof FlowIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/performance/meta-ads': {
       id: '/performance/meta-ads'
       path: '/performance/meta-ads'
@@ -265,8 +305,10 @@ const rootRouteChildren: RootRouteChildren = {
   CrmListasEstaticasRoute: CrmListasEstaticasRoute,
   CrmLiveViewRoute: CrmLiveViewRoute,
   CrmSegmentosRoute: CrmSegmentosRoute,
+  FlowIdRoute: FlowIdRoute,
   PerformanceMetaAdsRoute: PerformanceMetaAdsRoute,
   CrmIndexRoute: CrmIndexRoute,
+  FlowIndexRoute: FlowIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

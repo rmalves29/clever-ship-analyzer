@@ -71,6 +71,13 @@
   --color-brand: var(--brand);
   --color-brand-soft: var(--brand-soft);
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* Flow (canvas de automação) */
+  --color-trigger: var(--trigger);
+  --color-trigger-foreground: var(--trigger-foreground);
+  --color-delay: var(--delay);
+  --color-delay-foreground: var(--delay-foreground);
+  --color-canvas: var(--canvas);
 }
 
 :root {
@@ -124,6 +131,13 @@
   --gradient-brand: linear-gradient(135deg, oklch(0.66 0.18 250), oklch(0.6 0.2 262));
   --gradient-surface: linear-gradient(180deg, oklch(1 0 0), oklch(0.98 0.012 250));
   --shadow-card: 0 1px 2px oklch(0.5 0.05 260 / 6%), 0 12px 28px -18px oklch(0.5 0.08 260 / 35%);
+
+  /* Flow: trigger = menta suave, delay = pêssego suave, canvas = fundo pontilhado */
+  --trigger: oklch(0.94 0.06 155);
+  --trigger-foreground: oklch(0.35 0.09 155);
+  --delay: oklch(0.92 0.07 50);
+  --delay-foreground: oklch(0.4 0.11 40);
+  --canvas: oklch(0.975 0.005 85);
 }
 
 .dark {
@@ -187,6 +201,20 @@
   --gradient-brand: linear-gradient(135deg, oklch(0.6 0.18 250), oklch(0.5 0.2 262));
   --gradient-surface: linear-gradient(180deg, oklch(0.24 0.03 262), oklch(0.21 0.03 262));
   --shadow-card: 0 1px 2px oklch(0 0 0 / 30%), 0 12px 28px -18px oklch(0 0 0 / 60%);
+
+  --trigger: oklch(0.35 0.09 155);
+  --trigger-foreground: oklch(0.94 0.06 155);
+  --delay: oklch(0.4 0.11 40);
+  --delay-foreground: oklch(0.92 0.07 50);
+  --canvas: oklch(0.17 0.02 260);
+}
+
+/* React Flow overrides — usadas pelo canvas do Flow */
+.react-flow__background {
+  background-color: var(--color-canvas);
+}
+.react-flow__attribution {
+  display: none;
 }
 
 @utility surface-card {

@@ -441,7 +441,7 @@ function MetaAdsPage() {
       )}
 
       {view === "adpulse" && <AdPulseTab datePreset={datePreset} />}
-      {view === "criativos" && <InsightsCriativosTab datePreset={datePreset} />}
+      {view === "criativos" && <InsightsCriativosTab datePreset={datePreset} accountId={connection?.accountId ?? null} />}
       {view === "planejamento" && <PlanejamentoTab />}
       {view === "ia" && <MetaAdsAiTab datePreset={datePreset} />}
     </div>

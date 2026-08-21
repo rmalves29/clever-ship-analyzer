@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ImageOff, Target, MousePointerClick, ShoppingCart, TrendingUp } from "lucide-react";
+import { ImageOff, Target, MousePointerClick, ShoppingCart, TrendingUp, PlayCircle } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { getMetaAdsCreatives } from "@/lib/meta-ads.functions";
 import { brl } from "@/lib/crm-mock";
@@ -117,7 +117,13 @@ function TopPerformerCard({
   );
 }
 
-export function InsightsCriativosTab({ datePreset }: { datePreset: MetaAdsDatePreset }) {
+function adManagerUrl(accountId: string | null, adId: string): string | null {
+  if (!accountId) return null;
+  const numericId = accountId.replace(/^act_/, "");
+  return `https://www.facebook.com/adsmanager/manage/ads?act=${numericId}&selected_ad_ids=${adId}`;
+}
+
+export function InsightsCriativosTab({ datePreset, accountId }: { datePreset: MetaAdsDatePreset; accountId: string | null }) {
   const runCreatives = useServerFn(getMetaAdsCreatives);
   const [onlyActive, setOnlyActive] = useState(false);
 
@@ -236,13 +242,25 @@ export function InsightsCriativosTab({ datePreset }: { datePreset: MetaAdsDatePr
                 <span>Valor Gasto</span><span className="font-bold text-foreground">{brl(c.spend)}</span>
               </div>
             </div>
-            <span
-              className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                c.suggestion === "escalar" ? "bg-success-soft text-success" : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {c.suggestion === "escalar" ? "Escalar" : "Testar mais"}
-            </span>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span
+                className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                  c.suggestion === "escalar" ? "bg-success-soft text-success" : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {c.suggestion === "escalar" ? "Escalar" : "Testar mais"}
+              </span>
+              {adManagerUrl(accountId, c.id) && (
+                <a
+                  href={adManagerUrl(accountId, c.id)!}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand hover:underline"
+                >
+                  <PlayCircle className="size-3" /> Ver anúncio
+                </a>
+              )}
+            </div>
           </div>
           );
         })}

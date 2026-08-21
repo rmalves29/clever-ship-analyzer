@@ -34,7 +34,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/flow/$id")({
   component: Editor,
   head: () => ({
-    meta: [{ title: "Flow | Editor" }],
+    meta: [{ title: "ManyChat | Editor" }],
   }),
 });
 

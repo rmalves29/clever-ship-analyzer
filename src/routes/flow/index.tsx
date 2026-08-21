@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -8,12 +8,15 @@ import {
   deleteFlowAutomation,
   listFlowContacts,
   listFlowLogs,
+  addFlowContactTag,
+  removeFlowContactTag,
 } from "@/lib/flow.functions";
-import type { FlowAutomation } from "@/lib/flow.server";
+import type { FlowAutomation, FlowContact } from "@/lib/flow.server";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, MessageSquare, Trash2, MoreVertical, Users, ScrollText, CheckCircle2, XCircle, MinusCircle } from "lucide-react";
+import { Plus, MessageSquare, Trash2, MoreVertical, Users, ScrollText, CheckCircle2, XCircle, MinusCircle, Tag, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,7 +31,7 @@ export const Route = createFileRoute("/flow/")({
   component: FlowDashboard,
   head: () => ({
     meta: [
-      { title: "Flow | Automações" },
+      { title: "ManyChat | Automações" },
       { name: "description", content: "Automações de Instagram — comentário em post/reel/story vira DM automática." },
     ],
   }),
@@ -44,6 +47,9 @@ function FlowDashboard() {
   const del = useServerFn(deleteFlowAutomation);
   const runContacts = useServerFn(listFlowContacts);
   const runLogs = useServerFn(listFlowLogs);
+  const runAddTag = useServerFn(addFlowContactTag);
+  const runRemoveTag = useServerFn(removeFlowContactTag);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
 
   const { data: automations = [], isLoading } = useQuery({
     queryKey: ["flow-automations"],
@@ -80,11 +86,34 @@ function FlowDashboard() {
     },
   });
 
+  const addTagMut = useMutation({
+    mutationFn: (input: { contactId: string; tag: string }) => runAddTag({ data: input }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["flow-contacts"] }),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const removeTagMut = useMutation({
+    mutationFn: (input: { contactId: string; tag: string }) => runRemoveTag({ data: input }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["flow-contacts"] }),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const allTags = useMemo(() => {
+    const s = new Set<string>();
+    contacts.forEach((c) => c.tags.forEach((t) => s.add(t)));
+    return Array.from(s).sort();
+  }, [contacts]);
+
+  const filteredContacts = useMemo(
+    () => (tagFilter ? contacts.filter((c) => c.tags.includes(tagFilter)) : contacts),
+    [contacts, tagFilter],
+  );
+
   return (
     <div className="p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Flow</h1>
+          <h1 className="text-2xl font-bold">ManyChat</h1>
           <p className="text-sm text-muted-foreground">Fluxos que respondem por você no Instagram — comentário vira DM automática.</p>
         </div>
         {view === "automacoes" && (
@@ -98,7 +127,7 @@ function FlowDashboard() {
         <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
           <TabsList>
             <TabsTrigger value="automacoes" className="gap-1.5">
-              <MessageSquare className="size-3.5" /> Automações
+              <MessageSquare className="size-3.5" /> ManyChat
             </TabsTrigger>
             <TabsTrigger value="contatos" className="gap-1.5">
               <Users className="size-3.5" /> Contatos
@@ -139,30 +168,54 @@ function FlowDashboard() {
               <p className="text-sm text-muted-foreground">Quando alguém for atingido por uma automação, aparece aqui.</p>
             </div>
           ) : (
-            <div className="rounded-xl border border-border bg-card overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-medium">Usuário</th>
-                    <th className="text-left px-4 py-3 font-medium">Primeiro contato</th>
-                    <th className="text-left px-4 py-3 font-medium">Último contato</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {contacts.map((c) => (
-                    <tr key={c.id}>
-                      <td className="px-4 py-3 font-medium">@{c.username ?? c.ig_user_id}</td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {formatDistanceToNow(new Date(c.first_seen_at), { locale: ptBR, addSuffix: true })}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {formatDistanceToNow(new Date(c.last_seen_at), { locale: ptBR, addSuffix: true })}
-                      </td>
-                    </tr>
+            <>
+              {allTags.length > 0 && (
+                <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                  <Tag className="size-3.5 text-muted-foreground" />
+                  <button
+                    onClick={() => setTagFilter(null)}
+                    className={`px-2 py-0.5 rounded-full text-xs border transition-colors ${
+                      tagFilter === null ? "bg-brand text-brand-foreground border-brand" : "hover:bg-muted"
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  {allTags.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setTagFilter(t === tagFilter ? null : t)}
+                      className={`px-2 py-0.5 rounded-full text-xs border transition-colors ${
+                        tagFilter === t ? "bg-brand text-brand-foreground border-brand" : "hover:bg-muted"
+                      }`}
+                    >
+                      {t}
+                    </button>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              )}
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-medium">Usuário</th>
+                      <th className="text-left px-4 py-3 font-medium">Tags</th>
+                      <th className="text-left px-4 py-3 font-medium">Primeiro contato</th>
+                      <th className="text-left px-4 py-3 font-medium">Último contato</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {filteredContacts.map((c) => (
+                      <ContactRow
+                        key={c.id}
+                        contact={c}
+                        onAddTag={(tag) => addTagMut.mutate({ contactId: c.id, tag })}
+                        onRemoveTag={(tag) => removeTagMut.mutate({ contactId: c.id, tag })}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       )}
@@ -254,6 +307,75 @@ function AutomationCard({ a, onDelete }: { a: FlowAutomation; onDelete: () => vo
         </div>
       </Link>
     </div>
+  );
+}
+
+function ContactRow({
+  contact,
+  onAddTag,
+  onRemoveTag,
+}: {
+  contact: FlowContact;
+  onAddTag: (tag: string) => void;
+  onRemoveTag: (tag: string) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [value, setValue] = useState("");
+
+  function submit() {
+    const tag = value.trim();
+    if (tag) onAddTag(tag);
+    setValue("");
+    setAdding(false);
+  }
+
+  return (
+    <tr>
+      <td className="px-4 py-3 font-medium align-top">@{contact.username ?? contact.ig_user_id}</td>
+      <td className="px-4 py-3 align-top">
+        <div className="flex flex-wrap items-center gap-1">
+          {contact.tags.map((t) => (
+            <Badge key={t} variant="secondary" className="gap-1 pr-1 text-xs">
+              {t}
+              <button onClick={() => onRemoveTag(t)} className="rounded-full hover:bg-muted-foreground/20 p-0.5">
+                <X className="size-2.5" />
+              </button>
+            </Badge>
+          ))}
+          {adding ? (
+            <Input
+              autoFocus
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+                if (e.key === "Escape") {
+                  setValue("");
+                  setAdding(false);
+                }
+              }}
+              onBlur={submit}
+              placeholder="tag…"
+              className="h-6 w-24 text-xs px-1.5"
+            />
+          ) : (
+            <button
+              onClick={() => setAdding(true)}
+              className="grid size-6 place-items-center rounded-full border border-dashed text-muted-foreground hover:bg-muted"
+              title="Adicionar tag"
+            >
+              <Plus className="size-3" />
+            </button>
+          )}
+        </div>
+      </td>
+      <td className="px-4 py-3 text-muted-foreground align-top">
+        {formatDistanceToNow(new Date(contact.first_seen_at), { locale: ptBR, addSuffix: true })}
+      </td>
+      <td className="px-4 py-3 text-muted-foreground align-top">
+        {formatDistanceToNow(new Date(contact.last_seen_at), { locale: ptBR, addSuffix: true })}
+      </td>
+    </tr>
   );
 }
 

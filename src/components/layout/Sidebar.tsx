@@ -30,15 +30,10 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     ],
   },
   {
-    label: "Performance",
+    label: "Meta",
     items: [
-      { label: "Meta Ads", to: "/performance/meta-ads", icon: TrendingUp },
-    ],
-  },
-  {
-    label: "Instagram",
-    items: [
-      { label: "Visão Geral", to: "/instagram", icon: Camera },
+      { label: "Facebook Ads", to: "/performance/meta-ads", icon: TrendingUp },
+      { label: "Instagram", to: "/instagram", icon: Camera },
     ],
   },
   {
@@ -48,9 +43,9 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     ],
   },
   {
-    label: "Flow",
+    label: "Automações",
     items: [
-      { label: "Automações", to: "/flow", icon: Workflow },
+      { label: "ManyChat", to: "/flow", icon: Workflow },
     ],
   },
   {

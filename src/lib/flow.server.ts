@@ -158,6 +158,7 @@ export type FlowContact = {
   id: string;
   ig_user_id: string;
   username: string | null;
+  tags: string[];
   first_seen_at: string;
   last_seen_at: string;
 };
@@ -169,7 +170,65 @@ export async function listFlowContacts(): Promise<FlowContact[]> {
     .order("last_seen_at", { ascending: false })
     .limit(200);
   if (error) throw new Error(error.message);
-  return (data ?? []) as FlowContact[];
+  return ((data ?? []) as any[]).map((c) => ({ ...c, tags: c.tags ?? [] })) as FlowContact[];
+}
+
+async function getFlowContactTags(supabaseAdmin: Awaited<ReturnType<typeof admin>>, contactId: string): Promise<string[]> {
+  const { data, error } = await (supabaseAdmin.from("flow_contacts" as any) as any)
+    .select("tags")
+    .eq("id", contactId)
+    .single();
+  if (error) throw new Error(error.message);
+  return (data as any)?.tags ?? [];
+}
+
+export async function addFlowContactTag(contactId: string, tag: string): Promise<FlowContact> {
+  const supabaseAdmin = await admin();
+  const current = await getFlowContactTags(supabaseAdmin, contactId);
+  const tags = Array.from(new Set([...current, tag.trim()])).filter(Boolean);
+  const { data, error } = await (supabaseAdmin.from("flow_contacts" as any) as any)
+    .update({ tags })
+    .eq("id", contactId)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return { ...(data as any), tags: (data as any).tags ?? [] } as FlowContact;
+}
+
+export async function removeFlowContactTag(contactId: string, tag: string): Promise<FlowContact> {
+  const supabaseAdmin = await admin();
+  const current = await getFlowContactTags(supabaseAdmin, contactId);
+  const tags = current.filter((t) => t !== tag);
+  const { data, error } = await (supabaseAdmin.from("flow_contacts" as any) as any)
+    .update({ tags })
+    .eq("id", contactId)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return { ...(data as any), tags: (data as any).tags ?? [] } as FlowContact;
+}
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/** Upload de imagem pro node "Enviar Mensagem" — bucket público (a Meta precisa buscar a URL da
+ *  imagem de fora pra mandar no Direct, então não dá pra ser um bucket privado). */
+export async function uploadFlowImage(input: { fileName: string; base64Data: string; contentType: string }): Promise<{ url: string }> {
+  const supabaseAdmin = await admin();
+  const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const path = `${Date.now()}-${safeName}`;
+  const bytes = base64ToUint8Array(input.base64Data);
+  const { error } = await supabaseAdmin.storage.from("flow-uploads").upload(path, bytes, {
+    contentType: input.contentType,
+    upsert: false,
+  });
+  if (error) throw new Error(error.message);
+  const { data } = supabaseAdmin.storage.from("flow-uploads").getPublicUrl(path);
+  return { url: data.publicUrl };
 }
 
 export type FlowDispatchLog = {

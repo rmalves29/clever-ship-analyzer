@@ -95,3 +95,26 @@ export const listFlowLogs = createServerFn({ method: "GET" }).handler(async () =
   const { listFlowLogs: list } = await import("./flow.server");
   return list();
 });
+
+export const addFlowContactTag = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ contactId: z.string().uuid(), tag: z.string().min(1).max(40) }).parse(data))
+  .handler(async ({ data }) => {
+    const { addFlowContactTag: add } = await import("./flow.server");
+    return add(data.contactId, data.tag);
+  });
+
+export const removeFlowContactTag = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ contactId: z.string().uuid(), tag: z.string().min(1).max(40) }).parse(data))
+  .handler(async ({ data }) => {
+    const { removeFlowContactTag: remove } = await import("./flow.server");
+    return remove(data.contactId, data.tag);
+  });
+
+export const uploadFlowImage = createServerFn({ method: "POST" })
+  .validator((data: unknown) =>
+    z.object({ fileName: z.string().max(200), base64Data: z.string(), contentType: z.string().max(100) }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { uploadFlowImage: upload } = await import("./flow.server");
+    return upload(data);
+  });

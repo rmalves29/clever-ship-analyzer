@@ -1,11 +1,23 @@
-import { memo, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { MessageSquare, Image as ImageIcon } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { MessageSquare, Image as ImageIcon, Upload, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import type { FlowNodeData } from "@/lib/flow.server";
+import { uploadFlowImage } from "@/lib/flow.functions";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DeleteNodeButton } from "./DeleteNodeButton";
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+    reader.onerror = () => reject(reader.error ?? new Error("Falha ao ler o arquivo."));
+    reader.readAsDataURL(file);
+  });
+}
 
 export const MessageNode = memo(function MessageNode({ data, id }: NodeProps) {
   const d = data as FlowNodeData;
@@ -14,10 +26,36 @@ export const MessageNode = memo(function MessageNode({ data, id }: NodeProps) {
   const [buttonLabel, setButtonLabel] = useState(d.buttonLabel ?? "");
   const [buttonUrl, setButtonUrl] = useState(d.buttonUrl ?? "");
   const [imageUrl, setImageUrl] = useState(d.imageUrl ?? "");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const runUpload = useServerFn(uploadFlowImage);
 
   function update<K extends keyof FlowNodeData>(key: K, value: FlowNodeData[K]) {
     (data as FlowNodeData)[key] = value;
     window.dispatchEvent(new CustomEvent("flow-node-update", { detail: { id, key, value } }));
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Imagem muito grande (máx. 5MB).");
+      e.target.value = "";
+      return;
+    }
+    setUploading(true);
+    try {
+      const base64Data = await fileToBase64(file);
+      const res = await runUpload({ data: { fileName: file.name, base64Data, contentType: file.type || "image/jpeg" } });
+      setImageUrl(res.url);
+      update("imageUrl", res.url);
+      toast.success("Imagem enviada.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao enviar a imagem.");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
   }
 
   return (
@@ -69,17 +107,32 @@ export const MessageNode = memo(function MessageNode({ data, id }: NodeProps) {
 
         <div>
           <Label className="text-[10px] uppercase text-muted-foreground flex items-center gap-1">
-            <ImageIcon className="size-3" /> Imagem (URL opcional)
+            <ImageIcon className="size-3" /> Imagem (upload ou URL)
           </Label>
-          <Input
-            value={imageUrl}
-            onChange={(e) => {
-              setImageUrl(e.target.value);
-              update("imageUrl", e.target.value);
-            }}
-            placeholder="https://…"
-            className="h-8 text-xs mt-1"
-          />
+          <div className="mt-1 flex gap-1">
+            <Input
+              value={imageUrl}
+              onChange={(e) => {
+                setImageUrl(e.target.value);
+                update("imageUrl", e.target.value);
+              }}
+              placeholder="https://…"
+              className="h-8 flex-1 text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              title="Enviar imagem"
+              className="grid size-8 shrink-0 place-items-center rounded-md border hover:bg-muted disabled:opacity-50"
+            >
+              {uploading ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+          </div>
+          {imageUrl && (
+            <img src={imageUrl} alt="" className="mt-1.5 h-14 w-14 rounded-md border object-cover" />
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-2">

@@ -624,6 +624,8 @@ export async function runDailyEventsAnalysis(
 
   const conversaoDia = sessions && sessions.sessions > 0 ? (shopifyDay.pedidos / sessions.sessions) * 100 : null;
   const conversaoBaseline = baseline.avgSessions && baseline.avgSessions > 0 ? (baseline.avgPedidos / baseline.avgSessions) * 100 : null;
+  const ticketDia = shopifyDay.pedidos > 0 ? shopifyDay.faturamento / shopifyDay.pedidos : 0;
+  const ticketBaseline = baseline.avgPedidos > 0 ? baseline.avgFaturamento / baseline.avgPedidos : 0;
 
   const descricaoPartes = [analysis.resumo_texto];
 
@@ -644,6 +646,43 @@ export async function runDailyEventsAnalysis(
   if (analysis.pontos_negativos.length) {
     descricaoPartes.push(`O que atrapalhou: ${analysis.pontos_negativos.join("; ")}.`);
   }
+
+  const contrafactuais: string[] = [];
+
+  if (baseline.avgPedidos > 0 && shopifyDay.pedidos < baseline.avgPedidos && ticketDia > 0) {
+    const hipotetico = baseline.avgPedidos * ticketDia;
+    contrafactuais.push(
+      `Se os pedidos tivessem ficado na média do mês (${baseline.avgPedidos.toFixed(1)}/dia) mantendo o mesmo ticket médio, o faturamento teria sido de R$${hipotetico.toFixed(2)} (R$${(hipotetico - shopifyDay.faturamento).toFixed(2)} a mais).`,
+    );
+  }
+
+  if (ticketBaseline > 0 && ticketDia > 0 && ticketDia < ticketBaseline) {
+    const hipotetico = shopifyDay.pedidos * ticketBaseline;
+    contrafactuais.push(
+      `Se o ticket médio tivesse ficado na média do mês (R$${ticketBaseline.toFixed(2)}) mantendo o mesmo número de pedidos, o faturamento teria sido de R$${hipotetico.toFixed(2)} (R$${(hipotetico - shopifyDay.faturamento).toFixed(2)} a mais).`,
+    );
+  }
+
+  if (conversaoBaseline && conversaoDia != null && conversaoDia < conversaoBaseline && sessions && ticketDia > 0) {
+    const pedidosHipoteticos = sessions.sessions * (conversaoBaseline / 100);
+    const faturamentoHipotetico = pedidosHipoteticos * ticketDia;
+    contrafactuais.push(
+      `Se a taxa de conversão tivesse ficado na média do mês (${conversaoBaseline.toFixed(2)}%) mantendo as mesmas sessões, o faturamento teria sido de aproximadamente R$${faturamentoHipotetico.toFixed(2)} (R$${(faturamentoHipotetico - shopifyDay.faturamento).toFixed(2)} a mais), com cerca de ${Math.round(pedidosHipoteticos)} pedidos.`,
+    );
+  }
+
+  if (baseline.avgMetaRoas != null && shopifyDay.metaRoas != null && shopifyDay.metaRoas < baseline.avgMetaRoas && shopifyDay.metaSpend != null) {
+    const receitaAtual = shopifyDay.metaSpend * shopifyDay.metaRoas;
+    const receitaHipotetica = shopifyDay.metaSpend * baseline.avgMetaRoas;
+    contrafactuais.push(
+      `Se o ROAS do Meta Ads tivesse ficado na média do mês (${baseline.avgMetaRoas.toFixed(2)}) mantendo o mesmo gasto, a receita atribuída ao Meta Ads teria sido de R$${receitaHipotetica.toFixed(2)} em vez de R$${receitaAtual.toFixed(2)} (R$${(receitaHipotetica - receitaAtual).toFixed(2)} a mais).`,
+    );
+  }
+
+  if (contrafactuais.length) {
+    descricaoPartes.push(`E se tivesse ficado na média: ${contrafactuais.join(" ")}`);
+  }
+
   if (analysis.recomendacoes.length) {
     descricaoPartes.push(`Recomendações: ${analysis.recomendacoes.join("; ")}.`);
   }

@@ -1,10 +1,10 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Settings, Sparkles, Megaphone, FileText, BarChart3, TrendingUp, Camera } from "lucide-react";
+import { LayoutDashboard, Settings, Sparkles, Megaphone, FileText, BarChart3, TrendingUp, Camera, CalendarClock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
   label: string;
-  to: "/" | "/configuracoes" | "/campanhas-whatsapp" | "/crm" | "/crm/live-view" | "/performance/meta-ads" | "/instagram";
+  to: "/" | "/configuracoes" | "/campanhas-whatsapp" | "/crm" | "/crm/live-view" | "/performance/meta-ads" | "/instagram" | "/eventos";
   search?: Record<string, string>;
   icon: typeof LayoutDashboard;
 };
@@ -39,6 +39,12 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: "Instagram",
     items: [
       { label: "Visão Geral", to: "/instagram", icon: Camera },
+    ],
+  },
+  {
+    label: "Eventos",
+    items: [
+      { label: "Linha do Tempo", to: "/eventos", icon: CalendarClock },
     ],
   },
   {

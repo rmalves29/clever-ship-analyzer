@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CampanhasWhatsappRouteImport } from './routes/campanhas-whatsapp'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
+import { Route as EventosRouteImport } from './routes/eventos'
 import { Route as InstagramRouteImport } from './routes/instagram'
 import { Route as CrmIndexRouteImport } from './routes/crm/index'
 import { Route as CrmContatosRouteImport } from './routes/crm/contatos'
@@ -33,6 +34,11 @@ const CampanhasWhatsappRoute = CampanhasWhatsappRouteImport.update({
 const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
   id: '/configuracoes',
   path: '/configuracoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EventosRoute = EventosRouteImport.update({
+  id: '/eventos',
+  path: '/eventos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InstagramRoute = InstagramRouteImport.update({
@@ -75,6 +81,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/eventos': typeof EventosRoute
   '/instagram': typeof InstagramRoute
   '/crm/contatos': typeof CrmContatosRoute
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
@@ -87,6 +94,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/eventos': typeof EventosRoute
   '/instagram': typeof InstagramRoute
   '/crm/contatos': typeof CrmContatosRoute
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
@@ -100,6 +108,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/eventos': typeof EventosRoute
   '/instagram': typeof InstagramRoute
   '/crm/contatos': typeof CrmContatosRoute
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
@@ -114,6 +123,7 @@ export interface FileRouteTypes {
     | '/'
     | '/campanhas-whatsapp'
     | '/configuracoes'
+    | '/eventos'
     | '/instagram'
     | '/crm/contatos'
     | '/crm/listas-estaticas'
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/'
     | '/campanhas-whatsapp'
     | '/configuracoes'
+    | '/eventos'
     | '/instagram'
     | '/crm/contatos'
     | '/crm/listas-estaticas'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/'
     | '/campanhas-whatsapp'
     | '/configuracoes'
+    | '/eventos'
     | '/instagram'
     | '/crm/contatos'
     | '/crm/listas-estaticas'
@@ -151,6 +163,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CampanhasWhatsappRoute: typeof CampanhasWhatsappRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
+  EventosRoute: typeof EventosRoute
   InstagramRoute: typeof InstagramRoute
   CrmContatosRoute: typeof CrmContatosRoute
   CrmListasEstaticasRoute: typeof CrmListasEstaticasRoute
@@ -181,6 +194,13 @@ declare module '@tanstack/react-router' {
       path: '/configuracoes'
       fullPath: '/configuracoes'
       preLoaderRoute: typeof ConfiguracoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/eventos': {
+      id: '/eventos'
+      path: '/eventos'
+      fullPath: '/eventos'
+      preLoaderRoute: typeof EventosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/instagram': {
@@ -239,6 +259,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CampanhasWhatsappRoute: CampanhasWhatsappRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
+  EventosRoute: EventosRoute,
   InstagramRoute: InstagramRoute,
   CrmContatosRoute: CrmContatosRoute,
   CrmListasEstaticasRoute: CrmListasEstaticasRoute,

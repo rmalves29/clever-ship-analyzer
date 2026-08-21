@@ -5,9 +5,11 @@ import { renderErrorPage } from "./lib/error-page";
 import { applyMetaStatusUpdate, applyMetaTemplateStatusUpdate, getStoredVerifyToken } from "./lib/whatsapp-meta.server";
 import { matchIncomingMessage } from "./lib/conversational-flows.server";
 import { getAutomationTickSecret, runAutomationsTickWithLog } from "./lib/automations-engine.server";
+import { runDailyEventsAnalysis } from "./lib/events.server";
 
 const WHATSAPP_WEBHOOK_PATH = "/api/whatsapp-webhook";
 const AUTOMATIONS_TICK_PATH = "/api/automations/tick";
+const DAILY_EVENTS_ANALYSIS_PATH = "/api/events/daily-analysis";
 
 // Webhook da Meta é chamado diretamente por eles, fora do protocolo de RPC do
 // createServerFn — por isso é tratado aqui, antes do handler SSR do TanStack Start.
@@ -94,6 +96,29 @@ async function handleAutomationsTick(request: Request): Promise<Response> {
   }
 }
 
+// Chamado 1x por dia às 8h (America/Sao_Paulo) pelo pg_cron+pg_net — mesmo padrão e mesmo
+// segredo compartilhado do tick de automações acima, só que numa agenda diária própria.
+async function handleDailyEventsAnalysis(request: Request): Promise<Response> {
+  if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+
+  const provided = request.headers.get("X-Automation-Secret");
+  const storedSecret = await getAutomationTickSecret();
+  if (!storedSecret || !provided || provided !== storedSecret) {
+    return new Response("Forbidden", { status: 401 });
+  }
+
+  try {
+    const result = await runDailyEventsAnalysis();
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  } catch (error) {
+    console.error("Falha ao rodar a análise diária de eventos:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}
+
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
 };
@@ -143,6 +168,9 @@ export default {
     }
     if (pathname === AUTOMATIONS_TICK_PATH) {
       return handleAutomationsTick(request);
+    }
+    if (pathname === DAILY_EVENTS_ANALYSIS_PATH) {
+      return handleDailyEventsAnalysis(request);
     }
     try {
       const handler = await getServerEntry();

@@ -49,7 +49,7 @@ type ShopifyQLRow = Record<string, string | undefined>;
  *  `data.shopifyqlQuery` (não `data.data.shopifyqlQuery`). Em caso de erro (ex: escopo faltando),
  *  `shopifyGraphQL` lança — capturamos aqui pra essa métrica falhar isolada, sem derrubar o resto
  *  do Live View (pedidos/produtos continuam vindo do Supabase, não dependem disso). */
-async function runShopifyQL(query: string): Promise<ShopifyQLRow[]> {
+export async function runShopifyQL(query: string): Promise<ShopifyQLRow[]> {
   const { shopifyGraphQL } = await import("./shopify.server");
   const gql = `{ shopifyqlQuery(query: ${JSON.stringify(query)}) { tableData { columns { name } rows } parseErrors } }`;
   try {

@@ -14,7 +14,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
-import { Plus, Sparkles, Trash2, Pencil, Tag } from "lucide-react";
+import { Plus, Sparkles, Trash2, Pencil, Tag, LineChart, Network } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EventsGraph } from "@/components/eventos/EventsGraph";
 import {
   listCrmEvents,
   createCrmEvent,
@@ -194,6 +196,7 @@ function EventDialog({
 
 function EventosPage() {
   const queryClient = useQueryClient();
+  const [view, setView] = useState<"linha" | "grafo">("linha");
   const [rangeDays, setRangeDays] = useState(30);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<EventFormState | null>(null);
@@ -271,17 +274,35 @@ function EventosPage() {
         </Button>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-1.5">
-        {RANGE_PRESETS.map((p) => (
-          <Button key={p.days} variant={rangeDays === p.days ? "default" : "outline"} size="sm" onClick={() => setRangeDays(p.days)}>
-            {p.label}
-          </Button>
-        ))}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-1.5">
+          {RANGE_PRESETS.map((p) => (
+            <Button key={p.days} variant={rangeDays === p.days ? "default" : "outline"} size="sm" onClick={() => setRangeDays(p.days)}>
+              {p.label}
+            </Button>
+          ))}
+        </div>
+        <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
+          <TabsList>
+            <TabsTrigger value="linha" className="gap-1.5">
+              <LineChart className="size-3.5" /> Linha do Tempo
+            </TabsTrigger>
+            <TabsTrigger value="grafo" className="gap-1.5">
+              <Network className="size-3.5" /> Grafo
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       {isLoading && <p className="mt-6 text-center text-muted-foreground">Carregando...</p>}
 
-      {!isLoading && timeline && (
+      {!isLoading && timeline && view === "grafo" && (
+        <div className="mt-4">
+          <EventsGraph events={events} categoryLabel={CATEGORY_LABEL} />
+        </div>
+      )}
+
+      {!isLoading && timeline && view === "linha" && (
         <>
           <div className="mt-4 rounded-xl border border-border bg-card p-4">
             <div className="flex items-center justify-between">
@@ -338,6 +359,11 @@ function EventosPage() {
                         <span className="text-xs text-muted-foreground">
                           {new Date(ev.eventDate + "T00:00:00").toLocaleDateString("pt-BR")}
                         </span>
+                        {ev.source === "auto" && (
+                          <span className="flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[10px] font-semibold text-brand">
+                            <Sparkles className="size-2.5" /> Automático
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 font-medium">{ev.title}</p>
                       {ev.description && <p className="mt-0.5 text-sm text-muted-foreground">{ev.description}</p>}

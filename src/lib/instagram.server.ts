@@ -211,6 +211,7 @@ export type InstagramAudience = {
   age: AudienceBucket[];
   gender: AudienceBucket[];
   topCountries: AudienceBucket[];
+  topStates: AudienceBucket[];
   topCities: AudienceBucket[];
 };
 
@@ -249,7 +250,19 @@ export async function getInstagramAudience(): Promise<{ success: true; audience:
     const topCountries = withPct(countryRaw.map((r) => ({ ...r, label: countryName(r.label) })).sort((a, b) => b.value - a.value).slice(0, 10));
     const topCities = withPct(cityRaw.sort((a, b) => b.value - a.value).slice(0, 10));
 
-    return { success: true, audience: { age, gender, topCountries, topCities } };
+    // Estados: O Instagram não fornece um breakdown direto de "region" no segmendo follower_demographics via API Graph.
+    // Mas as cidades vêm no formato "Cidade, Estado". Vamos agrupar as cidades para estimar os estados.
+    const stateMap = new Map<string, number>();
+    cityRaw.forEach(c => {
+      const parts = c.label.split(',').map(s => s.trim());
+      if (parts.length > 1) {
+        const state = parts[parts.length - 1];
+        stateMap.set(state, (stateMap.get(state) || 0) + c.value);
+      }
+    });
+    const topStates = withPct(Array.from(stateMap.entries()).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 10));
+
+    return { success: true, audience: { age, gender, topCountries, topStates, topCities } };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar o Instagram." };
   }

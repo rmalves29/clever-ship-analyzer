@@ -565,7 +565,9 @@ export async function getMetaAdsCreatives(datePreset: MetaAdsDatePreset): Promis
       ),
       graphGET(
         `/${accountId}/ads`,
-        { fields: "id,effective_status,created_time,creative{thumbnail_url}", limit: "500" },
+        // thumbnail_url vem em baixa resolução (pixelado) por padrão — thumbnail_width/height força
+        // a Meta a gerar/servir uma miniatura bem maior pro mesmo campo.
+        { fields: "id,effective_status,created_time,creative.thumbnail_width(640).thumbnail_height(640){thumbnail_url}", limit: "500" },
         accessToken,
       ),
     ]);

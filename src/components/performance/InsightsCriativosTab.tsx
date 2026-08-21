@@ -2,8 +2,10 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ImageOff, Target, MousePointerClick, ShoppingCart, TrendingUp, PlayCircle } from "lucide-react";
+import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
-import { getMetaAdsCreatives } from "@/lib/meta-ads.functions";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { getMetaAdsCreatives, getMetaAdsPreview } from "@/lib/meta-ads.functions";
 import { brl } from "@/lib/crm-mock";
 import type { MetaAdsDatePreset, CreativeInsight, CreativeFreshness } from "@/lib/meta-ads.server";
 
@@ -117,15 +119,28 @@ function TopPerformerCard({
   );
 }
 
-function adManagerUrl(accountId: string | null, adId: string): string | null {
-  if (!accountId) return null;
-  const numericId = accountId.replace(/^act_/, "");
-  return `https://www.facebook.com/adsmanager/manage/ads?act=${numericId}&selected_ad_ids=${adId}`;
-}
-
-export function InsightsCriativosTab({ datePreset, accountId }: { datePreset: MetaAdsDatePreset; accountId: string | null }) {
+export function InsightsCriativosTab({ datePreset }: { datePreset: MetaAdsDatePreset }) {
   const runCreatives = useServerFn(getMetaAdsCreatives);
+  const runPreview = useServerFn(getMetaAdsPreview);
   const [onlyActive, setOnlyActive] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [loadingPreviewId, setLoadingPreviewId] = useState<string | null>(null);
+
+  const handleViewAd = async (adId: string) => {
+    setLoadingPreviewId(adId);
+    try {
+      const res = await runPreview({ data: { adId } });
+      if (!res.success) {
+        toast.error(res.error || "Falha ao gerar a prévia do anúncio.");
+        return;
+      }
+      setPreviewUrl(res.previewUrl);
+      setPreviewOpen(true);
+    } finally {
+      setLoadingPreviewId(null);
+    }
+  };
 
   const { data: result, isLoading } = useQuery({
     queryKey: ["meta-ads-creatives", datePreset],
@@ -250,21 +265,29 @@ export function InsightsCriativosTab({ datePreset, accountId }: { datePreset: Me
               >
                 {c.suggestion === "escalar" ? "Escalar" : "Testar mais"}
               </span>
-              {adManagerUrl(accountId, c.id) && (
-                <a
-                  href={adManagerUrl(accountId, c.id)!}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand hover:underline"
-                >
-                  <PlayCircle className="size-3" /> Ver anúncio
-                </a>
-              )}
+              <button
+                type="button"
+                onClick={() => handleViewAd(c.id)}
+                disabled={loadingPreviewId === c.id}
+                className="flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand hover:underline disabled:opacity-60"
+              >
+                <PlayCircle className="size-3" /> {loadingPreviewId === c.id ? "Carregando..." : "Ver anúncio"}
+              </button>
             </div>
           </div>
           );
         })}
       </div>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogTitle>Prévia do anúncio</DialogTitle>
+          <DialogDescription>Prévia oficial da Meta — mostra o criativo real, sem precisar de login na conta de anúncios.</DialogDescription>
+          {previewUrl && (
+            <iframe src={previewUrl} className="h-[600px] w-full rounded-lg border border-border" title="Prévia do anúncio" />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

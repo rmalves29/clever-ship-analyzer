@@ -797,3 +797,22 @@ export async function setMetaAdsStatus(id: string, status: "ACTIVE" | "PAUSED"):
   if (!res.ok || json?.error) return { success: false, error: json?.error?.message ?? `Meta respondeu ${res.status}` };
   return { success: true };
 }
+
+/** Prévia oficial do anúncio (a mesma usada pela Meta na revisão antes de publicar) — devolve um
+ *  iframe embutível que mostra o criativo real (imagem/vídeo) sem exigir login na conta de anúncios,
+ *  diferente do link do Ads Manager (que só funciona pra quem já tem acesso ao Business Manager). */
+export async function getMetaAdsPreview(adId: string): Promise<{ success: true; previewUrl: string } | { success: false; error: string }> {
+  const { accessToken } = await loadMetaAdsSettings();
+  if (!accessToken) return { success: false, error: "Meta Ads não conectado." };
+
+  try {
+    const res = await graphGET(`/${adId}/previews`, { ad_format: "DESKTOP_FEED_STANDARD" }, accessToken);
+    const body: string | undefined = res.data?.[0]?.body;
+    const match = body?.match(/src="([^"]+)"/);
+    const previewUrl = match?.[1]?.replace(/&amp;/g, "&");
+    if (!previewUrl) return { success: false, error: "A Meta não retornou uma prévia pra esse anúncio." };
+    return { success: true, previewUrl };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar a Meta." };
+  }
+}

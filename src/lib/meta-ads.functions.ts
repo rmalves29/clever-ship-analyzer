@@ -104,6 +104,13 @@ export const saveMetaAdsPlan = createServerFn({ method: "POST" })
     return save(data);
   });
 
+export const getMetaAdsPreview = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ adId: z.string().min(1) }).parse(data))
+  .handler(async ({ data }) => {
+    const { getMetaAdsPreview: getPreview } = await import("./meta-ads.server");
+    return getPreview(data.adId);
+  });
+
 export const setMetaAdsStatus = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.object({ id: z.string().min(1), status: z.enum(["ACTIVE", "PAUSED"]) }).parse(data))
   .handler(async ({ data }) => {

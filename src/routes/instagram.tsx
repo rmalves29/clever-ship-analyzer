@@ -107,7 +107,7 @@ function InstagramPage() {
   const { data: topContentResult, isLoading: loadingTopContent } = useQuery({
     queryKey: ["instagram-top-content", datePreset],
     queryFn: () => runTopContent({ data: { datePreset } }),
-    enabled: Boolean(connection?.connected) && view === "conteudo",
+    enabled: Boolean(connection?.connected) && (view === "conteudo" || view === "geral"),
   });
 
   const { data: latestAnalysis, refetch: refetchAnalysis } = useQuery({
@@ -254,6 +254,53 @@ function InstagramPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              <div className="mt-6 rounded-xl border border-border bg-card p-4">
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold">Posts que mais engajaram no período</p>
+                  <button className="text-xs text-primary hover:underline" onClick={() => setView("conteudo")}>
+                    Ver todos
+                  </button>
+                </div>
+                {loadingTopContent && <p className="mt-2 text-sm text-muted-foreground">Carregando...</p>}
+                {!loadingTopContent && topContent.length === 0 && (
+                  <p className="mt-2 text-sm text-muted-foreground">Nenhuma publicação nesse período.</p>
+                )}
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {topContent.slice(0, 3).map((m, i) => (
+                    <a
+                      key={m.id}
+                      href={m.permalink ?? undefined}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex gap-3 rounded-lg border border-border p-2.5 transition-colors hover:border-primary"
+                    >
+                      <div className="relative w-16 shrink-0">
+                        {m.thumbnailUrl ? (
+                          <img src={m.thumbnailUrl} alt="" className="aspect-square w-full rounded-md object-cover" />
+                        ) : (
+                          <div className="flex aspect-square items-center justify-center rounded-md bg-muted">
+                            <ImageIcon className="size-5 text-muted-foreground" />
+                          </div>
+                        )}
+                        <span className="absolute left-1 top-1 rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] font-semibold text-white">#{i + 1}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="line-clamp-2 text-xs text-muted-foreground">{m.caption || "(sem legenda)"}</p>
+                        <p className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">{m.productType}</p>
+                        <p className="mt-1 text-xs font-semibold">{m.totalInteractions.toLocaleString("pt-BR")} interações</p>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+                {topContent.length > 0 && (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    O post #1 puxou o engajamento do período — {topContent[0]!.productType === "FEED" ? "um post de Feed" : topContent[0]!.productType === "REELS" ? "um Reel" : "uma publicação"}{" "}
+                    com {topContent[0]!.likes.toLocaleString("pt-BR")} curtidas, {topContent[0]!.comments.toLocaleString("pt-BR")} comentários e{" "}
+                    {topContent[0]!.shares.toLocaleString("pt-BR")} compartilhamentos.
+                  </p>
+                )}
               </div>
             </>
           )}

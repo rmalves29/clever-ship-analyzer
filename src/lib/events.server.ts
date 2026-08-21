@@ -347,6 +347,66 @@ async function getWhatsappActivityForDate(dateISO: string): Promise<{ templateNa
   }));
 }
 
+/** De onde vieram os pedidos do dia (source_name do Shopify: direto, orgânico, referência, etc) —
+ *  é o que permite achar a causa real de um pico quando Meta Ads/Instagram NÃO explicam o resultado. */
+async function getOrderSourceBreakdown(dateISO: string): Promise<{ source: string; pedidos: number; receita: number }[]> {
+  const supabaseAdmin = await admin();
+  const fromISO = new Date(`${dateISO}T00:00:00-03:00`).toISOString();
+  const toISO = new Date(`${dateISO}T23:59:59-03:00`).toISOString();
+  const { data } = await supabaseAdmin
+    .from("shopify_orders")
+    .select("source_name, total_price")
+    .gte("processed_at", fromISO)
+    .lte("processed_at", toISO)
+    .neq("financial_status", "VOIDED")
+    .neq("financial_status", "REFUNDED");
+
+  const map = new Map<string, { pedidos: number; receita: number }>();
+  for (const o of data ?? []) {
+    const key = (o as any).source_name || "desconhecida";
+    const slot = map.get(key) ?? { pedidos: 0, receita: 0 };
+    slot.pedidos += 1;
+    slot.receita += num((o as any).total_price);
+    map.set(key, slot);
+  }
+  return Array.from(map.entries())
+    .map(([source, v]) => ({ source, ...v }))
+    .sort((a, b) => b.receita - a.receita);
+}
+
+/** Quantos clientes do dia já tinham comprado antes (recorrente) vs nunca tinham comprado (novo) —
+ *  diferencia "veio gente nova" de "a base recorrente comprou mais" como causa do resultado. */
+async function getNewVsReturningForDate(dateISO: string): Promise<{ novos: number; recorrentes: number }> {
+  const supabaseAdmin = await admin();
+  const fromISO = new Date(`${dateISO}T00:00:00-03:00`).toISOString();
+  const toISO = new Date(`${dateISO}T23:59:59-03:00`).toISOString();
+  const { data: dayOrders } = await supabaseAdmin
+    .from("shopify_orders")
+    .select("customer_id")
+    .gte("processed_at", fromISO)
+    .lte("processed_at", toISO)
+    .neq("financial_status", "VOIDED")
+    .neq("financial_status", "REFUNDED");
+
+  const customerIds = Array.from(new Set((dayOrders ?? []).map((o: any) => o.customer_id).filter(Boolean)));
+  if (customerIds.length === 0) return { novos: 0, recorrentes: 0 };
+
+  const { data: priorOrders } = await supabaseAdmin
+    .from("shopify_orders")
+    .select("customer_id")
+    .in("customer_id", customerIds)
+    .lt("processed_at", fromISO);
+
+  const returningSet = new Set((priorOrders ?? []).map((o: any) => o.customer_id));
+  let novos = 0;
+  let recorrentes = 0;
+  for (const id of customerIds) {
+    if (returningSet.has(id)) recorrentes++;
+    else novos++;
+  }
+  return { novos, recorrentes };
+}
+
 const dailyAutoEventSchema = z.object({
   title: z.string(),
   category: z.enum(["preco", "campanha", "criativo", "estoque", "feriado", "concorrencia", "conteudo", "outro"]),
@@ -356,8 +416,10 @@ const dailyAutoEventSchema = z.object({
 
 const dailyAnalysisSchema = z.object({
   resumo_texto: z.string(),
+  causa_provavel: z.string(),
   pontos_positivos: z.array(z.string()).max(4).default([]),
   pontos_negativos: z.array(z.string()).max(4).default([]),
+  recomendacoes: z.array(z.string()).max(4).default([]),
   destaques: z.array(dailyAutoEventSchema).max(3).default([]),
 });
 
@@ -376,33 +438,47 @@ function buildDailyPrompt(
     instagram: { reachTotal: number; accountsEngaged: number; totalInteractions: number; profileViews: number } | null;
     whatsapp: { templateName: string; messageType: string; recipients: number }[];
     baseline: MonthBaseline;
+    sources: { source: string; pedidos: number; receita: number }[];
+    novosVsRecorrentes: { novos: number; recorrentes: number };
   },
 ) {
   const b = ctx.baseline;
-  return `Você é um analista de e-commerce sênior. Analise o dia ${dateISO} (ontem) comparando com a MÉDIA DO MÊS corrente até esse dia, com base SOMENTE nos dados reais abaixo — nunca invente números. O objetivo é apontar o que ajudou ou atrapalhou o faturamento desse dia especificamente, canal por canal.
+  const ticketDia = ctx.shopify.pedidos > 0 ? ctx.shopify.faturamento / ctx.shopify.pedidos : 0;
+  const ticketBaseline = b.avgPedidos > 0 ? b.avgFaturamento / b.avgPedidos : 0;
+  const direcao = ctx.shopify.faturamento > b.avgFaturamento ? "SUBIU" : ctx.shopify.faturamento < b.avgFaturamento ? "CAIU" : "ficou estável";
+
+  return `Você é um analista de e-commerce sênior, especialista em atribuição de causa (não só correlação). Analise o dia ${dateISO} (ontem) comparando com a MÉDIA DO MÊS corrente até esse dia, com base SOMENTE nos dados reais abaixo — nunca invente números.
+
+O faturamento do dia ${direcao} em relação à média do mês. Sua tarefa central é responder: **o que REALMENTE explica essa direção**, e o que poderia ter sido feito de diferente (pra subir ainda mais, se subiu; ou pra não ter caído, se caiu).
+
+REGRA MAIS IMPORTANTE — não liste os canais lado a lado sem checar a causalidade: um canal só "explica" o resultado se ele se moveu NA MESMA DIREÇÃO do faturamento. Se o faturamento subiu mas o gasto em Meta Ads e o alcance no Instagram caíram em relação à média, ESSES CANAIS NÃO SÃO A CAUSA do aumento — diga isso explicitamente e aponte pra origem real dos pedidos e pro perfil de cliente (novo vs recorrente) abaixo pra achar a causa verdadeira. Não deixe a IA "empurrar" ROAS ou alcance como causa só porque o número existe — some 2+2: gasto menor + alcance menor não geram mais venda.
 
 DADOS DO DIA (D-1):
-- Site/Shopify: faturamento R$${ctx.shopify.faturamento.toFixed(2)}, ${ctx.shopify.pedidos} pedidos${ctx.sessions ? `, ${ctx.sessions.sessions} sessões, ${ctx.sessions.visitors} visitantes únicos` : " (sessões do site indisponíveis)"}.
+- Site/Shopify: faturamento R$${ctx.shopify.faturamento.toFixed(2)}, ${ctx.shopify.pedidos} pedidos, ticket médio R$${ticketDia.toFixed(2)}${ctx.sessions ? `, ${ctx.sessions.sessions} sessões, ${ctx.sessions.visitors} visitantes únicos` : " (sessões do site indisponíveis)"}.
+- Origem dos pedidos do dia: ${ctx.sources.length ? ctx.sources.map((s) => `"${s.source}" (${s.pedidos} pedidos, R$${s.receita.toFixed(2)})`).join("; ") : "sem pedidos no dia"}.
+- Perfil de cliente do dia: ${ctx.novosVsRecorrentes.novos} clientes novos, ${ctx.novosVsRecorrentes.recorrentes} clientes recorrentes.
 - Meta Ads: ${ctx.shopify.metaSpend != null ? `gasto R$${ctx.shopify.metaSpend.toFixed(2)}, ${ctx.shopify.metaPurchases ?? 0} compras atribuídas, ROAS ${ctx.shopify.metaRoas?.toFixed(2) ?? "0"}` : "não conectado ou sem dados nesse dia"}.
 - Instagram: ${ctx.instagram ? `alcance ${ctx.instagram.reachTotal}, contas engajadas ${ctx.instagram.accountsEngaged}, interações ${ctx.instagram.totalInteractions}, visitas ao perfil ${ctx.instagram.profileViews}` : "não conectado ou sem dados nesse dia"}.
 - WhatsApp: ${ctx.whatsapp.length ? ctx.whatsapp.map((c) => `campanha "${c.templateName}" (${c.messageType}) enviada pra ${c.recipients} contatos`).join("; ") : "nenhuma campanha enviada nesse dia"}.
 
 MÉDIA DO MÊS ATÉ ANTES DE ONTEM (baseline, ${b.daysCounted} dia(s) considerados):
-- Site/Shopify: faturamento médio R$${b.avgFaturamento.toFixed(2)}/dia (D-1 ficou ${pct(ctx.shopify.faturamento, b.avgFaturamento)}), ${b.avgPedidos.toFixed(1)} pedidos/dia em média (D-1 ficou ${pct(ctx.shopify.pedidos, b.avgPedidos)}).
+- Site/Shopify: faturamento médio R$${b.avgFaturamento.toFixed(2)}/dia (D-1 ficou ${pct(ctx.shopify.faturamento, b.avgFaturamento)}), ${b.avgPedidos.toFixed(1)} pedidos/dia (D-1 ficou ${pct(ctx.shopify.pedidos, b.avgPedidos)}), ticket médio R$${ticketBaseline.toFixed(2)} (D-1 ficou ${pct(ticketDia, ticketBaseline)}).
 - Meta Ads: ${b.avgMetaSpend != null ? `gasto médio R$${b.avgMetaSpend.toFixed(2)}/dia` : "sem baseline de gasto"}${ctx.shopify.metaSpend != null && b.avgMetaSpend != null ? ` (D-1 ficou ${pct(ctx.shopify.metaSpend, b.avgMetaSpend)})` : ""}; ${b.avgMetaRoas != null ? `ROAS médio ${b.avgMetaRoas.toFixed(2)}` : "sem baseline de ROAS"}${ctx.shopify.metaRoas != null && b.avgMetaRoas != null ? ` (D-1 ficou ${pct(ctx.shopify.metaRoas, b.avgMetaRoas)})` : ""}.
 - Instagram: ${b.igMonthAvgReach != null ? `alcance médio ${b.igMonthAvgReach.toFixed(0)}/dia` : "sem baseline"}${ctx.instagram && b.igMonthAvgReach != null ? ` (D-1 ficou ${pct(ctx.instagram.reachTotal, b.igMonthAvgReach)})` : ""}.
 - WhatsApp: ${b.whatsappCampanhasNoMes} campanha(s) enviada(s) no mês até antes de ontem.
 
-Com base nessa comparação, escreva:
-1. "resumo_texto" (2 a 4 frases, português do Brasil): o resultado do dia canal por canal, sempre relativo à média do mês (acima/abaixo/na média). Se um canal não tiver dado ou baseline, diga isso em vez de inventar.
-2. "pontos_positivos" (0 a 4 itens curtos): o que especificamente ajudou o faturamento nesse dia (ex: "ROAS do Meta Ads 40% acima da média do mês").
-3. "pontos_negativos" (0 a 4 itens curtos): o que especificamente atrapalhou (ex: "zero campanhas de WhatsApp enviadas, diferente do padrão do mês").
-4. "destaques" (0 a 3 itens, só se houver algo realmente fora do padrão): eventos candidatos a registrar formalmente no CRM.
+Com base nisso, escreva:
+1. "resumo_texto" (2-3 frases): o resultado do dia em relação à média do mês, sem ainda explicar a causa.
+2. "causa_provavel" (2-4 frases, o MAIS IMPORTANTE): explique com que canal(is)/fator(es) REALMENTE bate com a direção do faturamento (origem dos pedidos, cliente novo vs recorrente, ticket médio, ou um canal pago que de fato subiu junto). Se NENHUM canal rastreado explica — ex: pedidos subiram mas todo canal pago caiu — diga isso claramente e aponte a origem dos pedidos como pista mais provável, sem inventar uma causa externa que os dados não sustentam.
+3. "pontos_positivos" (0-4 itens curtos, só fatores que realmente empurraram o resultado na mesma direção).
+4. "pontos_negativos" (0-4 itens curtos, fatores que empurraram contra o resultado ou representam risco/ineficiência mesmo num dia bom).
+5. "recomendacoes" (2-4 itens, ação concreta): se o faturamento SUBIU, o que fazer pra sustentar/ampliar ainda mais esse resultado (ex: dobrar investimento no canal de origem que mais vendeu); se CAIU, o que poderia ter evitado a queda.
+6. "destaques" (0-3 itens, só se houver algo realmente fora do padrão): eventos candidatos a registrar formalmente no CRM.
 
-Não invente pontos triviais só pra preencher — se não houver nada relevante numa das listas, retorne vazio.
+Não invente pontos triviais só pra preencher — se não houver nada relevante numa lista, retorne vazio. Responda em português do Brasil.
 
 Responda em JSON estrito:
-{ "resumo_texto": string, "pontos_positivos": [string], "pontos_negativos": [string], "destaques": [ { "title": string, "category": "preco"|"campanha"|"criativo"|"estoque"|"feriado"|"concorrencia"|"conteudo"|"outro", "canais": ["shopify"|"meta_ads"|"instagram"|"whatsapp"], "description": string } ] }`;
+{ "resumo_texto": string, "causa_provavel": string, "pontos_positivos": [string], "pontos_negativos": [string], "recomendacoes": [string], "destaques": [ { "title": string, "category": "preco"|"campanha"|"criativo"|"estoque"|"feriado"|"concorrencia"|"conteudo"|"outro", "canais": ["shopify"|"meta_ads"|"instagram"|"whatsapp"], "description": string } ] }`;
 }
 
 async function callOpenAiDaily(apiKey: string, prompt: string) {
@@ -489,8 +565,10 @@ export async function runDailyEventsAnalysis(
 
   const whatsapp = await getWhatsappActivityForDate(dateISO);
   const baseline = await getMonthBaseline(dateISO);
+  const sources = await getOrderSourceBreakdown(dateISO);
+  const novosVsRecorrentes = await getNewVsReturningForDate(dateISO);
 
-  const prompt = buildDailyPrompt(dateISO, { shopify: shopifyDay, sessions, instagram, whatsapp, baseline });
+  const prompt = buildDailyPrompt(dateISO, { shopify: shopifyDay, sessions, instagram, whatsapp, baseline, sources, novosVsRecorrentes });
 
   let analysis: z.infer<typeof dailyAnalysisSchema>;
   try {
@@ -507,12 +585,15 @@ export async function runDailyEventsAnalysis(
     whatsapp.length > 0 ? "whatsapp" : null,
   ].filter((c): c is string => Boolean(c));
 
-  const descricaoPartes = [analysis.resumo_texto];
+  const descricaoPartes = [analysis.resumo_texto, `Causa provável: ${analysis.causa_provavel}`];
   if (analysis.pontos_positivos.length) {
     descricaoPartes.push(`O que ajudou: ${analysis.pontos_positivos.join("; ")}.`);
   }
   if (analysis.pontos_negativos.length) {
     descricaoPartes.push(`O que atrapalhou: ${analysis.pontos_negativos.join("; ")}.`);
+  }
+  if (analysis.recomendacoes.length) {
+    descricaoPartes.push(`Recomendações: ${analysis.recomendacoes.join("; ")}.`);
   }
 
   await createEvent(

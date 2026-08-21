@@ -622,7 +622,22 @@ export async function runDailyEventsAnalysis(
     whatsapp.length > 0 ? "whatsapp" : null,
   ].filter((c): c is string => Boolean(c));
 
-  const descricaoPartes = [analysis.resumo_texto, `Causa provável: ${analysis.causa_provavel}`];
+  const conversaoDia = sessions && sessions.sessions > 0 ? (shopifyDay.pedidos / sessions.sessions) * 100 : null;
+  const conversaoBaseline = baseline.avgSessions && baseline.avgSessions > 0 ? (baseline.avgPedidos / baseline.avgSessions) * 100 : null;
+
+  const descricaoPartes = [analysis.resumo_texto];
+
+  descricaoPartes.push(
+    sessions
+      ? `Sessões do site: ${sessions.sessions} (${pct(sessions.sessions, baseline.avgSessions ?? 0)}), taxa de conversão ${conversaoDia?.toFixed(2) ?? "0"}%${conversaoBaseline ? ` (${pct(conversaoDia ?? 0, conversaoBaseline)})` : ""}.`
+      : "Sessões do site: indisponíveis nesse dia.",
+  );
+
+  if (sources.length) {
+    descricaoPartes.push(`Origem dos pedidos: ${sources.map((s) => `${s.pedidos} via ${s.label} (R$${s.receita.toFixed(2)})`).join("; ")}.`);
+  }
+
+  descricaoPartes.push(`Causa provável: ${analysis.causa_provavel}`);
   if (analysis.pontos_positivos.length) {
     descricaoPartes.push(`O que ajudou: ${analysis.pontos_positivos.join("; ")}.`);
   }

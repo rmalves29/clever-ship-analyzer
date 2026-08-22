@@ -265,6 +265,7 @@ export type Database = {
           ig_user_id: string | null
           ig_username: string | null
           matched_keyword: string | null
+          node_id: string | null
           status: Database["public"]["Enums"]["flow_dispatch_status"]
         }
         Insert: {
@@ -276,6 +277,7 @@ export type Database = {
           ig_user_id?: string | null
           ig_username?: string | null
           matched_keyword?: string | null
+          node_id?: string | null
           status: Database["public"]["Enums"]["flow_dispatch_status"]
         }
         Update: {
@@ -287,11 +289,53 @@ export type Database = {
           ig_user_id?: string | null
           ig_username?: string | null
           matched_keyword?: string | null
+          node_id?: string | null
           status?: Database["public"]["Enums"]["flow_dispatch_status"]
         }
         Relationships: [
           {
             foreignKeyName: "flow_dispatch_logs_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "flow_automations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      flow_node_stats: {
+        Row: {
+          automation_id: string
+          clicked_count: number | null
+          delivered_count: number | null
+          id: string
+          node_id: string
+          opened_count: number | null
+          sent_count: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          automation_id: string
+          clicked_count?: number | null
+          delivered_count?: number | null
+          id?: string
+          node_id: string
+          opened_count?: number | null
+          sent_count?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          automation_id?: string
+          clicked_count?: number | null
+          delivered_count?: number | null
+          id?: string
+          node_id?: string
+          opened_count?: number | null
+          sent_count?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flow_node_stats_automation_id_fkey"
             columns: ["automation_id"]
             isOneToOne: false
             referencedRelation: "flow_automations"

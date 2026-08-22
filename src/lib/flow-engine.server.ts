@@ -426,12 +426,17 @@ async function dispatch(automation: { id: string; canvas_data: FlowCanvasData },
   }
 
   try {
-    await walkCanvasAndDispatch(automation.canvas_data, ctx, contactId, { 
-      pageToken, 
-      igId, 
-      messagingToken: messagingToken || pageToken,
-      messagingIgId: messagingIgId || igId 
-    });
+    await walkCanvasAndDispatch(
+      { ...automation.canvas_data, id: automation.id }, 
+      ctx, 
+      contactId, 
+      { 
+        pageToken, 
+        igId, 
+        messagingToken: messagingToken || pageToken,
+        messagingIgId: messagingIgId || igId 
+      }
+    );
     await bumpDispatchCount(automation.id);
     // Log global de sucesso já foi registrado se necessário, ou walkCanvas registrou por node
   } catch (error) {

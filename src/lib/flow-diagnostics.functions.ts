@@ -9,11 +9,13 @@ export const getFlowStatus = createServerFn({ method: "GET" }).handler(async () 
     .from("flow_webhook_events" as any)
     .select("*", { count: 'exact', head: true });
     
-  // 2. Check recent errors
+  // 2. Check recent errors (last 10 minutes to reflect real-time status after user fix)
+  const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const { data: recentErrors } = await supabaseAdmin
     .from("flow_dispatch_logs" as any)
     .select("error_message, created_at")
     .eq("status", "error")
+    .gt("created_at", tenMinutesAgo)
     .order("created_at", { ascending: false })
     .limit(5);
 

@@ -662,6 +662,8 @@ export type Database = {
           instagram_latest_analysis: Json | null
           instagram_latest_analysis_at: string | null
           instagram_latest_analysis_period: string | null
+          instagram_messaging_access_token: string | null
+          instagram_messaging_account_id: string | null
           instagram_page_access_token: string | null
           instagram_username: string | null
           last_imported_order_at: string | null
@@ -709,6 +711,8 @@ export type Database = {
           instagram_latest_analysis?: Json | null
           instagram_latest_analysis_at?: string | null
           instagram_latest_analysis_period?: string | null
+          instagram_messaging_access_token?: string | null
+          instagram_messaging_account_id?: string | null
           instagram_page_access_token?: string | null
           instagram_username?: string | null
           last_imported_order_at?: string | null
@@ -756,6 +760,8 @@ export type Database = {
           instagram_latest_analysis?: Json | null
           instagram_latest_analysis_at?: string | null
           instagram_latest_analysis_period?: string | null
+          instagram_messaging_access_token?: string | null
+          instagram_messaging_account_id?: string | null
           instagram_page_access_token?: string | null
           instagram_username?: string | null
           last_imported_order_at?: string | null

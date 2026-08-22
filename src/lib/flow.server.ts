@@ -24,6 +24,8 @@ export interface FlowNodeData {
   text?: string;
   publicReply?: string;
   imageUrl?: string;
+  audioUrl?: string;
+  videoUrl?: string;
   buttonLabel?: string;
   buttonUrl?: string;
   delayMinutes?: number;

@@ -28,6 +28,8 @@ const nodeDataSchema = z.object({
   text: z.string().max(2000).optional(),
   publicReply: z.string().max(500).optional(),
   imageUrl: z.string().max(500).optional().or(z.literal("")),
+  audioUrl: z.string().max(500).optional().or(z.literal("")),
+  videoUrl: z.string().max(500).optional().or(z.literal("")),
   buttonLabel: z.string().max(60).optional(),
   buttonUrl: z.string().max(500).optional().or(z.literal("")),
   delayMinutes: z.number().int().min(0).max(365 * 24 * 60).optional(),

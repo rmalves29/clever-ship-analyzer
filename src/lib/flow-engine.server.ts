@@ -248,6 +248,12 @@ async function runFlowAction(data: FlowNodeData, contactId: string): Promise<voi
   // Demais ações do catálogo (subscribe_sequence, external_request, etc.) ainda não têm efeito real.
 }
 
+function normalizeUrl(url?: string): string | null {
+  const trimmed = url?.trim();
+  if (!trimmed) return null;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
 async function sendFlowMessage(data: FlowNodeData, ctx: DispatchContext, creds: FlowCreds): Promise<void> {
   // Comentário/live -> resposta privada via comment_id, ainda pela API legada (graph.facebook.com)
   // ligada à Página. DM/story reply -> API "Instagram com login do Instagram" (graph.instagram.com),
@@ -258,20 +264,47 @@ async function sendFlowMessage(data: FlowNodeData, ctx: DispatchContext, creds: 
   const igId = useMessagingApi ? creds.messagingIgId! : creds.igId;
   const recipient = ctx.commentId ? { comment_id: ctx.commentId } : { id: ctx.igUserId };
 
-  let text = (data.text ?? "").trim();
-  if (data.buttonUrl?.trim()) {
-    text = `${text}\n\n${data.buttonLabel?.trim() || "Saiba mais"}: ${data.buttonUrl.trim()}`;
+  // Mídia primeiro, texto por último — ordem pedida: imagem/vídeo/áudio chegam antes da explicação em texto.
+  for (const [kind, url] of [
+    ["image", data.imageUrl],
+    ["video", data.videoUrl],
+    ["audio", data.audioUrl],
+  ] as const) {
+    if (url?.trim()) {
+      await graphPOST(
+        `/${igId}/messages`,
+        { recipient, message: { attachment: { type: kind, payload: { url: url.trim() } } } },
+        token,
+        host,
+      );
+    }
   }
-  if (text) {
-    await graphPOST(`/${igId}/messages`, { recipient, message: { text } }, token, host);
-  }
-  if (data.imageUrl?.trim()) {
+
+  const text = (data.text ?? "").trim();
+  const buttonUrl = normalizeUrl(data.buttonUrl);
+  if (text && buttonUrl) {
+    // Botão nativo (template "button") em vez de colar o link dentro do texto — só assim vira
+    // um botão clicável de verdade no Direct, e não um texto solto.
     await graphPOST(
       `/${igId}/messages`,
-      { recipient, message: { attachment: { type: "image", payload: { url: data.imageUrl.trim() } } } },
+      {
+        recipient,
+        message: {
+          attachment: {
+            type: "template",
+            payload: {
+              template_type: "button",
+              text,
+              buttons: [{ type: "web_url", url: buttonUrl, title: (data.buttonLabel?.trim() || "Saiba mais").slice(0, 20) }],
+            },
+          },
+        },
+      },
       token,
       host,
     );
+  } else if (text) {
+    await graphPOST(`/${igId}/messages`, { recipient, message: { text } }, token, host);
   }
   if (ctx.commentId && data.publicReply?.trim()) {
     // Para responder comentário, o parâmetro 'message' vai na Query String, não no corpo JSON

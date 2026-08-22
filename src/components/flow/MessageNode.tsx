@@ -69,10 +69,15 @@ export const MessageNode = memo(function MessageNode({ data, id }: NodeProps) {
       </div>
 
       <div className="px-4 py-2 grid grid-cols-4 gap-1 text-center border-b bg-muted/20">
-        {["Enviado", "Entregue", "Aberto", "Clicado"].map((k) => (
-          <div key={k}>
-            <div className="text-primary font-semibold text-sm">0</div>
-            <div className="text-[9px] text-muted-foreground uppercase tracking-wider">{k}</div>
+        {[
+          { label: "Enviado", value: d.stats?.sent_count ?? 0 },
+          { label: "Entregue", value: d.stats?.delivered_count ?? 0 },
+          { label: "Aberto", value: d.stats?.opened_count ?? 0 },
+          { label: "Clicado", value: d.stats?.clicked_count ?? 0 },
+        ].map((s) => (
+          <div key={s.label}>
+            <div className="text-primary font-semibold text-sm">{s.value}</div>
+            <div className="text-[9px] text-muted-foreground uppercase tracking-wider">{s.label}</div>
           </div>
         ))}
       </div>

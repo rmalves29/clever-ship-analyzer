@@ -65,6 +65,13 @@ function Editor() {
     queryFn: () => get({ data: { id } }),
   });
 
+  const getStats = useServerFn(import("@/lib/flow.functions").then(m => m.getFlowNodeStats));
+  const { data: stats } = useQuery({
+    queryKey: ["flow-node-stats", id],
+    queryFn: () => getStats({ data: { automationId: id } }),
+    refetchInterval: 5000,
+  });
+
   const [name, setName] = useState("");
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -72,10 +79,19 @@ function Editor() {
   useEffect(() => {
     if (automation) {
       setName(automation.name);
-      setNodes(automation.canvas_data.nodes.map((n) => ({ ...n }) as Node));
+      setNodes(automation.canvas_data.nodes.map((n) => {
+        const nodeStats = stats?.find(s => s.node_id === n.id);
+        return { 
+          ...n, 
+          data: { 
+            ...n.data, 
+            stats: nodeStats || { sent_count: 0, delivered_count: 0, opened_count: 0, clicked_count: 0 } 
+          } 
+        };
+      }) as Node[]);
       setEdges(automation.canvas_data.edges.map((e) => ({ ...e }) as Edge));
     }
-  }, [automation, setNodes, setEdges]);
+  }, [automation, stats, setNodes, setEdges]);
 
   useEffect(() => {
     const handler = (ev: Event) => {

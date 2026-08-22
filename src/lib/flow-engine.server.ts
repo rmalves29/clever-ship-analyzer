@@ -349,13 +349,34 @@ async function sendFlowMessage(data: FlowNodeData, ctx: DispatchContext, creds: 
   const buttonUrl = normalizeUrl(data.buttonUrl);
   const buttonLabel = (data.buttonLabel?.trim() || "Saiba mais").slice(0, 20);
 
-  // Testado na prática: os templates "button" e "generic" são aceitos pela API (200 OK) mas o
-  // Direct do Instagram não renderiza o botão — chegam como texto puro, sem nenhum botão. Como
-  // o Instagram detecta e deixa clicável qualquer link dentro do texto normal, esse é o único
-  // jeito que realmente funciona hoje.
-  const finalText = buttonUrl ? `${text}\n\n${buttonLabel}: ${buttonUrl}` : text;
-  if (finalText) {
-    await graphPOST(`/${igId}/messages`, { recipient, message: { text: finalText } }, token, host);
+  // Botão nativo (template "button") — testado ao vivo no app do Instagram (celular) e funciona
+  // perfeitamente; só não aparece no Instagram Web, que ignora templates de mensagem. A resposta
+  // privada a comentário (recipient: comment_id) não aceita templates estruturados, então nesse
+  // caso caímos pro texto simples com o link colado.
+  if (text && buttonUrl && !ctx.commentId) {
+    await graphPOST(
+      `/${igId}/messages`,
+      {
+        recipient,
+        message: {
+          attachment: {
+            type: "template",
+            payload: {
+              template_type: "button",
+              text,
+              buttons: [{ type: "web_url", url: buttonUrl, title: buttonLabel }],
+            },
+          },
+        },
+      },
+      token,
+      host,
+    );
+  } else {
+    const finalText = buttonUrl ? `${text}\n\n${buttonLabel}: ${buttonUrl}` : text;
+    if (finalText) {
+      await graphPOST(`/${igId}/messages`, { recipient, message: { text: finalText } }, token, host);
+    }
   }
 
   if (ctx.commentId && data.publicReply?.trim()) {

@@ -41,6 +41,42 @@ export type Database = {
         }
         Relationships: []
       }
+      crm_events: {
+        Row: {
+          canais: string[]
+          category: string
+          created_at: string
+          description: string | null
+          event_date: string
+          id: string
+          source: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          canais?: string[]
+          category: string
+          created_at?: string
+          description?: string | null
+          event_date: string
+          id?: string
+          source?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          canais?: string[]
+          category?: string
+          created_at?: string
+          description?: string | null
+          event_date?: string
+          id?: string
+          source?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       crm_list_members: {
         Row: {
           adicionado_em: string
@@ -69,6 +105,226 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      crm_segments: {
+        Row: {
+          atualizado_em: string
+          criado_em: string
+          descricao: string | null
+          id: string
+          nome: string
+          regras: Json
+        }
+        Insert: {
+          atualizado_em?: string
+          criado_em?: string
+          descricao?: string | null
+          id?: string
+          nome: string
+          regras?: Json
+        }
+        Update: {
+          atualizado_em?: string
+          criado_em?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+          regras?: Json
+        }
+        Relationships: []
+      }
+      crm_static_lists: {
+        Row: {
+          criado_em: string
+          descricao: string | null
+          id: string
+          nome: string
+        }
+        Insert: {
+          criado_em?: string
+          descricao?: string | null
+          id?: string
+          nome: string
+        }
+        Update: {
+          criado_em?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+        }
+        Relationships: []
+      }
+      flow_automations: {
+        Row: {
+          canvas_data: Json
+          created_at: string
+          dispatch_count: number
+          id: string
+          keywords: string[]
+          match_any_comment: boolean
+          media_id: string | null
+          media_thumbnail_url: string | null
+          name: string
+          status: Database["public"]["Enums"]["flow_automation_status"]
+          trigger_kind: Database["public"]["Enums"]["flow_trigger_kind"]
+          trigger_kinds: Database["public"]["Enums"]["flow_trigger_kind"][]
+          updated_at: string
+        }
+        Insert: {
+          canvas_data?: Json
+          created_at?: string
+          dispatch_count?: number
+          id?: string
+          keywords?: string[]
+          match_any_comment?: boolean
+          media_id?: string | null
+          media_thumbnail_url?: string | null
+          name?: string
+          status?: Database["public"]["Enums"]["flow_automation_status"]
+          trigger_kind?: Database["public"]["Enums"]["flow_trigger_kind"]
+          trigger_kinds?: Database["public"]["Enums"]["flow_trigger_kind"][]
+          updated_at?: string
+        }
+        Update: {
+          canvas_data?: Json
+          created_at?: string
+          dispatch_count?: number
+          id?: string
+          keywords?: string[]
+          match_any_comment?: boolean
+          media_id?: string | null
+          media_thumbnail_url?: string | null
+          name?: string
+          status?: Database["public"]["Enums"]["flow_automation_status"]
+          trigger_kind?: Database["public"]["Enums"]["flow_trigger_kind"]
+          trigger_kinds?: Database["public"]["Enums"]["flow_trigger_kind"][]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      flow_contacts: {
+        Row: {
+          first_seen_at: string
+          id: string
+          ig_user_id: string
+          last_seen_at: string
+          tags: string[]
+          username: string | null
+        }
+        Insert: {
+          first_seen_at?: string
+          id?: string
+          ig_user_id: string
+          last_seen_at?: string
+          tags?: string[]
+          username?: string | null
+        }
+        Update: {
+          first_seen_at?: string
+          id?: string
+          ig_user_id?: string
+          last_seen_at?: string
+          tags?: string[]
+          username?: string | null
+        }
+        Relationships: []
+      }
+      flow_dispatch_dedup: {
+        Row: {
+          automation_id: string
+          dispatched_at: string
+          ig_user_id: string
+        }
+        Insert: {
+          automation_id: string
+          dispatched_at?: string
+          ig_user_id: string
+        }
+        Update: {
+          automation_id?: string
+          dispatched_at?: string
+          ig_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flow_dispatch_dedup_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "flow_automations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      flow_dispatch_logs: {
+        Row: {
+          automation_id: string | null
+          comment_id: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          ig_user_id: string | null
+          ig_username: string | null
+          matched_keyword: string | null
+          status: Database["public"]["Enums"]["flow_dispatch_status"]
+        }
+        Insert: {
+          automation_id?: string | null
+          comment_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          ig_user_id?: string | null
+          ig_username?: string | null
+          matched_keyword?: string | null
+          status: Database["public"]["Enums"]["flow_dispatch_status"]
+        }
+        Update: {
+          automation_id?: string | null
+          comment_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          ig_user_id?: string | null
+          ig_username?: string | null
+          matched_keyword?: string | null
+          status?: Database["public"]["Enums"]["flow_dispatch_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flow_dispatch_logs_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "flow_automations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      flow_webhook_events: {
+        Row: {
+          id: string
+          processed: boolean
+          processing_error: string | null
+          raw_payload: Json
+          received_at: string
+          signature_valid: boolean
+        }
+        Insert: {
+          id?: string
+          processed?: boolean
+          processing_error?: string | null
+          raw_payload: Json
+          received_at?: string
+          signature_valid: boolean
+        }
+        Update: {
+          id?: string
+          processed?: boolean
+          processing_error?: string | null
+          raw_payload?: Json
+          received_at?: string
+          signature_valid?: boolean
+        }
+        Relationships: []
       }
       meta_ads_planning: {
         Row: {
@@ -124,54 +380,6 @@ export type Database = {
           metric?: string
           operator?: string
           value?: number
-        }
-        Relationships: []
-      }
-      crm_segments: {
-        Row: {
-          atualizado_em: string
-          criado_em: string
-          descricao: string | null
-          id: string
-          nome: string
-          regras: Json
-        }
-        Insert: {
-          atualizado_em?: string
-          criado_em?: string
-          descricao?: string | null
-          id?: string
-          nome: string
-          regras?: Json
-        }
-        Update: {
-          atualizado_em?: string
-          criado_em?: string
-          descricao?: string | null
-          id?: string
-          nome?: string
-          regras?: Json
-        }
-        Relationships: []
-      }
-      crm_static_lists: {
-        Row: {
-          criado_em: string
-          descricao: string | null
-          id: string
-          nome: string
-        }
-        Insert: {
-          criado_em?: string
-          descricao?: string | null
-          id?: string
-          nome: string
-        }
-        Update: {
-          criado_em?: string
-          descricao?: string | null
-          id?: string
-          nome?: string
         }
         Relationships: []
       }
@@ -445,13 +653,29 @@ export type Database = {
         Row: {
           automation_tick_secret: string | null
           created_at: string
+          events_latest_analysis: Json | null
+          events_latest_analysis_at: string | null
+          events_latest_analysis_range: Json | null
           id: string
+          instagram_business_account_id: string | null
+          instagram_connected_at: string | null
+          instagram_latest_analysis: Json | null
+          instagram_latest_analysis_at: string | null
+          instagram_latest_analysis_period: string | null
+          instagram_page_access_token: string | null
+          instagram_username: string | null
           last_imported_order_at: string | null
           last_sync_at: string | null
           last_sync_error: string | null
           latest_ai_analysis: Json | null
           latest_ai_analysis_at: string | null
           latest_ai_analysis_period: string | null
+          meta_ads_access_token: string | null
+          meta_ads_account_id: string | null
+          meta_ads_connected_at: string | null
+          meta_ads_latest_analysis: Json | null
+          meta_ads_latest_analysis_at: string | null
+          meta_ads_latest_analysis_period: string | null
           openai_api_key: string | null
           shopify_admin_access_token: string | null
           shopify_client_id: string | null
@@ -476,13 +700,29 @@ export type Database = {
         Insert: {
           automation_tick_secret?: string | null
           created_at?: string
+          events_latest_analysis?: Json | null
+          events_latest_analysis_at?: string | null
+          events_latest_analysis_range?: Json | null
           id?: string
+          instagram_business_account_id?: string | null
+          instagram_connected_at?: string | null
+          instagram_latest_analysis?: Json | null
+          instagram_latest_analysis_at?: string | null
+          instagram_latest_analysis_period?: string | null
+          instagram_page_access_token?: string | null
+          instagram_username?: string | null
           last_imported_order_at?: string | null
           last_sync_at?: string | null
           last_sync_error?: string | null
           latest_ai_analysis?: Json | null
           latest_ai_analysis_at?: string | null
           latest_ai_analysis_period?: string | null
+          meta_ads_access_token?: string | null
+          meta_ads_account_id?: string | null
+          meta_ads_connected_at?: string | null
+          meta_ads_latest_analysis?: Json | null
+          meta_ads_latest_analysis_at?: string | null
+          meta_ads_latest_analysis_period?: string | null
           openai_api_key?: string | null
           shopify_admin_access_token?: string | null
           shopify_client_id?: string | null
@@ -507,13 +747,29 @@ export type Database = {
         Update: {
           automation_tick_secret?: string | null
           created_at?: string
+          events_latest_analysis?: Json | null
+          events_latest_analysis_at?: string | null
+          events_latest_analysis_range?: Json | null
           id?: string
+          instagram_business_account_id?: string | null
+          instagram_connected_at?: string | null
+          instagram_latest_analysis?: Json | null
+          instagram_latest_analysis_at?: string | null
+          instagram_latest_analysis_period?: string | null
+          instagram_page_access_token?: string | null
+          instagram_username?: string | null
           last_imported_order_at?: string | null
           last_sync_at?: string | null
           last_sync_error?: string | null
           latest_ai_analysis?: Json | null
           latest_ai_analysis_at?: string | null
           latest_ai_analysis_period?: string | null
+          meta_ads_access_token?: string | null
+          meta_ads_account_id?: string | null
+          meta_ads_connected_at?: string | null
+          meta_ads_latest_analysis?: Json | null
+          meta_ads_latest_analysis_at?: string | null
+          meta_ads_latest_analysis_period?: string | null
           openai_api_key?: string | null
           shopify_admin_access_token?: string | null
           shopify_client_id?: string | null
@@ -936,7 +1192,13 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      flow_automation_status: "draft" | "active" | "paused"
+      flow_dispatch_status: "success" | "error" | "skipped"
+      flow_trigger_kind:
+        | "post_or_reel_comment"
+        | "story_reply"
+        | "live_comment"
+        | "dm_message"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1063,6 +1325,15 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      flow_automation_status: ["draft", "active", "paused"],
+      flow_dispatch_status: ["success", "error", "skipped"],
+      flow_trigger_kind: [
+        "post_or_reel_comment",
+        "story_reply",
+        "live_comment",
+        "dm_message",
+      ],
+    },
   },
 } as const

@@ -165,8 +165,11 @@ async function logDispatch(input: {
   matchedKeyword: string | null;
   status: "success" | "error" | "skipped";
   errorMessage?: string | null;
+  nodeId?: string | null;
 }): Promise<void> {
   const supabaseAdmin = await admin();
+  
+  // Log básico na tabela de histórico
   await (supabaseAdmin.from("flow_dispatch_logs" as any) as any).insert({
     automation_id: input.automationId,
     ig_user_id: input.igUserId,
@@ -175,7 +178,38 @@ async function logDispatch(input: {
     matched_keyword: input.matchedKeyword,
     status: input.status,
     error_message: input.errorMessage ?? null,
+    node_id: input.nodeId ?? null,
   });
+
+  // Atualiza as estatísticas do node se for sucesso
+  if (input.status === "success" && input.automationId && input.nodeId) {
+    // Incrementa o contador de "enviado"
+    await (supabaseAdmin.from("flow_node_stats" as any) as any).upsert(
+      { 
+        automation_id: input.automationId, 
+        node_id: input.nodeId,
+        sent_count: 1, 
+        updated_at: new Date().toISOString() 
+      },
+      { onConflict: "automation_id, node_id" }
+    ).select();
+    
+    // Como a API da Meta não retorna o status de entrega/leitura no mesmo POST, 
+    // registramos como enviado. O webhook de status poderá atualizar entregue/aberto depois.
+    // RPC increment SQL seria melhor, mas upsert resolve para MVP.
+    const { data: stats } = await (supabaseAdmin.from("flow_node_stats" as any) as any)
+      .select("sent_count")
+      .eq("automation_id", input.automationId)
+      .eq("node_id", input.nodeId)
+      .single();
+    
+    if (stats) {
+      await (supabaseAdmin.from("flow_node_stats" as any) as any)
+        .update({ sent_count: (stats as any).sent_count + 1 })
+        .eq("automation_id", input.automationId)
+        .eq("node_id", input.nodeId);
+    }
+  }
 }
 
 async function bumpDispatchCount(automationId: string): Promise<void> {
@@ -226,7 +260,7 @@ function findMatchedKeyword(keywords: string[], matchAny: boolean, text: string)
 type FlowCreds = { pageToken: string; igId: string; messagingToken: string | null; messagingIgId: string | null };
 
 async function walkCanvasAndDispatch(
-  canvas: FlowCanvasData,
+  canvas: FlowCanvasData & { id: string },
   ctx: DispatchContext,
   contactId: string,
   creds: FlowCreds,
@@ -244,6 +278,16 @@ async function walkCanvasAndDispatch(
 
     if (node.type === "message") {
       await sendFlowMessage(node.data, ctx, creds);
+      // Registra o envio para este node específico
+      await logDispatch({
+        automationId: canvas.id,
+        igUserId: ctx.igUserId,
+        igUsername: ctx.username,
+        commentId: ctx.commentId,
+        matchedKeyword: ctx.matchedKeyword,
+        status: "success",
+        nodeId: node.id
+      });
     } else if (node.type === "action") {
       await runFlowAction(node.data, contactId);
     } else if ((node.type === "delay" || node.type === "smart_delay") && isZeroDelay(node.data)) {
@@ -382,21 +426,19 @@ async function dispatch(automation: { id: string; canvas_data: FlowCanvasData },
   }
 
   try {
-    await walkCanvasAndDispatch(automation.canvas_data, ctx, contactId, { 
-      pageToken, 
-      igId, 
-      messagingToken: messagingToken || pageToken, // Fallback para o token da página se o de messaging (login) não existir
-      messagingIgId: messagingIgId || igId 
-    });
+    await walkCanvasAndDispatch(
+      { ...automation.canvas_data, id: automation.id }, 
+      ctx, 
+      contactId, 
+      { 
+        pageToken, 
+        igId, 
+        messagingToken: messagingToken || pageToken,
+        messagingIgId: messagingIgId || igId 
+      }
+    );
     await bumpDispatchCount(automation.id);
-    await logDispatch({
-      automationId: automation.id,
-      igUserId: ctx.igUserId,
-      igUsername: ctx.username,
-      commentId: ctx.commentId,
-      matchedKeyword: ctx.matchedKeyword,
-      status: "success",
-    });
+    // Log global de sucesso já foi registrado se necessário, ou walkCanvas registrou por node
   } catch (error) {
     // Libera a trava anti-duplicado nesse erro — uma falha de envio (ex: token sem permissão)
     // não deve bloquear esse contato de receber a automação para sempre.

@@ -260,7 +260,7 @@ function findMatchedKeyword(keywords: string[], matchAny: boolean, text: string)
 type FlowCreds = { pageToken: string; igId: string; messagingToken: string | null; messagingIgId: string | null };
 
 async function walkCanvasAndDispatch(
-  canvas: FlowCanvasData,
+  canvas: FlowCanvasData & { id: string },
   ctx: DispatchContext,
   contactId: string,
   creds: FlowCreds,
@@ -280,7 +280,7 @@ async function walkCanvasAndDispatch(
       await sendFlowMessage(node.data, ctx, creds);
       // Registra o envio para este node específico
       await logDispatch({
-        automationId: canvas.nodes.find(n => n.type === "trigger")?.id || null, // V1 simplificado
+        automationId: canvas.id,
         igUserId: ctx.igUserId,
         igUsername: ctx.username,
         commentId: ctx.commentId,

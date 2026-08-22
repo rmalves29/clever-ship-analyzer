@@ -204,34 +204,27 @@ async function logDispatch(input: {
     node_id: input.nodeId ?? null,
   });
 
-  // Atualiza as estatísticas do node se for sucesso
+  // Atualiza as estatísticas do node se for sucesso — lê o valor atual e grava +1 num upsert só,
+  // sem o insert-depois-update em dois passos que fazia cada envio contar em dobro.
   if (input.status === "success" && input.automationId && input.nodeId) {
-    // Incrementa o contador de "enviado"
-    await (supabaseAdmin.from("flow_node_stats" as any) as any).upsert(
-      { 
-        automation_id: input.automationId, 
-        node_id: input.nodeId,
-        sent_count: 1, 
-        updated_at: new Date().toISOString() 
-      },
-      { onConflict: "automation_id, node_id" }
-    ).select();
-    
-    // Como a API da Meta não retorna o status de entrega/leitura no mesmo POST, 
-    // registramos como enviado. O webhook de status poderá atualizar entregue/aberto depois.
-    // RPC increment SQL seria melhor, mas upsert resolve para MVP.
-    const { data: stats } = await (supabaseAdmin.from("flow_node_stats" as any) as any)
+    const { data: existing } = await (supabaseAdmin.from("flow_node_stats" as any) as any)
       .select("sent_count")
       .eq("automation_id", input.automationId)
       .eq("node_id", input.nodeId)
-      .single();
-    
-    if (stats) {
-      await (supabaseAdmin.from("flow_node_stats" as any) as any)
-        .update({ sent_count: (stats as any).sent_count + 1 })
-        .eq("automation_id", input.automationId)
-        .eq("node_id", input.nodeId);
-    }
+      .maybeSingle();
+
+    await (supabaseAdmin.from("flow_node_stats" as any) as any).upsert(
+      {
+        automation_id: input.automationId,
+        node_id: input.nodeId,
+        sent_count: ((existing as any)?.sent_count ?? 0) + 1,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "automation_id, node_id" },
+    );
+    // Entregue/Aberto/Clicado ainda não são preenchidos: dependem de webhooks de confirmação de
+    // entrega/leitura do Instagram (delivery/read) e de tracking de clique em botão, que ainda não
+    // estão implementados — não é um bug, é um recurso que falta construir.
   }
 }
 

@@ -63,6 +63,8 @@ async function graphPOST(path: string, body: Record<string, unknown>, accessToke
   const separator = url.includes("?") ? "&" : "?";
   const fullUrl = `${url}${separator}access_token=${encodeURIComponent(accessToken)}`;
 
+  console.log(`[flow-engine] Enviando POST para ${host}${path} (com corpo: ${JSON.stringify(body).slice(0, 200)}...)`);
+
   const res = await fetch(fullUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -71,7 +73,7 @@ async function graphPOST(path: string, body: Record<string, unknown>, accessToke
   const json: any = await res.json().catch(() => ({}));
   if (!res.ok || json?.error) {
     const errorDetail = json?.error ? JSON.stringify(json.error) : `Status ${res.status}`;
-    console.error(`[flow-engine] Graph API error (${path}):`, errorDetail);
+    console.error(`[flow-engine] Graph API error (${path}) [Host: ${host}]:`, errorDetail);
     throw new Error(json?.error?.message ?? `Meta respondeu ${res.status}`);
   }
   return json;

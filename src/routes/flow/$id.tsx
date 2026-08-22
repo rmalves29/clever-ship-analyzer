@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { getFlowAutomation, updateFlowAutomation } from "@/lib/flow.functions";
+import { getFlowAutomation, updateFlowAutomation, getFlowNodeStats } from "@/lib/flow.functions";
 import type { FlowCanvasData, FlowCanvasNode, FlowCanvasEdge, FlowNodeData, FlowNodeKind } from "@/lib/flow.server";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -80,7 +80,7 @@ function Editor() {
     if (automation) {
       setName(automation.name);
       setNodes(automation.canvas_data.nodes.map((n) => {
-        const nodeStats = stats?.find(s => s.node_id === n.id);
+        const nodeStats = stats?.find((s: any) => s.node_id === n.id);
         return { 
           ...n, 
           data: { 

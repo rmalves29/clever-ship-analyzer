@@ -386,7 +386,20 @@ function ContactRow({
 
   return (
     <tr>
-      <td className="px-4 py-3 font-medium align-top">@{contact.username ?? contact.ig_user_id}</td>
+      <td className="px-4 py-3 font-medium align-top">
+        {contact.username ? (
+          <a
+            href={`https://instagram.com/${contact.username}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-brand hover:underline"
+          >
+            @{contact.username}
+          </a>
+        ) : (
+          <span className="text-muted-foreground">@{contact.ig_user_id}</span>
+        )}
+      </td>
       <td className="px-4 py-3 align-top">
         <div className="flex flex-wrap items-center gap-1">
           {contact.tags.map((t) => (

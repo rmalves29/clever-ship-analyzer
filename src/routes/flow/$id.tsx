@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { getFlowAutomation, updateFlowAutomation } from "@/lib/flow.functions";
+import { getFlowAutomation, updateFlowAutomation, getFlowNodeStats } from "@/lib/flow.functions";
 import type { FlowCanvasData, FlowCanvasNode, FlowCanvasEdge, FlowNodeData, FlowNodeKind } from "@/lib/flow.server";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -59,10 +59,17 @@ function Editor() {
   const qc = useQueryClient();
   const get = useServerFn(getFlowAutomation);
   const save = useServerFn(updateFlowAutomation);
+  const getStatsFn = useServerFn(getFlowNodeStats);
 
   const { data: automation, isLoading } = useQuery({
     queryKey: ["flow-automation", id],
     queryFn: () => get({ data: { id } }),
+  });
+
+  const { data: stats } = useQuery({
+    queryKey: ["flow-node-stats", id],
+    queryFn: () => getStatsFn({ data: { automationId: id } }),
+    refetchInterval: 5000,
   });
 
   const [name, setName] = useState("");
@@ -72,10 +79,19 @@ function Editor() {
   useEffect(() => {
     if (automation) {
       setName(automation.name);
-      setNodes(automation.canvas_data.nodes.map((n) => ({ ...n }) as Node));
+      setNodes(automation.canvas_data.nodes.map((n) => {
+        const nodeStats = stats?.find((s: any) => s.node_id === n.id);
+        return { 
+          ...n, 
+          data: { 
+            ...n.data, 
+            stats: nodeStats || { sent_count: 0, delivered_count: 0, opened_count: 0, clicked_count: 0 } 
+          } 
+        };
+      }) as Node[]);
       setEdges(automation.canvas_data.edges.map((e) => ({ ...e }) as Edge));
     }
-  }, [automation, setNodes, setEdges]);
+  }, [automation, stats, setNodes, setEdges]);
 
   useEffect(() => {
     const handler = (ev: Event) => {

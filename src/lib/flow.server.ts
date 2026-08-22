@@ -42,6 +42,12 @@ export interface FlowNodeData {
   delayWindowStart?: string;
   delayWindowEnd?: string;
   delayDate?: string;
+  stats?: {
+    sent_count: number;
+    delivered_count: number;
+    opened_count: number;
+    clicked_count: number;
+  };
 }
 
 export interface FlowCanvasNode {
@@ -256,4 +262,13 @@ export async function listFlowLogs(): Promise<FlowDispatchLog[]> {
     .limit(200);
   if (error) throw new Error(error.message);
   return (data ?? []) as FlowDispatchLog[];
+}
+
+export async function getFlowNodeStats(automationId: string): Promise<any[]> {
+  const supabaseAdmin = await admin();
+  const { data, error } = await (supabaseAdmin.from("flow_node_stats" as any) as any)
+    .select("*")
+    .eq("automation_id", automationId);
+  if (error) throw new Error(error.message);
+  return data ?? [];
 }

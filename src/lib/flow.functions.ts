@@ -121,3 +121,10 @@ export const uploadFlowImage = createServerFn({ method: "POST" })
     const { uploadFlowImage: upload } = await import("./flow.server");
     return upload(data);
   });
+
+export const getFlowNodeStats = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ automationId: z.string().uuid() }).parse(data))
+  .handler(async ({ data }) => {
+    const { getFlowNodeStats: get } = await import("./flow.server");
+    return get(data.automationId);
+  });

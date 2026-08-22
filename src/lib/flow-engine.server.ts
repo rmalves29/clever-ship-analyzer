@@ -380,7 +380,12 @@ async function dispatch(automation: { id: string; canvas_data: FlowCanvasData },
   }
 
   try {
-    await walkCanvasAndDispatch(automation.canvas_data, ctx, contactId, { pageToken, igId, messagingToken, messagingIgId });
+    await walkCanvasAndDispatch(automation.canvas_data, ctx, contactId, { 
+      pageToken, 
+      igId, 
+      messagingToken: messagingToken || pageToken, // Fallback para o token da página se o de messaging (login) não existir
+      messagingIgId: messagingIgId || igId 
+    });
     await bumpDispatchCount(automation.id);
     await logDispatch({
       automationId: automation.id,

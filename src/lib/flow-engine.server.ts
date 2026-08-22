@@ -115,6 +115,14 @@ async function claimDispatchSlot(automationId: string, igUserId: string): Promis
   throw new Error(error.message);
 }
 
+async function releaseDispatchSlot(automationId: string, igUserId: string): Promise<void> {
+  const supabaseAdmin = await admin();
+  await (supabaseAdmin.from("flow_dispatch_dedup" as any) as any)
+    .delete()
+    .eq("automation_id", automationId)
+    .eq("ig_user_id", igUserId);
+}
+
 async function logDispatch(input: {
   automationId: string | null;
   igUserId: string | null;
@@ -293,6 +301,9 @@ async function dispatch(automation: { id: string; canvas_data: FlowCanvasData },
       status: "success",
     });
   } catch (error) {
+    // Libera a trava anti-duplicado nesse erro — uma falha de envio (ex: token sem permissão)
+    // não deve bloquear esse contato de receber a automação para sempre.
+    await releaseDispatchSlot(automation.id, ctx.igUserId);
     await logDispatch({
       automationId: automation.id,
       igUserId: ctx.igUserId,

@@ -56,11 +56,6 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: "Automações",
     items: [
       { label: "ManyChat", to: "/flow", icon: Workflow },
-    ],
-  },
-  {
-    label: "Fluxo de Envio",
-    items: [
       { label: "Fluxo de Envio", to: "/fluxo-envio", icon: Send },
     ],
   },

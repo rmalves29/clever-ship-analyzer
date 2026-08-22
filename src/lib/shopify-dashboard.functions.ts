@@ -43,43 +43,60 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
     const startISO = period === "tudo" ? start.toISOString() : fromZonedTime(start, TZ).toISOString();
     const endISO = fromZonedTime(end, TZ).toISOString();
 
-    const { data: orders } = await supabaseAdmin
-      .from("shopify_orders")
-      .select("*")
-      .gte("processed_at", startISO)
-      .lte("processed_at", endISO)
-      .neq("financial_status", "VOIDED");
+    // As 4 buscas abaixo são independentes entre si (nenhuma usa o resultado da outra),
+    // então rodam em paralelo em vez de em série — eram 4 idas-e-voltas sequenciais ao banco.
+    const [{ data: orders }, { data: fulfillments }, { data: allOrders }, { data: landingData }] = await Promise.all([
+      supabaseAdmin
+        .from("shopify_orders")
+        .select("*")
+        .gte("processed_at", startISO)
+        .lte("processed_at", endISO)
+        .neq("financial_status", "VOIDED"),
+      supabaseAdmin
+        .from("shopify_fulfillments")
+        .select("*, shopify_orders!inner(processed_at)")
+        .not("tracking_number", "is", null)
+        .gte("updated_at", startISO)
+        .lte("updated_at", endISO),
+      supabaseAdmin
+        .from("shopify_orders")
+        .select("customer_id, total_price, processed_at, created_at, province")
+        .lte("processed_at", endISO)
+        .neq("financial_status", "VOIDED"),
+      supabaseAdmin
+        .from("shopify_orders")
+        .select("landing_site")
+        .gte("processed_at", startISO)
+        .lte("processed_at", endISO)
+        .not("landing_site", "is", null),
+    ]);
 
     if (!orders) throw new Error("Falha ao ler pedidos");
 
     const validOrders = orders.filter(o => o.financial_status !== "REFUNDED");
-    
+
     const faturamento = validOrders.reduce((acc, o) => acc + Number(o.total_price), 0);
     const numPedidos = validOrders.length;
     const ticketMedio = numPedidos > 0 ? faturamento / numPedidos : 0;
-    
-    const uniqueCustomers = new Set(validOrders.map(o => o.customer_id)).size;
 
-    const { data: fulfillments } = await supabaseAdmin
-      .from("shopify_fulfillments")
-      .select("*, shopify_orders!inner(processed_at)")
-      .not("tracking_number", "is", null)
-      .gte("updated_at", startISO)
-      .lte("updated_at", endISO);
+    const uniqueCustomers = new Set(validOrders.map(o => o.customer_id)).size;
 
     const shippedOrderIds = Array.from(
       new Set((fulfillments ?? []).map((f) => f.order_id).filter(Boolean) as string[]),
     );
     const pedidosEnviadosCount = shippedOrderIds.length;
 
-    let produtosEnviadosCount = 0;
+    // Uma única busca de itens, reaproveitada tanto pra contagem de produtos enviados
+    // quanto pro mapa por pedido (itemsByOrder) mais abaixo — antes era buscada 2x à toa.
+    let shippedItems: { quantity: number | null; order_id: string | null }[] = [];
     if (shippedOrderIds.length > 0) {
       const { data: items } = await supabaseAdmin
         .from("shopify_order_items")
         .select("quantity, order_id")
         .in("order_id", shippedOrderIds);
-      produtosEnviadosCount = (items ?? []).reduce((acc, i) => acc + (i.quantity ?? 0), 0);
+      shippedItems = items ?? [];
     }
+    const produtosEnviadosCount = shippedItems.reduce((acc, i) => acc + (i.quantity ?? 0), 0);
 
     const firstFulfillmentByOrder = new Map<string, { at: string; processedAt: string | null }>();
     for (const f of fulfillments ?? []) {
@@ -101,12 +118,6 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
 
     const tempoMedioEnvioHoras = countWithTime > 0 ? totalSendTimeHours / countWithTime : 0;
     const tempoMedioEnvioDias = tempoMedioEnvioHoras / 24;
-
-    const { data: allOrders } = await supabaseAdmin
-      .from("shopify_orders")
-      .select("customer_id, total_price, processed_at, created_at, province")
-      .lte("processed_at", endISO)
-      .neq("financial_status", "VOIDED");
 
     type CustomerAgg = { dates: number[]; total: number; province: string | null };
     const byCustomer = new Map<string, CustomerAgg>();
@@ -230,15 +241,9 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
       perDay.set(d, slot);
     }
     const itemsByOrder = new Map<string, number>();
-    if (shippedOrderIds.length > 0) {
-      const { data: allItems } = await supabaseAdmin
-        .from("shopify_order_items")
-        .select("quantity, order_id")
-        .in("order_id", shippedOrderIds);
-      for (const it of allItems ?? []) {
-        if (!it.order_id) continue;
-        itemsByOrder.set(it.order_id, (itemsByOrder.get(it.order_id) ?? 0) + (it.quantity ?? 0));
-      }
+    for (const it of shippedItems) {
+      if (!it.order_id) continue;
+      itemsByOrder.set(it.order_id, (itemsByOrder.get(it.order_id) ?? 0) + (it.quantity ?? 0));
     }
     const enviosPorDia = [1, 2, 3, 4, 5, 6, 0].map((d) => {
       const slot = perDay.get(d);
@@ -298,13 +303,6 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
     });
 
     // ---------- Sessões por Página ----------
-    const { data: landingData } = await supabaseAdmin
-      .from("shopify_orders")
-      .select("landing_site")
-      .gte("processed_at", startISO)
-      .lte("processed_at", endISO)
-      .not("landing_site", "is", null);
-
     const landingCounts = new Map<string, number>();
     (landingData ?? []).forEach(o => {
       if (o.landing_site) {

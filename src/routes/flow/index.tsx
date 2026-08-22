@@ -6,6 +6,7 @@ import {
   listFlowAutomations,
   createFlowAutomation,
   deleteFlowAutomation,
+  duplicateFlowAutomation,
   listFlowContacts,
   listFlowLogs,
   addFlowContactTag,
@@ -17,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, MessageSquare, Trash2, MoreVertical, Users, ScrollText, CheckCircle2, XCircle, MinusCircle, Tag, X } from "lucide-react";
+import { Plus, MessageSquare, Trash2, MoreVertical, Users, ScrollText, CheckCircle2, XCircle, MinusCircle, Tag, X, Pencil, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -47,6 +48,7 @@ function FlowDashboard() {
   const list = useServerFn(listFlowAutomations);
   const create = useServerFn(createFlowAutomation);
   const del = useServerFn(deleteFlowAutomation);
+  const runDuplicate = useServerFn(duplicateFlowAutomation);
   const runContacts = useServerFn(listFlowContacts);
   const runLogs = useServerFn(listFlowLogs);
   const runAddTag = useServerFn(addFlowContactTag);
@@ -92,6 +94,16 @@ function FlowDashboard() {
       qc.invalidateQueries({ queryKey: ["flow-automations"] });
       toast.success("Automação excluída");
     },
+  });
+
+  const duplicateMut = useMutation({
+    mutationFn: (id: string) => runDuplicate({ data: { id } }),
+    onSuccess: (a) => {
+      qc.invalidateQueries({ queryKey: ["flow-automations"] });
+      toast.success("Automação duplicada");
+      navigate({ to: "/flow/$id", params: { id: a.id } });
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const addTagMut = useMutation({
@@ -203,7 +215,12 @@ function FlowDashboard() {
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
               {automations.map((a) => (
-                <AutomationCard key={a.id} a={a} onDelete={() => deleteMut.mutate(a.id)} />
+                <AutomationCard
+                  key={a.id}
+                  a={a}
+                  onDelete={() => deleteMut.mutate(a.id)}
+                  onDuplicate={() => duplicateMut.mutate(a.id)}
+                />
               ))}
             </div>
           )}
@@ -322,7 +339,7 @@ function FlowDashboard() {
   );
 }
 
-function AutomationCard({ a, onDelete }: { a: FlowAutomation; onDelete: () => void }) {
+function AutomationCard({ a, onDelete, onDuplicate }: { a: FlowAutomation; onDelete: () => void; onDuplicate: () => void }) {
   return (
     <div className="group relative rounded-xl border border-border bg-card p-5 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between mb-3">
@@ -338,6 +355,16 @@ function AutomationCard({ a, onDelete }: { a: FlowAutomation; onDelete: () => vo
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild>
+                <Link to="/flow/$id" params={{ id: a.id }} className="flex items-center">
+                  <Pencil className="size-4 mr-2" />
+                  Editar
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onDuplicate}>
+                <Copy className="size-4 mr-2" />
+                Duplicar
+              </DropdownMenuItem>
               <DropdownMenuItem className="text-critical" onClick={onDelete}>
                 <Trash2 className="size-4 mr-2" />
                 Excluir

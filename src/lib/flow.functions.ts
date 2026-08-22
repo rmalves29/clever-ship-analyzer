@@ -89,6 +89,13 @@ export const deleteFlowAutomation = createServerFn({ method: "POST" })
     return del(data.id);
   });
 
+export const duplicateFlowAutomation = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
+  .handler(async ({ data }) => {
+    const { duplicateFlowAutomation: dup } = await import("./flow.server");
+    return dup(data.id);
+  });
+
 export const listFlowContacts = createServerFn({ method: "GET" }).handler(async () => {
   const { listFlowContacts: list } = await import("./flow.server");
   return list();

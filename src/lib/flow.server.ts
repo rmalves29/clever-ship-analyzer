@@ -135,6 +135,26 @@ export async function createFlowAutomation(name?: string): Promise<FlowAutomatio
   return data as FlowAutomation;
 }
 
+export async function duplicateFlowAutomation(id: string): Promise<FlowAutomation> {
+  const original = await getFlowAutomation(id);
+  const supabaseAdmin = await admin();
+  const { data, error } = await (supabaseAdmin.from("flow_automations" as any) as any)
+    .insert({
+      name: `${original.name} (cópia)`,
+      status: "draft",
+      trigger_kind: original.trigger_kind,
+      trigger_kinds: original.trigger_kinds,
+      keywords: original.keywords,
+      match_any_comment: original.match_any_comment,
+      media_id: original.media_id,
+      canvas_data: original.canvas_data as unknown as never,
+    })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as FlowAutomation;
+}
+
 export async function updateFlowAutomation(input: {
   id: string;
   name?: string;

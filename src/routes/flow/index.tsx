@@ -7,18 +7,21 @@ import {
   createFlowAutomation,
   deleteFlowAutomation,
   duplicateFlowAutomation,
+  updateFlowAutomation,
   listFlowContacts,
   listFlowLogs,
   addFlowContactTag,
   removeFlowContactTag,
+  getFlowAutomationsStats,
 } from "@/lib/flow.functions";
 import { getFlowStatus } from "@/lib/flow-diagnostics.functions";
-import type { FlowAutomation, FlowContact } from "@/lib/flow.server";
+import type { FlowAutomation, FlowAutomationStats, FlowContact } from "@/lib/flow.server";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, MessageSquare, Trash2, MoreVertical, Users, ScrollText, CheckCircle2, XCircle, MinusCircle, Tag, X, Pencil, Copy } from "lucide-react";
+import { Plus, MessageSquare, Trash2, MoreVertical, Users, ScrollText, CheckCircle2, XCircle, MinusCircle, Tag, X, Pencil, Copy, Send, Eye, MousePointerClick, Inbox } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -49,6 +52,8 @@ function FlowDashboard() {
   const create = useServerFn(createFlowAutomation);
   const del = useServerFn(deleteFlowAutomation);
   const runDuplicate = useServerFn(duplicateFlowAutomation);
+  const runUpdate = useServerFn(updateFlowAutomation);
+  const runStats = useServerFn(getFlowAutomationsStats);
   const runContacts = useServerFn(listFlowContacts);
   const runLogs = useServerFn(listFlowLogs);
   const runAddTag = useServerFn(addFlowContactTag);
@@ -64,6 +69,12 @@ function FlowDashboard() {
   const { data: automations = [], isLoading } = useQuery({
     queryKey: ["flow-automations"],
     queryFn: () => list(),
+    enabled: view === "automacoes",
+  });
+
+  const { data: automationsStats = {} } = useQuery({
+    queryKey: ["flow-automations-stats"],
+    queryFn: () => runStats(),
     enabled: view === "automacoes",
   });
 
@@ -94,6 +105,15 @@ function FlowDashboard() {
       qc.invalidateQueries({ queryKey: ["flow-automations"] });
       toast.success("Automação excluída");
     },
+  });
+
+  const toggleStatusMut = useMutation({
+    mutationFn: (input: { id: string; status: "active" | "paused" }) => runUpdate({ data: input }),
+    onSuccess: (a) => {
+      qc.invalidateQueries({ queryKey: ["flow-automations"] });
+      toast.success(a.status === "active" ? "Automação ativada" : "Automação pausada");
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const duplicateMut = useMutation({
@@ -218,8 +238,10 @@ function FlowDashboard() {
                 <AutomationCard
                   key={a.id}
                   a={a}
+                  stats={automationsStats[a.id]}
                   onDelete={() => deleteMut.mutate(a.id)}
                   onDuplicate={() => duplicateMut.mutate(a.id)}
+                  onToggleStatus={(active) => toggleStatusMut.mutate({ id: a.id, status: active ? "active" : "paused" })}
                 />
               ))}
             </div>
@@ -339,7 +361,20 @@ function FlowDashboard() {
   );
 }
 
-function AutomationCard({ a, onDelete, onDuplicate }: { a: FlowAutomation; onDelete: () => void; onDuplicate: () => void }) {
+function AutomationCard({
+  a,
+  stats,
+  onDelete,
+  onDuplicate,
+  onToggleStatus,
+}: {
+  a: FlowAutomation;
+  stats?: FlowAutomationStats | undefined;
+  onDelete: () => void;
+  onDuplicate: () => void;
+  onToggleStatus: (active: boolean) => void;
+}) {
+  const s = stats ?? { sent: 0, delivered: 0, opened: 0, clicked: 0 };
   return (
     <div className="group relative rounded-xl border border-border bg-card p-5 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between mb-3">
@@ -348,6 +383,12 @@ function AutomationCard({ a, onDelete, onDuplicate }: { a: FlowAutomation; onDel
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={a.status} />
+          <Switch
+            checked={a.status === "active"}
+            onCheckedChange={onToggleStatus}
+            onClick={(e) => e.stopPropagation()}
+            title={a.status === "active" ? "Pausar automação" : "Ativar automação"}
+          />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="size-7">
@@ -383,11 +424,29 @@ function AutomationCard({ a, onDelete, onDuplicate }: { a: FlowAutomation; onDel
               ? "Qualquer comentário"
               : "Sem palavras-chave"}
         </p>
+
+        <div className="grid grid-cols-4 gap-1 text-center py-2.5 rounded-lg bg-muted/30 mb-3">
+          <StatCell icon={Send} label="Enviado" value={s.sent} />
+          <StatCell icon={Inbox} label="Entregue" value={s.delivered} />
+          <StatCell icon={Eye} label="Aberto" value={s.opened} />
+          <StatCell icon={MousePointerClick} label="Clicado" value={s.clicked} />
+        </div>
+
         <div className="flex justify-between text-xs text-muted-foreground pt-3 border-t border-border">
           <span>{a.dispatch_count} disparos</span>
           <span>Editado {formatDistanceToNow(new Date(a.updated_at), { locale: ptBR, addSuffix: true })}</span>
         </div>
       </Link>
+    </div>
+  );
+}
+
+function StatCell({ icon: Icon, label, value }: { icon: typeof Send; label: string; value: number }) {
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <Icon className="size-3 text-muted-foreground" />
+      <span className="text-sm font-semibold">{value}</span>
+      <span className="text-[9px] text-muted-foreground uppercase tracking-wide">{label}</span>
     </div>
   );
 }

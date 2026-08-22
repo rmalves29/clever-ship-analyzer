@@ -135,3 +135,8 @@ export const getFlowNodeStats = createServerFn({ method: "POST" })
     const { getFlowNodeStats: get } = await import("./flow.server");
     return get(data.automationId);
   });
+
+export const getFlowAutomationsStats = createServerFn({ method: "GET" }).handler(async () => {
+  const { getFlowAutomationsStats: get } = await import("./flow.server");
+  return get();
+});

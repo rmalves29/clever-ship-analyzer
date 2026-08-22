@@ -292,3 +292,27 @@ export async function getFlowNodeStats(automationId: string): Promise<any[]> {
   if (error) throw new Error(error.message);
   return data ?? [];
 }
+
+export type FlowAutomationStats = { sent: number; delivered: number; opened: number; clicked: number };
+
+/** Soma os contadores de todos os nodes de cada automação, pra mostrar no card da listagem
+ *  (sem precisar abrir o editor). */
+export async function getFlowAutomationsStats(): Promise<Record<string, FlowAutomationStats>> {
+  const supabaseAdmin = await admin();
+  const { data, error } = await (supabaseAdmin.from("flow_node_stats" as any) as any).select(
+    "automation_id, sent_count, delivered_count, opened_count, clicked_count",
+  );
+  if (error) throw new Error(error.message);
+
+  const stats: Record<string, FlowAutomationStats> = {};
+  for (const row of (data ?? []) as any[]) {
+    const key = row.automation_id as string;
+    const acc = stats[key] ?? { sent: 0, delivered: 0, opened: 0, clicked: 0 };
+    acc.sent += row.sent_count ?? 0;
+    acc.delivered += row.delivered_count ?? 0;
+    acc.opened += row.opened_count ?? 0;
+    acc.clicked += row.clicked_count ?? 0;
+    stats[key] = acc;
+  }
+  return stats;
+}

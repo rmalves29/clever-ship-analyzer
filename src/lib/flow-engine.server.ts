@@ -10,13 +10,17 @@ async function admin() {
 async function loadFlowCredentials(): Promise<{
   pageToken: string | null;
   igId: string | null;
+  messagingToken: string | null;
+  messagingIgId: string | null;
   verifyToken: string | null;
   appSecret: string | null;
 }> {
   const supabaseAdmin = await admin();
   const { data } = await supabaseAdmin
     .from("store_settings")
-    .select("instagram_page_access_token, instagram_business_account_id, whatsapp_meta_verify_token, whatsapp_meta_app_secret")
+    .select(
+      "instagram_page_access_token, instagram_business_account_id, instagram_messaging_access_token, instagram_messaging_account_id, whatsapp_meta_verify_token, whatsapp_meta_app_secret",
+    )
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -24,6 +28,8 @@ async function loadFlowCredentials(): Promise<{
   return {
     pageToken: row?.instagram_page_access_token ?? null,
     igId: row?.instagram_business_account_id ?? null,
+    messagingToken: row?.instagram_messaging_access_token ?? null,
+    messagingIgId: row?.instagram_messaging_account_id ?? null,
     verifyToken: row?.whatsapp_meta_verify_token ?? null,
     appSecret: row?.whatsapp_meta_app_secret ?? null,
   };
@@ -52,8 +58,8 @@ export async function verifyMetaSignature(rawBody: string, signatureHeader: stri
   return diff === 0;
 }
 
-async function graphPOST(path: string, body: Record<string, unknown>, accessToken: string): Promise<any> {
-  const url = `https://graph.facebook.com/${GRAPH_VERSION}${path}?access_token=${encodeURIComponent(accessToken)}`;
+async function graphPOST(path: string, body: Record<string, unknown>, accessToken: string, host = "graph.facebook.com"): Promise<any> {
+  const url = `https://${host}/${GRAPH_VERSION}${path}?access_token=${encodeURIComponent(accessToken)}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -189,12 +195,13 @@ function findMatchedKeyword(keywords: string[], matchAny: boolean, text: string)
  *  V1: entende "message" (envia texto/imagem/botão) e "action" (add_tag/remove_tag). Para
  *  delay > 0 ou nodes ainda não implementados (condition/randomizer/etc.), para por ali —
  *  não falha, só encerra o percurso (é o próximo incremento natural do motor). */
+type FlowCreds = { pageToken: string; igId: string; messagingToken: string | null; messagingIgId: string | null };
+
 async function walkCanvasAndDispatch(
   canvas: FlowCanvasData,
   ctx: DispatchContext,
   contactId: string,
-  pageToken: string,
-  igId: string,
+  creds: FlowCreds,
 ): Promise<void> {
   const nodeById = new Map(canvas.nodes.map((n) => [n.id, n] as const));
   const nextEdgeFrom = (nodeId: string) => canvas.edges.find((e) => e.source === nodeId);
@@ -208,7 +215,7 @@ async function walkCanvasAndDispatch(
     if (!node) break;
 
     if (node.type === "message") {
-      await sendFlowMessage(node.data, ctx, pageToken, igId);
+      await sendFlowMessage(node.data, ctx, creds);
     } else if (node.type === "action") {
       await runFlowAction(node.data, contactId);
     } else if ((node.type === "delay" || node.type === "smart_delay") && isZeroDelay(node.data)) {
@@ -237,7 +244,14 @@ async function runFlowAction(data: FlowNodeData, contactId: string): Promise<voi
   // Demais ações do catálogo (subscribe_sequence, external_request, etc.) ainda não têm efeito real.
 }
 
-async function sendFlowMessage(data: FlowNodeData, ctx: DispatchContext, pageToken: string, igId: string): Promise<void> {
+async function sendFlowMessage(data: FlowNodeData, ctx: DispatchContext, creds: FlowCreds): Promise<void> {
+  // Comentário/live -> resposta privada via comment_id, ainda pela API legada (graph.facebook.com)
+  // ligada à Página. DM/story reply -> API "Instagram com login do Instagram" (graph.instagram.com),
+  // que é quem de fato tem permissão de enviar DM avulsa hoje.
+  const useMessagingApi = !ctx.commentId && creds.messagingToken && creds.messagingIgId;
+  const host = useMessagingApi ? "graph.instagram.com" : "graph.facebook.com";
+  const token = useMessagingApi ? creds.messagingToken! : creds.pageToken;
+  const igId = useMessagingApi ? creds.messagingIgId! : creds.igId;
   const recipient = ctx.commentId ? { comment_id: ctx.commentId } : { id: ctx.igUserId };
 
   let text = (data.text ?? "").trim();
@@ -245,22 +259,23 @@ async function sendFlowMessage(data: FlowNodeData, ctx: DispatchContext, pageTok
     text = `${text}\n\n${data.buttonLabel?.trim() || "Saiba mais"}: ${data.buttonUrl.trim()}`;
   }
   if (text) {
-    await graphPOST(`/${igId}/messages`, { recipient, message: { text } }, pageToken);
+    await graphPOST(`/${igId}/messages`, { recipient, message: { text } }, token, host);
   }
   if (data.imageUrl?.trim()) {
     await graphPOST(
       `/${igId}/messages`,
       { recipient, message: { attachment: { type: "image", payload: { url: data.imageUrl.trim() } } } },
-      pageToken,
+      token,
+      host,
     );
   }
   if (ctx.commentId && data.publicReply?.trim()) {
-    await graphPOST(`/${ctx.commentId}/replies`, { message: data.publicReply.trim() }, pageToken);
+    await graphPOST(`/${ctx.commentId}/replies`, { message: data.publicReply.trim() }, creds.pageToken);
   }
 }
 
 async function dispatch(automation: { id: string; canvas_data: FlowCanvasData }, ctx: DispatchContext): Promise<void> {
-  const { pageToken, igId } = await loadFlowCredentials();
+  const { pageToken, igId, messagingToken, messagingIgId } = await loadFlowCredentials();
   if (!pageToken || !igId) {
     await logDispatch({
       automationId: automation.id,
@@ -290,7 +305,7 @@ async function dispatch(automation: { id: string; canvas_data: FlowCanvasData },
   }
 
   try {
-    await walkCanvasAndDispatch(automation.canvas_data, ctx, contactId, pageToken, igId);
+    await walkCanvasAndDispatch(automation.canvas_data, ctx, contactId, { pageToken, igId, messagingToken, messagingIgId });
     await bumpDispatchCount(automation.id);
     await logDispatch({
       automationId: automation.id,

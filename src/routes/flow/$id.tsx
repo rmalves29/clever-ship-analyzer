@@ -59,16 +59,16 @@ function Editor() {
   const qc = useQueryClient();
   const get = useServerFn(getFlowAutomation);
   const save = useServerFn(updateFlowAutomation);
+  const getStatsFn = useServerFn(getFlowNodeStats);
 
   const { data: automation, isLoading } = useQuery({
     queryKey: ["flow-automation", id],
     queryFn: () => get({ data: { id } }),
   });
 
-  const getStats = useServerFn(import("@/lib/flow.functions").then(m => m.getFlowNodeStats));
   const { data: stats } = useQuery({
     queryKey: ["flow-node-stats", id],
-    queryFn: () => getStats({ data: { automationId: id } }),
+    queryFn: () => getStatsFn({ data: { automationId: id } }),
     refetchInterval: 5000,
   });
 

@@ -255,3 +255,12 @@ export async function listFlowLogs(): Promise<FlowDispatchLog[]> {
   if (error) throw new Error(error.message);
   return (data ?? []) as FlowDispatchLog[];
 }
+
+export async function getFlowNodeStats(automationId: string): Promise<any[]> {
+  const supabaseAdmin = await admin();
+  const { data, error } = await (supabaseAdmin.from("flow_node_stats" as any) as any)
+    .select("*")
+    .eq("automation_id", automationId);
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}

@@ -150,20 +150,20 @@ function FlowDashboard() {
           <div className="p-4 rounded-xl border bg-card border-border">
             <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Saúde do Fluxo</p>
             <p className="text-sm font-medium mt-1">
-              {diagnostics.recentErrors.length > 0 ? "Existem falhas recentes" : "Nenhum erro reportado"}
+              {(diagnostics.recentErrors?.length ?? 0) > 0 ? "Existem falhas recentes" : "Nenhum erro reportado"}
             </p>
           </div>
         </div>
       )}
 
-      {diagnostics?.recentErrors.length > 0 && (
+      {diagnostics && (diagnostics.recentErrors?.length ?? 0) > 0 && (
         <div className="mt-4 p-4 rounded-xl bg-critical-soft border border-critical/20">
           <div className="flex items-center gap-2 text-critical mb-2">
             <XCircle className="size-4" />
             <h3 className="text-sm font-bold">Problemas de Permissão Detectados</h3>
           </div>
           <div className="space-y-2">
-            {diagnostics.recentErrors.slice(0, 1).map((e: any, idx: number) => (
+            {diagnostics.recentErrors?.slice(0, 1).map((e: any, idx: number) => (
               <div key={idx} className="text-xs text-critical bg-white/50 p-2 rounded">
                 <p className="font-mono">{e.message}</p>
               </div>

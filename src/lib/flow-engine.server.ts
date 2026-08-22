@@ -53,15 +53,19 @@ export async function verifyMetaSignature(rawBody: string, signatureHeader: stri
 }
 
 async function graphPOST(path: string, body: Record<string, unknown>, accessToken: string): Promise<any> {
-  const url = `https://graph.facebook.com/${GRAPH_VERSION}${path}?access_token=${encodeURIComponent(accessToken)}`;
-  const res = await fetch(url, {
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}${path}`;
+  const separator = url.includes("?") ? "&" : "?";
+  const fullUrl = `${url}${separator}access_token=${encodeURIComponent(accessToken)}`;
+
+  const res = await fetch(fullUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
   const json: any = await res.json().catch(() => ({}));
   if (!res.ok || json?.error) {
-    console.error("[flow-engine] Graph API error:", json?.error ?? res.status);
+    const errorDetail = json?.error ? JSON.stringify(json.error) : `Status ${res.status}`;
+    console.error(`[flow-engine] Graph API error (${path}):`, errorDetail);
     throw new Error(json?.error?.message ?? `Meta respondeu ${res.status}`);
   }
   return json;
@@ -255,7 +259,8 @@ async function sendFlowMessage(data: FlowNodeData, ctx: DispatchContext, pageTok
     );
   }
   if (ctx.commentId && data.publicReply?.trim()) {
-    await graphPOST(`/${ctx.commentId}/replies`, { message: data.publicReply.trim() }, pageToken);
+    // Para responder comentário, o parâmetro 'message' vai na Query String, não no corpo JSON
+    await graphPOST(`/${ctx.commentId}/replies?message=${encodeURIComponent(data.publicReply.trim())}`, {}, pageToken);
   }
 }
 

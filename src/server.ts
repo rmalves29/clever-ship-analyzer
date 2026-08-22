@@ -7,11 +7,21 @@ import { matchIncomingMessage } from "./lib/conversational-flows.server";
 import { getAutomationTickSecret, runAutomationsTickWithLog } from "./lib/automations-engine.server";
 import { runDailyEventsAnalysis } from "./lib/events.server";
 import { getFlowWebhookVerifyToken, processInstagramWebhookBody, verifyMetaSignature } from "./lib/flow-engine.server";
+import { handleEnvioCampaignRedirect } from "./lib/envio-redirect.server";
+import { processEnvioWebhookEvent } from "./lib/envio-webhook.server";
+import { processDueEnvioMessages } from "./lib/envio-messages.server";
+import { dispatchDueReturnInvites } from "./lib/envio-return-automation.server";
+import { runEnvioGroupEventsCleanup } from "./lib/envio-cleanup.server";
 
 const WHATSAPP_WEBHOOK_PATH = "/api/whatsapp-webhook";
 const INSTAGRAM_WEBHOOK_PATH = "/api/instagram-webhook";
 const AUTOMATIONS_TICK_PATH = "/api/automations/tick";
 const DAILY_EVENTS_ANALYSIS_PATH = "/api/events/daily-analysis";
+const UAZAPI_WEBHOOK_PATH = "/api/uazapi-webhook";
+const ENVIO_REDIRECT_PREFIX = "/fluxo/";
+const ENVIO_PROCESS_SCHEDULED_PATH = "/api/envio/process-scheduled";
+const ENVIO_RETURN_DISPATCH_PATH = "/api/envio/return-dispatch";
+const ENVIO_CLEANUP_EVENTS_PATH = "/api/envio/cleanup-events";
 
 // Webhook da Meta é chamado diretamente por eles, fora do protocolo de RPC do
 // createServerFn — por isso é tratado aqui, antes do handler SSR do TanStack Start.
@@ -153,6 +163,76 @@ async function handleDailyEventsAnalysis(request: Request): Promise<Response> {
   }
 }
 
+// Webhook da UazAPI (módulo Fluxo de Envio) — mesmo padrão dos webhooks acima, mas sem verificação
+// de assinatura (a UazAPI não assina o corpo do webhook, diferente da Meta).
+async function handleUazapiWebhook(request: Request): Promise<Response> {
+  if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+  try {
+    const body = await request.json();
+    await processEnvioWebhookEvent(body);
+  } catch (error) {
+    console.error("Falha ao processar webhook da UazAPI:", error);
+  }
+  return new Response("EVENT_RECEIVED", { status: 200 });
+}
+
+type WaitUntilCtx = { waitUntil?: (promise: Promise<unknown>) => void };
+
+async function handleEnvioRedirect(request: Request, ctx: unknown): Promise<Response> {
+  const url = new URL(request.url);
+  const slug = url.pathname.slice(ENVIO_REDIRECT_PREFIX.length);
+  if (!slug) return new Response("Not Found", { status: 404 });
+  const waitUntil = (ctx as WaitUntilCtx | null)?.waitUntil ?? ((p: Promise<unknown>) => void p.catch(() => {}));
+  try {
+    return await handleEnvioCampaignRedirect(slug, request, waitUntil);
+  } catch (error) {
+    console.error("Falha ao processar redirect de campanha do Fluxo de Envio:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}
+
+async function checkAutomationSecret(request: Request): Promise<boolean> {
+  const provided = request.headers.get("X-Automation-Secret");
+  const storedSecret = await getAutomationTickSecret();
+  return Boolean(storedSecret && provided && provided === storedSecret);
+}
+
+async function handleEnvioProcessScheduled(request: Request): Promise<Response> {
+  if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+  if (!(await checkAutomationSecret(request))) return new Response("Forbidden", { status: 401 });
+  try {
+    const result = await processDueEnvioMessages();
+    return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json" } });
+  } catch (error) {
+    console.error("Falha ao processar mensagens agendadas do Fluxo de Envio:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}
+
+async function handleEnvioReturnDispatch(request: Request): Promise<Response> {
+  if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+  if (!(await checkAutomationSecret(request))) return new Response("Forbidden", { status: 401 });
+  try {
+    const result = await dispatchDueReturnInvites();
+    return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json" } });
+  } catch (error) {
+    console.error("Falha ao despachar convites de retorno do Fluxo de Envio:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}
+
+async function handleEnvioCleanupEvents(request: Request): Promise<Response> {
+  if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+  if (!(await checkAutomationSecret(request))) return new Response("Forbidden", { status: 401 });
+  try {
+    const result = await runEnvioGroupEventsCleanup();
+    return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json" } });
+  } catch (error) {
+    console.error("Falha na limpeza de eventos do Fluxo de Envio:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}
+
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
 };
@@ -208,6 +288,21 @@ export default {
     }
     if (pathname === DAILY_EVENTS_ANALYSIS_PATH) {
       return handleDailyEventsAnalysis(request);
+    }
+    if (pathname === UAZAPI_WEBHOOK_PATH) {
+      return handleUazapiWebhook(request);
+    }
+    if (pathname.startsWith(ENVIO_REDIRECT_PREFIX)) {
+      return handleEnvioRedirect(request, ctx);
+    }
+    if (pathname === ENVIO_PROCESS_SCHEDULED_PATH) {
+      return handleEnvioProcessScheduled(request);
+    }
+    if (pathname === ENVIO_RETURN_DISPATCH_PATH) {
+      return handleEnvioReturnDispatch(request);
+    }
+    if (pathname === ENVIO_CLEANUP_EVENTS_PATH) {
+      return handleEnvioCleanupEvents(request);
     }
     try {
       const handler = await getServerEntry();

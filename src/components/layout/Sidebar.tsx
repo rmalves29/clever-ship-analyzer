@@ -1,10 +1,20 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Settings, Sparkles, Megaphone, FileText, BarChart3, TrendingUp, Camera, CalendarClock, Workflow } from "lucide-react";
+import { LayoutDashboard, Settings, Sparkles, Megaphone, FileText, BarChart3, TrendingUp, Camera, CalendarClock, Workflow, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
   label: string;
-  to: "/" | "/configuracoes" | "/campanhas-whatsapp" | "/crm" | "/crm/live-view" | "/performance/meta-ads" | "/instagram" | "/eventos" | "/flow";
+  to:
+    | "/"
+    | "/configuracoes"
+    | "/campanhas-whatsapp"
+    | "/crm"
+    | "/crm/live-view"
+    | "/performance/meta-ads"
+    | "/instagram"
+    | "/eventos"
+    | "/flow"
+    | "/fluxo-envio";
   search?: Record<string, string>;
   icon: typeof LayoutDashboard;
 };
@@ -46,6 +56,12 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: "Automações",
     items: [
       { label: "ManyChat", to: "/flow", icon: Workflow },
+    ],
+  },
+  {
+    label: "Fluxo de Envio",
+    items: [
+      { label: "Fluxo de Envio", to: "/fluxo-envio", icon: Send },
     ],
   },
   {

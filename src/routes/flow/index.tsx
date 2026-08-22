@@ -11,12 +11,14 @@ import {
   addFlowContactTag,
   removeFlowContactTag,
 } from "@/lib/flow.functions";
+import { getFlowStatus } from "@/lib/flow-diagnostics.functions";
 import type { FlowAutomation, FlowContact } from "@/lib/flow.server";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, MessageSquare, Trash2, MoreVertical, Users, ScrollText, CheckCircle2, XCircle, MinusCircle, Tag, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,6 +52,12 @@ function FlowDashboard() {
   const runAddTag = useServerFn(addFlowContactTag);
   const runRemoveTag = useServerFn(removeFlowContactTag);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const runDiagnostics = useServerFn(getFlowStatus);
+
+  const { data: diagnostics } = useQuery({
+    queryKey: ["flow-diagnostics"],
+    queryFn: () => runDiagnostics(),
+  });
 
   const { data: automations = [], isLoading } = useQuery({
     queryKey: ["flow-automations"],
@@ -122,6 +130,53 @@ function FlowDashboard() {
           </Button>
         )}
       </div>
+
+      {diagnostics && (
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className={cn("p-4 rounded-xl border bg-card", diagnostics.webhookCount > 0 ? "border-success/20" : "border-warning/20")}>
+            <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Status do Webhook</p>
+            <div className="mt-1 flex items-center gap-2">
+              <div className={cn("size-2 rounded-full animate-pulse", diagnostics.webhookCount > 0 ? "bg-success" : "bg-warning")} />
+              <p className="text-sm font-medium">
+                {diagnostics.webhookCount > 0 ? `${diagnostics.webhookCount} eventos recebidos` : "Aguardando primeiro evento..."}
+              </p>
+            </div>
+          </div>
+          <div className={cn("p-4 rounded-xl border bg-card", diagnostics.hasCredentials ? "border-success/20" : "border-critical/20")}>
+            <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Conexão Instagram</p>
+            <p className="mt-1 text-sm font-medium">
+              {diagnostics.hasCredentials ? "Autenticado e pronto" : "Credenciais ausentes em Configurações"}
+            </p>
+          </div>
+          <div className="p-4 rounded-xl border bg-card border-border">
+            <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Saúde do Fluxo</p>
+            <p className="text-sm font-medium mt-1">
+              {(diagnostics.recentErrors?.length ?? 0) > 0 ? "Existem falhas recentes" : "Nenhum erro reportado"}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {diagnostics && (diagnostics.recentErrors?.length ?? 0) > 0 && (
+        <div className="mt-4 p-4 rounded-xl bg-critical-soft border border-critical/20">
+          <div className="flex items-center gap-2 text-critical mb-2">
+            <XCircle className="size-4" />
+            <h3 className="text-sm font-bold">Problemas de Permissão Detectados</h3>
+          </div>
+          <div className="space-y-2">
+            {diagnostics.recentErrors?.slice(0, 1).map((e: any, idx: number) => (
+              <div key={idx} className="text-xs text-critical bg-white/50 p-2 rounded">
+                <p className="font-mono">{e.message}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-critical leading-relaxed">
+            <strong>Dica de Correção:</strong> O erro "(#3) Capability" geralmente significa que o App da Meta não tem a permissão 
+            <code>instagram_manage_messages</code>. Vá ao <a href="https://developers.facebook.com" target="_blank" className="underline font-bold">Meta for Developers</a>, 
+            garanta que o produto "Instagram Graph API" está configurado e que todas as permissões de mensagens estão ativas.
+          </p>
+        </div>
+      )}
 
       <div className="mt-4">
         <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>

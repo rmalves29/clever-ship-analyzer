@@ -40,6 +40,12 @@ export interface FlowNodeData {
   delayWindowStart?: string;
   delayWindowEnd?: string;
   delayDate?: string;
+  stats?: {
+    sent_count: number;
+    delivered_count: number;
+    opened_count: number;
+    clicked_count: number;
+  };
 }
 
 export interface FlowCanvasNode {

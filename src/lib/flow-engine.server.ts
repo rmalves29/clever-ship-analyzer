@@ -101,11 +101,33 @@ type DispatchContext = {
   matchedKeyword: string | null;
 };
 
+async function fetchInstagramUsername(igUserId: string, accessToken: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/${GRAPH_VERSION}/${igUserId}?fields=username&access_token=${encodeURIComponent(accessToken)}`,
+    );
+    const json = await res.json();
+    return json?.username ?? null;
+  } catch (err) {
+    console.error(`[flow-engine] Erro ao buscar username para ${igUserId}:`, err);
+    return null;
+  }
+}
+
 async function upsertFlowContact(igUserId: string, username: string | null): Promise<string> {
   const supabaseAdmin = await admin();
+  
+  // Se veio sem username, tenta manter o que já existe ou buscar se for a primeira vez
+  const { data: existing } = await (supabaseAdmin.from("flow_contacts" as any) as any)
+    .select("username")
+    .eq("ig_user_id", igUserId)
+    .maybeSingle();
+
+  const finalUsername = username || (existing as any)?.username || null;
+
   const { data, error } = await (supabaseAdmin.from("flow_contacts" as any) as any)
     .upsert(
-      { ig_user_id: igUserId, username, last_seen_at: new Date().toISOString() },
+      { ig_user_id: igUserId, username: finalUsername, last_seen_at: new Date().toISOString() },
       { onConflict: "ig_user_id" },
     )
     .select("id")
@@ -249,22 +271,60 @@ async function runFlowAction(data: FlowNodeData, contactId: string): Promise<voi
 }
 
 async function sendFlowMessage(data: FlowNodeData, ctx: DispatchContext, creds: FlowCreds): Promise<void> {
-  // Comentário/live -> resposta privada via comment_id, ainda pela API legada (graph.facebook.com)
-  // ligada à Página. DM/story reply -> API "Instagram com login do Instagram" (graph.instagram.com),
-  // que é quem de fato tem permissão de enviar DM avulsa hoje.
   const useMessagingApi = !ctx.commentId && creds.messagingToken && creds.messagingIgId;
   const host = useMessagingApi ? "graph.instagram.com" : "graph.facebook.com";
   const token = useMessagingApi ? creds.messagingToken! : creds.pageToken;
   const igId = useMessagingApi ? creds.messagingIgId! : creds.igId;
   const recipient = ctx.commentId ? { comment_id: ctx.commentId } : { id: ctx.igUserId };
 
-  let text = (data.text ?? "").trim();
-  if (data.buttonUrl?.trim()) {
-    text = `${text}\n\n${data.buttonLabel?.trim() || "Saiba mais"}: ${data.buttonUrl.trim()}`;
+  const text = (data.text ?? "").trim();
+  const buttonUrl = (data.buttonUrl ?? "").trim();
+  const buttonLabel = (data.buttonLabel ?? "").trim() || "Saiba mais";
+
+  // Prioriza o envio via template se houver botão, pois o Instagram renderiza melhor.
+  // IMPORTANTE: A API de Comentários (Facebook Graph) não suporta botões estruturados da mesma forma que a API de Mensagens.
+  // Então para comentários mantemos o fallback de texto + link.
+  if (buttonUrl && !ctx.commentId) {
+    await graphPOST(
+      `/${igId}/messages`,
+      {
+        recipient,
+        message: {
+          attachment: {
+            type: "template",
+            payload: {
+              template_type: "generic",
+              elements: [
+                {
+                  title: text || "Confira abaixo",
+                  buttons: [
+                    {
+                      type: "web_url",
+                      url: buttonUrl,
+                      title: buttonLabel,
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+      token,
+      host,
+    );
+  } else {
+    // Texto simples ou Fallback para comentários (onde botões estruturados não funcionam)
+    let finalMsg = text;
+    if (buttonUrl) {
+      finalMsg = `${finalMsg}\n\n${buttonLabel}: ${buttonUrl}`;
+    }
+    if (finalMsg) {
+      await graphPOST(`/${igId}/messages`, { recipient, message: { text: finalMsg } }, token, host);
+    }
   }
-  if (text) {
-    await graphPOST(`/${igId}/messages`, { recipient, message: { text } }, token, host);
-  }
+
+  // Imagem
   if (data.imageUrl?.trim()) {
     await graphPOST(
       `/${igId}/messages`,
@@ -273,9 +333,14 @@ async function sendFlowMessage(data: FlowNodeData, ctx: DispatchContext, creds: 
       host,
     );
   }
+
+  // Resposta Pública
   if (ctx.commentId && data.publicReply?.trim()) {
-    // Para responder comentário, o parâmetro 'message' vai na Query String, não no corpo JSON
-    await graphPOST(`/${ctx.commentId}/replies?message=${encodeURIComponent(data.publicReply.trim())}`, {}, creds.pageToken);
+    await graphPOST(
+      `/${ctx.commentId}/replies?message=${encodeURIComponent(data.publicReply.trim())}`,
+      {},
+      creds.pageToken,
+    );
   }
 }
 
@@ -294,7 +359,12 @@ async function dispatch(automation: { id: string; canvas_data: FlowCanvasData },
     return;
   }
 
-  const contactId = await upsertFlowContact(ctx.igUserId, ctx.username);
+  let finalUsername = ctx.username;
+  if (!finalUsername) {
+    finalUsername = await fetchInstagramUsername(ctx.igUserId, pageToken);
+  }
+
+  const contactId = await upsertFlowContact(ctx.igUserId, finalUsername);
   const claimed = await claimDispatchSlot(automation.id, ctx.igUserId);
   if (!claimed) {
     await logDispatch({

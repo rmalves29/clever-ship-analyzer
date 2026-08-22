@@ -79,6 +79,29 @@ async function graphPOST(path: string, body: Record<string, unknown>, accessToke
   return json;
 }
 
+async function graphGET(path: string, accessToken: string, host = "graph.facebook.com"): Promise<any> {
+  const url = `https://${host}/${GRAPH_VERSION}${path}${path.includes("?") ? "&" : "?"}access_token=${encodeURIComponent(accessToken)}`;
+  const res = await fetch(url);
+  const json: any = await res.json().catch(() => ({}));
+  if (!res.ok || json?.error) {
+    console.error(`[flow-engine] Graph API GET error (${path}) [Host: ${host}]:`, json?.error ?? res.status);
+    throw new Error(json?.error?.message ?? `Meta respondeu ${res.status}`);
+  }
+  return json;
+}
+
+/** A Meta só devolve o @usuário de quem manda comentário no payload do webhook — quem manda DM só
+ *  vem com o ID numérico (IGSID). Buscamos o username via API pra não salvar contato só com número. */
+async function resolveIgUsername(igUserId: string, messagingToken: string | null): Promise<string | null> {
+  if (!messagingToken) return null;
+  try {
+    const data = await graphGET(`/${igUserId}?fields=username`, messagingToken, "graph.instagram.com");
+    return data?.username ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function recordWebhookEvent(rawPayload: unknown, signatureValid: boolean): Promise<string> {
   const supabaseAdmin = await admin();
   const { data, error } = await (supabaseAdmin.from("flow_webhook_events" as any) as any)
@@ -480,9 +503,12 @@ async function handleMessagingEvent(pageId: string, m: any): Promise<void> {
   const automation = await findActiveAutomation(triggerKind, text);
   if (!automation) return;
 
+  const { messagingToken } = await loadFlowCredentials();
+  const username = await resolveIgUsername(igUserId, messagingToken);
+
   await dispatch(automation, {
     igUserId,
-    username: null,
+    username,
     commentId: null,
     matchedKeyword: findMatchedKeyword(automation.keywords ?? [], automation.match_any_comment, text),
   });

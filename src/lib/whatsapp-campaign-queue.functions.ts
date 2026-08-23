@@ -23,7 +23,7 @@ const createCampaignSchema = z.object({
 export const createAndQueueCampaign = createServerFn({ method: "POST" })
   .validator((data: unknown) => createCampaignSchema.parse(data))
   .handler(async ({ data }) => {
-    const { createCampaignRow } = await import("./whatsapp-meta.server");
+    const { createCampaignRow, loadSettings } = await import("./whatsapp-meta.server");
     const { enqueueWhatsAppCampaign } = await import("./whatsapp-queue.server");
 
     const created = await createCampaignRow(
@@ -56,12 +56,17 @@ export const createAndQueueCampaign = createServerFn({ method: "POST" })
       };
     }
 
+    const settings = await loadSettings();
+    const templateName = data.templateName?.trim() || settings.templateName;
+    const templateLanguage = data.templateLanguage?.trim() || settings.templateLanguage;
+    if (!templateName) return { success: false as const, error: "Template do WhatsApp não configurado." };
+
     const queued = await enqueueWhatsAppCampaign({
       campaignId: created.campaignId,
       segmentType: data.segmentType,
       segmentId: data.segmentId,
-      templateName: data.templateName?.trim() || (await import("./whatsapp-meta.server")).loadSettings().then((s) => s.templateName),
-      templateLanguage: data.templateLanguage?.trim() || (await import("./whatsapp-meta.server")).loadSettings().then((s) => s.templateLanguage),
+      templateName,
+      templateLanguage,
       bodyParams: data.bodyParams,
     });
 

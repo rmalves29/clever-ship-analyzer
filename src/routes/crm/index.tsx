@@ -529,14 +529,14 @@ function CRMPage() {
                             regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "data_envio_hoje", operator: "eq", value: "sim", label: "Pedido Enviado Hoje" }] }] }
                           },
                           {
-                            nome: "Checkouts Abandonados",
-                            descricao: "Clientes que iniciaram o checkout mas não finalizaram.",
-                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "perfil", operator: "eq", value: "carrinho", label: "Perfil do Cliente" }] }] }
+                            nome: "Checkouts Abandonados (CAR24)",
+                            descricao: "Clientes capturados da integração de checkouts abandonados da Shopify.",
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "checkout_abandonado", operator: "eq", value: "sim", label: "Checkout Abandonado (CAR24)" }] }] }
                           },
                           {
                             nome: "Acessou e Não Comprou",
                             descricao: "Leads que interagiram mas ainda não possuem pedidos.",
-                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "perfil", operator: "eq", value: "acesso_sem_compra", label: "CRM/contatos/segmentos eu consigo criar um segmento para puxar os clientes que abandonaram checkouts?" }] }] }
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "perfil", operator: "eq", value: "acesso_sem_compra", label: "Acessou e não comprou" }] }] }
                           },
                           {
                             nome: "Primeira Compra",

@@ -79,7 +79,8 @@ const CATEGORIES = [
       { id: "data_pedido_hoje", label: "Compra Realizada Hoje" },
       { id: "data_pedido_24h", label: "Compra Realizada (Últimas 24h)" },
       { id: "data_envio_hoje", label: "Pedido Enviado Hoje" },
-      { id: "acesso_sem_compra", label: "CRM/contatos/segmentos eu consigo criar um segmento para puxar os clientes que abandonaram checkouts?" },
+      { id: "checkout_abandonado", label: "Checkout Abandonado (CAR24)" },
+      { id: "acesso_sem_compra", label: "Acessou e não comprou" },
     ]
   },
   {
@@ -381,7 +382,7 @@ export function SegmentEditor({
                             <SelectItem value="acesso_sem_compra">Acessou e não comprou</SelectItem>
                           </SelectContent>
                         </Select>
-                      ) : condition.field === "data_pedido_hoje" || condition.field === "data_pedido_24h" || condition.field === "data_envio_hoje" ? (
+                      ) : condition.field === "checkout_abandonado" || condition.field === "data_pedido_hoje" || condition.field === "data_pedido_24h" || condition.field === "data_envio_hoje" || condition.field === "acesso_sem_compra" ? (
                         <Select
                           value={condition.value as string}
                           onValueChange={v => updateCondition(group.id, condition.id, { value: v })}

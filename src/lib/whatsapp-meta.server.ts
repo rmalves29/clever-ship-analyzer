@@ -321,7 +321,8 @@ async function sendTemplateMessage(params: {
   templateName: string;
   templateLanguage: string;
   bodyParams: string[];
-  mediaId?: string; // ID da mídia (imagem/vídeo/documento) se o template tiver header de mídia
+  mediaId?: string;
+  mediaUrl?: string;
 }) {
   const components: any[] = [];
   
@@ -332,14 +333,16 @@ async function sendTemplateMessage(params: {
     });
   }
 
-  // Se houver um mediaId, ele deve ir no componente HEADER
-  if (params.mediaId) {
+  if (params.mediaId || params.mediaUrl) {
+    const isVideo = params.mediaUrl?.toLowerCase().includes('.mp4') || params.mediaUrl?.toLowerCase().includes('video');
+    const mediaType = isVideo ? "video" : "image";
+    
     components.push({
       type: "header",
       parameters: [
         {
-          type: "video", // Por padrão vídeo, mas a API é flexível se o template for de imagem
-          video: { id: params.mediaId }
+          type: mediaType,
+          [mediaType]: params.mediaId ? { id: params.mediaId } : { link: params.mediaUrl }
         }
       ]
     });

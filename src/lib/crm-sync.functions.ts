@@ -184,8 +184,8 @@ export const syncShopifyData = createServerFn({ method: "POST" })
             await supabaseAdmin.from("shopify_order_items").upsert({
               id: li.id,
               order_id: order.id,
-              product_id: null,
-              variant_id: null,
+              product_id: li.product?.id ?? null,
+              variant_id: li.variant?.id ?? null,
               title: li.title,
               variant_title: li.variantTitle,
               sku: li.sku,

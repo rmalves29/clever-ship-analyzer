@@ -88,6 +88,7 @@ export type DashboardData = {
   enviosPorDia: { dia: string; pedidos: number; produtos: number; tempoMedio: number }[];
   cohortData: { month: string; size: number; retention: (number | null)[] }[];
   sessoes: { page: string; count: number; trend?: number }[];
+  produtosMaisVendidos: { productId: string | null; nome: string; quantidade: number; faturamento: number }[];
   reguas: {
     titulo: string;
     tag: string;
@@ -272,6 +273,7 @@ export function getDashboardData(period: PeriodKey, customLabel?: string): Dashb
     })),
     cohortData: [],
     sessoes: [],
+    produtosMaisVendidos: [],
     reguas: [
       {
         titulo: "Onboarding Pós-1ª Compra",

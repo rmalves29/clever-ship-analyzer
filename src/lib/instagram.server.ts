@@ -57,21 +57,23 @@ function datePresetToRange(preset: InstagramDatePreset): { since: string; until:
       const y = daysAgo(1);
       return { since: toISO(y), until: toISO(now) };
     }
+    // `until` sempre exclusivo (mesma regra do "today"/"yesterday" acima) — pra ranges "até
+    // agora" isso significa amanhã, não hoje, senão os posts de hoje ficam de fora.
     case "last_7d":
-      return { since: toISO(daysAgo(7)), until: toISO(now) };
+      return { since: toISO(daysAgo(7)), until: toISO(daysAgo(-1)) };
     case "last_14d":
-      return { since: toISO(daysAgo(14)), until: toISO(now) };
+      return { since: toISO(daysAgo(14)), until: toISO(daysAgo(-1)) };
     case "last_30d":
-      return { since: toISO(daysAgo(30)), until: toISO(now) };
+      return { since: toISO(daysAgo(30)), until: toISO(daysAgo(-1)) };
     case "this_month": {
       const first = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { since: toISO(first), until: toISO(now) };
+      return { since: toISO(first), until: toISO(daysAgo(-1)) };
     }
     case "last_month": {
       const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
       const lastPrev = new Date(firstThis.getTime() - 86_400_000);
       const firstPrev = new Date(lastPrev.getFullYear(), lastPrev.getMonth(), 1);
-      return { since: toISO(firstPrev), until: toISO(lastPrev) };
+      return { since: toISO(firstPrev), until: toISO(firstThis) };
     }
   }
 }
@@ -284,52 +286,77 @@ export type InstagramMedia = {
   totalInteractions: number;
 };
 
+/** Fetch+mapeamento compartilhado entre `getInstagramTopContent` (presets fechados) e
+ *  `getInstagramTopContentInRange` (range arbitrário, ex: "semana anterior" pro lote de IA).
+ *  `untilISO` é exclusivo (mesma semântica dos outros usos de range nesse arquivo). */
+async function fetchTopContentInRange(pageToken: string, igId: string, sinceISO: string, untilISO: string): Promise<InstagramMedia[]> {
+  const sinceTs = Math.floor(new Date(sinceISO + "T00:00:00Z").getTime() / 1000);
+  const untilTs = Math.floor(new Date(untilISO + "T00:00:00Z").getTime() / 1000);
+
+  const listRes = await graphGET(
+    `/${igId}/media`,
+    { fields: "id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp", limit: "50" },
+    pageToken,
+  );
+  const items = ((listRes.data ?? []) as any[]).filter((m) => {
+    const ts = Math.floor(new Date(m.timestamp).getTime() / 1000);
+    return ts >= sinceTs && ts < untilTs;
+  });
+
+  const withInsights = await Promise.all(
+    items.map(async (m) => {
+      try {
+        const insRes = await graphGET(`/${m.id}/insights`, { metric: "reach,likes,comments,shares,saved,total_interactions" }, pageToken);
+        const byName = new Map<string, number>(((insRes.data ?? []) as any[]).map((row) => [row.name, row.values?.[0]?.value ?? row.total_value?.value ?? 0]));
+        return {
+          id: m.id,
+          caption: m.caption ?? null,
+          mediaType: m.media_type,
+          productType: m.media_product_type,
+          permalink: m.permalink ?? null,
+          thumbnailUrl: m.thumbnail_url ?? m.media_url ?? null,
+          timestamp: m.timestamp,
+          reach: byName.get("reach") ?? 0,
+          likes: byName.get("likes") ?? 0,
+          comments: byName.get("comments") ?? 0,
+          shares: byName.get("shares") ?? 0,
+          saved: byName.get("saved") ?? 0,
+          totalInteractions: byName.get("total_interactions") ?? 0,
+        } as InstagramMedia;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return withInsights
+    .filter((m): m is InstagramMedia => m !== null)
+    .sort((a, b) => b.totalInteractions - a.totalInteractions)
+    .slice(0, 10);
+}
+
 export async function getInstagramTopContent(datePreset: InstagramDatePreset): Promise<{ success: true; media: InstagramMedia[] } | { success: false; error: string }> {
   const { pageToken, igId } = await loadInstagramSettings();
   if (!pageToken || !igId) return { success: false, error: "Instagram não conectado. Configure em Configurações." };
 
-  const { since } = datePresetToRange(datePreset);
-  const sinceTs = Math.floor(new Date(since + "T00:00:00Z").getTime() / 1000);
+  const { since, until } = datePresetToRange(datePreset);
 
   try {
-    const listRes = await graphGET(
-      `/${igId}/media`,
-      { fields: "id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp", limit: "50" },
-      pageToken,
-    );
-    const items = ((listRes.data ?? []) as any[]).filter((m) => Math.floor(new Date(m.timestamp).getTime() / 1000) >= sinceTs);
+    const media = await fetchTopContentInRange(pageToken, igId, since, until);
+    return { success: true, media };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar o Instagram." };
+  }
+}
 
-    const withInsights = await Promise.all(
-      items.map(async (m) => {
-        try {
-          const insRes = await graphGET(`/${m.id}/insights`, { metric: "reach,likes,comments,shares,saved,total_interactions" }, pageToken);
-          const byName = new Map<string, number>(((insRes.data ?? []) as any[]).map((row) => [row.name, row.values?.[0]?.value ?? row.total_value?.value ?? 0]));
-          return {
-            id: m.id,
-            caption: m.caption ?? null,
-            mediaType: m.media_type,
-            productType: m.media_product_type,
-            permalink: m.permalink ?? null,
-            thumbnailUrl: m.thumbnail_url ?? m.media_url ?? null,
-            timestamp: m.timestamp,
-            reach: byName.get("reach") ?? 0,
-            likes: byName.get("likes") ?? 0,
-            comments: byName.get("comments") ?? 0,
-            shares: byName.get("shares") ?? 0,
-            saved: byName.get("saved") ?? 0,
-            totalInteractions: byName.get("total_interactions") ?? 0,
-          } as InstagramMedia;
-        } catch {
-          return null;
-        }
-      }),
-    );
+/** Generalização pra range arbitrário (ex: "semana anterior" do lote de IA) — mesmo fetch e
+ *  mapeamento de `getInstagramTopContent`, mas sem depender de um preset fechado. */
+export async function getInstagramTopContentInRange(sinceISO: string, untilISO: string): Promise<{ success: true; media: InstagramMedia[] } | { success: false; error: string }> {
+  const { pageToken, igId } = await loadInstagramSettings();
+  if (!pageToken || !igId) return { success: false, error: "Instagram não conectado. Configure em Configurações." };
 
-    const media = withInsights
-      .filter((m): m is InstagramMedia => m !== null)
-      .sort((a, b) => b.totalInteractions - a.totalInteractions)
-      .slice(0, 10);
-
+  try {
+    const media = await fetchTopContentInRange(pageToken, igId, sinceISO, untilISO);
     return { success: true, media };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar o Instagram." };

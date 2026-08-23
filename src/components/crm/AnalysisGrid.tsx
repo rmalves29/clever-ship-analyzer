@@ -322,6 +322,32 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
           ))}
         </ul>
       </section>
+
+      <section className="surface-card p-5 lg:col-span-2">
+        <header className="flex items-start gap-3 border-b border-border pb-3">
+          <span className="mt-1 text-xs font-mono text-muted-foreground">12</span>
+          <div className="flex-1">
+            <h3 className="text-base font-semibold">Produtos mais vendidos</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Por quantidade vendida no período selecionado.</p>
+          </div>
+        </header>
+        <ul className="mt-4 space-y-2">
+          {data.produtosMaisVendidos?.map((p, i) => (
+            <li key={i} className="flex items-center justify-between text-xs p-2 rounded-md hover:bg-muted/50 transition-colors">
+              <span className="truncate max-w-[300px]" title={p.nome}>{p.nome}</span>
+              <div className="flex items-center gap-3">
+                <span className="font-semibold">{p.quantidade} un.</span>
+                <span className="text-muted-foreground">
+                  {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(p.faturamento)}
+                </span>
+              </div>
+            </li>
+          ))}
+          {(!data.produtosMaisVendidos || data.produtosMaisVendidos.length === 0) && (
+            <li className="text-xs text-muted-foreground p-2">Nenhum produto vendido no período selecionado.</li>
+          )}
+        </ul>
+      </section>
     </div>
   );
 }

@@ -162,6 +162,7 @@ function Index() {
       tempoEntreCompras: shopifyData.tempoEntreCompras ?? mockData.tempoEntreCompras,
       curvaRecompra: shopifyData.curvaRecompra ?? mockData.curvaRecompra,
       enviosPorDia: shopifyData.enviosPorDia ?? mockData.enviosPorDia,
+      produtosMaisVendidos: shopifyData.produtosMaisVendidos ?? mockData.produtosMaisVendidos,
     };
   }, [mockData, shopifyData, aiAnalysis]);
 

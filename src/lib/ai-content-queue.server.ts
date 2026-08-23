@@ -1,5 +1,7 @@
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
 import { fetchImageAsDataUri, dataUriToBase64, dataUriContentType, generateImageBase64, dispatchToCampaignGroups } from "./ai-send-routines.server";
+import type { BestSellingProduct } from "./shopify-products.server";
+import type { InstagramMedia } from "./instagram.server";
 
 const TZ = "America/Sao_Paulo";
 const APP_BASE_URL = "https://clever-ship-analyzer.lovable.app";
@@ -45,29 +47,50 @@ function mapRow(row: any): ContentQueueItem {
 
 type DraftItem = {
   message_text: string;
-  use_image: "ad" | "post" | "generate" | "none";
+  use_image: "product" | "post" | "generate" | "none";
   image_prompt: string | null;
   link_type: "instagram" | "site" | "none";
   source_summary: string;
 };
 
-type AdProduct = { name: string; cleanName: string; thumbnailUrl: string | null; roas: number; ctrLink: number; cpa: number };
+type ProductSourceSlot = {
+  kind: "top_seller_1" | "top_seller_2" | "top_visited";
+  title: string;
+  description: string | null;
+  imageUrl: string | null;
+  productUrl: string | null;
+};
+
+type InstagramSourceSlot = {
+  kind: "top_post_1" | "top_post_2" | "top_reel";
+  caption: string | null;
+  imageUrl: string | null;
+  permalink: string | null;
+};
+
+type CouponSourceSlot = {
+  kind: "coupon";
+  code: string;
+  percentageLabel: string; // "8%"
+  expiresAtLabel: string; // já formatado pt-BR/America-Sao_Paulo
+};
+
+type ContentSlot = ProductSourceSlot | InstagramSourceSlot | CouponSourceSlot | null;
+
+type NonCouponSlotKind = "top_seller_1" | "top_seller_2" | "top_visited" | "top_post_1" | "top_post_2" | "top_reel";
+type SlotKind = NonCouponSlotKind | "coupon";
 
 type SignalsContext = {
-  adProducts: AdProduct[];
-  productSlots: (AdProduct | null)[];
-  topPostYesterday: { caption: string | null; thumbnailUrl: string | null; permalink: string | null; reach: number; totalInteractions: number } | null;
-  promotions: { title: string; summary: string | null; code: string | null }[];
-  storeUrl: string | null;
+  slots: ContentSlot[]; // length === count, index-alinhado com angles/mensagens
   playbook: string | null;
   recentTexts: string[];
 };
 
-/** Deixar a diversidade só na mão da IA não é confiável — com os mesmos sinais de entrada
- *  (mesmo anúncio, mesmo post, mesmas promoções), o modelo tende a convergir pra respostas
- *  parecidas entre chamadas separadas, mesmo com temperature alta (reportado pelo usuário:
- *  cancelar e gerar de novo voltava com as mesmas mensagens). Forçar um ângulo diferente e
- *  sorteado por item, por chamada, garante diversidade mecânica em vez de só pedir por texto. */
+/** Deixar a diversidade só na mão da IA não é confiável — com os mesmos sinais de entrada, o
+ *  modelo tende a convergir pra respostas parecidas entre chamadas separadas, mesmo com
+ *  temperature alta (reportado pelo usuário: cancelar e gerar de novo voltava com as mesmas
+ *  mensagens). Forçar um ângulo diferente e sorteado por item, por chamada, garante diversidade
+ *  mecânica em vez de só pedir por texto. */
 const ANGLE_POOL = [
   "pergunta direta que gera curiosidade",
   "urgência (tempo acabando, últimas unidades)",
@@ -90,66 +113,170 @@ function pickAngles(count: number): string[] {
   return picked;
 }
 
-/** Nomes de anúncio no Meta Ads costumam ter tags internas depois de "|" (público, objetivo,
- *  variante — ex: "Conjunto LUMIM | LTV") que não fazem sentido nenhum pro cliente final. Usado
- *  só como o nome "limpo" sugerido no prompt — a IA ainda recebe o nome bruto como referência,
- *  mas instruída a nunca citá-lo literalmente. */
-function cleanAdName(raw: string): string {
-  const first = raw.split("|")[0]?.trim();
-  return first && first.length > 0 ? first : raw.trim();
+function buildScheduledDates(startDate: string, count: number): string[] {
+  const [startYear, startMonth, startDay] = startDate.split("-").map(Number) as [number, number, number];
+  const dates: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const d = new Date(startYear, startMonth - 1, startDay + i);
+    dates.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+  }
+  return dates;
 }
 
-/** Com só 1 produto real disponível (o de melhor ROAS), toda mensagem "concreta" acabava caindo
- *  nele — reportado pelo usuário como o lote inteiro girando em torno do mesmo conjunto, só com
- *  ângulos diferentes. Distribui um produto (ou nenhum, de propósito) por mensagem via rodízio —
- *  cada produto (e um slot "sem produto específico") aparece no máximo 1x antes de qualquer um
- *  repetir, em vez de deixar a escolha de assunto a cargo do modelo. */
-function pickProductSlots(count: number, products: AdProduct[]): (AdProduct | null)[] {
-  const pool: (AdProduct | null)[] = products.length > 0 ? [...products, null] : [null];
-  const slots: (AdProduct | null)[] = [];
-  let cycle: (AdProduct | null)[] = [];
-  for (let i = 0; i < count; i++) {
-    if (cycle.length === 0) cycle = [...pool].sort(() => Math.random() - 0.5);
-    slots.push(cycle.shift()!);
+function isSunday(dateStr: string): boolean {
+  const [y, m, d] = dateStr.split("-").map(Number) as [number, number, number];
+  return new Date(y, m - 1, d).getDay() === 0;
+}
+
+const NON_COUPON_KINDS: NonCouponSlotKind[] = ["top_seller_1", "top_seller_2", "top_visited", "top_post_1", "top_post_2", "top_reel"];
+
+/** Domingo (sempre existe exatamente 1 numa janela de 7 dias corridos) sempre vira cupom. As
+ *  outras datas recebem as 6 fontes reais em ordem embaralhada a cada geração — nunca a mesma
+ *  sequência fixa toda semana. No modo "dia" (count=1, não-domingo) isso naturalmente sorteia 1
+ *  das 6 fontes aleatoriamente, sem correspondência fixa dia-da-semana -> fonte. */
+function assignSlotKinds(scheduledDates: string[]): SlotKind[] {
+  const shuffled = [...NON_COUPON_KINDS].sort(() => Math.random() - 0.5);
+  let ptr = 0;
+  return scheduledDates.map((d) => {
+    if (isSunday(d)) return "coupon";
+    const kind = shuffled[ptr % shuffled.length]!;
+    ptr++;
+    return kind;
+  });
+}
+
+function dateOnlyToSaoPauloISO(dateStr: string): string {
+  return new Date(`${dateStr}T00:00:00-03:00`).toISOString();
+}
+
+/** "Semana anterior" = 7 dias corridos antes de `startDate` (data de início do lote). */
+function previousWeekRange(startDate: string): { sinceDate: string; untilDate: string; sinceISO: string; untilISO: string } {
+  const [y, m, d] = startDate.split("-").map(Number) as [number, number, number];
+  const fmt = (dt: Date) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+  const untilDate = fmt(new Date(y, m - 1, d));
+  const sinceDate = fmt(new Date(y, m - 1, d - 7));
+  return { sinceDate, untilDate, sinceISO: dateOnlyToSaoPauloISO(sinceDate), untilISO: dateOnlyToSaoPauloISO(untilDate) };
+}
+
+type WeeklySignals = {
+  topSeller1: ProductSourceSlot | null;
+  topSeller2: ProductSourceSlot | null;
+  topVisited: ProductSourceSlot | null;
+  topPost1: InstagramSourceSlot | null;
+  topPost2: InstagramSourceSlot | null;
+  topReel: InstagramSourceSlot | null;
+};
+
+/** Junta os sinais reais da semana anterior a `startDate`: 2 produtos mais vendidos, 1 produto
+ *  mais acessado (nunca coincidindo com os 2 vendidos), 2 posts + 1 reels de mais engajamento do
+ *  Instagram. Cada sub-busca tem fallback isolado — uma fonte falhando não derruba as outras. */
+async function gatherWeeklySignals(startDate: string): Promise<WeeklySignals> {
+  const { sinceDate, untilDate, sinceISO, untilISO } = previousWeekRange(startDate);
+
+  const { getBestSellingProducts, getMostVisitedProducts } = await import("./shopify-products.server");
+  const { getShopifyProductsByIds } = await import("./shopify.server");
+  const { getInstagramTopContentInRange } = await import("./instagram.server");
+
+  const [bestSellers, igRes] = await Promise.all([
+    getBestSellingProducts({ startISO: sinceISO, endISO: untilISO, limit: 2 }).catch(() => [] as BestSellingProduct[]),
+    getInstagramTopContentInRange(sinceISO, untilISO).catch(() => ({ success: false as const, error: "" })),
+  ]);
+
+  const bestSellerIds = bestSellers.map((p) => p.productId).filter((id): id is string => !!id);
+  const [productDetails, mostVisited] = await Promise.all([
+    getShopifyProductsByIds(bestSellerIds).catch(() => new Map()),
+    getMostVisitedProducts({ sinceDate, untilDate, excludeProductIds: bestSellerIds, limit: 1 }).catch(() => []),
+  ]);
+
+  function toProductSlot(kind: "top_seller_1" | "top_seller_2", seller: BestSellingProduct | undefined): ProductSourceSlot | null {
+    if (!seller) return null;
+    const detail = seller.productId ? productDetails.get(seller.productId) : undefined;
+    return {
+      kind,
+      title: detail?.title ?? seller.title,
+      description: detail?.description ?? null,
+      imageUrl: detail?.featuredImageUrl ?? null,
+      productUrl: detail?.productUrl ?? null,
+    };
   }
-  return slots;
+
+  const topSeller1 = toProductSlot("top_seller_1", bestSellers[0]);
+  const topSeller2 = toProductSlot("top_seller_2", bestSellers[1]);
+  const visited = mostVisited[0];
+  const topVisited: ProductSourceSlot | null = visited
+    ? { kind: "top_visited", title: visited.detail.title, description: visited.detail.description, imageUrl: visited.detail.featuredImageUrl, productUrl: visited.detail.productUrl }
+    : null;
+
+  const media = igRes.success ? igRes.media : [];
+  const nonVideo = media.filter((m) => m.mediaType === "IMAGE" || m.mediaType === "CAROUSEL_ALBUM").sort((a, b) => b.totalInteractions - a.totalInteractions);
+  const reels = media.filter((m) => m.mediaType === "VIDEO" || m.productType === "REELS").sort((a, b) => b.totalInteractions - a.totalInteractions);
+
+  function toIgSlot(kind: "top_post_1" | "top_post_2" | "top_reel", m: InstagramMedia | undefined): InstagramSourceSlot | null {
+    if (!m) return null;
+    return { kind, caption: m.caption, imageUrl: m.thumbnailUrl, permalink: m.permalink };
+  }
+
+  return {
+    topSeller1,
+    topSeller2,
+    topVisited,
+    topPost1: toIgSlot("top_post_1", nonVideo[0]),
+    topPost2: toIgSlot("top_post_2", nonVideo[1]),
+    topReel: toIgSlot("top_reel", reels[0]),
+  };
+}
+
+function slotForKind(kind: NonCouponSlotKind, signals: WeeklySignals): ContentSlot {
+  switch (kind) {
+    case "top_seller_1": return signals.topSeller1;
+    case "top_seller_2": return signals.topSeller2;
+    case "top_visited": return signals.topVisited;
+    case "top_post_1": return signals.topPost1;
+    case "top_post_2": return signals.topPost2;
+    case "top_reel": return signals.topReel;
+  }
+}
+
+function slotDescription(slot: ContentSlot): string {
+  if (!slot) return "Fonte: NENHUM dado disponível — fale da marca/loja em geral, gatilho mental sem citar produto específico";
+  switch (slot.kind) {
+    case "top_seller_1":
+      return `Fonte: produto #1 mais VENDIDO na semana passada — "${slot.title}"${slot.description ? `. Descrição real do produto: "${slot.description.slice(0, 300)}"` : ""}`;
+    case "top_seller_2":
+      return `Fonte: produto #2 mais VENDIDO na semana passada — "${slot.title}"${slot.description ? `. Descrição real do produto: "${slot.description.slice(0, 300)}"` : ""}`;
+    case "top_visited":
+      return `Fonte: produto mais ACESSADO no site na semana passada (bastante gente entrou pra ver) — "${slot.title}"${slot.description ? `. Descrição real do produto: "${slot.description.slice(0, 300)}"` : ""}`;
+    case "top_post_1":
+    case "top_post_2":
+      return `Fonte: post do Instagram com mais engajamento na semana passada — legenda original: "${slot.caption ?? "(sem legenda)"}"`;
+    case "top_reel":
+      return `Fonte: Reels com mais engajamento na semana passada — legenda original: "${slot.caption ?? "(sem legenda)"}"`;
+    case "coupon":
+      return `Fonte: CUPOM DE DESCONTO exclusivo pro Grupo VIP — código "${slot.code}", ${slot.percentageLabel} OFF, válido só até ${slot.expiresAtLabel}. Use EXATAMENTE esses dados — nunca invente nem altere código, percentual ou validade.`;
+  }
 }
 
 function buildBatchPrompt(ctx: SignalsContext, count: number, angles: string[]): string {
-  const productLine = (p: AdProduct | null) =>
-    p ? `Produto: "${p.cleanName}" (ROAS ${p.roas.toFixed(2)})` : `Produto: NENHUM específico — fale da marca/loja em geral, ou use uma promoção/post do Instagram abaixo se fizer sentido; NÃO force menção a nenhum produto de anúncio nessa mensagem`;
-
   return `Você é um copywriter de e-commerce especialista em WhatsApp pra grupos (moda feminina, loja "Mania de Mulher"). Escreva ${count} mensage${count > 1 ? "ns" : "m"} DIFERENTE${count > 1 ? "S" : ""} pra disparar em grupos de WhatsApp, uma por dia.
 
 CONFIGURAÇÃO OBRIGATÓRIA DE CADA MENSAGEM (mensagem 1 = item 1 do array JSON, etc — siga essa ordem e essa atribuição à risca, nunca troque):
-${angles.map((a, i) => `${i + 1}. Ângulo: ${a} — ${productLine(ctx.productSlots[i] ?? null)}`).join("\n")}
+${angles.map((a, i) => `${i + 1}. Ângulo: ${a} — ${slotDescription(ctx.slots[i] ?? null)}`).join("\n")}
 
 REGRAS OBRIGATÓRIAS:
-- Siga o ângulo E o produto designado de cada mensagem à risca — é isso que garante que o lote não saia parecido (nem sempre sobre o mesmo produto), e que gerar de novo não volte com as mesmas mensagens de antes.
+- Siga o ângulo E a fonte designada de cada mensagem à risca — é isso que garante que o lote não saia parecido, e que gerar de novo não volte com as mesmas mensagens de antes.
 - Use gatilhos mentais de verdade (escassez, urgência, prova social, curiosidade, benefício claro) — sem exagero forçado, sem soar robótico.
-- Quando a mensagem tiver um produto designado, seja CONCRETO sobre ele (cite o nome natural do produto, o que o torna especial) em vez de frases vagas tipo "nossos acessórios", "seu look" que servem pra qualquer loja. Quando o produto designado for "nenhum específico", tudo bem ser mais genérico de marca, ou usar uma promoção/o post do Instagram se houver.
-- Máximo 4 linhas por mensagem, emoji com moderação.
-- Se fizer sentido citar o post recente do Instagram (${ctx.topPostYesterday ? "existe um disponível abaixo" : "NÃO há post disponível — não cite Instagram"}), marque essa mensagem com "link_type":"instagram".
-- Se fizer sentido citar uma promoção do site (${ctx.promotions.length > 0 || ctx.storeUrl ? "existe informação abaixo" : "sem dado de site disponível — não cite"}), marque com "link_type":"site".
-- Nem toda mensagem precisa ter link — varie isso também.
+- Quando a fonte for um produto ou um cupom, seja CONCRETO (cite o nome do produto/o que o torna especial, ou o código e percentual exato do cupom) em vez de frases vagas tipo "nossos acessórios" que servem pra qualquer loja. Quando a fonte for "nenhum dado disponível", tudo bem ser mais genérico de marca.
+- Máximo 6 linhas por mensagem, emoji com moderação.
+- Se a fonte for um post/Reels do Instagram, marque "link_type":"instagram". Se a fonte for um produto (vendido ou acessado), marque "link_type":"site". Se a fonte for cupom ou nenhum dado disponível, marque "link_type":"none" (o cupom já leva o código escrito na própria mensagem, não precisa de link).
 - NUNCA escreva a URL literal no texto — só o convite claro ("responde aqui", "corre no link abaixo", "olha nosso Instagram") — o link real é adicionado depois, fora do seu texto.
-- NUNCA cite o nome interno de um anúncio literalmente. Nomes de anúncio no Meta Ads têm tags internas tipo "| LTV", "| Story", "| Conv" que são só rótulos de organização de campanha, não o nome real do produto pro cliente. Use sempre o nome natural já dado em "Produto:" na configuração de cada mensagem.
-- Imagens de produto (anexadas abaixo, cada uma rotulada com o nome do produto) são fotos REAIS de um produto específico. Só marque "use_image":"ad" se a mensagem tiver um produto designado (não "nenhum específico") — nesse caso a imagem certa é resolvida automaticamente pelo produto atribuído a ela, então só decida "ad" vs "generate" vs "none" vs "post", sem se preocupar em escolher QUAL foto. Se o produto designado da mensagem for "nenhum específico", NUNCA use "ad" — use "generate" (descrevendo no image_prompt algo condizente com o que a mensagem está vendendo) ou "none". Mesma regra pro post do Instagram: só use "use_image":"post" se a mensagem citar exatamente esse post.
+- Se a fonte for CUPOM: use exatamente o código, percentual e validade fornecidos — NUNCA invente nem altere esses dados. Deixe claro que é um benefício exclusivo pro Grupo VIP.
+- Imagem: se a fonte tiver uma imagem real anexada (produto ou post/Reels, rotulada abaixo), marque "use_image" como "product" (produto vendido/acessado) ou "post" (post/Reels do Instagram) — a imagem certa é resolvida automaticamente pela fonte atribuída, você só escolhe o TIPO, não precisa (nem consegue) escolher qual foto. Se a fonte não tiver imagem (cupom, ou nenhum dado disponível), use "generate" (descrevendo no image_prompt algo condizente com a mensagem) ou "none".
 
 ${ctx.playbook ? `O QUE JÁ SABEMOS QUE FUNCIONA (aprendizado de mensagens anteriores — use como direção estratégica, NÃO copie frases):\n${ctx.playbook}\n` : ""}
 ${ctx.recentTexts.length > 0 ? `MENSAGENS JÁ ENVIADAS RECENTEMENTE (NÃO repita a estrutura/abertura destas):\n${ctx.recentTexts.map((t, i) => `${i + 1}. ${t}`).join("\n")}\n` : ""}
 
-PRODUTOS/ANÚNCIOS DISPONÍVEIS (ROAS dos últimos 30 dias — imagens reais anexadas abaixo, uma por produto):
-${ctx.adProducts.length > 0 ? ctx.adProducts.map((p) => `- "${p.cleanName}" — ROAS ${p.roas.toFixed(2)}, CTR ${(p.ctrLink * 100).toFixed(2)}%, CPA R$${p.cpa.toFixed(2)}`).join("\n") : "nenhum disponível"}
-
-MELHOR POST DO INSTAGRAM DE ONTEM:
-${ctx.topPostYesterday ? `"${ctx.topPostYesterday.caption ?? "(sem legenda)"}" — alcance ${ctx.topPostYesterday.reach}, ${ctx.topPostYesterday.totalInteractions} interações${ctx.topPostYesterday.thumbnailUrl ? " (imagem em anexo)" : ""}` : "nenhum post ontem"}
-
-PROMOÇÕES ATIVAS AGORA NO SITE:
-${ctx.promotions.length > 0 ? ctx.promotions.map((p) => `- ${p.title}${p.summary ? `: ${p.summary}` : ""}${p.code ? ` (cupom ${p.code})` : ""}`).join("\n") : "nenhuma promoção ativa detectada"}
-
 Responda em JSON estrito, um array com exatamente ${count} item(ns):
-{ "items": [ { "message_text": string, "use_image": "ad"|"post"|"generate"|"none", "image_prompt": string|null, "link_type": "instagram"|"site"|"none", "source_summary": string (1 frase curta) } ] }`;
+{ "items": [ { "message_text": string, "use_image": "product"|"post"|"generate"|"none", "image_prompt": string|null, "link_type": "instagram"|"site"|"none", "source_summary": string (1 frase curta) } ] }`;
 }
 
 async function requestBatchCompletion(
@@ -205,24 +332,23 @@ async function callOpenAiBatch(
   apiKey: string,
   ctx: SignalsContext,
   count: number,
-): Promise<{ items: DraftItem[]; productDataUriByName: Map<string, string>; postDataUri: string | null }> {
-  const [productDataUris, postDataUri] = await Promise.all([
-    Promise.all(ctx.adProducts.map((p) => (p.thumbnailUrl ? fetchImageAsDataUri(p.thumbnailUrl) : Promise.resolve(null)))),
-    ctx.topPostYesterday?.thumbnailUrl ? fetchImageAsDataUri(ctx.topPostYesterday.thumbnailUrl) : Promise.resolve(null),
-  ]);
-  const productDataUriByName = new Map<string, string>();
+): Promise<{ items: DraftItem[]; slotImageDataUris: (string | null)[] }> {
+  const slotImageDataUris = await Promise.all(
+    ctx.slots.map((slot) => {
+      if (!slot || slot.kind === "coupon") return Promise.resolve(null);
+      return slot.imageUrl ? fetchImageAsDataUri(slot.imageUrl) : Promise.resolve(null);
+    }),
+  );
+
   const imageParts: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }> = [];
-  ctx.adProducts.forEach((p, i) => {
-    const dataUri = productDataUris[i];
-    if (!dataUri) return;
-    productDataUriByName.set(p.name, dataUri);
-    imageParts.push({ type: "text", text: `Imagem do produto "${p.cleanName}":` });
+  ctx.slots.forEach((slot, i) => {
+    const dataUri = slotImageDataUris[i];
+    if (!dataUri || !slot || slot.kind === "coupon") return;
+    const isInstagramSlot = slot.kind === "top_post_1" || slot.kind === "top_post_2" || slot.kind === "top_reel";
+    const label = isInstagramSlot ? "post do Instagram" : (slot as ProductSourceSlot).title;
+    imageParts.push({ type: "text", text: `Imagem da mensagem ${i + 1} (${label}):` });
     imageParts.push({ type: "image_url", image_url: { url: dataUri } });
   });
-  if (postDataUri) {
-    imageParts.push({ type: "text", text: "Imagem do post do Instagram de ontem:" });
-    imageParts.push({ type: "image_url", image_url: { url: postDataUri } });
-  }
 
   const angles = pickAngles(count);
 
@@ -249,7 +375,7 @@ async function callOpenAiBatch(
     }
   }
 
-  return { items, productDataUriByName, postDataUri };
+  return { items, slotImageDataUris };
 }
 
 export type BatchMode = "day" | "week";
@@ -268,46 +394,49 @@ export async function generateAiContentBatch(input: {
   const playbook = (settings as any)?.ai_marketing_playbook as string | null;
 
   const count = input.mode === "week" ? 7 : 1;
+  const scheduledDates = buildScheduledDates(input.startDate, count);
+  const kinds = assignSlotKinds(scheduledDates);
+  const batchId = crypto.randomUUID();
 
-  const { getMetaAdsCreatives } = await import("./meta-ads.server");
-  const { getInstagramTopContent } = await import("./instagram.server");
-  const { getActiveShopifyPromotions, getShopifyStoreUrl } = await import("./shopify.server");
+  const signals = await gatherWeeklySignals(input.startDate);
 
-  const [adsRes, igRes, promoRes, storeUrl] = await Promise.all([
-    getMetaAdsCreatives("last_30d").catch(() => ({ success: false as const, error: "" })),
-    getInstagramTopContent("yesterday").catch(() => ({ success: false as const, error: "" })),
-    getActiveShopifyPromotions().catch(() => ({ success: false as const, error: "" })),
-    getShopifyStoreUrl().catch(() => null),
-  ]);
-
-  // Antes só usava o anúncio de melhor ROAS (1 produto só) — todo o lote acabava girando em torno
-  // dele, só com ângulo diferente. Agora pega até 3 produtos distintos (deduplicados pelo nome
-  // limpo, pra duas variantes do mesmo anúncio não contarem como produtos diferentes) e distribui
-  // um por mensagem via pickProductSlots, incluindo slots "sem produto específico" de propósito.
-  const adProducts: AdProduct[] = [];
-  if (adsRes.success) {
-    const seenNames = new Set<string>();
-    const ranked = [...adsRes.result.creatives].filter((c) => c.roas > 0 && c.purchases > 0).sort((a, b) => b.roas - a.roas);
-    for (const c of ranked) {
-      const clean = cleanAdName(c.name);
-      if (seenNames.has(clean)) continue;
-      seenNames.add(clean);
-      adProducts.push({ name: c.name, cleanName: clean, thumbnailUrl: c.thumbnailUrl, roas: c.roas, ctrLink: c.ctrLink, cpa: c.cpa });
-      if (adProducts.length >= 3) break;
-    }
+  const hasAnySignal = !!(signals.topSeller1 || signals.topSeller2 || signals.topVisited || signals.topPost1 || signals.topPost2 || signals.topReel);
+  const hasCouponDay = kinds.includes("coupon");
+  if (!hasAnySignal && !hasCouponDay) {
+    return { success: false, error: "Nenhum produto vendido, produto acessado ou post do Instagram disponível na semana anterior pra basear o conteúdo." };
   }
 
-  const topPostYesterday = igRes.success && igRes.media.length > 0
-    ? [...igRes.media].sort((a, b) => b.totalInteractions - a.totalInteractions).slice(0, 1).map((m) => ({
-        caption: m.caption,
-        thumbnailUrl: m.thumbnailUrl,
-        permalink: m.permalink,
-        reach: m.reach,
-        totalInteractions: m.totalInteractions,
-      }))[0]!
-    : null;
-
-  const promotions = promoRes.success ? promoRes.promotions : [];
+  // Monta os slots finais dia a dia — o cupom é criado aqui (precisa da scheduledDate exata pra
+  // saber a validade). Se a Shopify falhar, o dia cai pra uma das 6 fontes normais em vez de
+  // travar o lote inteiro.
+  const slots: ContentSlot[] = [];
+  for (let i = 0; i < count; i++) {
+    if (kinds[i] === "coupon") {
+      const { createBatchCoupon } = await import("./ai-coupons.server");
+      const couponRes = await createBatchCoupon({ scheduledDate: scheduledDates[i]!, batchId });
+      if (couponRes.success) {
+        const expiresAtLabel = new Date(couponRes.coupon.endsAt).toLocaleString("pt-BR", {
+          timeZone: TZ,
+          day: "2-digit",
+          month: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        slots.push({
+          kind: "coupon",
+          code: couponRes.coupon.code,
+          percentageLabel: `${Math.round(couponRes.coupon.percentage * 100)}%`,
+          expiresAtLabel,
+        });
+      } else {
+        console.error(`generateAiContentBatch: falha ao criar cupom Shopify (${couponRes.error}), caindo pra fonte alternativa no dia ${scheduledDates[i]}`);
+        const fallback = NON_COUPON_KINDS.map((k) => slotForKind(k, signals)).find((s) => s !== null) ?? null;
+        slots.push(fallback);
+      }
+    } else {
+      slots.push(slotForKind(kinds[i] as NonCouponSlotKind, signals));
+    }
+  }
 
   const since = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
   const { data: recent } = await (supabaseAdmin.from("ai_content_queue" as any) as any)
@@ -317,46 +446,25 @@ export async function generateAiContentBatch(input: {
     .limit(20);
   const recentTexts = ((recent ?? []) as any[]).map((r) => r.content_text as string).slice(0, 10);
 
-  if (adProducts.length === 0 && !topPostYesterday && promotions.length === 0) {
-    return { success: false, error: "Nenhum anúncio, post do Instagram de ontem ou promoção ativa disponível pra basear o conteúdo." };
-  }
-
-  const productSlots = pickProductSlots(count, adProducts);
-
-  let batchResult: { items: DraftItem[]; productDataUriByName: Map<string, string>; postDataUri: string | null };
+  let batchResult: { items: DraftItem[]; slotImageDataUris: (string | null)[] };
   try {
-    batchResult = await callOpenAiBatch(apiKey, { adProducts, productSlots, topPostYesterday, promotions, storeUrl, playbook, recentTexts }, count);
+    batchResult = await callOpenAiBatch(apiKey, { slots, playbook, recentTexts }, count);
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Falha ao gerar o lote com a OpenAI." };
   }
 
   const { uploadEnvioMedia } = await import("./envio-messages.server");
-  const batchId = crypto.randomUUID();
-  const [startYear, startMonth, startDay] = input.startDate.split("-").map(Number) as [number, number, number];
   const items: ContentQueueItem[] = [];
 
   for (let i = 0; i < batchResult.items.length; i++) {
     const draft = batchResult.items[i]!;
-    const assignedProduct = productSlots[i] ?? null;
+    const slot = slots[i] ?? null;
 
-    // Rede de segurança: mesmo com a instrução no prompt, se o texto ainda vier com o nome
-    // interno cru de algum anúncio (ex: "Conjunto LUMIM | LTV"), troca pelo nome limpo.
-    for (const p of adProducts) {
-      if (draft.message_text.includes(p.name)) {
-        draft.message_text = draft.message_text.split(p.name).join(p.cleanName);
-      }
-    }
-
-    // A imagem do produto é resolvida pelo produto ATRIBUÍDO a essa mensagem (pickProductSlots),
-    // não por uma escolha livre da IA — garante que a foto batha com o que a mensagem descreve.
-    const assignedProductDataUri = assignedProduct ? batchResult.productDataUriByName.get(assignedProduct.name) : undefined;
-
+    const slotDataUri = batchResult.slotImageDataUris[i];
     let contentImageUrl: string | null = null;
     try {
-      if (draft.use_image === "ad" && assignedProductDataUri) {
-        contentImageUrl = (await uploadEnvioMedia({ fileName: `ai-batch-${Date.now()}-${i}.jpg`, base64Data: dataUriToBase64(assignedProductDataUri), contentType: dataUriContentType(assignedProductDataUri) })).url;
-      } else if (draft.use_image === "post" && batchResult.postDataUri) {
-        contentImageUrl = (await uploadEnvioMedia({ fileName: `ai-batch-${Date.now()}-${i}.jpg`, base64Data: dataUriToBase64(batchResult.postDataUri), contentType: dataUriContentType(batchResult.postDataUri) })).url;
+      if ((draft.use_image === "product" || draft.use_image === "post") && slotDataUri) {
+        contentImageUrl = (await uploadEnvioMedia({ fileName: `ai-batch-${Date.now()}-${i}.jpg`, base64Data: dataUriToBase64(slotDataUri), contentType: dataUriContentType(slotDataUri) })).url;
       } else if (draft.use_image === "generate" && draft.image_prompt) {
         const b64 = await generateImageBase64(apiKey, draft.image_prompt);
         contentImageUrl = (await uploadEnvioMedia({ fileName: `ai-batch-${Date.now()}-${i}.png`, base64Data: b64, contentType: "image/png" })).url;
@@ -367,16 +475,14 @@ export async function generateAiContentBatch(input: {
 
     let linkType: "instagram" | "site" | "none" = draft.link_type;
     let linkUrl: string | null = null;
-    if (linkType === "instagram") {
-      linkUrl = topPostYesterday?.permalink ?? null;
-      if (!linkUrl) linkType = "none";
-    } else if (linkType === "site") {
-      linkUrl = storeUrl;
-      if (!linkUrl) linkType = "none";
+    if (linkType === "instagram" && slot && (slot.kind === "top_post_1" || slot.kind === "top_post_2" || slot.kind === "top_reel")) {
+      linkUrl = slot.permalink;
+    } else if (linkType === "site" && slot && (slot.kind === "top_seller_1" || slot.kind === "top_seller_2" || slot.kind === "top_visited")) {
+      linkUrl = slot.productUrl;
     }
+    if (!linkUrl) linkType = "none";
 
-    const scheduledDate = new Date(startYear, startMonth - 1, startDay + i);
-    const scheduledDateStr = `${scheduledDate.getFullYear()}-${String(scheduledDate.getMonth() + 1).padStart(2, "0")}-${String(scheduledDate.getDate()).padStart(2, "0")}`;
+    const scheduledDateStr = scheduledDates[i]!;
 
     const { data: inserted, error } = await (supabaseAdmin.from("ai_content_queue" as any) as any)
       .insert({
@@ -410,6 +516,11 @@ export async function generateAiContentBatch(input: {
         .select("*")
         .single();
       if (updated) row = updated;
+    }
+
+    if (slot?.kind === "coupon") {
+      const { associateCouponWithContentItem } = await import("./ai-coupons.server");
+      await associateCouponWithContentItem(batchId, scheduledDateStr, row.id).catch((e) => console.error("generateAiContentBatch: falha ao associar cupom ao item de fila:", e));
     }
 
     items.push(mapRow(row));

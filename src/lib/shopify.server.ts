@@ -166,6 +166,8 @@ export const ORDERS_QUERY = `
                 quantity
                 variantTitle
                 sku
+                product { id }
+                variant { id }
                 discountedUnitPriceSet { presentmentMoney { amount } }
                 totalDiscountSet { presentmentMoney { amount } }
               }
@@ -311,5 +313,137 @@ export async function getShopifyStoreUrl(): Promise<string | null> {
     return `https://${domain}`;
   } catch {
     return null;
+  }
+}
+
+const PRODUCT_DETAIL_FIELDS = `
+  id
+  handle
+  title
+  description
+  onlineStorePreviewUrl
+  featuredImage { url }
+`;
+
+export type ShopifyProductDetail = {
+  id: string;
+  handle: string;
+  title: string;
+  description: string | null;
+  featuredImageUrl: string | null;
+  productUrl: string | null;
+};
+
+function mapProductNode(node: any, storeUrl: string | null): ShopifyProductDetail | null {
+  if (!node?.id) return null;
+  return {
+    id: node.id,
+    handle: node.handle,
+    title: node.title,
+    description: node.description || null,
+    featuredImageUrl: node.featuredImage?.url ?? null,
+    productUrl: node.onlineStorePreviewUrl ?? (storeUrl && node.handle ? `${storeUrl}/products/${node.handle}` : null),
+  };
+}
+
+/** Resolve 1 produto pelo GID completo (ex: vindo de shopify_order_items.product_id). */
+export async function getShopifyProductById(productGid: string): Promise<ShopifyProductDetail | null> {
+  try {
+    const [data, storeUrl] = await Promise.all([
+      shopifyGraphQL(`query getProduct($id: ID!) { product(id: $id) { ${PRODUCT_DETAIL_FIELDS} } }`, { id: productGid }),
+      getShopifyStoreUrl(),
+    ]);
+    return mapProductNode(data?.product, storeUrl);
+  } catch (error) {
+    console.error("getShopifyProductById falhou:", error);
+    return null;
+  }
+}
+
+/** Resolve 1 produto pelo handle (ex: extraído do landing_page_path do ShopifyQL). */
+export async function getShopifyProductByHandle(handle: string): Promise<ShopifyProductDetail | null> {
+  try {
+    const [data, storeUrl] = await Promise.all([
+      shopifyGraphQL(`query getProductByHandle($handle: String!) { productByHandle(handle: $handle) { ${PRODUCT_DETAIL_FIELDS} } }`, { handle }),
+      getShopifyStoreUrl(),
+    ]);
+    return mapProductNode(data?.productByHandle, storeUrl);
+  } catch (error) {
+    console.error("getShopifyProductByHandle falhou:", error);
+    return null;
+  }
+}
+
+/** Resolve vários produtos de uma vez via `nodes(ids: [...])` — evita N chamadas sequenciais
+ *  ao montar os slots de "mais vendido" do lote/dashboard. */
+export async function getShopifyProductsByIds(productGids: string[]): Promise<Map<string, ShopifyProductDetail>> {
+  const map = new Map<string, ShopifyProductDetail>();
+  if (productGids.length === 0) return map;
+  try {
+    const [data, storeUrl] = await Promise.all([
+      shopifyGraphQL(
+        `query getProducts($ids: [ID!]!) { nodes(ids: $ids) { ... on Product { ${PRODUCT_DETAIL_FIELDS} } } }`,
+        { ids: productGids },
+      ),
+      getShopifyStoreUrl(),
+    ]);
+    for (const node of (data?.nodes ?? []) as any[]) {
+      const detail = mapProductNode(node, storeUrl);
+      if (detail) map.set(detail.id, detail);
+    }
+  } catch (error) {
+    console.error("getShopifyProductsByIds falhou:", error);
+  }
+  return map;
+}
+
+const DISCOUNT_CODE_BASIC_CREATE_MUTATION = `
+  mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
+    discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
+      codeDiscountNode { id }
+      userErrors { field message code }
+    }
+  }
+`;
+
+export type DiscountCodeBasicCreateInput = {
+  title: string;
+  code: string;
+  percentageFraction: number; // 0.05 a 0.10
+  startsAt: string; // ISO
+  endsAt: string; // ISO
+};
+
+/** Cria um cupom de desconto percentual de verdade na Shopify — sem restrição técnica de
+ *  cliente (regra de negócio é só copy, "exclusivo Grupo VIP" fica no texto da mensagem, não
+ *  aqui), não combinável com desconto de produto em promoção nem com desconto progressivo
+ *  (order discount), válido até `endsAt`. Nunca lança — devolve {success:false} pro caller
+ *  decidir o fallback (não travar o lote inteiro por causa da Shopify). */
+export async function createShopifyDiscountCodeBasic(
+  input: DiscountCodeBasicCreateInput,
+): Promise<{ success: true; discountId: string } | { success: false; error: string }> {
+  try {
+    const data = await shopifyGraphQL(DISCOUNT_CODE_BASIC_CREATE_MUTATION, {
+      basicCodeDiscount: {
+        title: input.title,
+        code: input.code,
+        startsAt: input.startsAt,
+        endsAt: input.endsAt,
+        customerSelection: { all: true },
+        customerGets: { value: { percentage: input.percentageFraction }, items: { all: true } },
+        appliesOncePerCustomer: false,
+        combinesWith: { orderDiscounts: false, productDiscounts: false, shippingDiscounts: true },
+      },
+    });
+    const result = data?.discountCodeBasicCreate;
+    const userErrors = result?.userErrors ?? [];
+    if (userErrors.length > 0) {
+      return { success: false, error: userErrors.map((e: any) => e.message).join("; ") };
+    }
+    const discountId = result?.codeDiscountNode?.id;
+    if (!discountId) return { success: false, error: "Shopify não retornou o ID do cupom criado." };
+    return { success: true, discountId };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao criar cupom na Shopify." };
   }
 }

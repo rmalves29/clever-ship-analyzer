@@ -43,9 +43,11 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
     const startISO = period === "tudo" ? start.toISOString() : fromZonedTime(start, TZ).toISOString();
     const endISO = fromZonedTime(end, TZ).toISOString();
 
+    const { getBestSellingProducts } = await import("./shopify-products.server");
+
     // As 4 buscas abaixo são independentes entre si (nenhuma usa o resultado da outra),
     // então rodam em paralelo em vez de em série — eram 4 idas-e-voltas sequenciais ao banco.
-    const [{ data: orders }, { data: fulfillments }, { data: allOrders }, { data: landingData }] = await Promise.all([
+    const [{ data: orders }, { data: fulfillments }, { data: allOrders }, { data: landingData }, bestSellers] = await Promise.all([
       supabaseAdmin
         .from("shopify_orders")
         .select("*")
@@ -69,6 +71,7 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
         .gte("processed_at", startISO)
         .lte("processed_at", endISO)
         .not("landing_site", "is", null),
+      getBestSellingProducts({ startISO, endISO, limit: 5 }).catch(() => []),
     ]);
 
     if (!orders) throw new Error("Falha ao ler pedidos");
@@ -340,6 +343,12 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
       enviosPorDia,
       cohortData,
       sessoes: topLandings,
+      produtosMaisVendidos: bestSellers.map((p) => ({
+        productId: p.productId,
+        nome: p.title,
+        quantidade: p.quantity,
+        faturamento: p.revenue,
+      })),
     };
 }
 

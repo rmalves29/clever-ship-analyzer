@@ -14,6 +14,167 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_content_queue: {
+        Row: {
+          batch_id: string
+          campaign_id: string
+          campaign_name: string
+          content_image_url: string | null
+          content_text: string
+          created_at: string
+          envio_message_id: string | null
+          id: string
+          link_type: string | null
+          link_url: string | null
+          scheduled_date: string
+          source_summary: string
+          status: string
+          time_of_day: string
+          updated_at: string
+        }
+        Insert: {
+          batch_id: string
+          campaign_id: string
+          campaign_name: string
+          content_image_url?: string | null
+          content_text: string
+          created_at?: string
+          envio_message_id?: string | null
+          id?: string
+          link_type?: string | null
+          link_url?: string | null
+          scheduled_date: string
+          source_summary: string
+          status?: string
+          time_of_day: string
+          updated_at?: string
+        }
+        Update: {
+          batch_id?: string
+          campaign_id?: string
+          campaign_name?: string
+          content_image_url?: string | null
+          content_text?: string
+          created_at?: string
+          envio_message_id?: string | null
+          id?: string
+          link_type?: string | null
+          link_url?: string | null
+          scheduled_date?: string
+          source_summary?: string
+          status?: string
+          time_of_day?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      ai_coupons: {
+        Row: {
+          batch_id: string
+          code: string
+          content_queue_item_id: string | null
+          created_at: string
+          ends_at: string
+          error: string | null
+          id: string
+          percentage: number
+          scheduled_date: string
+          shopify_discount_id: string | null
+          starts_at: string
+          status: string
+        }
+        Insert: {
+          batch_id: string
+          code: string
+          content_queue_item_id?: string | null
+          created_at?: string
+          ends_at: string
+          error?: string | null
+          id?: string
+          percentage: number
+          scheduled_date: string
+          shopify_discount_id?: string | null
+          starts_at: string
+          status?: string
+        }
+        Update: {
+          batch_id?: string
+          code?: string
+          content_queue_item_id?: string | null
+          created_at?: string
+          ends_at?: string
+          error?: string | null
+          id?: string
+          percentage?: number
+          scheduled_date?: string
+          shopify_discount_id?: string | null
+          starts_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_coupons_content_queue_item_id_fkey"
+            columns: ["content_queue_item_id"]
+            isOneToOne: false
+            referencedRelation: "ai_content_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_send_routines: {
+        Row: {
+          campaign_id: string
+          campaign_name: string
+          content_image_url: string | null
+          content_text: string
+          created_at: string
+          day_of_month: number | null
+          day_of_week: number | null
+          id: string
+          last_run_at: string | null
+          next_run_at: string
+          recurrence: string
+          source_summary: string
+          status: string
+          time_of_day: string
+          updated_at: string
+        }
+        Insert: {
+          campaign_id: string
+          campaign_name: string
+          content_image_url?: string | null
+          content_text: string
+          created_at?: string
+          day_of_month?: number | null
+          day_of_week?: number | null
+          id?: string
+          last_run_at?: string | null
+          next_run_at: string
+          recurrence: string
+          source_summary: string
+          status?: string
+          time_of_day: string
+          updated_at?: string
+        }
+        Update: {
+          campaign_id?: string
+          campaign_name?: string
+          content_image_url?: string | null
+          content_text?: string
+          created_at?: string
+          day_of_month?: number | null
+          day_of_week?: number | null
+          id?: string
+          last_run_at?: string | null
+          next_run_at?: string
+          recurrence?: string
+          source_summary?: string
+          status?: string
+          time_of_day?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       automation_tick_runs: {
         Row: {
           automations_processed: number
@@ -153,6 +314,530 @@ export type Database = {
           nome?: string
         }
         Relationships: []
+      }
+      envio_auto_messages: {
+        Row: {
+          campaign_id: string | null
+          content_text: string | null
+          content_type: string
+          created_at: string | null
+          event_type: string
+          group_id: string | null
+          id: string
+          is_active: boolean | null
+          media_url: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          campaign_id?: string | null
+          content_text?: string | null
+          content_type?: string
+          created_at?: string | null
+          event_type: string
+          group_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          media_url?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          campaign_id?: string | null
+          content_text?: string | null
+          content_type?: string
+          created_at?: string | null
+          event_type?: string
+          group_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          media_url?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "envio_auto_messages_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "envio_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "envio_auto_messages_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "envio_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      envio_campaign_groups: {
+        Row: {
+          campaign_id: string
+          created_at: string | null
+          group_id: string
+          id: string
+          sort_order: number | null
+          weight_percent: number | null
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string | null
+          group_id: string
+          id?: string
+          sort_order?: number | null
+          weight_percent?: number | null
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string | null
+          group_id?: string
+          id?: string
+          sort_order?: number | null
+          weight_percent?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "envio_campaign_groups_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "envio_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "envio_campaign_groups_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "envio_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      envio_campaigns: {
+        Row: {
+          auto_spawn_enabled: boolean
+          created_at: string | null
+          description: string | null
+          facebook_pixel_id: string | null
+          group_template: Json | null
+          id: string
+          is_active: boolean | null
+          is_entry_open: boolean | null
+          last_spawn_at: string | null
+          name: string
+          slug: string
+          spawn_margin: number
+          updated_at: string | null
+        }
+        Insert: {
+          auto_spawn_enabled?: boolean
+          created_at?: string | null
+          description?: string | null
+          facebook_pixel_id?: string | null
+          group_template?: Json | null
+          id?: string
+          is_active?: boolean | null
+          is_entry_open?: boolean | null
+          last_spawn_at?: string | null
+          name: string
+          slug: string
+          spawn_margin?: number
+          updated_at?: string | null
+        }
+        Update: {
+          auto_spawn_enabled?: boolean
+          created_at?: string | null
+          description?: string | null
+          facebook_pixel_id?: string | null
+          group_template?: Json | null
+          id?: string
+          is_active?: boolean | null
+          is_entry_open?: boolean | null
+          last_spawn_at?: string | null
+          name?: string
+          slug?: string
+          spawn_margin?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      envio_group_events: {
+        Row: {
+          created_at: string | null
+          event_type: string
+          group_id: string | null
+          group_jid: string | null
+          id: string
+          phone: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          event_type: string
+          group_id?: string | null
+          group_jid?: string | null
+          id?: string
+          phone?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          event_type?: string
+          group_id?: string | null
+          group_jid?: string | null
+          id?: string
+          phone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "envio_group_events_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "envio_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      envio_group_events_backups: {
+        Row: {
+          created_at: string | null
+          deleted_rows: number | null
+          drive_file_id: string | null
+          drive_file_name: string | null
+          drive_file_size: number | null
+          drive_file_url: string | null
+          dry_run: boolean | null
+          duration_ms: number | null
+          id: string
+          rows_exported: number | null
+          success: boolean | null
+        }
+        Insert: {
+          created_at?: string | null
+          deleted_rows?: number | null
+          drive_file_id?: string | null
+          drive_file_name?: string | null
+          drive_file_size?: number | null
+          drive_file_url?: string | null
+          dry_run?: boolean | null
+          duration_ms?: number | null
+          id?: string
+          rows_exported?: number | null
+          success?: boolean | null
+        }
+        Update: {
+          created_at?: string | null
+          deleted_rows?: number | null
+          drive_file_id?: string | null
+          drive_file_name?: string | null
+          drive_file_size?: number | null
+          drive_file_url?: string | null
+          dry_run?: boolean | null
+          duration_ms?: number | null
+          id?: string
+          rows_exported?: number | null
+          success?: boolean | null
+        }
+        Relationships: []
+      }
+      envio_groups: {
+        Row: {
+          created_at: string | null
+          group_jid: string
+          group_name: string
+          id: string
+          invite_link: string | null
+          is_active: boolean | null
+          is_admin: boolean
+          is_entry_open: boolean | null
+          max_participants: number | null
+          participant_count: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          group_jid: string
+          group_name: string
+          id?: string
+          invite_link?: string | null
+          is_active?: boolean | null
+          is_admin?: boolean
+          is_entry_open?: boolean | null
+          max_participants?: number | null
+          participant_count?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          group_jid?: string
+          group_name?: string
+          id?: string
+          invite_link?: string | null
+          is_active?: boolean | null
+          is_admin?: boolean
+          is_entry_open?: boolean | null
+          max_participants?: number | null
+          participant_count?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      envio_link_clicks: {
+        Row: {
+          campaign_id: string
+          clicked_at: string | null
+          envio_message_id: string | null
+          id: string
+          ip_hash: string | null
+          redirected_group_id: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          campaign_id: string
+          clicked_at?: string | null
+          envio_message_id?: string | null
+          id?: string
+          ip_hash?: string | null
+          redirected_group_id?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          campaign_id?: string
+          clicked_at?: string | null
+          envio_message_id?: string | null
+          id?: string
+          ip_hash?: string | null
+          redirected_group_id?: string | null
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
+      envio_message_feedback: {
+        Row: {
+          created_at: string
+          envio_message_id: string
+          feedback: string
+          id: string
+          note: string | null
+        }
+        Insert: {
+          created_at?: string
+          envio_message_id: string
+          feedback: string
+          id?: string
+          note?: string | null
+        }
+        Update: {
+          created_at?: string
+          envio_message_id?: string
+          feedback?: string
+          id?: string
+          note?: string | null
+        }
+        Relationships: []
+      }
+      envio_message_replies: {
+        Row: {
+          created_at: string
+          envio_message_id: string | null
+          group_id: string | null
+          id: string
+          participant_name: string | null
+          participant_phone: string
+          quoted_message_id: string
+          replied_at: string
+          reply_text: string | null
+        }
+        Insert: {
+          created_at?: string
+          envio_message_id?: string | null
+          group_id?: string | null
+          id?: string
+          participant_name?: string | null
+          participant_phone: string
+          quoted_message_id: string
+          replied_at?: string
+          reply_text?: string | null
+        }
+        Update: {
+          created_at?: string
+          envio_message_id?: string | null
+          group_id?: string | null
+          id?: string
+          participant_name?: string | null
+          participant_phone?: string
+          quoted_message_id?: string
+          replied_at?: string
+          reply_text?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "envio_message_replies_envio_message_id_fkey"
+            columns: ["envio_message_id"]
+            isOneToOne: false
+            referencedRelation: "envio_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "envio_message_replies_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "envio_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      envio_messages: {
+        Row: {
+          campaign_id: string | null
+          content_text: string | null
+          content_type: string
+          created_at: string | null
+          group_id: string | null
+          id: string
+          media_url: string | null
+          scheduled_at: string | null
+          sent_at: string | null
+          status: string
+          updated_at: string | null
+          wa_message_id: string | null
+        }
+        Insert: {
+          campaign_id?: string | null
+          content_text?: string | null
+          content_type?: string
+          created_at?: string | null
+          group_id?: string | null
+          id?: string
+          media_url?: string | null
+          scheduled_at?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string | null
+          wa_message_id?: string | null
+        }
+        Update: {
+          campaign_id?: string | null
+          content_text?: string | null
+          content_type?: string
+          created_at?: string | null
+          group_id?: string | null
+          id?: string
+          media_url?: string | null
+          scheduled_at?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string | null
+          wa_message_id?: string | null
+        }
+        Relationships: []
+      }
+      envio_return_automations: {
+        Row: {
+          campaign_ids: string[]
+          cooldown_hours: number
+          coupon_code: string
+          created_at: string
+          delay_minutes: number
+          group_ids: string[]
+          id: string
+          invite_message: string
+          is_active: boolean
+          name: string
+          reward_message: string
+          updated_at: string
+          validity_days: number
+        }
+        Insert: {
+          campaign_ids?: string[]
+          cooldown_hours?: number
+          coupon_code: string
+          created_at?: string
+          delay_minutes?: number
+          group_ids?: string[]
+          id?: string
+          invite_message: string
+          is_active?: boolean
+          name: string
+          reward_message: string
+          updated_at?: string
+          validity_days?: number
+        }
+        Update: {
+          campaign_ids?: string[]
+          cooldown_hours?: number
+          coupon_code?: string
+          created_at?: string
+          delay_minutes?: number
+          group_ids?: string[]
+          id?: string
+          invite_message?: string
+          is_active?: boolean
+          name?: string
+          reward_message?: string
+          updated_at?: string
+          validity_days?: number
+        }
+        Relationships: []
+      }
+      envio_return_pending: {
+        Row: {
+          automation_id: string
+          created_at: string
+          error_message: string | null
+          expires_at: string
+          group_id: string | null
+          group_jid: string
+          id: string
+          invite_send_at: string
+          invite_sent_at: string | null
+          phone: string
+          reward_sent_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          automation_id: string
+          created_at?: string
+          error_message?: string | null
+          expires_at: string
+          group_id?: string | null
+          group_jid: string
+          id?: string
+          invite_send_at: string
+          invite_sent_at?: string | null
+          phone: string
+          reward_sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          automation_id?: string
+          created_at?: string
+          error_message?: string | null
+          expires_at?: string
+          group_id?: string | null
+          group_jid?: string
+          id?: string
+          invite_send_at?: string
+          invite_sent_at?: string | null
+          phone?: string
+          reward_sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "envio_return_pending_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "envio_return_automations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "envio_return_pending_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "envio_groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       flow_automations: {
         Row: {
@@ -695,6 +1380,8 @@ export type Database = {
       }
       store_settings: {
         Row: {
+          ai_marketing_playbook: string | null
+          ai_marketing_playbook_updated_at: string | null
           automation_tick_secret: string | null
           created_at: string
           events_latest_analysis: Json | null
@@ -716,6 +1403,8 @@ export type Database = {
           latest_ai_analysis: Json | null
           latest_ai_analysis_at: string | null
           latest_ai_analysis_period: string | null
+          live_launchpad_supabase_service_role_key: string | null
+          live_launchpad_supabase_url: string | null
           meta_ads_access_token: string | null
           meta_ads_account_id: string | null
           meta_ads_connected_at: string | null
@@ -729,6 +1418,11 @@ export type Database = {
           shopify_store_domain: string
           sync_status: string | null
           total_orders_imported: number | null
+          uazapi_admin_token: string | null
+          uazapi_connected_phone: string | null
+          uazapi_is_active: boolean
+          uazapi_token: string | null
+          uazapi_url: string | null
           updated_at: string
           user_id: string | null
           whatsapp_cost_marketing: number | null
@@ -744,6 +1438,8 @@ export type Database = {
           whatsapp_meta_waba_id: string | null
         }
         Insert: {
+          ai_marketing_playbook?: string | null
+          ai_marketing_playbook_updated_at?: string | null
           automation_tick_secret?: string | null
           created_at?: string
           events_latest_analysis?: Json | null
@@ -765,6 +1461,8 @@ export type Database = {
           latest_ai_analysis?: Json | null
           latest_ai_analysis_at?: string | null
           latest_ai_analysis_period?: string | null
+          live_launchpad_supabase_service_role_key?: string | null
+          live_launchpad_supabase_url?: string | null
           meta_ads_access_token?: string | null
           meta_ads_account_id?: string | null
           meta_ads_connected_at?: string | null
@@ -778,6 +1476,11 @@ export type Database = {
           shopify_store_domain: string
           sync_status?: string | null
           total_orders_imported?: number | null
+          uazapi_admin_token?: string | null
+          uazapi_connected_phone?: string | null
+          uazapi_is_active?: boolean
+          uazapi_token?: string | null
+          uazapi_url?: string | null
           updated_at?: string
           user_id?: string | null
           whatsapp_cost_marketing?: number | null
@@ -793,6 +1496,8 @@ export type Database = {
           whatsapp_meta_waba_id?: string | null
         }
         Update: {
+          ai_marketing_playbook?: string | null
+          ai_marketing_playbook_updated_at?: string | null
           automation_tick_secret?: string | null
           created_at?: string
           events_latest_analysis?: Json | null
@@ -814,6 +1519,8 @@ export type Database = {
           latest_ai_analysis?: Json | null
           latest_ai_analysis_at?: string | null
           latest_ai_analysis_period?: string | null
+          live_launchpad_supabase_service_role_key?: string | null
+          live_launchpad_supabase_url?: string | null
           meta_ads_access_token?: string | null
           meta_ads_account_id?: string | null
           meta_ads_connected_at?: string | null
@@ -827,6 +1534,11 @@ export type Database = {
           shopify_store_domain?: string
           sync_status?: string | null
           total_orders_imported?: number | null
+          uazapi_admin_token?: string | null
+          uazapi_connected_phone?: string | null
+          uazapi_is_active?: boolean
+          uazapi_token?: string | null
+          uazapi_url?: string | null
           updated_at?: string
           user_id?: string | null
           whatsapp_cost_marketing?: number | null

@@ -183,7 +183,7 @@ export function WhatsappSendDialog({
                 <h2 className="text-2xl font-bold tracking-tight">{steps[step-1]}</h2>
                 <p className="text-sm text-muted-foreground mt-1">
                   {step === 1 && "Defina o nome e a conta de envio para identificar sua campanha."}
-                  {step === 2 && "Selecione quem deve receber as mensagens desta campanha."}
+                  {step === 2 && "fui criar uma campanha via api do whatsapp no sistema, qdo selecionei o segmento SEGMENTO TESTE mostrou 0 contatos, mas em segmentos mostra que ele tem 2 contatos"}
                   {step === 3 && "Configure o conteúdo que seus clientes irão receber."}
                   {step === 4 && "Escolha o melhor momento para realizar os disparos."}
                   {step === 5 && "Confira todos os detalhes antes de iniciar o envio."}

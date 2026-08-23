@@ -369,8 +369,8 @@ async function sendTemplateMessage(params: {
 
   const json: any = await res.json().catch(() => ({}));
   if (!res.ok) {
-    console.error("[sendTemplateMessage] Error", { status: res.status, body: json });
-    return { ok: false as const, error: json?.error?.message ?? `Meta respondeu ${res.status}` };
+    console.error(`[sendTemplateMessage] Falha na API da Meta (To: ${params.to}, Template: ${params.templateName}):`, { status: res.status, body: json });
+    return { ok: false as const, error: json?.error?.error_user_msg || json?.error?.message || `Erro Meta: ${res.status}` };
   }
   const waMessageId: string | undefined = json?.messages?.[0]?.id;
   console.log("[sendTemplateMessage] Success", { waMessageId, to: params.to });

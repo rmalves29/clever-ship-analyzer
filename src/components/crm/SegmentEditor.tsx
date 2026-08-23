@@ -79,7 +79,7 @@ const CATEGORIES = [
       { id: "data_pedido_hoje", label: "Compra Realizada Hoje" },
       { id: "data_pedido_24h", label: "Compra Realizada (Últimas 24h)" },
       { id: "data_envio_hoje", label: "Pedido Enviado Hoje" },
-      { id: "acesso_sem_compra", label: "CRM/contatos/segmentos eu consigo criar um segmento para puxar os clientes que abandonaram checkouts?" },
+      { id: "checkout_abandonado", label: "Checkout Abandonado (CAR24)" },
     ]
   },
   {

@@ -220,6 +220,15 @@ export const getCustomersList = createServerFn({ method: "POST" })
             } else if (val === "sim") {
               query = query.eq("id", "00000000-0000-0000-0000-000000000000");
             }
+          } else if (field === "checkout_abandonado") {
+            if (val === "sim") {
+              const { data: abandonedCheckouts } = await supabaseAdmin
+                .from("shopify_abandoned_checkouts")
+                .select("customer_id");
+              const customerIds = Array.from(new Set(abandonedCheckouts?.map(o => String(o.customer_id)).filter(id => id && id !== 'null')));
+              if (customerIds.length > 0) query = query.in("id", customerIds);
+              else query = query.eq("id", "00000000-0000-0000-0000-000000000000");
+            }
           } else if (field === "acesso_sem_compra") {
             if (operator === "eq") {
               if (customersWithOrdersList.length > 0) {

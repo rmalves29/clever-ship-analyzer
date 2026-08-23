@@ -333,23 +333,23 @@ async function sendTemplateMessage(params: {
     });
   }
 
-  if (params.mediaId || params.mediaUrl) {
+  // Validação disruptiva de mídia: só inclui header se tiver ID ou URL absoluta válida (não placeholder)
+  const hasValidMedia = params.mediaId || (params.mediaUrl && /^https?:\/\//i.test(params.mediaUrl));
+
+  if (hasValidMedia) {
     const url = params.mediaUrl?.toLowerCase() || "";
-    const isVideo = url.includes('.mp4') || url.includes('video');
+    const isVideo = url.includes(".mp4") || url.includes("video");
     const mediaType = isVideo ? "video" : "image";
-    
-    // Só adiciona o componente de header se a URL ou ID for válida e não for uma string vazia/placeholder
-    if (params.mediaId || (params.mediaUrl && params.mediaUrl.startsWith('http'))) {
-      components.push({
-        type: "header",
-        parameters: [
-          {
-            type: mediaType,
-            [mediaType]: params.mediaId ? { id: params.mediaId } : { link: params.mediaUrl }
-          }
-        ]
-      });
-    }
+
+    components.push({
+      type: "header",
+      parameters: [
+        {
+          type: mediaType,
+          [mediaType]: params.mediaId ? { id: params.mediaId } : { link: params.mediaUrl },
+        },
+      ],
+    });
   }
 
   const res = await fetch(`https://graph.facebook.com/v20.0/${params.phoneNumberId}/messages`, {
@@ -575,8 +575,8 @@ export async function dispatchCampaign(campaignId: string, restrictToCustomerIds
       templateName: campaign.template_name,
       templateLanguage: campaign.template_language ?? settings.templateLanguage,
       bodyParams: resolvedParams,
-      // Passamos a URL do vídeo se for uma campanha de vídeo e o template suportar
-      mediaUrl: (c as any).video_url || undefined,
+      // Só passa mediaUrl se for uma URL real, não placeholder
+      mediaUrl: (c as any).video_url && /^https?:\/\//i.test((c as any).video_url) ? (c as any).video_url : undefined,
     });
 
     await supabaseAdmin.from("whatsapp_campaign_recipients").insert({

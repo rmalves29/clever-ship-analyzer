@@ -735,16 +735,32 @@ export async function getCalendarMonthData(year: number, month: number): Promise
 
   const dayKey = (iso: string) => new Date(iso).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
 
-  const { data: envioMsgs } = await (supabaseAdmin.from("envio_messages" as any) as any)
-    .select("sent_at")
-    .eq("status", "sent")
-    .gte("sent_at", fromISO)
-    .lte("sent_at", toISO);
+  // Conta tanto o que já foi enviado (por sent_at) quanto o que ainda está agendado/em fila
+  // (por scheduled_at) — senão os lotes gerados pela IA pra dias futuros somem do calendário até
+  // o cron realmente despachar, mesmo já aprovados e com data certa.
+  const [{ data: sentMsgs }, { data: scheduledMsgs }] = await Promise.all([
+    (supabaseAdmin.from("envio_messages" as any) as any)
+      .select("sent_at")
+      .eq("status", "sent")
+      .gte("sent_at", fromISO)
+      .lte("sent_at", toISO),
+    (supabaseAdmin.from("envio_messages" as any) as any)
+      .select("scheduled_at")
+      .in("status", ["pending", "sending"])
+      .gte("scheduled_at", fromISO)
+      .lte("scheduled_at", toISO),
+  ]);
   const envioByDay = new Map<string, number>();
-  for (const m of envioMsgs ?? []) {
+  for (const m of sentMsgs ?? []) {
     const sentAt = (m as any).sent_at;
     if (!sentAt) continue;
     const key = dayKey(sentAt);
+    envioByDay.set(key, (envioByDay.get(key) ?? 0) + 1);
+  }
+  for (const m of scheduledMsgs ?? []) {
+    const scheduledAt = (m as any).scheduled_at;
+    if (!scheduledAt) continue;
+    const key = dayKey(scheduledAt);
     envioByDay.set(key, (envioByDay.get(key) ?? 0) + 1);
   }
 

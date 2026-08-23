@@ -231,6 +231,35 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
             const value = cond.value;
             const target = String(value || "").toLowerCase();
 
+            if (field === "tags_custom") {
+              const tagsCustom = ((c as any).tags_custom ?? []) as string[];
+              if (operator === "contains") return tagsCustom.includes(value);
+              if (operator === "not_contains") return !tagsCustom.includes(value);
+              if (operator === "eq") return tagsCustom.length === 1 && tagsCustom[0] === value;
+              return false;
+            }
+
+            if (field === "customer_tag") {
+              const tags = ((c as any).tags ?? []) as string[];
+              if (operator === "contains") return tags.includes(value);
+              if (operator === "not_contains") return !tags.includes(value);
+              if (operator === "eq") return tags.length === 1 && tags[0] === value;
+              return false;
+            }
+
+            if (field === "checkout_abandonado") {
+              const tags = ((c as any).tags ?? []) as string[];
+              const isMatch = tags.includes("Carrinho Abandonado") || tags.includes("Checkout") || tags.includes("CAR24");
+              return value === "sim" ? (operator === "eq" ? isMatch : !isMatch) : true;
+            }
+
+            if (field === "data_pedido_hoje" || field === "data_pedido_24h" || field === "data_envio_hoje") {
+              // Estes campos dependem de subqueries complexas. No filter client-side, 
+              // vamos assumir falso para evitar processamento pesado aqui.
+              return false;
+            }
+
+
             if (field === "total_pedidos" || field === "recorrencia") {
               const numVal = Number(value);
               const orderCount = orders?.filter(o => o.customer_id === c.id).length || 0;

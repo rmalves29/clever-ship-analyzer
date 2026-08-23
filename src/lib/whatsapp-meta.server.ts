@@ -334,7 +334,18 @@ async function sendTemplateMessage(params: {
   }
 
   // Validação disruptiva de mídia: só inclui header se tiver ID ou URL absoluta válida (não placeholder)
-  const hasValidMedia = params.mediaId || (params.mediaUrl && /^https?:\/\//i.test(params.mediaUrl));
+  // Ignora explicitamente strings que parecem ser placeholders ou caminhos relativos
+  const isUrl = (s: string) => /^https?:\/\//i.test(s);
+  const isPlaceholder = (s: string) => 
+    s.includes("placeholder") || 
+    s.includes("default") || 
+    s.length < 10 || 
+    !s.includes(".");
+
+  const hasValidMedia = Boolean(
+    params.mediaId || 
+    (params.mediaUrl && isUrl(params.mediaUrl) && !isPlaceholder(params.mediaUrl))
+  );
 
   if (hasValidMedia) {
     const url = params.mediaUrl?.toLowerCase() || "";
@@ -576,7 +587,7 @@ export async function dispatchCampaign(campaignId: string, restrictToCustomerIds
       templateLanguage: campaign.template_language ?? settings.templateLanguage,
       bodyParams: resolvedParams,
       // Só passa mediaUrl se for uma URL real, não placeholder
-      mediaUrl: (c as any).video_url && /^https?:\/\//i.test((c as any).video_url) ? (c as any).video_url : undefined,
+      mediaUrl: (c as any).video_url && /^https?:\/\//i.test((c as any).video_url) && !(c as any).video_url.includes("placeholder") ? (c as any).video_url : undefined,
     });
 
     await supabaseAdmin.from("whatsapp_campaign_recipients").insert({

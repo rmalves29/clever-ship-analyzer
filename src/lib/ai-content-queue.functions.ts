@@ -53,6 +53,13 @@ export const rejectContentQueueItemFn = createServerFn({ method: "POST" })
     return rejectContentQueueItem(data.id);
   });
 
+export const rejectContentQueueBatchFn = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ batchId: z.string().min(1) }).parse(data))
+  .handler(async ({ data }) => {
+    const { rejectContentQueueBatch } = await import("./ai-content-queue.server");
+    return rejectContentQueueBatch(data.batchId);
+  });
+
 export const getAiContentPerformanceFn = createServerFn({ method: "GET" }).handler(async () => {
   const { getAiContentPerformance } = await import("./ai-content-queue.server");
   return getAiContentPerformance();

@@ -17,6 +17,7 @@ import {
   approveContentQueueItemFn,
   approveContentQueueBatchFn,
   rejectContentQueueItemFn,
+  rejectContentQueueBatchFn,
 } from "@/lib/ai-content-queue.functions";
 import { listEnvioCampaigns } from "@/lib/envio-campaigns.functions";
 import type { ContentQueueItem } from "@/lib/ai-content-queue.server";
@@ -124,7 +125,17 @@ export function AiBatchDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const runApprove = useServerFn(approveContentQueueItemFn);
   const runApproveBatch = useServerFn(approveContentQueueBatchFn);
   const runReject = useServerFn(rejectContentQueueItemFn);
+  const runRejectBatch = useServerFn(rejectContentQueueBatchFn);
   const runListCampaigns = useServerFn(listEnvioCampaigns);
+
+  // Sem isso, fechar o popup ou clicar em "Gerar outro lote" abandonava os itens em status
+  // 'review' pra sempre — nunca despachavam, mas continuavam entrando como "conteúdo recente"
+  // na próxima geração, o que contribuía pro lote seguinte sair parecido com o anterior.
+  const discardCurrentBatch = async () => {
+    if (batchId && items.some((i) => i.status === "review")) {
+      await runRejectBatch({ data: { batchId } }).catch(() => {});
+    }
+  };
 
   const { data: campaigns } = useQuery({ queryKey: ["envio-campaigns"], queryFn: () => runListCampaigns(), enabled: open });
 
@@ -211,7 +222,13 @@ export function AiBatchDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const reviewCount = items.filter((i) => i.status === "review").length;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) discardCurrentBatch();
+        onOpenChange(o);
+      }}
+    >
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -301,7 +318,7 @@ export function AiBatchDialog({ open, onOpenChange }: { open: boolean; onOpenCha
             </div>
 
             <div className="flex justify-end border-t border-border pt-4">
-              <Button variant="outline" onClick={() => setBatchId(null)}>
+              <Button variant="outline" onClick={async () => { await discardCurrentBatch(); setBatchId(null); setItems([]); }}>
                 Gerar outro lote
               </Button>
             </div>

@@ -60,6 +60,33 @@ type SignalsContext = {
   recentTexts: string[];
 };
 
+/** Deixar a diversidade só na mão da IA não é confiável — com os mesmos sinais de entrada
+ *  (mesmo anúncio, mesmo post, mesmas promoções), o modelo tende a convergir pra respostas
+ *  parecidas entre chamadas separadas, mesmo com temperature alta (reportado pelo usuário:
+ *  cancelar e gerar de novo voltava com as mesmas mensagens). Forçar um ângulo diferente e
+ *  sorteado por item, por chamada, garante diversidade mecânica em vez de só pedir por texto. */
+const ANGLE_POOL = [
+  "pergunta direta que gera curiosidade",
+  "urgência (tempo acabando, últimas unidades)",
+  "prova social (outras clientes comprando/amando)",
+  "bastidores (algo íntimo da loja/processo)",
+  "escassez (edição limitada, poucas peças)",
+  "benefício direto e prático pro dia a dia",
+  "storytelling curto (uma cena/situação)",
+  "convite pra interação (pergunta, enquete, peça opinião)",
+  "comparação antes/depois ou com/sem o produto",
+  "humor leve ou tom descontraído",
+  "dica de uso prático (como combinar, quando usar)",
+  "contagem regressiva / prazo específico",
+] as const;
+
+function pickAngles(count: number): string[] {
+  const shuffled = [...ANGLE_POOL].sort(() => Math.random() - 0.5);
+  const picked: string[] = [];
+  for (let i = 0; i < count; i++) picked.push(shuffled[i % shuffled.length]!);
+  return picked;
+}
+
 /** Nomes de anúncio no Meta Ads costumam ter tags internas depois de "|" (público, objetivo,
  *  variante — ex: "Conjunto LUMIM | LTV") que não fazem sentido nenhum pro cliente final. Usado
  *  só como o nome "limpo" sugerido no prompt — a IA ainda recebe o nome bruto como referência,
@@ -69,12 +96,15 @@ function cleanAdName(raw: string): string {
   return first && first.length > 0 ? first : raw.trim();
 }
 
-function buildBatchPrompt(ctx: SignalsContext, count: number): string {
+function buildBatchPrompt(ctx: SignalsContext, count: number, angles: string[]): string {
   const adCleanName = ctx.topAd ? cleanAdName(ctx.topAd.name) : null;
   return `Você é um copywriter de e-commerce especialista em WhatsApp pra grupos (moda feminina, loja "Mania de Mulher"). Escreva ${count} mensage${count > 1 ? "ns" : "m"} DIFERENTE${count > 1 ? "S" : ""} pra disparar em grupos de WhatsApp, uma por dia.
 
+ÂNGULO OBRIGATÓRIO DE CADA MENSAGEM (nessa ordem exata, mensagem 1 = item 1 do array, etc — não troque a ordem nem repita o mesmo ângulo em duas mensagens):
+${angles.map((a, i) => `${i + 1}. ${a}`).join("\n")}
+
 REGRAS OBRIGATÓRIAS:
-- Cada mensagem precisa ter uma ABERTURA, TOM e ESTRUTURA diferente das outras — nunca repita o mesmo formato duas vezes no lote (varie: pergunta, urgência, curiosidade, prova social, bastidores, escassez, benefício direto).
+- Siga o ângulo designado de cada mensagem à risca — é isso que garante que o lote não saia parecido, e que gerar de novo não volte com as mesmas mensagens de antes.
 - Use gatilhos mentais de verdade (escassez, urgência, prova social, curiosidade, benefício claro) — sem exagero forçado, sem soar robótico.
 - Seja CONCRETO, não genérico: quando houver uma promoção/produto específico disponível abaixo, cite o detalhe real dela (nome do cupom, condição, o produto certo) em vez de cair em frases vagas tipo "nossos acessórios", "seu look" que servem pra qualquer loja. Mensagens sem nenhum dado concreto disponível podem ser mais genéricas, mas isso deve ser exceção, não a maioria do lote.
 - Máximo 4 linhas por mensagem, emoji com moderação.
@@ -112,16 +142,18 @@ async function callOpenAiBatch(apiKey: string, ctx: SignalsContext, count: numbe
   if (adDataUri) imageParts.push({ type: "image_url", image_url: { url: adDataUri } });
   if (postDataUri) imageParts.push({ type: "image_url", image_url: { url: postDataUri } });
 
+  const angles = pickAngles(count);
+
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: "gpt-4o-mini",
-      temperature: 0.8,
+      temperature: 1,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: "Você é um copywriter de e-commerce sênior, especialista em variar tom e estrutura entre mensagens. Responda sempre em JSON válido." },
-        { role: "user", content: [{ type: "text", text: buildBatchPrompt(ctx, count) }, ...imageParts] },
+        { role: "user", content: [{ type: "text", text: buildBatchPrompt(ctx, count, angles) }, ...imageParts] },
       ],
     }),
   });
@@ -354,6 +386,21 @@ export async function rejectContentQueueItem(id: string): Promise<{ success: tru
   const supabaseAdmin = await admin();
   await (supabaseAdmin.from("ai_content_queue" as any) as any).update({ status: "rejected", updated_at: new Date().toISOString() }).eq("id", id).eq("status", "review");
   return { success: true };
+}
+
+/** Fecha o lote inteiro sem aprovar nada — chamado quando o usuário fecha o popup ou clica em
+ *  "Gerar outro lote" com itens ainda em revisão. Sem isso, os itens abandonados ficavam presos
+ *  em status='review' pra sempre: nunca despachavam, mas também continuavam entrando no pool de
+ *  "recentTexts" de gerações futuras como se fossem conteúdo válido/recente. */
+export async function rejectContentQueueBatch(batchId: string): Promise<{ rejected: number }> {
+  const supabaseAdmin = await admin();
+  const { data, error } = await (supabaseAdmin.from("ai_content_queue" as any) as any)
+    .update({ status: "rejected", updated_at: new Date().toISOString() })
+    .eq("batch_id", batchId)
+    .eq("status", "review")
+    .select("id");
+  if (error) return { rejected: 0 };
+  return { rejected: (data ?? []).length };
 }
 
 function countBy(rows: any[], key: string): Map<string, number> {

@@ -321,7 +321,30 @@ async function sendTemplateMessage(params: {
   templateName: string;
   templateLanguage: string;
   bodyParams: string[];
+  mediaId?: string; // ID da mídia (imagem/vídeo/documento) se o template tiver header de mídia
 }) {
+  const components: any[] = [];
+  
+  if (params.bodyParams.length) {
+    components.push({
+      type: "body",
+      parameters: params.bodyParams.map((text) => ({ type: "text", text })),
+    });
+  }
+
+  // Se houver um mediaId, ele deve ir no componente HEADER
+  if (params.mediaId) {
+    components.push({
+      type: "header",
+      parameters: [
+        {
+          type: "video", // Por padrão vídeo, mas a API é flexível se o template for de imagem
+          video: { id: params.mediaId }
+        }
+      ]
+    });
+  }
+
   const res = await fetch(`https://graph.facebook.com/v20.0/${params.phoneNumberId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${params.accessToken}` },
@@ -332,9 +355,7 @@ async function sendTemplateMessage(params: {
       template: {
         name: params.templateName,
         language: { code: params.templateLanguage },
-        ...(params.bodyParams.length
-          ? { components: [{ type: "body", parameters: params.bodyParams.map((text) => ({ type: "text", text })) }] }
-          : {}),
+        ...(components.length ? { components } : {}),
       },
     }),
   });
@@ -547,6 +568,10 @@ export async function dispatchCampaign(campaignId: string, restrictToCustomerIds
       templateName: campaign.template_name,
       templateLanguage: campaign.template_language ?? settings.templateLanguage,
       bodyParams: resolvedParams,
+      // Se for um evento de carrinho abandonado, o vídeo (Recado de Vídeo)
+      // geralmente vem como um anexo de mídia se o template permitir.
+      // A Meta exige que o vídeo seja enviado como um objeto de mídia separado
+      // ou dentro do template se ele tiver um header de mídia.
     });
 
     await supabaseAdmin.from("whatsapp_campaign_recipients").insert({

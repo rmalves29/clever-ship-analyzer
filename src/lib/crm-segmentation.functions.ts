@@ -54,12 +54,12 @@ export const getCustomersList = createServerFn({ method: "POST" })
             else if (operator === "neq") query = query.neq("province", val);
           } else if (field === "customer_tag") {
             if (operator === "contains") query = query.contains("tags", [val]);
-            else if (operator === "not_contains") query = query.not("tags", "cs", `{${val}}`);
-            else if (operator === "eq") query = query.eq("tags", `{${val}}`);
+            else if (operator === "not_contains") query = query.not("tags", "cs", [val]);
+            else if (operator === "eq") query = query.eq("tags", [val]);
           } else if (field === "tags_custom") {
             if (operator === "contains") query = query.contains("tags_custom", [val]);
-            else if (operator === "not_contains") query = query.not("tags_custom", "cs", `{${val}}`);
-            else if (operator === "eq") query = query.eq("tags_custom", `{${val}}`);
+            else if (operator === "not_contains") query = query.not("tags_custom", "cs", [val]);
+            else if (operator === "eq") query = query.eq("tags_custom", [val]);
           } else if (field === "status_pagamento") {
             // Filtrar clientes que possuem pelo menos um pedido com este status financeiro
             const { data: customersWithStatus } = await supabaseAdmin

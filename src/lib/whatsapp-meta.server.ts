@@ -337,8 +337,10 @@ async function sendTemplateMessage(params: {
   // Ignora explicitamente strings que parecem ser placeholders ou caminhos relativos
   const isUrl = (s: string) => /^https?:\/\//i.test(s);
   const isPlaceholder = (s: string) => 
+    !s || 
     s.includes("placeholder") || 
     s.includes("default") || 
+    s.includes("undefined") ||
     s.length < 10 || 
     !s.includes(".");
 
@@ -586,8 +588,8 @@ export async function dispatchCampaign(campaignId: string, restrictToCustomerIds
       templateName: campaign.template_name,
       templateLanguage: campaign.template_language ?? settings.templateLanguage,
       bodyParams: resolvedParams,
-      // Só passa mediaUrl se for uma URL real, não placeholder
-      mediaUrl: (c as any).video_url && /^https?:\/\//i.test((c as any).video_url) && !(c as any).video_url.includes("placeholder") ? (c as any).video_url : undefined,
+      // Só passa mediaUrl se for uma URL real e válida, não placeholder
+      mediaUrl: (c as any).video_url && /^https?:\/\//i.test((c as any).video_url) && !(c as any).video_url.includes("placeholder") && !(c as any).video_url.includes("undefined") ? (c as any).video_url : undefined,
     });
 
     await supabaseAdmin.from("whatsapp_campaign_recipients").insert({

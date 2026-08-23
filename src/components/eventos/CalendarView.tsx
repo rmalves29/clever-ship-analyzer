@@ -19,6 +19,12 @@ function todayISO(): string {
   return new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
 }
 
+/** No calendário, "outro" (categoria dos resumos automáticos da Linha do Tempo) aparece como
+ *  "Evento" em vez de "Outro" — mais claro pra quem só quer saber que teve algo registrado no dia. */
+function displayCategoryLabel(category: EventCategory, categoryLabel: Record<EventCategory, string>): string {
+  return category === "outro" ? "Evento" : categoryLabel[category];
+}
+
 export function CalendarView({
   categoryLabel,
   categoryColor,
@@ -109,7 +115,7 @@ export function CalendarView({
                       <span className="flex flex-wrap gap-1">
                         {d.crmEvents.slice(0, 2).map((ev) => (
                           <span key={ev.id} className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${categoryColor[ev.category]}`}>
-                            {categoryLabel[ev.category]}
+                            {displayCategoryLabel(ev.category, categoryLabel)}
                           </span>
                         ))}
                       </span>
@@ -169,7 +175,7 @@ export function CalendarView({
                   {selected.crmEvents.map((ev) => (
                     <div key={ev.id} className="rounded-lg border border-border p-2.5">
                       <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${categoryColor[ev.category]}`}>
-                        {categoryLabel[ev.category]}
+                        {displayCategoryLabel(ev.category, categoryLabel)}
                       </span>
                       <p className="mt-1 font-medium">{ev.title}</p>
                       {ev.description && <p className="mt-0.5 text-sm text-muted-foreground">{ev.description}</p>}

@@ -41,10 +41,39 @@ Responda em JSON estrito:
 { "message_text": string, "use_image": "ad"|"post"|"generate"|"none", "image_prompt": string|null, "source_summary": string (1 frase curta explicando em que você se baseou, pra mostrar num popup de aprovação) }`;
 }
 
-async function callOpenAiDraft(apiKey: string, ctx: DraftContext): Promise<OpenAiDraftResult> {
+/** URLs de imagem do Meta (Ads/Instagram) costumam ser protegidas/temporárias — a OpenAI não
+ *  consegue baixá-las direto (403). Baixamos aqui no servidor e mandamos como data URI. */
+async function fetchImageAsDataUri(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const contentType = res.headers.get("content-type") ?? "image/jpeg";
+    const buf = await res.arrayBuffer();
+    const base64 = Buffer.from(buf).toString("base64");
+    return `data:${contentType};base64,${base64}`;
+  } catch (error) {
+    console.error(`fetchImageAsDataUri: falha ao baixar ${url}:`, error);
+    return null;
+  }
+}
+
+function dataUriToBase64(dataUri: string): string {
+  return dataUri.slice(dataUri.indexOf(",") + 1);
+}
+
+function dataUriContentType(dataUri: string): string {
+  const match = /^data:([^;]+);base64,/.exec(dataUri);
+  return match?.[1] ?? "image/jpeg";
+}
+
+async function callOpenAiDraft(apiKey: string, ctx: DraftContext): Promise<{ result: OpenAiDraftResult; adDataUri: string | null; postDataUri: string | null }> {
+  const [adDataUri, postDataUri] = await Promise.all([
+    ctx.topAd?.thumbnailUrl ? fetchImageAsDataUri(ctx.topAd.thumbnailUrl) : Promise.resolve(null),
+    ctx.topPost?.thumbnailUrl ? fetchImageAsDataUri(ctx.topPost.thumbnailUrl) : Promise.resolve(null),
+  ]);
   const imageParts: Array<{ type: "image_url"; image_url: { url: string } }> = [];
-  if (ctx.topAd?.thumbnailUrl) imageParts.push({ type: "image_url", image_url: { url: ctx.topAd.thumbnailUrl } });
-  if (ctx.topPost?.thumbnailUrl) imageParts.push({ type: "image_url", image_url: { url: ctx.topPost.thumbnailUrl } });
+  if (adDataUri) imageParts.push({ type: "image_url", image_url: { url: adDataUri } });
+  if (postDataUri) imageParts.push({ type: "image_url", image_url: { url: postDataUri } });
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -71,7 +100,7 @@ async function callOpenAiDraft(apiKey: string, ctx: DraftContext): Promise<OpenA
   const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
   const content = json.choices?.[0]?.message?.content;
   if (!content) throw new Error("OpenAI não retornou conteúdo.");
-  return JSON.parse(content) as OpenAiDraftResult;
+  return { result: JSON.parse(content) as OpenAiDraftResult, adDataUri, postDataUri };
 }
 
 async function generateImageBase64(apiKey: string, prompt: string): Promise<string> {
@@ -127,25 +156,30 @@ export async function generateAiRoutineDraft(): Promise<{ success: true; draft: 
     return { success: false, error: "Nenhum anúncio (Meta Ads) ou post (Instagram) disponível nos últimos 30 dias pra basear a mensagem. Conecte pelo menos um em Configurações." };
   }
 
-  let result: OpenAiDraftResult;
+  let draftResult: { result: OpenAiDraftResult; adDataUri: string | null; postDataUri: string | null };
   try {
-    result = await callOpenAiDraft(apiKey, { topAd, topPost });
+    draftResult = await callOpenAiDraft(apiKey, { topAd, topPost });
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Falha ao gerar o rascunho com a OpenAI." };
   }
+  const { result } = draftResult;
+
+  // Sempre rehospeda no nosso storage — a URL original do Meta é protegida/temporária e não
+  // funcionaria nem pra mostrar no popup nem pro UazAPI buscar na hora de enviar.
+  const { uploadEnvioMedia } = await import("./envio-messages.server");
 
   let contentImageUrl: string | null = null;
-  if (result.use_image === "ad" && topAd?.thumbnailUrl) contentImageUrl = topAd.thumbnailUrl;
-  else if (result.use_image === "post" && topPost?.thumbnailUrl) contentImageUrl = topPost.thumbnailUrl;
-  else if (result.use_image === "generate" && result.image_prompt) {
-    try {
+  try {
+    if (result.use_image === "ad" && draftResult.adDataUri) {
+      contentImageUrl = (await uploadEnvioMedia({ fileName: `ai-routine-${Date.now()}.jpg`, base64Data: dataUriToBase64(draftResult.adDataUri), contentType: dataUriContentType(draftResult.adDataUri) })).url;
+    } else if (result.use_image === "post" && draftResult.postDataUri) {
+      contentImageUrl = (await uploadEnvioMedia({ fileName: `ai-routine-${Date.now()}.jpg`, base64Data: dataUriToBase64(draftResult.postDataUri), contentType: dataUriContentType(draftResult.postDataUri) })).url;
+    } else if (result.use_image === "generate" && result.image_prompt) {
       const b64 = await generateImageBase64(apiKey, result.image_prompt);
-      const { uploadEnvioMedia } = await import("./envio-messages.server");
-      const uploaded = await uploadEnvioMedia({ fileName: `ai-routine-${Date.now()}.png`, base64Data: b64, contentType: "image/png" });
-      contentImageUrl = uploaded.url;
-    } catch (error) {
-      console.error("generateAiRoutineDraft: falha ao gerar imagem, seguindo sem imagem:", error);
+      contentImageUrl = (await uploadEnvioMedia({ fileName: `ai-routine-${Date.now()}.png`, base64Data: b64, contentType: "image/png" })).url;
     }
+  } catch (error) {
+    console.error("generateAiRoutineDraft: falha ao preparar imagem, seguindo sem imagem:", error);
   }
 
   return {

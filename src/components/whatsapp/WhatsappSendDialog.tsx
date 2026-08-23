@@ -104,7 +104,7 @@ export function WhatsappSendDialog({
           messageType,
           templateName: templateName || undefined,
           couponCode: coupon.trim() || undefined,
-          bodyParams: selectedTemplate ? bodyParams.slice(0, bodyVarCount) : [],
+          bodyParams: selectedTemplate ? bodyParams.slice(0, bodyVarCount).map(p => p.trim() || "") : [],
           requireApproval,
           campaignTag: campaignTag.trim() || undefined,
         },

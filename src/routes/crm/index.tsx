@@ -470,6 +470,23 @@ function CRMPage() {
                             ) : "—"}
                           </TableCell>
                           <TableCell>
+                            <div className="flex flex-wrap gap-1 max-w-[200px]">
+                              {(c.tagsCustom || []).map((tag: string) => (
+                                <Badge key={tag} variant="outline" className="text-[10px] bg-brand/5 text-brand border-brand/20">
+                                  {tag}
+                                </Badge>
+                              ))}
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="size-5 rounded-full hover:bg-brand/10 hover:text-brand"
+                                onClick={() => handleEditTags(c.id, c.tagsCustom || [])}
+                              >
+                                <Plus className="size-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                          <TableCell>
                             <div className="flex flex-col gap-1">
                               {c.rfmSegment && (
                                 <Badge 

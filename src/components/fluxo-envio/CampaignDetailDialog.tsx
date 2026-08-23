@@ -35,6 +35,7 @@ export function CampaignDetailDialog({ campaignId, onClose }: { campaignId: stri
   const [templateMax, setTemplateMax] = useState(1000);
   const [manageOpen, setManageOpen] = useState(false);
   const [pendingGroupIds, setPendingGroupIds] = useState<Set<string>>(new Set());
+  const [groupSearch, setGroupSearch] = useState("");
 
   useEffect(() => {
     if (!campaign) return;
@@ -115,6 +116,7 @@ export function CampaignDetailDialog({ campaignId, onClose }: { campaignId: stri
   if (!campaign) return null;
 
   const adminGroups = (groups ?? []).filter((g) => g.is_admin && g.is_active);
+  const filteredGroups = adminGroups.filter((g) => g.group_name.toLowerCase().includes(groupSearch.trim().toLowerCase()));
   const weightSum = (links ?? []).reduce((acc, l) => acc + (l.weight_percent ?? 0), 0);
 
   return (
@@ -179,24 +181,36 @@ export function CampaignDetailDialog({ campaignId, onClose }: { campaignId: stri
             </div>
 
             {manageOpen ? (
-              <div className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
-                {adminGroups.map((g) => (
-                  <label key={g.id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted">
-                    <Checkbox
-                      checked={pendingGroupIds.has(g.id)}
-                      onCheckedChange={(checked) => {
-                        setPendingGroupIds((prev) => {
-                          const next = new Set(prev);
-                          if (checked) next.add(g.id);
-                          else next.delete(g.id);
-                          return next;
-                        });
-                      }}
-                    />
-                    {g.group_name}
-                  </label>
-                ))}
-                <Button size="sm" className="mt-2" onClick={() => saveLinksMut.mutate()} disabled={saveLinksMut.isPending}>
+              <div className="mt-2 space-y-2">
+                <Input
+                  value={groupSearch}
+                  onChange={(e) => setGroupSearch(e.target.value)}
+                  placeholder="Buscar grupo..."
+                  className="h-8"
+                />
+                <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+                  {filteredGroups.map((g) => (
+                    <label key={g.id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted">
+                      <Checkbox
+                        checked={pendingGroupIds.has(g.id)}
+                        onCheckedChange={(checked) => {
+                          setPendingGroupIds((prev) => {
+                            const next = new Set(prev);
+                            if (checked) next.add(g.id);
+                            else next.delete(g.id);
+                            return next;
+                          });
+                        }}
+                      />
+                      <span className="flex-1 truncate">{g.group_name}</span>
+                      <span className="text-xs text-muted-foreground">{g.participant_count} participantes</span>
+                    </label>
+                  ))}
+                  {filteredGroups.length === 0 && (
+                    <p className="px-2 py-1.5 text-sm text-muted-foreground">Nenhum grupo encontrado.</p>
+                  )}
+                </div>
+                <Button size="sm" onClick={() => saveLinksMut.mutate()} disabled={saveLinksMut.isPending}>
                   Salvar ({pendingGroupIds.size} grupos)
                 </Button>
               </div>

@@ -382,7 +382,7 @@ export function SegmentEditor({
                             <SelectItem value="acesso_sem_compra">Acessou e não comprou</SelectItem>
                           </SelectContent>
                         </Select>
-                      ) : condition.field === "data_pedido_hoje" || condition.field === "data_pedido_24h" || condition.field === "data_envio_hoje" ? (
+                      ) : condition.field === "checkout_abandonado" || condition.field === "data_pedido_hoje" || condition.field === "data_pedido_24h" || condition.field === "data_envio_hoje" || condition.field === "acesso_sem_compra" ? (
                         <Select
                           value={condition.value as string}
                           onValueChange={v => updateCondition(group.id, condition.id, { value: v })}

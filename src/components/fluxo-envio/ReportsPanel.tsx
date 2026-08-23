@@ -131,7 +131,7 @@ export function ReportsPanel() {
       </div>
 
       <div>
-        <p className="mb-2 text-sm font-semibold">Postagens geradas por IA — o que deu certo</p>
+        <p className="mb-2 text-sm font-semibold">Postagens geradas por IA — o que nao está dando certo.</p>
         <div className="surface-card overflow-x-auto">
           <Table>
             <TableHeader>

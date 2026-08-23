@@ -133,22 +133,21 @@ Responda em JSON estrito, um array com exatamente ${count} item(ns):
 { "items": [ { "message_text": string, "use_image": "ad"|"post"|"generate"|"none", "image_prompt": string|null, "link_type": "instagram"|"site"|"none", "source_summary": string (1 frase curta) } ] }`;
 }
 
-async function callOpenAiBatch(apiKey: string, ctx: SignalsContext, count: number): Promise<{ items: DraftItem[]; adDataUri: string | null; postDataUri: string | null }> {
-  const [adDataUri, postDataUri] = await Promise.all([
-    ctx.topAd?.thumbnailUrl ? fetchImageAsDataUri(ctx.topAd.thumbnailUrl) : Promise.resolve(null),
-    ctx.topPostYesterday?.thumbnailUrl ? fetchImageAsDataUri(ctx.topPostYesterday.thumbnailUrl) : Promise.resolve(null),
-  ]);
-  const imageParts: Array<{ type: "image_url"; image_url: { url: string } }> = [];
-  if (adDataUri) imageParts.push({ type: "image_url", image_url: { url: adDataUri } });
-  if (postDataUri) imageParts.push({ type: "image_url", image_url: { url: postDataUri } });
-
-  const angles = pickAngles(count);
-
+async function requestBatchCompletion(
+  apiKey: string,
+  ctx: SignalsContext,
+  count: number,
+  angles: string[],
+  imageParts: Array<{ type: "image_url"; image_url: { url: string } }>,
+): Promise<DraftItem[]> {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: "gpt-4o-mini",
+      // gpt-4o (não o -mini) especificamente aqui: modelo menor tende a convergir em vocabulário
+      // e fraseado parecidos entre chamadas separadas mesmo com o mesmo ângulo/temperature alta —
+      // reportado pelo usuário como "continua repetindo" mesmo depois do controle de ângulo.
+      model: "gpt-4o",
       temperature: 1,
       response_format: { type: "json_object" },
       messages: [
@@ -168,7 +167,35 @@ async function callOpenAiBatch(apiKey: string, ctx: SignalsContext, count: numbe
   if (!content) throw new Error("OpenAI não retornou conteúdo.");
   const parsed = JSON.parse(content) as { items: DraftItem[] };
   if (!Array.isArray(parsed.items) || parsed.items.length === 0) throw new Error("OpenAI não retornou nenhum item.");
-  return { items: parsed.items, adDataUri, postDataUri };
+  return parsed.items;
+}
+
+async function callOpenAiBatch(apiKey: string, ctx: SignalsContext, count: number): Promise<{ items: DraftItem[]; adDataUri: string | null; postDataUri: string | null }> {
+  const [adDataUri, postDataUri] = await Promise.all([
+    ctx.topAd?.thumbnailUrl ? fetchImageAsDataUri(ctx.topAd.thumbnailUrl) : Promise.resolve(null),
+    ctx.topPostYesterday?.thumbnailUrl ? fetchImageAsDataUri(ctx.topPostYesterday.thumbnailUrl) : Promise.resolve(null),
+  ]);
+  const imageParts: Array<{ type: "image_url"; image_url: { url: string } }> = [];
+  if (adDataUri) imageParts.push({ type: "image_url", image_url: { url: adDataUri } });
+  if (postDataUri) imageParts.push({ type: "image_url", image_url: { url: postDataUri } });
+
+  const angles = pickAngles(count);
+
+  // O modelo nem sempre respeita "exatamente N itens" — já reproduzido em produção (pediu 7,
+  // voltou 6, e o dia que sobrou some sem nenhum aviso). Tenta de novo 1x com o mesmo pedido antes
+  // de aceitar um lote incompleto.
+  let items = await requestBatchCompletion(apiKey, ctx, count, angles, imageParts);
+  if (items.length !== count) {
+    try {
+      const retry = await requestBatchCompletion(apiKey, ctx, count, angles, imageParts);
+      if (retry.length === count) items = retry;
+      else if (retry.length > items.length) items = retry;
+    } catch {
+      // mantém o resultado da primeira tentativa se a segunda falhar
+    }
+  }
+
+  return { items, adDataUri, postDataUri };
 }
 
 export type BatchMode = "day" | "week";

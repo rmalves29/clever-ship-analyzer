@@ -321,7 +321,33 @@ async function sendTemplateMessage(params: {
   templateName: string;
   templateLanguage: string;
   bodyParams: string[];
+  mediaId?: string;
+  mediaUrl?: string;
 }) {
+  const components: any[] = [];
+  
+  if (params.bodyParams.length) {
+    components.push({
+      type: "body",
+      parameters: params.bodyParams.map((text) => ({ type: "text", text })),
+    });
+  }
+
+  if (params.mediaId || params.mediaUrl) {
+    const isVideo = params.mediaUrl?.toLowerCase().includes('.mp4') || params.mediaUrl?.toLowerCase().includes('video');
+    const mediaType = isVideo ? "video" : "image";
+    
+    components.push({
+      type: "header",
+      parameters: [
+        {
+          type: mediaType,
+          [mediaType]: params.mediaId ? { id: params.mediaId } : { link: params.mediaUrl }
+        }
+      ]
+    });
+  }
+
   const res = await fetch(`https://graph.facebook.com/v20.0/${params.phoneNumberId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${params.accessToken}` },
@@ -332,9 +358,7 @@ async function sendTemplateMessage(params: {
       template: {
         name: params.templateName,
         language: { code: params.templateLanguage },
-        ...(params.bodyParams.length
-          ? { components: [{ type: "body", parameters: params.bodyParams.map((text) => ({ type: "text", text })) }] }
-          : {}),
+        ...(components.length ? { components } : {}),
       },
     }),
   });
@@ -547,6 +571,8 @@ export async function dispatchCampaign(campaignId: string, restrictToCustomerIds
       templateName: campaign.template_name,
       templateLanguage: campaign.template_language ?? settings.templateLanguage,
       bodyParams: resolvedParams,
+      // Passamos a URL do vídeo se for uma campanha de vídeo e o template suportar
+      mediaUrl: (c as any).video_url || undefined,
     });
 
     await supabaseAdmin.from("whatsapp_campaign_recipients").insert({

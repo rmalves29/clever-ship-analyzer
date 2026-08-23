@@ -60,23 +60,36 @@ type SignalsContext = {
   recentTexts: string[];
 };
 
+/** Nomes de anúncio no Meta Ads costumam ter tags internas depois de "|" (público, objetivo,
+ *  variante — ex: "Conjunto LUMIM | LTV") que não fazem sentido nenhum pro cliente final. Usado
+ *  só como o nome "limpo" sugerido no prompt — a IA ainda recebe o nome bruto como referência,
+ *  mas instruída a nunca citá-lo literalmente. */
+function cleanAdName(raw: string): string {
+  const first = raw.split("|")[0]?.trim();
+  return first && first.length > 0 ? first : raw.trim();
+}
+
 function buildBatchPrompt(ctx: SignalsContext, count: number): string {
+  const adCleanName = ctx.topAd ? cleanAdName(ctx.topAd.name) : null;
   return `Você é um copywriter de e-commerce especialista em WhatsApp pra grupos (moda feminina, loja "Mania de Mulher"). Escreva ${count} mensage${count > 1 ? "ns" : "m"} DIFERENTE${count > 1 ? "S" : ""} pra disparar em grupos de WhatsApp, uma por dia.
 
 REGRAS OBRIGATÓRIAS:
 - Cada mensagem precisa ter uma ABERTURA, TOM e ESTRUTURA diferente das outras — nunca repita o mesmo formato duas vezes no lote (varie: pergunta, urgência, curiosidade, prova social, bastidores, escassez, benefício direto).
 - Use gatilhos mentais de verdade (escassez, urgência, prova social, curiosidade, benefício claro) — sem exagero forçado, sem soar robótico.
+- Seja CONCRETO, não genérico: quando houver uma promoção/produto específico disponível abaixo, cite o detalhe real dela (nome do cupom, condição, o produto certo) em vez de cair em frases vagas tipo "nossos acessórios", "seu look" que servem pra qualquer loja. Mensagens sem nenhum dado concreto disponível podem ser mais genéricas, mas isso deve ser exceção, não a maioria do lote.
 - Máximo 4 linhas por mensagem, emoji com moderação.
 - Se fizer sentido citar o post recente do Instagram (${ctx.topPostYesterday ? "existe um disponível abaixo" : "NÃO há post disponível — não cite Instagram"}), marque essa mensagem com "link_type":"instagram".
 - Se fizer sentido citar um produto/promoção do site (${ctx.promotions.length > 0 || ctx.storeUrl ? "existe informação abaixo" : "sem dado de site disponível — não cite"}), marque com "link_type":"site".
 - Nem toda mensagem precisa ter link — varie isso também.
 - NUNCA escreva a URL literal no texto — só o convite claro ("responde aqui", "corre no link abaixo", "olha nosso Instagram") — o link real é adicionado depois, fora do seu texto.
+- NUNCA cite o nome interno do anúncio literalmente. Nomes de anúncio no Meta Ads têm tags internas tipo "| LTV", "| Story", "| Conv" que são só rótulos de organização de campanha, não o nome real do produto pro cliente — o cliente não faz ideia do que isso significa. Se for mencionar o produto do anúncio, use um nome natural (ex: "${adCleanName ?? "o produto"}") ou descreva-o (ex: "aquele conjunto que está bombando"), nunca o rótulo cru.
+- A foto do anúncio (quando anexada) é de UM produto específico: "${adCleanName ?? ""}". Só marque "use_image":"ad" se a mensagem for especificamente SOBRE esse produto/promoção — nunca reaproveite essa foto numa mensagem sobre outro produto ou uma promoção genérica só porque é a única foto real disponível. Se a mensagem for sobre outra coisa, use "generate" (descreva no image_prompt algo que combine com o que a mensagem está vendendo) ou "none". Mesma regra pro post do Instagram: só use "use_image":"post" se a mensagem citar exatamente esse post.
 
 ${ctx.playbook ? `O QUE JÁ SABEMOS QUE FUNCIONA (aprendizado de mensagens anteriores — use como direção estratégica, NÃO copie frases):\n${ctx.playbook}\n` : ""}
 ${ctx.recentTexts.length > 0 ? `MENSAGENS JÁ ENVIADAS RECENTEMENTE (NÃO repita a estrutura/abertura destas):\n${ctx.recentTexts.map((t, i) => `${i + 1}. ${t}`).join("\n")}\n` : ""}
 
 ANÚNCIO COM MELHOR ROAS (últimos 30 dias):
-${ctx.topAd ? `"${ctx.topAd.name}" — ROAS ${ctx.topAd.roas.toFixed(2)}, CTR ${(ctx.topAd.ctrLink * 100).toFixed(2)}%, CPA R$${ctx.topAd.cpa.toFixed(2)}${ctx.topAd.thumbnailUrl ? " (imagem em anexo)" : ""}` : "nenhum disponível"}
+${ctx.topAd ? `Nome interno bruto (NÃO citar literalmente): "${ctx.topAd.name}" — nome natural do produto pra usar no texto: "${adCleanName}" — ROAS ${ctx.topAd.roas.toFixed(2)}, CTR ${(ctx.topAd.ctrLink * 100).toFixed(2)}%, CPA R$${ctx.topAd.cpa.toFixed(2)}${ctx.topAd.thumbnailUrl ? " (imagem em anexo, é uma foto REAL desse produto específico — ver regra de uso de imagem acima)" : ""}` : "nenhum disponível"}
 
 MELHOR POST DO INSTAGRAM DE ONTEM:
 ${ctx.topPostYesterday ? `"${ctx.topPostYesterday.caption ?? "(sem legenda)"}" — alcance ${ctx.topPostYesterday.reach}, ${ctx.topPostYesterday.totalInteractions} interações${ctx.topPostYesterday.thumbnailUrl ? " (imagem em anexo)" : ""}` : "nenhum post ontem"}
@@ -196,6 +209,12 @@ export async function generateAiContentBatch(input: {
 
   for (let i = 0; i < batchResult.items.length; i++) {
     const draft = batchResult.items[i]!;
+
+    // Rede de segurança: mesmo com a instrução no prompt, se o texto ainda vier com o nome
+    // interno cru do anúncio (ex: "Conjunto LUMIM | LTV"), troca pelo nome limpo antes de salvar.
+    if (topAd && draft.message_text.includes(topAd.name)) {
+      draft.message_text = draft.message_text.split(topAd.name).join(cleanAdName(topAd.name));
+    }
 
     let contentImageUrl: string | null = null;
     try {

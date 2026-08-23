@@ -14,7 +14,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
-import { Plus, Sparkles, Trash2, Pencil, Tag, LineChart, Network } from "lucide-react";
+import { Plus, Sparkles, Trash2, Pencil, Tag, LineChart, Network, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EventsGraph } from "@/components/eventos/EventsGraph";
+import { CalendarView } from "@/components/eventos/CalendarView";
 import {
   listCrmEvents,
   createCrmEvent,
@@ -196,7 +197,7 @@ function EventDialog({
 
 function EventosPage() {
   const queryClient = useQueryClient();
-  const [view, setView] = useState<"linha" | "grafo">("linha");
+  const [view, setView] = useState<"linha" | "grafo" | "calendario">("linha");
   const [rangeDays, setRangeDays] = useState(30);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<EventFormState | null>(null);
@@ -290,11 +291,22 @@ function EventosPage() {
             <TabsTrigger value="grafo" className="gap-1.5">
               <Network className="size-3.5" /> Grafo
             </TabsTrigger>
+            <TabsTrigger value="calendario" className="gap-1.5">
+              <CalendarDays className="size-3.5" /> Calendário
+            </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
-      {isLoading && <p className="mt-6 text-center text-muted-foreground">Carregando...</p>}
+      {view === "calendario" && (
+        <CalendarView
+          categoryLabel={CATEGORY_LABEL}
+          categoryColor={CATEGORY_COLOR}
+          onNewEvent={(dateISO) => { setEditing(emptyForm(dateISO)); setDialogOpen(true); }}
+        />
+      )}
+
+      {view !== "calendario" && isLoading && <p className="mt-6 text-center text-muted-foreground">Carregando...</p>}
 
       {!isLoading && timeline && view === "grafo" && (
         <div className="mt-4">

@@ -48,6 +48,13 @@ export const getEventsTimelineData = createServerFn({ method: "POST" })
     return getEventsTimeline(data);
   });
 
+export const getCalendarMonthDataFn = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ year: z.number().int(), month: z.number().int().min(1).max(12) }).parse(data))
+  .handler(async ({ data }) => {
+    const { getCalendarMonthData } = await import("./events.server");
+    return getCalendarMonthData(data.year, data.month);
+  });
+
 const eventsAnalysisSchema = z.object({
   resumo: z.string(),
   insights: z.array(

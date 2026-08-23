@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { format, subDays, addDays, startOfMonth, differenceInCalendarDays } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
+import { getCommercialDateName } from "./commercial-dates";
 
 const GRAPH_VERSION = "v21.0";
 const TZ = "America/Sao_Paulo";
@@ -706,4 +707,74 @@ export async function runDailyEventsAnalysis(
   }
 
   return { created: 1 + analysis.destaques.length, skipped: false, date: dateISO };
+}
+
+export type CalendarDay = {
+  date: string;
+  commercialDate: string | null;
+  faturamento: number;
+  pedidos: number;
+  crmEvents: CrmEvent[];
+  envioMensagens: number;
+  whatsappCampanhas: number;
+};
+
+/** Dados do calendário mensal: cruza faturamento/pedidos (getEventsTimeline, já existente) com
+ *  datas comemorativas do varejo, eventos do CRM e volume de mensagens enviadas (WhatsApp API
+ *  oficial + Fluxo de Envio), um registro por dia do mês. */
+export async function getCalendarMonthData(year: number, month: number): Promise<CalendarDay[]> {
+  const from = `${year}-${String(month).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const to = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+  const { days, events } = await getEventsTimeline({ from, to });
+
+  const supabaseAdmin = await admin();
+  const fromISO = new Date(`${from}T00:00:00-03:00`).toISOString();
+  const toISO = new Date(`${to}T23:59:59-03:00`).toISOString();
+
+  const dayKey = (iso: string) => new Date(iso).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+
+  const { data: envioMsgs } = await (supabaseAdmin.from("envio_messages" as any) as any)
+    .select("sent_at")
+    .eq("status", "sent")
+    .gte("sent_at", fromISO)
+    .lte("sent_at", toISO);
+  const envioByDay = new Map<string, number>();
+  for (const m of envioMsgs ?? []) {
+    const sentAt = (m as any).sent_at;
+    if (!sentAt) continue;
+    const key = dayKey(sentAt);
+    envioByDay.set(key, (envioByDay.get(key) ?? 0) + 1);
+  }
+
+  const { data: waCampaigns } = await supabaseAdmin
+    .from("whatsapp_campaigns")
+    .select("sent_at")
+    .gte("sent_at", fromISO)
+    .lte("sent_at", toISO);
+  const waByDay = new Map<string, number>();
+  for (const c of waCampaigns ?? []) {
+    const sentAt = (c as any).sent_at;
+    if (!sentAt) continue;
+    const key = dayKey(sentAt);
+    waByDay.set(key, (waByDay.get(key) ?? 0) + 1);
+  }
+
+  const eventsByDay = new Map<string, CrmEvent[]>();
+  for (const ev of events) {
+    const list = eventsByDay.get(ev.eventDate) ?? [];
+    list.push(ev);
+    eventsByDay.set(ev.eventDate, list);
+  }
+
+  return days.map((d) => ({
+    date: d.date,
+    commercialDate: getCommercialDateName(d.date),
+    faturamento: d.faturamento,
+    pedidos: d.pedidos,
+    crmEvents: eventsByDay.get(d.date) ?? [],
+    envioMensagens: envioByDay.get(d.date) ?? 0,
+    whatsappCampanhas: waByDay.get(d.date) ?? 0,
+  }));
 }

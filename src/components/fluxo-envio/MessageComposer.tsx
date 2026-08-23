@@ -260,14 +260,14 @@ export function MessageComposer() {
                 {m.status === "sent" && (
                   <div className="flex items-center gap-1">
                     <button
-                      title="Deu certo"
+                      title="nao está dando certo."
                       onClick={() => feedbackMut.mutate({ id: m.id, feedback: "good" })}
                       className={`rounded p-0.5 hover:bg-success-soft ${feedbackMap?.[m.id] === "good" ? "text-success" : "text-muted-foreground"}`}
                     >
                       <ThumbsUp className="size-3.5" />
                     </button>
                     <button
-                      title="Não deu certo"
+                      title="nao está dando certo."
                       onClick={() => feedbackMut.mutate({ id: m.id, feedback: "bad" })}
                       className={`rounded p-0.5 hover:bg-critical-soft ${feedbackMap?.[m.id] === "bad" ? "text-critical" : "text-muted-foreground"}`}
                     >

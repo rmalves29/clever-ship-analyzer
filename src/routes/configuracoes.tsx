@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   Sparkles,
   MessageCircle,
+  Link2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,7 @@ import { syncShopifyData } from "@/lib/crm-sync.functions";
 import { getStoreSettings, saveStoreSettings } from "@/lib/store-settings.functions";
 import { getLatestAiAnalysis, saveOpenAiApiKey } from "@/lib/ai-analysis.functions";
 import { getWhatsappMetaStatus, saveWhatsappMetaSettings, activateTemplateStatusWebhook } from "@/lib/whatsapp-meta.functions";
+import { getLiveLaunchpadStatus, saveLiveLaunchpadSettings } from "@/lib/live-launchpad-settings.functions";
 import { EmbeddedSignupButton } from "@/components/crm/EmbeddedSignupButton";
 
 export const Route = createFileRoute("/configuracoes")({
@@ -89,6 +91,30 @@ function Configuracoes() {
         refetchAiStatus();
       } else {
         toast.error(res.error || "Erro ao salvar a API key.");
+      }
+    },
+    onError: (err: any) => toast.error("Erro: " + err.message),
+  });
+
+  const [liveLaunchpadForm, setLiveLaunchpadForm] = useState({ url: "https://hxtbsieodbtzgcvvkeqx.supabase.co", key: "" });
+  const { data: liveLaunchpadStatus, refetch: refetchLiveLaunchpad } = useQuery({
+    queryKey: ["live-launchpad-status"],
+    queryFn: () => getLiveLaunchpadStatus(),
+  });
+  useEffect(() => {
+    if (liveLaunchpadStatus?.url) {
+      setLiveLaunchpadForm((prev) => ({ ...prev, url: liveLaunchpadStatus.url as string }));
+    }
+  }, [liveLaunchpadStatus]);
+  const saveLiveLaunchpadMutation = useMutation({
+    mutationFn: () => saveLiveLaunchpadSettings({ data: { url: liveLaunchpadForm.url.trim(), serviceRoleKey: liveLaunchpadForm.key.trim() } }),
+    onSuccess: (res: any) => {
+      if (res.success) {
+        toast.success("Conexão com o live-launchpad-79 salva.");
+        setLiveLaunchpadForm((prev) => ({ ...prev, key: "" }));
+        refetchLiveLaunchpad();
+      } else {
+        toast.error(res.error || "Erro ao salvar.");
       }
     },
     onError: (err: any) => toast.error("Erro: " + err.message),
@@ -408,6 +434,62 @@ function Configuracoes() {
                   <Save className="mr-2 size-4" />
                 )}
                 Salvar API Key
+              </Button>
+            </CardFooter>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Link2 className="size-5 text-primary" />
+                <CardTitle>Live Launchpad (Fluxo de Envio)</CardTitle>
+              </div>
+              <CardDescription>
+                Conexão com o banco do live-launchpad-79 (OrderZaps) — é de lá que o Fluxo de Envio lê e escreve
+                grupos e campanhas de verdade, escopado ao tenant Mania de Mulher. Chave service_role do projeto
+                Supabase <code className="rounded bg-muted px-1">hxtbsieodbtzgcvvkeqx</code>.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="llUrl">URL do projeto Supabase</Label>
+                <Input
+                  id="llUrl"
+                  value={liveLaunchpadForm.url}
+                  onChange={(e) => setLiveLaunchpadForm((prev) => ({ ...prev, url: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="llKey">Service Role Key</Label>
+                <Input
+                  id="llKey"
+                  type="password"
+                  placeholder={liveLaunchpadStatus?.hasKey ? "•••••••• (salva)" : "eyJ..."}
+                  value={liveLaunchpadForm.key}
+                  onChange={(e) => setLiveLaunchpadForm((prev) => ({ ...prev, key: e.target.value }))}
+                />
+              </div>
+            </CardContent>
+            <CardFooter className="flex justify-between border-t px-6 py-4">
+              <a
+                href="https://supabase.com/dashboard/project/hxtbsieodbtzgcvvkeqx/settings/api"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+              >
+                Pegar a chave no Supabase <ExternalLink className="size-3" />
+              </a>
+              <Button
+                type="button"
+                onClick={() => saveLiveLaunchpadMutation.mutate()}
+                disabled={saveLiveLaunchpadMutation.isPending || !liveLaunchpadForm.url.trim() || !liveLaunchpadForm.key.trim()}
+              >
+                {saveLiveLaunchpadMutation.isPending ? (
+                  <RefreshCw className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 size-4" />
+                )}
+                Salvar
               </Button>
             </CardFooter>
           </Card>

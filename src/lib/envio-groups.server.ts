@@ -3,8 +3,8 @@ import { loadUazapiCreds, listGroupsRaw, getGroupInfo, toGroupJid, fromGroupJid 
 /** Banco do live-launchpad-79 (OrderZaps) — dono real dos grupos/campanhas, escopado ao tenant
  *  Mania de Mulher. Ver "Fluxo de Envio vs SendFlow" no vault pro histórico dessa migração. */
 async function admin() {
-  const { liveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
-  return liveLaunchpadAdmin;
+  const { getLiveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
+  return getLiveLaunchpadAdmin();
 }
 
 async function tenantId() {

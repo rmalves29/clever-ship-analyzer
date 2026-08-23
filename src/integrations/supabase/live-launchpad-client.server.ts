@@ -1,6 +1,10 @@
-// Server-side Supabase client for the live-launchpad-79 project (OrderZaps) — usado só pelo
+// Server-side Supabase client para o projeto live-launchpad-79 (OrderZaps) — usado só pelo
 // módulo Fluxo de Envio, que passou a ler/escrever os mesmos grupos/campanhas de lá em vez de
 // manter sua própria cópia. Ver nota do vault "Fluxo de Envio vs SendFlow" pro histórico.
+//
+// A conexão (URL + service role key) fica em store_settings, não como secret de build — este
+// projeto está no plano Pro do Lovable, sem acesso a "Segredos de compilação" (Enterprise).
+// Configurável em Configurações → Live Launchpad (Fluxo de Envio).
 // SECURITY: nunca importar isso fora de arquivos *.server.ts — nunca expor ao client bundle.
 import { createClient } from "@supabase/supabase-js";
 
@@ -63,29 +67,25 @@ type LiveLaunchpadDatabase = {
   };
 };
 
-function createLiveLaunchpadAdminClient() {
-  const URL = process.env["LIVE_LAUNCHPAD_SUPABASE_URL"];
-  const SERVICE_ROLE_KEY = process.env["LIVE_LAUNCHPAD_SUPABASE_SERVICE_ROLE_KEY"];
+/** Carrega a conexão salva em store_settings e cria um client novo — é uma tabela local pequena,
+ *  então o custo de reconsultar a cada chamada é desprezível, e evita cache de credencial velha
+ *  logo depois que o usuário salva uma nova chave em Configurações. */
+export async function getLiveLaunchpadAdmin() {
+  const { supabaseAdmin } = await import("./client.server");
+  const { data } = await (supabaseAdmin.from("store_settings") as any)
+    .select("live_launchpad_supabase_url, live_launchpad_supabase_service_role_key")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
 
-  if (!URL || !SERVICE_ROLE_KEY) {
-    const missing = [
-      ...(!URL ? ["LIVE_LAUNCHPAD_SUPABASE_URL"] : []),
-      ...(!SERVICE_ROLE_KEY ? ["LIVE_LAUNCHPAD_SUPABASE_SERVICE_ROLE_KEY"] : []),
-    ];
-    throw new Error(`Missing secret(s): ${missing.join(", ")}. Adicione em Configurações do projeto no Lovable.`);
+  const url = (data as any)?.live_launchpad_supabase_url as string | undefined;
+  const key = (data as any)?.live_launchpad_supabase_service_role_key as string | undefined;
+
+  if (!url || !key) {
+    throw new Error("Conexão com o live-launchpad-79 não configurada. Adicione em Configurações → Live Launchpad (Fluxo de Envio).");
   }
 
-  return createClient<LiveLaunchpadDatabase>(URL, SERVICE_ROLE_KEY, {
+  return createClient<LiveLaunchpadDatabase>(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
-
-let _liveLaunchpadAdmin: ReturnType<typeof createLiveLaunchpadAdminClient> | undefined;
-
-// Load inside server handlers: const { liveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
-export const liveLaunchpadAdmin = new Proxy({} as ReturnType<typeof createLiveLaunchpadAdminClient>, {
-  get(_, prop, receiver) {
-    if (!_liveLaunchpadAdmin) _liveLaunchpadAdmin = createLiveLaunchpadAdminClient();
-    return Reflect.get(_liveLaunchpadAdmin, prop, receiver);
-  },
-});

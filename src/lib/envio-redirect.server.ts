@@ -63,10 +63,15 @@ export async function handleTrackedLinkRedirect(queueItemId: string, request: Re
   const userAgent = (request.headers.get("user-agent") ?? "").slice(0, 500);
   const ipHash = await hashIp(ip);
 
-  await (localSupabaseAdmin.from("envio_link_clicks" as any) as any)
-    .insert({ campaign_id: (item as any).campaign_id, envio_message_id: messageId, ip_hash: ipHash, user_agent: userAgent } as never)
-    .then(() => {})
-    .catch((error: unknown) => console.error("handleTrackedLinkRedirect: falha ao logar clique", error));
+  // Precisa ser aguardado, não fire-and-forget: o Cloudflare Workers pode encerrar o isolate
+  // assim que a resposta HTTP for enviada, deixando o insert nunca terminar (mesma classe de bug
+  // já corrigida em envio-messages.server.ts).
+  try {
+    await (localSupabaseAdmin.from("envio_link_clicks" as any) as any)
+      .insert({ campaign_id: (item as any).campaign_id, envio_message_id: messageId, ip_hash: ipHash, user_agent: userAgent } as never);
+  } catch (error) {
+    console.error("handleTrackedLinkRedirect: falha ao logar clique", error);
+  }
 
   return new Response(null, { status: 302, headers: { Location: destination, "Cache-Control": "no-cache, no-store, must-revalidate" } });
 }
@@ -113,25 +118,28 @@ export async function handleEnvioCampaignRedirect(slug: string, request: Request
   const userAgent = (request.headers.get("user-agent") ?? "").slice(0, 500);
   const messageId = new URL(request.url).searchParams.get("m");
 
-  waitUntil(
-    (async () => {
-      const ipHash = await hashIp(ip);
-      const localSupabaseAdmin = await localAdmin();
-      await Promise.all([
-        (localSupabaseAdmin.from("envio_link_clicks" as any) as any).insert({
-          campaign_id: c.id,
-          ip_hash: ipHash,
-          user_agent: userAgent,
-          redirected_group_id: selected.id,
-          envio_message_id: messageId,
-        } as never),
-        (liveLaunchpad
-          .from("fe_groups" as any) as any)
-          .update({ participant_count: selected.participant_count + 1 } as never)
-          .eq("id", selected.id),
-      ]);
-    })().catch((error) => console.error("Registro de clique (fire-and-forget) falhou:", error)),
-  );
+  // Precisa ser aguardado, não fire-and-forget via waitUntil: testado em produção e confirmado que
+  // o isolate do Cloudflare Workers encerra antes desse bloco completar, perdendo 100% dos cliques
+  // e do incremento de participant_count (mesma classe de bug já corrigida em envio-messages.server.ts).
+  try {
+    const ipHash = await hashIp(ip);
+    const localSupabaseAdmin = await localAdmin();
+    await Promise.all([
+      (localSupabaseAdmin.from("envio_link_clicks" as any) as any).insert({
+        campaign_id: c.id,
+        ip_hash: ipHash,
+        user_agent: userAgent,
+        redirected_group_id: selected.id,
+        envio_message_id: messageId,
+      } as never),
+      (liveLaunchpad
+        .from("fe_groups" as any) as any)
+        .update({ participant_count: selected.participant_count + 1 } as never)
+        .eq("id", selected.id),
+    ]);
+  } catch (error) {
+    console.error("Registro de clique falhou:", error);
+  }
 
   if (c.facebook_pixel_id) {
     waitUntil(

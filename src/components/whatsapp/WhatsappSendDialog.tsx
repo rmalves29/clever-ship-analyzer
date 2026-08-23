@@ -344,8 +344,13 @@ export function WhatsappSendDialog({
                   </div>
 
                   {/* Mobile Preview */}
-                  <div className="md:col-span-2 flex flex-col items-center justify-start pt-4">
+                  <div className="md:col-span-2 flex flex-col items-center justify-start pt-4 relative">
                     <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-4">Prévia do WhatsApp</p>
+                    {selectedTemplate?.components.some(c => c.type === 'HEADER') && (
+                      <div className="absolute top-10 right-4 z-10">
+                        <Badge variant="outline" className="bg-brand/10 text-[8px] border-brand/20">Template com Cabeçalho</Badge>
+                      </div>
+                    )}
                     <div className="relative w-[220px] h-[400px] bg-slate-900 rounded-[2.5rem] border-[6px] border-slate-800 shadow-xl overflow-hidden flex flex-col">
                       <div className="h-10 bg-[#075e54] flex items-center px-4 gap-2">
                         <div className="size-6 rounded-full bg-slate-400" />

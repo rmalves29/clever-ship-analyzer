@@ -7,12 +7,13 @@ import { matchIncomingMessage } from "./lib/conversational-flows.server";
 import { getAutomationTickSecret, runAutomationsTickWithLog } from "./lib/automations-engine.server";
 import { runDailyEventsAnalysis } from "./lib/events.server";
 import { getFlowWebhookVerifyToken, processInstagramWebhookBody, verifyMetaSignature } from "./lib/flow-engine.server";
-import { handleEnvioCampaignRedirect } from "./lib/envio-redirect.server";
+import { handleEnvioCampaignRedirect, handleTrackedLinkRedirect } from "./lib/envio-redirect.server";
 import { processEnvioWebhookEvent } from "./lib/envio-webhook.server";
 import { processDueEnvioMessages } from "./lib/envio-messages.server";
 import { dispatchDueReturnInvites } from "./lib/envio-return-automation.server";
 import { runEnvioGroupEventsCleanup } from "./lib/envio-cleanup.server";
 import { runAiRoutinesTick } from "./lib/ai-send-routines.server";
+import { runAiPlaybookUpdate } from "./lib/ai-content-queue.server";
 
 const WHATSAPP_WEBHOOK_PATH = "/api/whatsapp-webhook";
 const INSTAGRAM_WEBHOOK_PATH = "/api/instagram-webhook";
@@ -20,10 +21,12 @@ const AUTOMATIONS_TICK_PATH = "/api/automations/tick";
 const DAILY_EVENTS_ANALYSIS_PATH = "/api/events/daily-analysis";
 const UAZAPI_WEBHOOK_PATH = "/api/uazapi-webhook";
 const ENVIO_REDIRECT_PREFIX = "/fluxo/";
+const TRACKED_LINK_PREFIX = "/r/";
 const ENVIO_PROCESS_SCHEDULED_PATH = "/api/envio/process-scheduled";
 const ENVIO_RETURN_DISPATCH_PATH = "/api/envio/return-dispatch";
 const ENVIO_CLEANUP_EVENTS_PATH = "/api/envio/cleanup-events";
 const AI_ROUTINES_TICK_PATH = "/api/ai-routines/tick";
+const AI_PLAYBOOK_TICK_PATH = "/api/ai-routines/playbook-tick";
 
 // Webhook da Meta é chamado diretamente por eles, fora do protocolo de RPC do
 // createServerFn — por isso é tratado aqui, antes do handler SSR do TanStack Start.
@@ -193,6 +196,18 @@ async function handleEnvioRedirect(request: Request, ctx: unknown): Promise<Resp
   }
 }
 
+async function handleTrackedLink(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const messageId = url.pathname.slice(TRACKED_LINK_PREFIX.length);
+  if (!messageId) return new Response("Not Found", { status: 404 });
+  try {
+    return await handleTrackedLinkRedirect(messageId, request);
+  } catch (error) {
+    console.error("Falha ao processar redirect rastreado:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}
+
 async function checkAutomationSecret(request: Request): Promise<boolean> {
   const provided = request.headers.get("X-Automation-Secret");
   const storedSecret = await getAutomationTickSecret();
@@ -231,6 +246,18 @@ async function handleAiRoutinesTick(request: Request): Promise<Response> {
     return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json" } });
   } catch (error) {
     console.error("Falha ao rodar o tick de rotinas de envio por IA:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}
+
+async function handleAiPlaybookTick(request: Request): Promise<Response> {
+  if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+  if (!(await checkAutomationSecret(request))) return new Response("Forbidden", { status: 401 });
+  try {
+    const result = await runAiPlaybookUpdate();
+    return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json" } });
+  } catch (error) {
+    console.error("Falha ao rodar a atualização do playbook de IA:", error);
     return new Response("Internal Server Error", { status: 500 });
   }
 }
@@ -309,6 +336,9 @@ export default {
     if (pathname.startsWith(ENVIO_REDIRECT_PREFIX)) {
       return handleEnvioRedirect(request, ctx);
     }
+    if (pathname.startsWith(TRACKED_LINK_PREFIX)) {
+      return handleTrackedLink(request);
+    }
     if (pathname === ENVIO_PROCESS_SCHEDULED_PATH) {
       return handleEnvioProcessScheduled(request);
     }
@@ -320,6 +350,9 @@ export default {
     }
     if (pathname === AI_ROUTINES_TICK_PATH) {
       return handleAiRoutinesTick(request);
+    }
+    if (pathname === AI_PLAYBOOK_TICK_PATH) {
+      return handleAiPlaybookTick(request);
     }
     try {
       const handler = await getServerEntry();

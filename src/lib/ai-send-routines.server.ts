@@ -42,8 +42,9 @@ Responda em JSON estrito:
 }
 
 /** URLs de imagem do Meta (Ads/Instagram) costumam ser protegidas/temporárias — a OpenAI não
- *  consegue baixá-las direto (403). Baixamos aqui no servidor e mandamos como data URI. */
-async function fetchImageAsDataUri(url: string): Promise<string | null> {
+ *  consegue baixá-las direto (403). Baixamos aqui no servidor e mandamos como data URI.
+ *  Exportado: reaproveitado por ai-content-queue.server.ts pra geração em lote. */
+export async function fetchImageAsDataUri(url: string): Promise<string | null> {
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
@@ -57,11 +58,11 @@ async function fetchImageAsDataUri(url: string): Promise<string | null> {
   }
 }
 
-function dataUriToBase64(dataUri: string): string {
+export function dataUriToBase64(dataUri: string): string {
   return dataUri.slice(dataUri.indexOf(",") + 1);
 }
 
-function dataUriContentType(dataUri: string): string {
+export function dataUriContentType(dataUri: string): string {
   const match = /^data:([^;]+);base64,/.exec(dataUri);
   return match?.[1] ?? "image/jpeg";
 }
@@ -103,7 +104,7 @@ async function callOpenAiDraft(apiKey: string, ctx: DraftContext): Promise<{ res
   return { result: JSON.parse(content) as OpenAiDraftResult, adDataUri, postDataUri };
 }
 
-async function generateImageBase64(apiKey: string, prompt: string): Promise<string> {
+export async function generateImageBase64(apiKey: string, prompt: string): Promise<string> {
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -229,25 +230,27 @@ function advanceNextRunAt(recurrence: RoutineRecurrence, prevNextRunAt: string):
  *  `scheduledAtIso` for null/omitido (cai no envio em background do próprio createAndSendEnvioMessage),
  *  ou entra na fila de agendados do Fluxo de Envio (aba Envios, já tem cron próprio) se for uma
  *  data futura. Retorna quantos grupos foram alvo, pra o chamador decidir o que fazer se for 0. */
-async function dispatchToCampaignGroups(campaignId: string, contentText: string, contentImageUrl: string | null, scheduledAtIso?: string): Promise<{ groupCount: number }> {
+export async function dispatchToCampaignGroups(campaignId: string, contentText: string, contentImageUrl: string | null, scheduledAtIso?: string): Promise<{ groupCount: number; messageIds: string[] }> {
   const { getLiveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
   const liveLaunchpadAdmin = await getLiveLaunchpadAdmin();
 
   const { data: links } = await (liveLaunchpadAdmin.from("fe_campaign_groups") as any).select("group_id").eq("campaign_id", campaignId);
   const groupIds = ((links ?? []) as any[]).map((l) => l.group_id as string);
 
+  let messageIds: string[] = [];
   if (groupIds.length > 0) {
     const { createAndSendEnvioMessage } = await import("./envio-messages.server");
-    await createAndSendEnvioMessage({
+    const res = await createAndSendEnvioMessage({
       groupIds,
       contentType: contentImageUrl ? "image" : "text",
       contentText,
       mediaUrl: contentImageUrl ?? undefined,
       scheduledAt: scheduledAtIso,
     });
+    messageIds = res.messageIds;
   }
 
-  return { groupCount: groupIds.length };
+  return { groupCount: groupIds.length, messageIds };
 }
 
 export async function createAiSendRoutine(input: {

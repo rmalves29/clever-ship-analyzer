@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Download } from "lucide-react";
 import { getEnvioReports } from "@/lib/envio-reports.functions";
 import type { EnvioReportsPeriod } from "@/lib/envio-reports.server";
+import { getAiContentPerformanceFn } from "@/lib/ai-content-queue.functions";
 
 const PERIODS: { value: EnvioReportsPeriod; label: string }[] = [
   { value: "24h", label: "24h" },
@@ -28,6 +29,9 @@ export function ReportsPanel() {
   const [period, setPeriod] = useState<EnvioReportsPeriod>("30d");
   const getReports = useServerFn(getEnvioReports);
   const { data, isLoading } = useQuery({ queryKey: ["envio-reports", period], queryFn: () => getReports({ data: { period } }) });
+
+  const getAiPerformance = useServerFn(getAiContentPerformanceFn);
+  const { data: aiPosts } = useQuery({ queryKey: ["ai-content-performance"], queryFn: () => getAiPerformance() });
 
   const exportCsv = () => {
     if (!data) return;
@@ -121,6 +125,43 @@ export function ReportsPanel() {
                   <TableCell className={g.net < 0 ? "text-critical" : ""}>{g.net}</TableCell>
                 </TableRow>
               ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-sm font-semibold">Postagens geradas por IA — o que deu certo</p>
+        <div className="surface-card overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data</TableHead>
+                <TableHead>Campanha</TableHead>
+                <TableHead>Texto</TableHead>
+                <TableHead>Cliques</TableHead>
+                <TableHead>Respostas</TableHead>
+                <TableHead>Saídas (24h)</TableHead>
+                <TableHead>Feedback</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(aiPosts ?? []).map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="whitespace-nowrap">{new Date(`${p.scheduledDate}T12:00:00Z`).toLocaleDateString("pt-BR")}</TableCell>
+                  <TableCell>{p.campaignName}</TableCell>
+                  <TableCell className="max-w-xs truncate" title={p.text}>{p.text}</TableCell>
+                  <TableCell>{p.clicks}</TableCell>
+                  <TableCell>{p.replies}</TableCell>
+                  <TableCell className={p.exits24h > 0 ? "text-critical" : ""}>{p.exits24h}</TableCell>
+                  <TableCell>{p.feedback === "good" ? "👍" : p.feedback === "bad" ? "👎" : "—"}</TableCell>
+                </TableRow>
+              ))}
+              {(aiPosts ?? []).length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">Nenhuma postagem gerada por IA enviada ainda nos últimos 30 dias.</TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>

@@ -25,6 +25,20 @@ export const listRecentEnvioMessages = createServerFn({ method: "GET" }).handler
   return list();
 });
 
+export const submitMessageFeedback = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ envioMessageId: z.string().uuid(), feedback: z.enum(["good", "bad"]), note: z.string().optional() }).parse(data))
+  .handler(async ({ data }) => {
+    const { submitMessageFeedback: submit } = await import("./envio-messages.server");
+    return submit(data);
+  });
+
+export const getRecentMessageFeedback = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ messageIds: z.array(z.string().uuid()) }).parse(data))
+  .handler(async ({ data }) => {
+    const { getRecentMessageFeedback: get } = await import("./envio-messages.server");
+    return get(data.messageIds);
+  });
+
 export const editPendingEnvioMessage = createServerFn({ method: "POST" })
   .validator((data: unknown) =>
     z

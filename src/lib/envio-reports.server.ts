@@ -1,6 +1,11 @@
-async function admin() {
+async function localAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
+}
+
+async function liveLaunchpadAdmin() {
+  const { getLiveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
+  return getLiveLaunchpadAdmin();
 }
 
 export type EnvioReportsPeriod = "24h" | "7d" | "30d" | "90d" | "all";
@@ -14,16 +19,19 @@ function dayKey(iso: string): string {
   return iso.slice(0, 10);
 }
 
+/** Campanhas/grupos/eventos de grupo vivem no live-launchpad-79 desde o repontamento; cliques
+ *  continuam locais. Bancos diferentes = sem SQL join, cruza em memória pelo group_id/campaign_id. */
 export async function getEnvioReports(period: EnvioReportsPeriod) {
-  const supabaseAdmin = await admin();
+  const localSupabaseAdmin = await localAdmin();
+  const liveLaunchpad = await liveLaunchpadAdmin();
   const start = periodStart(period);
 
   const [{ data: clicks }, { data: events }, { data: campaigns }, { data: campaignGroups }, { data: groups }] = await Promise.all([
-    ((supabaseAdmin.from("envio_link_clicks" as any) as any) as any).select("campaign_id, clicked_at").gte("clicked_at", start),
-    ((supabaseAdmin.from("envio_group_events" as any) as any) as any).select("group_id, event_type, created_at").gte("created_at", start),
-    ((supabaseAdmin.from("envio_campaigns" as any) as any) as any).select("id, name"),
-    ((supabaseAdmin.from("envio_campaign_groups" as any) as any) as any).select("campaign_id, group_id"),
-    ((supabaseAdmin.from("envio_groups" as any) as any) as any).select("id, group_name, participant_count"),
+    ((localSupabaseAdmin.from("envio_link_clicks" as any) as any) as any).select("campaign_id, clicked_at").gte("clicked_at", start),
+    ((liveLaunchpad.from("fe_group_events" as any) as any) as any).select("group_id, event_type, created_at").gte("created_at", start),
+    ((liveLaunchpad.from("fe_campaigns" as any) as any) as any).select("id, name"),
+    ((liveLaunchpad.from("fe_campaign_groups" as any) as any) as any).select("campaign_id, group_id"),
+    ((liveLaunchpad.from("fe_groups" as any) as any) as any).select("id, group_name, participant_count"),
   ]);
 
   const linkedGroupIds = new Set(((campaignGroups ?? []) as any[]).map((r) => r.group_id));

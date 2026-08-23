@@ -261,3 +261,55 @@ export const CUSTOMERS_QUERY = `
     }
   }
 `;
+
+const ACTIVE_PROMOTIONS_QUERY = `
+  query getActivePromotions {
+    discountNodes(first: 10, query: "status:ACTIVE") {
+      edges {
+        node {
+          id
+          discount {
+            __typename
+            ... on DiscountAutomaticBasic { title summary }
+            ... on DiscountAutomaticBxgy { title summary }
+            ... on DiscountCodeBasic { title summary codes(first: 1) { nodes { code } } }
+            ... on DiscountCodeBxgy { title summary codes(first: 1) { nodes { code } } }
+            ... on DiscountCodeFreeShipping { title summary codes(first: 1) { nodes { code } } }
+          }
+        }
+      }
+    }
+  }
+`;
+
+export type ActivePromotion = { title: string; summary: string | null; code: string | null };
+
+/** Promoções/descontos ativos AGORA na loja — consulta ao vivo (sem sync/tabela), usada só no
+ *  momento de gerar conteúdo pra IA saber se tem algo rolando pra mencionar. */
+export async function getActiveShopifyPromotions(): Promise<{ success: true; promotions: ActivePromotion[] } | { success: false; error: string }> {
+  try {
+    const data = await shopifyGraphQL(ACTIVE_PROMOTIONS_QUERY);
+    const edges: any[] = data?.discountNodes?.edges ?? [];
+    const promotions: ActivePromotion[] = edges
+      .map((e) => e.node?.discount)
+      .filter(Boolean)
+      .map((d: any) => ({
+        title: d.title ?? "Promoção ativa",
+        summary: d.summary ?? null,
+        code: d.codes?.nodes?.[0]?.code ?? null,
+      }));
+    return { success: true, promotions };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar promoções na Shopify." };
+  }
+}
+
+/** URL pública da loja, pra montar link de produto/coleção nas postagens geradas por IA. */
+export async function getShopifyStoreUrl(): Promise<string | null> {
+  try {
+    const { domain } = await getShopifyCredentials();
+    return `https://${domain}`;
+  } catch {
+    return null;
+  }
+}

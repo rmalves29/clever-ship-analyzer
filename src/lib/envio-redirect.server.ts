@@ -1,6 +1,11 @@
-async function admin() {
+async function localAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
+}
+
+async function liveLaunchpadAdmin() {
+  const { getLiveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
+  return getLiveLaunchpadAdmin();
 }
 
 type WaitUntil = (promise: Promise<unknown>) => void;
@@ -36,20 +41,52 @@ function pickWeighted<T extends { weight: number }>(candidates: T[]): T {
   return candidates[candidates.length - 1]!;
 }
 
-export async function handleEnvioCampaignRedirect(slug: string, request: Request, waitUntil: WaitUntil): Promise<Response> {
-  const supabaseAdmin = await admin();
+/** Redirect rastreado genérico pra link de produto/Instagram dentro de uma postagem gerada por
+ *  IA — diferente do redirect de campanha acima (que escolhe um grupo pra entrar), aqui é só
+ *  "logar o clique e mandar pro destino real". Usa o ID da FILA (ai_content_queue.id), não o da
+ *  mensagem — o link precisa existir no texto já na hora da geração, antes de envio_message_id
+ *  existir; por quando alguém clica (sempre depois do envio de verdade), a fila já tem o
+ *  envio_message_id preenchido, então o clique fica corretamente atribuído à mensagem real. */
+export async function handleTrackedLinkRedirect(queueItemId: string, request: Request): Promise<Response> {
+  const localSupabaseAdmin = await localAdmin();
+  const { data: item } = await (localSupabaseAdmin.from("ai_content_queue" as any) as any)
+    .select("campaign_id, link_url, envio_message_id")
+    .eq("id", queueItemId)
+    .not("link_url", "is", null)
+    .maybeSingle();
 
-  const { data: campaign } = await (supabaseAdmin.from("envio_campaigns" as any) as any).select("*").eq("slug", slug).eq("is_active", true).maybeSingle();
+  const destination = (item as any)?.link_url as string | undefined;
+  if (!destination) return htmlResponse(NOT_FOUND_HTML, 404);
+  const messageId = (item as any).envio_message_id as string | null;
+
+  const ip = request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for") ?? "unknown";
+  const userAgent = (request.headers.get("user-agent") ?? "").slice(0, 500);
+  const ipHash = await hashIp(ip);
+
+  await (localSupabaseAdmin.from("envio_link_clicks" as any) as any)
+    .insert({ campaign_id: (item as any).campaign_id, envio_message_id: messageId, ip_hash: ipHash, user_agent: userAgent } as never)
+    .then(() => {})
+    .catch((error: unknown) => console.error("handleTrackedLinkRedirect: falha ao logar clique", error));
+
+  return new Response(null, { status: 302, headers: { Location: destination, "Cache-Control": "no-cache, no-store, must-revalidate" } });
+}
+
+/** slug -> campanha/grupos agora vivem no live-launchpad-79; o clique em si (envio_link_clicks)
+ *  continua local, pra ficar junto do resto do rastreio do Fluxo de Envio nesse app. */
+export async function handleEnvioCampaignRedirect(slug: string, request: Request, waitUntil: WaitUntil): Promise<Response> {
+  const liveLaunchpad = await liveLaunchpadAdmin();
+
+  const { data: campaign } = await (liveLaunchpad.from("fe_campaigns" as any) as any).select("*").eq("slug", slug).eq("is_active", true).maybeSingle();
   if (!campaign) return htmlResponse(NOT_FOUND_HTML, 404);
   const c = campaign as any;
   if (!c.is_entry_open) return htmlResponse(CLOSED_HTML, 403);
 
-  const { data: links } = await (supabaseAdmin
-    .from("envio_campaign_groups" as any) as any)
-    .select("group_id, weight_percent, envio_groups!inner(id, group_name, invite_link, participant_count, max_participants, is_active, is_entry_open)")
+  const { data: links } = await (liveLaunchpad
+    .from("fe_campaign_groups" as any) as any)
+    .select("group_id, weight_percent, fe_groups!inner(id, group_name, invite_link, participant_count, max_participants, is_active, is_entry_open)")
     .eq("campaign_id", c.id);
 
-  const allGroups = ((links ?? []) as any[]).map((l) => ({ ...l.envio_groups, weight_percent: l.weight_percent }));
+  const allGroups = ((links ?? []) as any[]).map((l) => ({ ...l.fe_groups, weight_percent: l.weight_percent }));
 
   const available = allGroups.filter(
     (g) => g.is_active && g.is_entry_open && g.invite_link && (!g.max_participants || g.participant_count < g.max_participants),
@@ -74,19 +111,22 @@ export async function handleEnvioCampaignRedirect(slug: string, request: Request
 
   const ip = request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for") ?? "unknown";
   const userAgent = (request.headers.get("user-agent") ?? "").slice(0, 500);
+  const messageId = new URL(request.url).searchParams.get("m");
 
   waitUntil(
     (async () => {
       const ipHash = await hashIp(ip);
+      const localSupabaseAdmin = await localAdmin();
       await Promise.all([
-        (supabaseAdmin.from("envio_link_clicks" as any) as any).insert({
+        (localSupabaseAdmin.from("envio_link_clicks" as any) as any).insert({
           campaign_id: c.id,
           ip_hash: ipHash,
           user_agent: userAgent,
           redirected_group_id: selected.id,
+          envio_message_id: messageId,
         } as never),
-        (supabaseAdmin
-          .from("envio_groups" as any) as any)
+        (liveLaunchpad
+          .from("fe_groups" as any) as any)
           .update({ participant_count: selected.participant_count + 1 } as never)
           .eq("id", selected.id),
       ]);

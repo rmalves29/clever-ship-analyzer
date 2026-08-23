@@ -9,13 +9,15 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Send, Paperclip, X } from "lucide-react";
+import { Send, Paperclip, X, ThumbsUp, ThumbsDown } from "lucide-react";
 import {
   createAndSendEnvioMessage,
   listRecentEnvioMessages,
   editPendingEnvioMessage,
   cancelPendingEnvioMessage,
   uploadEnvioMedia,
+  submitMessageFeedback,
+  getRecentMessageFeedback,
 } from "@/lib/envio-messages.functions";
 import { listEnvioGroups } from "@/lib/envio-groups.functions";
 import { listEnvioCampaigns, getCampaignGroupLinks } from "@/lib/envio-campaigns.functions";
@@ -59,6 +61,21 @@ export function MessageComposer() {
   const { data: groups } = useQuery({ queryKey: ["envio-groups"], queryFn: () => listGroups() });
   const { data: campaigns } = useQuery({ queryKey: ["envio-campaigns"], queryFn: () => listCampaigns() });
   const { data: history } = useQuery({ queryKey: ["envio-messages"], queryFn: () => listMessages(), refetchInterval: 5000 });
+  const runSubmitFeedback = useServerFn(submitMessageFeedback);
+  const runGetFeedback = useServerFn(getRecentMessageFeedback);
+  const sentIds = (history ?? []).filter((m) => m.status === "sent").map((m) => m.id);
+  const { data: feedbackMap } = useQuery({
+    queryKey: ["envio-message-feedback", sentIds.join(",")],
+    queryFn: () => runGetFeedback({ data: { messageIds: sentIds } }),
+    enabled: sentIds.length > 0,
+  });
+  const feedbackMut = useMutation({
+    mutationFn: (input: { id: string; feedback: "good" | "bad" }) => runSubmitFeedback({ data: { envioMessageId: input.id, feedback: input.feedback } }),
+    onSuccess: () => {
+      toast.success("Feedback registrado.");
+      qc.invalidateQueries({ queryKey: ["envio-message-feedback"] });
+    },
+  });
 
   const [contentType, setContentType] = useState<(typeof CONTENT_TYPES)[number]["value"]>("text");
   const [text, setText] = useState("");
@@ -239,6 +256,24 @@ export function MessageComposer() {
                   <button onClick={() => cancelMut.mutate(m.id)} className="text-critical hover:underline">
                     <X className="size-3.5" />
                   </button>
+                )}
+                {m.status === "sent" && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      title="Deu certo"
+                      onClick={() => feedbackMut.mutate({ id: m.id, feedback: "good" })}
+                      className={`rounded p-0.5 hover:bg-success-soft ${feedbackMap?.[m.id] === "good" ? "text-success" : "text-muted-foreground"}`}
+                    >
+                      <ThumbsUp className="size-3.5" />
+                    </button>
+                    <button
+                      title="Não deu certo"
+                      onClick={() => feedbackMut.mutate({ id: m.id, feedback: "bad" })}
+                      className={`rounded p-0.5 hover:bg-critical-soft ${feedbackMap?.[m.id] === "bad" ? "text-critical" : "text-muted-foreground"}`}
+                    >
+                      <ThumbsDown className="size-3.5" />
+                    </button>
+                  </div>
                 )}
               </div>
               <p className="mt-1 truncate text-muted-foreground">{m.content_text || m.content_type}</p>

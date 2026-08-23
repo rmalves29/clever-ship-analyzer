@@ -137,6 +137,34 @@ export async function uploadEnvioMedia(input: { fileName: string; base64Data: st
   return { url: data.publicUrl };
 }
 
+export type MessageFeedback = "good" | "bad";
+
+/** Feedback manual (bom/ruim) sobre uma mensagem já enviada — alimenta o loop de aprendizado
+ *  diário (ai-content-queue.server.ts:runAiPlaybookUpdate). */
+export async function submitMessageFeedback(input: { envioMessageId: string; feedback: MessageFeedback; note?: string | undefined }): Promise<{ success: true }> {
+  const supabaseAdmin = await admin();
+  await (supabaseAdmin.from("envio_message_feedback" as any) as any).insert({
+    envio_message_id: input.envioMessageId,
+    feedback: input.feedback,
+    note: input.note ?? null,
+  } as never);
+  return { success: true };
+}
+
+export async function getRecentMessageFeedback(messageIds: string[]): Promise<Record<string, MessageFeedback>> {
+  if (messageIds.length === 0) return {};
+  const supabaseAdmin = await admin();
+  const { data } = await (supabaseAdmin.from("envio_message_feedback" as any) as any)
+    .select("envio_message_id, feedback, created_at")
+    .in("envio_message_id", messageIds)
+    .order("created_at", { ascending: false });
+  const map: Record<string, MessageFeedback> = {};
+  for (const row of (data ?? []) as any[]) {
+    if (!(row.envio_message_id in map)) map[row.envio_message_id] = row.feedback;
+  }
+  return map;
+}
+
 export async function listRecentEnvioMessages(limit = 20): Promise<EnvioMessage[]> {
   const supabaseAdmin = await admin();
   const { data, error } = await (supabaseAdmin

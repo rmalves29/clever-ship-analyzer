@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { getCalendarMonthDataFn } from "@/lib/events.functions";
 import type { CalendarDay } from "@/lib/events.server";
 import type { EventCategory } from "@/lib/events.server";
-import { AiRoutineDialog } from "./AiRoutineDialog";
+import { AiBatchDialog } from "./AiBatchDialog";
 
 const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
@@ -201,7 +201,7 @@ export function CalendarView({
         </Dialog>
       )}
 
-      <AiRoutineDialog open={aiDialogOpen} onOpenChange={setAiDialogOpen} />
+      <AiBatchDialog open={aiDialogOpen} onOpenChange={setAiDialogOpen} />
     </div>
   );
 }

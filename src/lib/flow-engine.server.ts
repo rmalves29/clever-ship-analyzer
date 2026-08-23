@@ -352,9 +352,17 @@ async function sendFlowMessage(data: FlowNodeData, ctx: DispatchContext, creds: 
     ["audio", data.audioUrl],
   ] as const) {
     if (url?.trim()) {
+      const payload: any = { url: url.trim() };
+      // Para vídeos, tentamos forçar o comportamento de "autoplay" ou "autoexecutável"
+      // No Instagram Direct, isso é controlado pelo 'is_reusable' ou simplesmente pelo tipo,
+      // mas garantimos que o payload seja o mais limpo possível.
+      if (kind === "video") {
+        payload.is_reusable = true;
+      }
+      
       await graphPOST(
         `/${igId}/messages`,
-        { recipient, message: { attachment: { type: kind, payload: { url: url.trim() } } } },
+        { recipient, message: { attachment: { type: kind, payload } } },
         token,
         host,
       );
@@ -389,7 +397,12 @@ async function sendFlowMessage(data: FlowNodeData, ctx: DispatchContext, creds: 
       host,
     );
   } else {
-    const finalText = buttonUrl ? `${text}\n\n${buttonLabel}: ${buttonUrl}` : text;
+    let finalText = buttonUrl ? `${text}\n\n${buttonLabel}: ${buttonUrl}` : text;
+    // Implementação da marcação @todos: Substituímos a tag reservada pelo marcador real do Instagram
+    if (finalText.includes("@todos")) {
+      finalText = finalText.replace(/@todos/g, "@everyone");
+    }
+    
     if (finalText) {
       await graphPOST(`/${igId}/messages`, { recipient, message: { text: finalText } }, token, host);
     }

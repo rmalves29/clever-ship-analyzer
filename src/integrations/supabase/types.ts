@@ -1169,6 +1169,7 @@ export type Database = {
           province: string | null
           rfm_segment: string | null
           tags: string[] | null
+          tags_custom: string[] | null
           updated_at: string
         }
         Insert: {
@@ -1183,6 +1184,7 @@ export type Database = {
           province?: string | null
           rfm_segment?: string | null
           tags?: string[] | null
+          tags_custom?: string[] | null
           updated_at?: string
         }
         Update: {
@@ -1197,6 +1199,7 @@ export type Database = {
           province?: string | null
           rfm_segment?: string | null
           tags?: string[] | null
+          tags_custom?: string[] | null
           updated_at?: string
         }
         Relationships: []

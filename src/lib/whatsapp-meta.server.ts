@@ -568,10 +568,8 @@ export async function dispatchCampaign(campaignId: string, restrictToCustomerIds
       templateName: campaign.template_name,
       templateLanguage: campaign.template_language ?? settings.templateLanguage,
       bodyParams: resolvedParams,
-      // Se for um evento de carrinho abandonado, o vídeo (Recado de Vídeo)
-      // geralmente vem como um anexo de mídia se o template permitir.
-      // A Meta exige que o vídeo seja enviado como um objeto de mídia separado
-      // ou dentro do template se ele tiver um header de mídia.
+      // Passamos a URL do vídeo se for uma campanha de vídeo e o template suportar
+      mediaUrl: (c as any).video_url || undefined,
     });
 
     await supabaseAdmin.from("whatsapp_campaign_recipients").insert({

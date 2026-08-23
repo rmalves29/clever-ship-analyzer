@@ -90,6 +90,7 @@ const CATEGORIES = [
     fields: [
       { id: "customer_tag", label: "Tag do Cliente" },
       { id: "order_tag", label: "Tag do Pedido" },
+      { id: "tags_custom", label: "Tag Personalizada (Sistema)" },
     ]
   },
   {

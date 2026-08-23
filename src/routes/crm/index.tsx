@@ -46,6 +46,7 @@ import { RFM_SEGMENTS_CONFIG } from "@/lib/crm-rfm.functions";
 import { normalizeAllPhones } from "@/lib/maintenance-scripts.functions";
 import { identifyAbandonedCheckouts } from "@/lib/abandoned-checkout.functions";
 import { brl } from "@/lib/crm-mock";
+import { updateCustomerTags } from "@/lib/crm-tags.functions";
 import { SegmentEditor } from "@/components/crm/SegmentEditor";
 import { toast } from "sonner";
 
@@ -169,6 +170,24 @@ function CRMPage() {
     }
   };
   
+  const runUpdateTags = useServerFn(updateCustomerTags);
+  const handleEditTags = async (customerId: string, currentTags: string[]) => {
+    const newTagsStr = prompt("Gerenciar Tags (separadas por vírgula):", currentTags.join(", "));
+    if (newTagsStr === null) return;
+    
+    const tags = newTagsStr.split(",").map(t => t.trim()).filter(t => t.length > 0);
+    
+    const promise = runUpdateTags({ data: { customerId, tags } });
+    toast.promise(promise, {
+      loading: "Atualizando tags...",
+      success: () => {
+        queryClient.invalidateQueries({ queryKey: ["crm-customers"] });
+        return "Tags atualizadas!";
+      },
+      error: (err) => "Erro: " + err.message
+    });
+  };
+
   const [isSyncing, setIsSyncing] = useState(false);
   const runSync = useServerFn(syncShopifyData);
   const handleSync = async () => {
@@ -407,6 +426,7 @@ function CRMPage() {
                       <TableHead className="w-12"></TableHead>
                       <TableHead>NOME / E-MAIL</TableHead>
                       <TableHead>TELEFONE</TableHead>
+                      <TableHead>TAGS</TableHead>
                       <TableHead>RFM / PERFIL</TableHead>
                       <TableHead className="text-center">COMPRAS</TableHead>
                       <TableHead className="text-right">TOTAL GASTO</TableHead>
@@ -448,6 +468,23 @@ function CRMPage() {
                                 <Phone className="size-3" /> {c.phone}
                               </div>
                             ) : "—"}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1 max-w-[200px]">
+                              {(c.tagsCustom || []).map((tag: string) => (
+                                <Badge key={tag} variant="outline" className="text-[10px] bg-brand/5 text-brand border-brand/20">
+                                  {tag}
+                                </Badge>
+                              ))}
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="size-5 rounded-full hover:bg-brand/10 hover:text-brand"
+                                onClick={() => handleEditTags(c.id, c.tagsCustom || [])}
+                              >
+                                <Plus className="size-3" />
+                              </Button>
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col gap-1">

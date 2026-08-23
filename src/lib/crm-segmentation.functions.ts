@@ -56,6 +56,10 @@ export const getCustomersList = createServerFn({ method: "POST" })
             if (operator === "contains") query = query.contains("tags", [val]);
             else if (operator === "not_contains") query = query.not("tags", "cs", `{${val}}`);
             else if (operator === "eq") query = query.eq("tags", `{${val}}`);
+          } else if (field === "tags_custom") {
+            if (operator === "contains") query = query.contains("tags_custom", [val]);
+            else if (operator === "not_contains") query = query.not("tags_custom", "cs", `{${val}}`);
+            else if (operator === "eq") query = query.eq("tags_custom", `{${val}}`);
           } else if (field === "status_pagamento") {
             // Filtrar clientes que possuem pelo menos um pedido com este status financeiro
             const { data: customersWithStatus } = await supabaseAdmin
@@ -285,6 +289,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
         totalOrders: orders.length,
         totalSpent,
         lastOrderAt: lastOrder?.processed_at || null,
+        tagsCustom: c.tags_custom || [],
         updatedAt: c.updated_at,
       };
     });

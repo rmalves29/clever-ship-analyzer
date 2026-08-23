@@ -536,7 +536,7 @@ function CRMPage() {
                           {
                             nome: "Acessou e Não Comprou",
                             descricao: "Leads que interagiram mas ainda não possuem pedidos.",
-                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "perfil", operator: "eq", value: "acesso_sem_compra", label: "Perfil do Cliente" }] }] }
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "perfil", operator: "eq", value: "acesso_sem_compra", label: "CRM/contatos/segmentos eu consigo criar um segmento para puxar os clientes que abandonaram checkouts?" }] }] }
                           },
                           {
                             nome: "Primeira Compra",

@@ -42,7 +42,9 @@ async function sendOneMessage(messageId: string): Promise<void> {
     return;
   }
 
-  const { data: group } = await ((supabaseAdmin.from("envio_groups" as any) as any) as any).select("group_jid").eq("id", m.group_id).maybeSingle();
+  const { getLiveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
+  const liveLaunchpadAdmin = await getLiveLaunchpadAdmin();
+  const { data: group } = await (liveLaunchpadAdmin.from("fe_groups") as any).select("group_jid").eq("id", m.group_id).maybeSingle();
   const groupJid = (group as any)?.group_jid as string | undefined;
   if (!groupJid) {
     await ((supabaseAdmin.from("envio_messages" as any) as any) as any).update({ status: "failed" } as never).eq("id", messageId);

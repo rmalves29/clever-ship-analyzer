@@ -12,6 +12,7 @@ import { processEnvioWebhookEvent } from "./lib/envio-webhook.server";
 import { processDueEnvioMessages } from "./lib/envio-messages.server";
 import { dispatchDueReturnInvites } from "./lib/envio-return-automation.server";
 import { runEnvioGroupEventsCleanup } from "./lib/envio-cleanup.server";
+import { runAiRoutinesTick } from "./lib/ai-send-routines.server";
 
 const WHATSAPP_WEBHOOK_PATH = "/api/whatsapp-webhook";
 const INSTAGRAM_WEBHOOK_PATH = "/api/instagram-webhook";
@@ -22,6 +23,7 @@ const ENVIO_REDIRECT_PREFIX = "/fluxo/";
 const ENVIO_PROCESS_SCHEDULED_PATH = "/api/envio/process-scheduled";
 const ENVIO_RETURN_DISPATCH_PATH = "/api/envio/return-dispatch";
 const ENVIO_CLEANUP_EVENTS_PATH = "/api/envio/cleanup-events";
+const AI_ROUTINES_TICK_PATH = "/api/ai-routines/tick";
 
 // Webhook da Meta é chamado diretamente por eles, fora do protocolo de RPC do
 // createServerFn — por isso é tratado aqui, antes do handler SSR do TanStack Start.
@@ -221,6 +223,18 @@ async function handleEnvioReturnDispatch(request: Request): Promise<Response> {
   }
 }
 
+async function handleAiRoutinesTick(request: Request): Promise<Response> {
+  if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+  if (!(await checkAutomationSecret(request))) return new Response("Forbidden", { status: 401 });
+  try {
+    const result = await runAiRoutinesTick();
+    return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json" } });
+  } catch (error) {
+    console.error("Falha ao rodar o tick de rotinas de envio por IA:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}
+
 async function handleEnvioCleanupEvents(request: Request): Promise<Response> {
   if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
   if (!(await checkAutomationSecret(request))) return new Response("Forbidden", { status: 401 });
@@ -303,6 +317,9 @@ export default {
     }
     if (pathname === ENVIO_CLEANUP_EVENTS_PATH) {
       return handleEnvioCleanupEvents(request);
+    }
+    if (pathname === AI_ROUTINES_TICK_PATH) {
+      return handleAiRoutinesTick(request);
     }
     try {
       const handler = await getServerEntry();

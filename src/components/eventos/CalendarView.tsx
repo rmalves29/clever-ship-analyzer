@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ChevronLeft, ChevronRight, MessageCircle, Gift, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageCircle, Gift, Plus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getCalendarMonthDataFn } from "@/lib/events.functions";
 import type { CalendarDay } from "@/lib/events.server";
 import type { EventCategory } from "@/lib/events.server";
+import { AiRoutineDialog } from "./AiRoutineDialog";
 
 const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
@@ -38,6 +39,7 @@ export function CalendarView({
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1); // 1-12
   const [selected, setSelected] = useState<CalendarDay | null>(null);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
 
   const runCalendar = useServerFn(getCalendarMonthDataFn);
   const { data: days, isLoading } = useQuery({
@@ -69,7 +71,10 @@ export function CalendarView({
     <div className="mt-4">
       <div className="flex items-center justify-between rounded-t-xl border border-b-0 border-border bg-card px-4 py-3">
         <p className="font-semibold">{MONTH_LABELS[month - 1]} de {year}</p>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
+          <Button size="sm" className="gap-1.5" onClick={() => setAiDialogOpen(true)}>
+            <Sparkles className="size-3.5" /> Criar fluxo com IA
+          </Button>
           <Button variant="ghost" size="icon" className="size-8" onClick={goPrev}>
             <ChevronLeft className="size-4" />
           </Button>
@@ -195,6 +200,8 @@ export function CalendarView({
           </DialogContent>
         </Dialog>
       )}
+
+      <AiRoutineDialog open={aiDialogOpen} onOpenChange={setAiDialogOpen} />
     </div>
   );
 }

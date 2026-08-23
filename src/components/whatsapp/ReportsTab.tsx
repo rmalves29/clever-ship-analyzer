@@ -204,8 +204,8 @@ export function ReportsTab() {
         </section>
 
         <section className="surface-card p-5">
-          <h3 className="font-semibold">pq a mensagem da API do whatsapp está dando erro ?</h3>
-          <p className="text-sm text-muted-foreground">pq a mensagem da API do whatsapp está dando erro ?</p>
+          <h3 className="font-semibold">crie uma mensagem de teste na api do whatsapp, veja se está tudo ok, faça uma avaliação geral do sistema para ver se a integração do whatsapp api está funcionando.</h3>
+          <p className="text-sm text-muted-foreground">crie uma mensagem de teste na api do whatsapp, veja se está tudo ok, faça uma avaliação geral do sistema para ver se a integração do whatsapp api está funcionando.</p>
           <div className="mt-4 space-y-3">
             {(!failures || failures.length === 0) && <p className="text-sm text-muted-foreground">Nenhuma falha registrada.</p>}
             {failures?.map((f) => (

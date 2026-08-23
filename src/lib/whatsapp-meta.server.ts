@@ -334,18 +334,22 @@ async function sendTemplateMessage(params: {
   }
 
   if (params.mediaId || params.mediaUrl) {
-    const isVideo = params.mediaUrl?.toLowerCase().includes('.mp4') || params.mediaUrl?.toLowerCase().includes('video');
+    const url = params.mediaUrl?.toLowerCase() || "";
+    const isVideo = url.includes('.mp4') || url.includes('video');
     const mediaType = isVideo ? "video" : "image";
     
-    components.push({
-      type: "header",
-      parameters: [
-        {
-          type: mediaType,
-          [mediaType]: params.mediaId ? { id: params.mediaId } : { link: params.mediaUrl }
-        }
-      ]
-    });
+    // Só adiciona o componente de header se a URL ou ID for válida e não for uma string vazia/placeholder
+    if (params.mediaId || (params.mediaUrl && params.mediaUrl.startsWith('http'))) {
+      components.push({
+        type: "header",
+        parameters: [
+          {
+            type: mediaType,
+            [mediaType]: params.mediaId ? { id: params.mediaId } : { link: params.mediaUrl }
+          }
+        ]
+      });
+    }
   }
 
   const res = await fetch(`https://graph.facebook.com/v20.0/${params.phoneNumberId}/messages`, {

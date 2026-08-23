@@ -108,16 +108,29 @@ export const MessageNode = memo(function MessageNode({ data, id }: NodeProps) {
 
         <div>
           <Label className="text-[10px] uppercase text-muted-foreground">Mensagem no Direct</Label>
-          <Textarea
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              update("text", e.target.value);
-            }}
-            placeholder="Olá! Use @todos para marcar a audiência 👇"
-            rows={3}
-            className="text-sm mt-1 resize-none"
-          />
+          <div className="relative">
+            <Textarea
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                update("text", e.target.value);
+              }}
+              placeholder="Olá! Use @todos para marcar a audiência 👇"
+              rows={3}
+              className="text-sm mt-1 resize-none pr-20"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const newText = text ? `${text} @todos` : "@todos";
+                setText(newText);
+                update("text", newText);
+              }}
+              className="absolute right-2 bottom-2 px-1.5 py-0.5 text-[9px] bg-primary/10 hover:bg-primary/20 text-primary rounded border border-primary/20 transition-colors font-medium"
+            >
+              + @todos
+            </button>
+          </div>
           <p className="text-[9px] text-muted-foreground mt-1">
             Dica: Use <strong>@todos</strong> para notificar todos os membros (apenas em grupos/canais compatíveis).
           </p>

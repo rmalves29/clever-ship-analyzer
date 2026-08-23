@@ -135,6 +135,7 @@ Responda em JSON estrito, um array com exatamente ${count} item(ns):
 
 async function requestBatchCompletion(
   apiKey: string,
+  model: string,
   ctx: SignalsContext,
   count: number,
   angles: string[],
@@ -144,10 +145,7 @@ async function requestBatchCompletion(
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      // gpt-4o (não o -mini) especificamente aqui: modelo menor tende a convergir em vocabulário
-      // e fraseado parecidos entre chamadas separadas mesmo com o mesmo ângulo/temperature alta —
-      // reportado pelo usuário como "continua repetindo" mesmo depois do controle de ângulo.
-      model: "gpt-4o",
+      model,
       temperature: 1,
       response_format: { type: "json_object" },
       messages: [
@@ -159,16 +157,30 @@ async function requestBatchCompletion(
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
-    throw new Error(`OpenAI respondeu ${res.status}: ${errBody.slice(0, 300)}`);
+    throw new Error(`OpenAI (${model}) respondeu ${res.status}: ${errBody.slice(0, 300)}`);
   }
 
-  const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  const content = json.choices?.[0]?.message?.content;
-  if (!content) throw new Error("OpenAI não retornou conteúdo.");
+  const json = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string; refusal?: string }; finish_reason?: string }>;
+  };
+  const choice = json.choices?.[0];
+  const content = choice?.message?.content;
+  if (!content) {
+    const reason = choice?.message?.refusal ? `recusa: ${choice.message.refusal}` : `finish_reason: ${choice?.finish_reason ?? "desconhecido"}`;
+    throw new Error(`OpenAI (${model}) não retornou conteúdo (${reason}).`);
+  }
   const parsed = JSON.parse(content) as { items: DraftItem[] };
-  if (!Array.isArray(parsed.items) || parsed.items.length === 0) throw new Error("OpenAI não retornou nenhum item.");
+  if (!Array.isArray(parsed.items) || parsed.items.length === 0) throw new Error(`OpenAI (${model}) não retornou nenhum item.`);
   return parsed.items;
 }
+
+// gpt-4o (não o -mini) é o preferido pra essa geração especificamente: modelo menor tende a
+// convergir em vocabulário/fraseado parecidos entre chamadas separadas mesmo com o mesmo ângulo/
+// temperature alta — reportado pelo usuário como "continua repetindo". Mas se essa API key não
+// tiver acesso ao gpt-4o (ou tiver algum problema pontual), cai pro mini em vez de quebrar a
+// geração inteira — melhor um lote menos variado do que nenhum lote.
+const PREFERRED_MODEL = "gpt-4o";
+const FALLBACK_MODEL = "gpt-4o-mini";
 
 async function callOpenAiBatch(apiKey: string, ctx: SignalsContext, count: number): Promise<{ items: DraftItem[]; adDataUri: string | null; postDataUri: string | null }> {
   const [adDataUri, postDataUri] = await Promise.all([
@@ -181,13 +193,22 @@ async function callOpenAiBatch(apiKey: string, ctx: SignalsContext, count: numbe
 
   const angles = pickAngles(count);
 
+  let model = PREFERRED_MODEL;
+  let items: DraftItem[];
+  try {
+    items = await requestBatchCompletion(apiKey, model, ctx, count, angles, imageParts);
+  } catch (error) {
+    console.error(`callOpenAiBatch: falha no modelo preferido (${PREFERRED_MODEL}), caindo pro fallback (${FALLBACK_MODEL}):`, error);
+    model = FALLBACK_MODEL;
+    items = await requestBatchCompletion(apiKey, model, ctx, count, angles, imageParts);
+  }
+
   // O modelo nem sempre respeita "exatamente N itens" — já reproduzido em produção (pediu 7,
   // voltou 6, e o dia que sobrou some sem nenhum aviso). Tenta de novo 1x com o mesmo pedido antes
   // de aceitar um lote incompleto.
-  let items = await requestBatchCompletion(apiKey, ctx, count, angles, imageParts);
   if (items.length !== count) {
     try {
-      const retry = await requestBatchCompletion(apiKey, ctx, count, angles, imageParts);
+      const retry = await requestBatchCompletion(apiKey, model, ctx, count, angles, imageParts);
       if (retry.length === count) items = retry;
       else if (retry.length > items.length) items = retry;
     } catch {

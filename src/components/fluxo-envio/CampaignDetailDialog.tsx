@@ -116,7 +116,9 @@ export function CampaignDetailDialog({ campaignId, onClose }: { campaignId: stri
   if (!campaign) return null;
 
   const adminGroups = (groups ?? []).filter((g) => g.is_admin && g.is_active);
-  const filteredGroups = adminGroups.filter((g) => g.group_name.toLowerCase().includes(groupSearch.trim().toLowerCase()));
+  const filteredGroups = adminGroups
+    .filter((g) => g.group_name.toLowerCase().includes(groupSearch.trim().toLowerCase()))
+    .sort((a, b) => b.participant_count - a.participant_count);
   const weightSum = (links ?? []).reduce((acc, l) => acc + (l.weight_percent ?? 0), 0);
 
   return (

@@ -1,8 +1,15 @@
 import { loadUazapiCreds, createGroup, applyGroupSettings, getGroupInfo, toGroupJid, fromGroupJid } from "./envio-uazapi.server";
 
+/** Banco do live-launchpad-79 (OrderZaps) — dono real dos grupos/campanhas, escopado ao tenant
+ *  Mania de Mulher. Ver "Fluxo de Envio vs SendFlow" no vault pro histórico dessa migração. */
 async function admin() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
+  const { liveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
+  return liveLaunchpadAdmin;
+}
+
+async function tenantId() {
+  const { MANIA_DE_MULHER_TENANT_ID } = await import("@/integrations/supabase/live-launchpad-client.server");
+  return MANIA_DE_MULHER_TENANT_ID;
 }
 
 export type GroupTemplate = {
@@ -40,25 +47,34 @@ function slugify(name: string): string {
 
 export async function listEnvioCampaigns(): Promise<EnvioCampaign[]> {
   const supabaseAdmin = await admin();
-  const { data, error } = await ((supabaseAdmin.from("envio_campaigns" as any) as any) as any).select("*").order("created_at", { ascending: false });
+  const tenant = await tenantId();
+  const { data, error } = await ((supabaseAdmin.from("fe_campaigns" as any) as any) as any)
+    .select("*")
+    .eq("tenant_id", tenant)
+    .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []) as EnvioCampaign[];
 }
 
 export async function createEnvioCampaign(input: { name: string; description?: string | undefined }): Promise<EnvioCampaign> {
   const supabaseAdmin = await admin();
+  const tenant = await tenantId();
   const baseSlug = slugify(input.name) || `campanha-${Date.now()}`;
   let slug = baseSlug;
   let attempt = 0;
   while (true) {
-    const { data: existing } = await ((supabaseAdmin.from("envio_campaigns" as any) as any) as any).select("id").eq("slug", slug).maybeSingle();
+    const { data: existing } = await ((supabaseAdmin.from("fe_campaigns" as any) as any) as any)
+      .select("id")
+      .eq("tenant_id", tenant)
+      .eq("slug", slug)
+      .maybeSingle();
     if (!existing) break;
     attempt++;
     slug = `${baseSlug}-${attempt}`;
   }
   const { data, error } = await (supabaseAdmin
-    .from("envio_campaigns" as any) as any)
-    .insert({ name: input.name, slug, description: input.description ?? null } as never)
+    .from("fe_campaigns" as any) as any)
+    .insert({ tenant_id: tenant, name: input.name, slug, description: input.description ?? null } as never)
     .select("*")
     .single();
   if (error) throw new Error(error.message);
@@ -79,10 +95,12 @@ export async function updateEnvioCampaign(
   },
 ): Promise<EnvioCampaign> {
   const supabaseAdmin = await admin();
+  const tenant = await tenantId();
   const { data, error } = await (supabaseAdmin
-    .from("envio_campaigns" as any) as any)
+    .from("fe_campaigns" as any) as any)
     .update({ ...patch, updated_at: new Date().toISOString() } as never)
     .eq("id", id)
+    .eq("tenant_id", tenant)
     .select("*")
     .single();
   if (error) throw new Error(error.message);
@@ -91,7 +109,8 @@ export async function updateEnvioCampaign(
 
 export async function deleteEnvioCampaign(id: string): Promise<{ success: true }> {
   const supabaseAdmin = await admin();
-  const { error } = await ((supabaseAdmin.from("envio_campaigns" as any) as any) as any).delete().eq("id", id);
+  const tenant = await tenantId();
+  const { error } = await ((supabaseAdmin.from("fe_campaigns" as any) as any) as any).delete().eq("id", id).eq("tenant_id", tenant);
   if (error) throw new Error(error.message);
   return { success: true };
 }
@@ -101,7 +120,7 @@ export type CampaignGroupLink = { group_id: string; weight_percent: number | nul
 export async function getCampaignGroupLinks(campaignId: string): Promise<(CampaignGroupLink & { id: string; sort_order: number })[]> {
   const supabaseAdmin = await admin();
   const { data, error } = await (supabaseAdmin
-    .from("envio_campaign_groups" as any) as any)
+    .from("fe_campaign_groups" as any) as any)
     .select("id, group_id, weight_percent, sort_order")
     .eq("campaign_id", campaignId)
     .order("sort_order", { ascending: true });
@@ -113,9 +132,9 @@ export async function getCampaignGroupLinks(campaignId: string): Promise<(Campai
  *  pesos informados — mesmo padrão do CampaignDetailDialog original. */
 export async function setCampaignGroupLinks(campaignId: string, links: CampaignGroupLink[]): Promise<void> {
   const supabaseAdmin = await admin();
-  await ((supabaseAdmin.from("envio_campaign_groups" as any) as any) as any).delete().eq("campaign_id", campaignId);
+  await ((supabaseAdmin.from("fe_campaign_groups" as any) as any) as any).delete().eq("campaign_id", campaignId);
   if (links.length === 0) return;
-  await ((supabaseAdmin.from("envio_campaign_groups" as any) as any) as any).insert(
+  await ((supabaseAdmin.from("fe_campaign_groups" as any) as any) as any).insert(
     links.map((l, i) => ({ campaign_id: campaignId, group_id: l.group_id, weight_percent: l.weight_percent, sort_order: i })) as never,
   );
 }
@@ -123,7 +142,7 @@ export async function setCampaignGroupLinks(campaignId: string, links: CampaignG
 export async function updateCampaignGroupWeight(campaignId: string, groupId: string, weightPercent: number | null): Promise<void> {
   const supabaseAdmin = await admin();
   await (supabaseAdmin
-    .from("envio_campaign_groups" as any) as any)
+    .from("fe_campaign_groups" as any) as any)
     .update({ weight_percent: weightPercent } as never)
     .eq("campaign_id", campaignId)
     .eq("group_id", groupId);
@@ -138,7 +157,8 @@ export function campaignPublicUrl(slug: string): string {
  *  concorrentes que disparariam o spawn ao mesmo tempo). */
 export async function spawnGroupForCampaign(campaignId: string): Promise<{ skipped?: "debounce"; groupId?: string }> {
   const supabaseAdmin = await admin();
-  const { data: campaign } = await ((supabaseAdmin.from("envio_campaigns" as any) as any) as any).select("*").eq("id", campaignId).maybeSingle();
+  const tenant = await tenantId();
+  const { data: campaign } = await ((supabaseAdmin.from("fe_campaigns" as any) as any) as any).select("*").eq("id", campaignId).maybeSingle();
   const c = campaign as EnvioCampaign | null;
   if (!c) throw new Error("Campanha não encontrada");
   if (!c.auto_spawn_enabled) throw new Error("Auto-clonagem desativada nessa campanha");
@@ -146,7 +166,7 @@ export async function spawnGroupForCampaign(campaignId: string): Promise<{ skipp
   if (c.last_spawn_at && Date.now() - new Date(c.last_spawn_at).getTime() < 2 * 60_000) {
     return { skipped: "debounce" };
   }
-  await ((supabaseAdmin.from("envio_campaigns" as any) as any) as any).update({ last_spawn_at: new Date().toISOString() } as never).eq("id", campaignId);
+  await ((supabaseAdmin.from("fe_campaigns" as any) as any) as any).update({ last_spawn_at: new Date().toISOString() } as never).eq("id", campaignId);
 
   const creds = await loadUazapiCreds();
   if (!creds) throw new Error("UazAPI não configurada");
@@ -174,8 +194,9 @@ export async function spawnGroupForCampaign(campaignId: string): Promise<{ skipp
   }
 
   const { data: newGroup, error } = await (supabaseAdmin
-    .from("envio_groups" as any) as any)
+    .from("fe_groups" as any) as any)
     .insert({
+      tenant_id: tenant,
       group_jid: fromGroupJid(groupJid),
       group_name: groupName,
       invite_link: inviteLink ?? null,
@@ -191,12 +212,12 @@ export async function spawnGroupForCampaign(campaignId: string): Promise<{ skipp
   const groupId = (newGroup as any).id as string;
 
   const { count } = await (supabaseAdmin
-    .from("envio_campaign_groups" as any) as any)
+    .from("fe_campaign_groups" as any) as any)
     .select("id", { count: "exact", head: true })
     .eq("campaign_id", campaignId);
 
   await (supabaseAdmin
-    .from("envio_campaign_groups" as any) as any)
+    .from("fe_campaign_groups" as any) as any)
     .insert({ campaign_id: campaignId, group_id: groupId, sort_order: count ?? 0 } as never);
 
   return { groupId };

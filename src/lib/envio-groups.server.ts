@@ -1,6 +1,20 @@
 import { loadUazapiCreds, listGroupsRaw, getGroupInfo, toGroupJid, fromGroupJid } from "./envio-uazapi.server";
 
+/** Banco do live-launchpad-79 (OrderZaps) — dono real dos grupos/campanhas, escopado ao tenant
+ *  Mania de Mulher. Ver "Fluxo de Envio vs SendFlow" no vault pro histórico dessa migração. */
 async function admin() {
+  const { liveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
+  return liveLaunchpadAdmin;
+}
+
+async function tenantId() {
+  const { MANIA_DE_MULHER_TENANT_ID } = await import("@/integrations/supabase/live-launchpad-client.server");
+  return MANIA_DE_MULHER_TENANT_ID;
+}
+
+/** Banco do próprio clever-ship-analyzer — só pra config local (credenciais UazAPI), que não
+ *  migrou pro live-launchpad. */
+async function localAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
 }
@@ -21,7 +35,11 @@ export type EnvioGroup = {
 
 export async function listEnvioGroups(): Promise<EnvioGroup[]> {
   const supabaseAdmin = await admin();
-  const { data, error } = await ((supabaseAdmin.from("envio_groups" as any) as any) as any).select("*").order("group_name", { ascending: true });
+  const tenant = await tenantId();
+  const { data, error } = await ((supabaseAdmin.from("fe_groups" as any) as any) as any)
+    .select("*")
+    .eq("tenant_id", tenant)
+    .order("group_name", { ascending: true });
   if (error) throw new Error(error.message);
   return (data ?? []) as EnvioGroup[];
 }
@@ -64,7 +82,9 @@ export async function syncEnvioGroupsFromWhatsapp(): Promise<{ synced: number; t
 
   const raw = await listGroupsRaw(creds);
   const supabaseAdmin = await admin();
-  const { data: settingsRow } = await supabaseAdmin.from("store_settings" as any).select("uazapi_connected_phone").limit(1).maybeSingle();
+  const tenant = await tenantId();
+  const localSupabaseAdmin = await localAdmin();
+  const { data: settingsRow } = await localSupabaseAdmin.from("store_settings" as any).select("uazapi_connected_phone").limit(1).maybeSingle();
   const connectedPhone = (settingsRow as any)?.uazapi_connected_phone as string | null;
 
   const enriched = await parallelLimit(raw, 10, async (g: any) => {
@@ -100,15 +120,17 @@ export async function syncEnvioGroupsFromWhatsapp(): Promise<{ synced: number; t
   for (const row of enriched) {
     if (row.is_admin) adminCount++;
     const { data: existing } = await (supabaseAdmin
-      .from("envio_groups" as any) as any)
+      .from("fe_groups" as any) as any)
       .select("invite_link")
+      .eq("tenant_id", tenant)
       .eq("group_jid", row.group_jid)
       .maybeSingle();
 
     await (supabaseAdmin
-      .from("envio_groups" as any) as any)
+      .from("fe_groups" as any) as any)
       .upsert(
         {
+          tenant_id: tenant,
           group_jid: row.group_jid,
           group_name: row.group_name,
           participant_count: row.participant_count,
@@ -118,7 +140,7 @@ export async function syncEnvioGroupsFromWhatsapp(): Promise<{ synced: number; t
           invite_link: row.invite_link ?? (existing as any)?.invite_link ?? null,
           updated_at: new Date().toISOString(),
         } as never,
-        { onConflict: "group_jid" },
+        { onConflict: "tenant_id,group_jid" },
       );
   }
 
@@ -127,10 +149,11 @@ export async function syncEnvioGroupsFromWhatsapp(): Promise<{ synced: number; t
 
 export async function addEnvioGroupManual(input: { groupJid: string; groupName: string; inviteLink?: string | undefined }): Promise<EnvioGroup> {
   const supabaseAdmin = await admin();
+  const tenant = await tenantId();
   const normalizedJid = input.groupJid.endsWith("-group") ? input.groupJid : fromGroupJid(toGroupJid(input.groupJid));
   const { data, error } = await (supabaseAdmin
-    .from("envio_groups" as any) as any)
-    .insert({ group_jid: normalizedJid, group_name: input.groupName, invite_link: input.inviteLink || null } as never)
+    .from("fe_groups" as any) as any)
+    .insert({ tenant_id: tenant, group_jid: normalizedJid, group_name: input.groupName, invite_link: input.inviteLink || null } as never)
     .select("*")
     .single();
   if (error) throw new Error(error.message);
@@ -148,10 +171,12 @@ export async function updateEnvioGroup(
   },
 ): Promise<EnvioGroup> {
   const supabaseAdmin = await admin();
+  const tenant = await tenantId();
   const { data, error } = await (supabaseAdmin
-    .from("envio_groups" as any) as any)
+    .from("fe_groups" as any) as any)
     .update({ ...patch, updated_at: new Date().toISOString() } as never)
     .eq("id", id)
+    .eq("tenant_id", tenant)
     .select("*")
     .single();
   if (error) throw new Error(error.message);
@@ -160,7 +185,8 @@ export async function updateEnvioGroup(
 
 export async function deleteEnvioGroup(id: string): Promise<{ success: true }> {
   const supabaseAdmin = await admin();
-  const { error } = await ((supabaseAdmin.from("envio_groups" as any) as any) as any).delete().eq("id", id);
+  const tenant = await tenantId();
+  const { error } = await ((supabaseAdmin.from("fe_groups" as any) as any) as any).delete().eq("id", id).eq("tenant_id", tenant);
   if (error) throw new Error(error.message);
   return { success: true };
 }

@@ -113,7 +113,10 @@ export async function createAndSendEnvioMessage(input: {
   const messageIds = (data ?? []).map((r: any) => r.id as string);
 
   if (!isScheduled) {
-    sendMessagesSequentially(messageIds).catch((e) => console.error("createAndSendEnvioMessage: envio em background falhou", e));
+    // Precisa ser aguardado (não fire-and-forget): o Cloudflare Workers pode encerrar a execução
+    // assim que a resposta HTTP for enviada, deixando a promise em background nunca terminar —
+    // a mensagem ficaria presa em "sending" pra sempre.
+    await sendMessagesSequentially(messageIds).catch((e) => console.error("createAndSendEnvioMessage: falha no envio", e));
   }
 
   return { messageIds };

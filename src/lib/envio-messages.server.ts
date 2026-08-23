@@ -35,23 +35,20 @@ const CONTENT_TO_MEDIA_TYPE: Record<Exclude<EnvioContentType, "text">, MediaType
 
 async function sendOneMessage(messageId: string): Promise<void> {
   const supabaseAdmin = await admin();
-  const { data: msg } = await ((supabaseAdmin.from("envio_messages" as any) as any) as any).select("*").eq("id", messageId).maybeSingle();
-  const m = msg as EnvioMessage | null;
-  if (!m || !m.group_id) {
-    await ((supabaseAdmin.from("envio_messages" as any) as any) as any).update({ status: "failed" } as never).eq("id", messageId);
-    return;
-  }
-
-  const { getLiveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
-  const liveLaunchpadAdmin = await getLiveLaunchpadAdmin();
-  const { data: group } = await (liveLaunchpadAdmin.from("fe_groups") as any).select("group_jid").eq("id", m.group_id).maybeSingle();
-  const groupJid = (group as any)?.group_jid as string | undefined;
-  if (!groupJid) {
-    await ((supabaseAdmin.from("envio_messages" as any) as any) as any).update({ status: "failed" } as never).eq("id", messageId);
-    return;
-  }
-
+  // Tudo depois da leitura inicial fica num try/catch só — qualquer falha aqui (inclusive na busca
+  // do grupo no live-launchpad-79) tem que marcar "failed", senão a mensagem trava em "sending"
+  // pra sempre (já aconteceu: getLiveLaunchpadAdmin() lançando erro ficava sem cair em catch nenhum).
   try {
+    const { data: msg } = await ((supabaseAdmin.from("envio_messages" as any) as any) as any).select("*").eq("id", messageId).maybeSingle();
+    const m = msg as EnvioMessage | null;
+    if (!m || !m.group_id) throw new Error("Mensagem sem grupo associado");
+
+    const { getLiveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
+    const liveLaunchpadAdmin = await getLiveLaunchpadAdmin();
+    const { data: group } = await (liveLaunchpadAdmin.from("fe_groups") as any).select("group_jid").eq("id", m.group_id).maybeSingle();
+    const groupJid = (group as any)?.group_jid as string | undefined;
+    if (!groupJid) throw new Error(`Grupo ${m.group_id} não encontrado no live-launchpad-79`);
+
     const creds = await loadUazapiCreds();
     if (!creds) throw new Error("UazAPI não configurada");
     const waJid = toGroupJid(groupJid);

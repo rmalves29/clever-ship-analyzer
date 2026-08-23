@@ -215,7 +215,7 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
 
     const { data: allCustomers } = await supabaseAdmin
       .from("shopify_customers")
-      .select("id, email, city, province, phone, tags");
+      .select("id, email, city, province, phone, tags, tags_custom");
 
     if (allCustomers && (customSegment.regras as any)?.groups) {
       const groups = (customSegment.regras as any).groups;

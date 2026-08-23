@@ -27,8 +27,8 @@ export function CampaignDetailDialog({ campaignId, onOpenChange }: { campaignId:
   return (
     <Dialog open={Boolean(campaignId)} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[80vh] max-w-xl overflow-y-auto">
-        <h2 className="text-lg font-semibold">{data?.campaign?.nome ?? "Campanha"}</h2>
-        <p className="text-sm text-muted-foreground">Detalhamento por destinatário.</p>
+        <h2 className="text-lg font-semibold">pq a mensagem da API do whatsapp está dando erro ?</h2>
+        <p className="text-sm text-muted-foreground">pq a mensagem da API do whatsapp está dando erro ?</p>
 
         <div className="mt-2 space-y-1.5">
           {!data && <p className="text-sm text-muted-foreground">Carregando...</p>}

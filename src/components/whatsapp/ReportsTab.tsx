@@ -204,8 +204,8 @@ export function ReportsTab() {
         </section>
 
         <section className="surface-card p-5">
-          <h3 className="font-semibold">Motivos de falha</h3>
-          <p className="text-sm text-muted-foreground">Erros reais retornados pela Meta nos envios.</p>
+          <h3 className="font-semibold">pq a mensagem da API do whatsapp está dando erro ?</h3>
+          <p className="text-sm text-muted-foreground">pq a mensagem da API do whatsapp está dando erro ?</p>
           <div className="mt-4 space-y-3">
             {(!failures || failures.length === 0) && <p className="text-sm text-muted-foreground">Nenhuma falha registrada.</p>}
             {failures?.map((f) => (

@@ -51,8 +51,11 @@ type DraftItem = {
   source_summary: string;
 };
 
+type AdProduct = { name: string; cleanName: string; thumbnailUrl: string | null; roas: number; ctrLink: number; cpa: number };
+
 type SignalsContext = {
-  topAd: { name: string; thumbnailUrl: string | null; roas: number; ctrLink: number; cpa: number } | null;
+  adProducts: AdProduct[];
+  productSlots: (AdProduct | null)[];
   topPostYesterday: { caption: string | null; thumbnailUrl: string | null; permalink: string | null; reach: number; totalInteractions: number } | null;
   promotions: { title: string; summary: string | null; code: string | null }[];
   storeUrl: string | null;
@@ -96,38 +99,54 @@ function cleanAdName(raw: string): string {
   return first && first.length > 0 ? first : raw.trim();
 }
 
+/** Com só 1 produto real disponível (o de melhor ROAS), toda mensagem "concreta" acabava caindo
+ *  nele — reportado pelo usuário como o lote inteiro girando em torno do mesmo conjunto, só com
+ *  ângulos diferentes. Distribui um produto (ou nenhum, de propósito) por mensagem via rodízio —
+ *  cada produto (e um slot "sem produto específico") aparece no máximo 1x antes de qualquer um
+ *  repetir, em vez de deixar a escolha de assunto a cargo do modelo. */
+function pickProductSlots(count: number, products: AdProduct[]): (AdProduct | null)[] {
+  const pool: (AdProduct | null)[] = products.length > 0 ? [...products, null] : [null];
+  const slots: (AdProduct | null)[] = [];
+  let cycle: (AdProduct | null)[] = [];
+  for (let i = 0; i < count; i++) {
+    if (cycle.length === 0) cycle = [...pool].sort(() => Math.random() - 0.5);
+    slots.push(cycle.shift()!);
+  }
+  return slots;
+}
+
 function buildBatchPrompt(ctx: SignalsContext, count: number, angles: string[]): string {
-  const adCleanName = ctx.topAd ? cleanAdName(ctx.topAd.name) : null;
+  const productLine = (p: AdProduct | null) =>
+    p ? `Produto: "${p.cleanName}" (ROAS ${p.roas.toFixed(2)})` : `Produto: NENHUM específico — fale da marca/loja em geral, ou use uma promoção/post do Instagram abaixo se fizer sentido; NÃO force menção a nenhum produto de anúncio nessa mensagem`;
+
   return `Você é um copywriter de e-commerce especialista em WhatsApp pra grupos (moda feminina, loja "Mania de Mulher"). Escreva ${count} mensage${count > 1 ? "ns" : "m"} DIFERENTE${count > 1 ? "S" : ""} pra disparar em grupos de WhatsApp, uma por dia.
 
-ÂNGULO OBRIGATÓRIO DE CADA MENSAGEM (nessa ordem exata, mensagem 1 = item 1 do array, etc — não troque a ordem nem repita o mesmo ângulo em duas mensagens):
-${angles.map((a, i) => `${i + 1}. ${a}`).join("\n")}
+CONFIGURAÇÃO OBRIGATÓRIA DE CADA MENSAGEM (mensagem 1 = item 1 do array JSON, etc — siga essa ordem e essa atribuição à risca, nunca troque):
+${angles.map((a, i) => `${i + 1}. Ângulo: ${a} — ${productLine(ctx.productSlots[i] ?? null)}`).join("\n")}
 
 REGRAS OBRIGATÓRIAS:
-- Siga o ângulo designado de cada mensagem à risca — é isso que garante que o lote não saia parecido, e que gerar de novo não volte com as mesmas mensagens de antes.
+- Siga o ângulo E o produto designado de cada mensagem à risca — é isso que garante que o lote não saia parecido (nem sempre sobre o mesmo produto), e que gerar de novo não volte com as mesmas mensagens de antes.
 - Use gatilhos mentais de verdade (escassez, urgência, prova social, curiosidade, benefício claro) — sem exagero forçado, sem soar robótico.
-- Seja CONCRETO, não genérico: quando houver uma promoção/produto específico disponível abaixo, cite o detalhe real dela (nome do cupom, condição, o produto certo) em vez de cair em frases vagas tipo "nossos acessórios", "seu look" que servem pra qualquer loja. Mensagens sem nenhum dado concreto disponível podem ser mais genéricas, mas isso deve ser exceção, não a maioria do lote.
+- Quando a mensagem tiver um produto designado, seja CONCRETO sobre ele (cite o nome natural do produto, o que o torna especial) em vez de frases vagas tipo "nossos acessórios", "seu look" que servem pra qualquer loja. Quando o produto designado for "nenhum específico", tudo bem ser mais genérico de marca, ou usar uma promoção/o post do Instagram se houver.
 - Máximo 4 linhas por mensagem, emoji com moderação.
 - Se fizer sentido citar o post recente do Instagram (${ctx.topPostYesterday ? "existe um disponível abaixo" : "NÃO há post disponível — não cite Instagram"}), marque essa mensagem com "link_type":"instagram".
-- Se fizer sentido citar um produto/promoção do site (${ctx.promotions.length > 0 || ctx.storeUrl ? "existe informação abaixo" : "sem dado de site disponível — não cite"}), marque com "link_type":"site".
+- Se fizer sentido citar uma promoção do site (${ctx.promotions.length > 0 || ctx.storeUrl ? "existe informação abaixo" : "sem dado de site disponível — não cite"}), marque com "link_type":"site".
 - Nem toda mensagem precisa ter link — varie isso também.
 - NUNCA escreva a URL literal no texto — só o convite claro ("responde aqui", "corre no link abaixo", "olha nosso Instagram") — o link real é adicionado depois, fora do seu texto.
-- NUNCA cite o nome interno do anúncio literalmente. Nomes de anúncio no Meta Ads têm tags internas tipo "| LTV", "| Story", "| Conv" que são só rótulos de organização de campanha, não o nome real do produto pro cliente — o cliente não faz ideia do que isso significa. Se for mencionar o produto do anúncio, use um nome natural (ex: "${adCleanName ?? "o produto"}") ou descreva-o (ex: "aquele conjunto que está bombando"), nunca o rótulo cru.
-- A foto do anúncio (quando anexada) é de UM produto específico: "${adCleanName ?? ""}". Só marque "use_image":"ad" se a mensagem for especificamente SOBRE esse produto/promoção — nunca reaproveite essa foto numa mensagem sobre outro produto ou uma promoção genérica só porque é a única foto real disponível. Se a mensagem for sobre outra coisa, use "generate" (descreva no image_prompt algo que combine com o que a mensagem está vendendo) ou "none". Mesma regra pro post do Instagram: só use "use_image":"post" se a mensagem citar exatamente esse post.
+- NUNCA cite o nome interno de um anúncio literalmente. Nomes de anúncio no Meta Ads têm tags internas tipo "| LTV", "| Story", "| Conv" que são só rótulos de organização de campanha, não o nome real do produto pro cliente. Use sempre o nome natural já dado em "Produto:" na configuração de cada mensagem.
+- Imagens de produto (anexadas abaixo, cada uma rotulada com o nome do produto) são fotos REAIS de um produto específico. Só marque "use_image":"ad" se a mensagem tiver um produto designado (não "nenhum específico") — nesse caso a imagem certa é resolvida automaticamente pelo produto atribuído a ela, então só decida "ad" vs "generate" vs "none" vs "post", sem se preocupar em escolher QUAL foto. Se o produto designado da mensagem for "nenhum específico", NUNCA use "ad" — use "generate" (descrevendo no image_prompt algo condizente com o que a mensagem está vendendo) ou "none". Mesma regra pro post do Instagram: só use "use_image":"post" se a mensagem citar exatamente esse post.
 
 ${ctx.playbook ? `O QUE JÁ SABEMOS QUE FUNCIONA (aprendizado de mensagens anteriores — use como direção estratégica, NÃO copie frases):\n${ctx.playbook}\n` : ""}
 ${ctx.recentTexts.length > 0 ? `MENSAGENS JÁ ENVIADAS RECENTEMENTE (NÃO repita a estrutura/abertura destas):\n${ctx.recentTexts.map((t, i) => `${i + 1}. ${t}`).join("\n")}\n` : ""}
 
-ANÚNCIO COM MELHOR ROAS (últimos 30 dias):
-${ctx.topAd ? `Nome interno bruto (NÃO citar literalmente): "${ctx.topAd.name}" — nome natural do produto pra usar no texto: "${adCleanName}" — ROAS ${ctx.topAd.roas.toFixed(2)}, CTR ${(ctx.topAd.ctrLink * 100).toFixed(2)}%, CPA R$${ctx.topAd.cpa.toFixed(2)}${ctx.topAd.thumbnailUrl ? " (imagem em anexo, é uma foto REAL desse produto específico — ver regra de uso de imagem acima)" : ""}` : "nenhum disponível"}
+PRODUTOS/ANÚNCIOS DISPONÍVEIS (ROAS dos últimos 30 dias — imagens reais anexadas abaixo, uma por produto):
+${ctx.adProducts.length > 0 ? ctx.adProducts.map((p) => `- "${p.cleanName}" — ROAS ${p.roas.toFixed(2)}, CTR ${(p.ctrLink * 100).toFixed(2)}%, CPA R$${p.cpa.toFixed(2)}`).join("\n") : "nenhum disponível"}
 
 MELHOR POST DO INSTAGRAM DE ONTEM:
 ${ctx.topPostYesterday ? `"${ctx.topPostYesterday.caption ?? "(sem legenda)"}" — alcance ${ctx.topPostYesterday.reach}, ${ctx.topPostYesterday.totalInteractions} interações${ctx.topPostYesterday.thumbnailUrl ? " (imagem em anexo)" : ""}` : "nenhum post ontem"}
 
 PROMOÇÕES ATIVAS AGORA NO SITE:
 ${ctx.promotions.length > 0 ? ctx.promotions.map((p) => `- ${p.title}${p.summary ? `: ${p.summary}` : ""}${p.code ? ` (cupom ${p.code})` : ""}`).join("\n") : "nenhuma promoção ativa detectada"}
-
-Pra cada mensagem, decida também a imagem: do anúncio, do post do Instagram, gerar uma nova (só se as outras não servirem — foto de produto de moda feminina, cores vibrantes, sem texto sobreposto, prompt em inglês), ou nenhuma.
 
 Responda em JSON estrito, um array com exatamente ${count} item(ns):
 { "items": [ { "message_text": string, "use_image": "ad"|"post"|"generate"|"none", "image_prompt": string|null, "link_type": "instagram"|"site"|"none", "source_summary": string (1 frase curta) } ] }`;
@@ -139,7 +158,7 @@ async function requestBatchCompletion(
   ctx: SignalsContext,
   count: number,
   angles: string[],
-  imageParts: Array<{ type: "image_url"; image_url: { url: string } }>,
+  imageParts: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>,
 ): Promise<DraftItem[]> {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -182,14 +201,28 @@ async function requestBatchCompletion(
 const PREFERRED_MODEL = "gpt-4o";
 const FALLBACK_MODEL = "gpt-4o-mini";
 
-async function callOpenAiBatch(apiKey: string, ctx: SignalsContext, count: number): Promise<{ items: DraftItem[]; adDataUri: string | null; postDataUri: string | null }> {
-  const [adDataUri, postDataUri] = await Promise.all([
-    ctx.topAd?.thumbnailUrl ? fetchImageAsDataUri(ctx.topAd.thumbnailUrl) : Promise.resolve(null),
+async function callOpenAiBatch(
+  apiKey: string,
+  ctx: SignalsContext,
+  count: number,
+): Promise<{ items: DraftItem[]; productDataUriByName: Map<string, string>; postDataUri: string | null }> {
+  const [productDataUris, postDataUri] = await Promise.all([
+    Promise.all(ctx.adProducts.map((p) => (p.thumbnailUrl ? fetchImageAsDataUri(p.thumbnailUrl) : Promise.resolve(null)))),
     ctx.topPostYesterday?.thumbnailUrl ? fetchImageAsDataUri(ctx.topPostYesterday.thumbnailUrl) : Promise.resolve(null),
   ]);
-  const imageParts: Array<{ type: "image_url"; image_url: { url: string } }> = [];
-  if (adDataUri) imageParts.push({ type: "image_url", image_url: { url: adDataUri } });
-  if (postDataUri) imageParts.push({ type: "image_url", image_url: { url: postDataUri } });
+  const productDataUriByName = new Map<string, string>();
+  const imageParts: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }> = [];
+  ctx.adProducts.forEach((p, i) => {
+    const dataUri = productDataUris[i];
+    if (!dataUri) return;
+    productDataUriByName.set(p.name, dataUri);
+    imageParts.push({ type: "text", text: `Imagem do produto "${p.cleanName}":` });
+    imageParts.push({ type: "image_url", image_url: { url: dataUri } });
+  });
+  if (postDataUri) {
+    imageParts.push({ type: "text", text: "Imagem do post do Instagram de ontem:" });
+    imageParts.push({ type: "image_url", image_url: { url: postDataUri } });
+  }
 
   const angles = pickAngles(count);
 
@@ -216,7 +249,7 @@ async function callOpenAiBatch(apiKey: string, ctx: SignalsContext, count: numbe
     }
   }
 
-  return { items, adDataUri, postDataUri };
+  return { items, productDataUriByName, postDataUri };
 }
 
 export type BatchMode = "day" | "week";
@@ -247,9 +280,22 @@ export async function generateAiContentBatch(input: {
     getShopifyStoreUrl().catch(() => null),
   ]);
 
-  const topAd = adsRes.success && adsRes.result.topRoas
-    ? { name: adsRes.result.topRoas.name, thumbnailUrl: adsRes.result.topRoas.thumbnailUrl, roas: adsRes.result.topRoas.roas, ctrLink: adsRes.result.topRoas.ctrLink, cpa: adsRes.result.topRoas.cpa }
-    : null;
+  // Antes só usava o anúncio de melhor ROAS (1 produto só) — todo o lote acabava girando em torno
+  // dele, só com ângulo diferente. Agora pega até 3 produtos distintos (deduplicados pelo nome
+  // limpo, pra duas variantes do mesmo anúncio não contarem como produtos diferentes) e distribui
+  // um por mensagem via pickProductSlots, incluindo slots "sem produto específico" de propósito.
+  const adProducts: AdProduct[] = [];
+  if (adsRes.success) {
+    const seenNames = new Set<string>();
+    const ranked = [...adsRes.result.creatives].filter((c) => c.roas > 0 && c.purchases > 0).sort((a, b) => b.roas - a.roas);
+    for (const c of ranked) {
+      const clean = cleanAdName(c.name);
+      if (seenNames.has(clean)) continue;
+      seenNames.add(clean);
+      adProducts.push({ name: c.name, cleanName: clean, thumbnailUrl: c.thumbnailUrl, roas: c.roas, ctrLink: c.ctrLink, cpa: c.cpa });
+      if (adProducts.length >= 3) break;
+    }
+  }
 
   const topPostYesterday = igRes.success && igRes.media.length > 0
     ? [...igRes.media].sort((a, b) => b.totalInteractions - a.totalInteractions).slice(0, 1).map((m) => ({
@@ -271,13 +317,15 @@ export async function generateAiContentBatch(input: {
     .limit(20);
   const recentTexts = ((recent ?? []) as any[]).map((r) => r.content_text as string).slice(0, 10);
 
-  if (!topAd && !topPostYesterday && promotions.length === 0) {
+  if (adProducts.length === 0 && !topPostYesterday && promotions.length === 0) {
     return { success: false, error: "Nenhum anúncio, post do Instagram de ontem ou promoção ativa disponível pra basear o conteúdo." };
   }
 
-  let batchResult: { items: DraftItem[]; adDataUri: string | null; postDataUri: string | null };
+  const productSlots = pickProductSlots(count, adProducts);
+
+  let batchResult: { items: DraftItem[]; productDataUriByName: Map<string, string>; postDataUri: string | null };
   try {
-    batchResult = await callOpenAiBatch(apiKey, { topAd, topPostYesterday, promotions, storeUrl, playbook, recentTexts }, count);
+    batchResult = await callOpenAiBatch(apiKey, { adProducts, productSlots, topPostYesterday, promotions, storeUrl, playbook, recentTexts }, count);
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Falha ao gerar o lote com a OpenAI." };
   }
@@ -289,17 +337,24 @@ export async function generateAiContentBatch(input: {
 
   for (let i = 0; i < batchResult.items.length; i++) {
     const draft = batchResult.items[i]!;
+    const assignedProduct = productSlots[i] ?? null;
 
     // Rede de segurança: mesmo com a instrução no prompt, se o texto ainda vier com o nome
-    // interno cru do anúncio (ex: "Conjunto LUMIM | LTV"), troca pelo nome limpo antes de salvar.
-    if (topAd && draft.message_text.includes(topAd.name)) {
-      draft.message_text = draft.message_text.split(topAd.name).join(cleanAdName(topAd.name));
+    // interno cru de algum anúncio (ex: "Conjunto LUMIM | LTV"), troca pelo nome limpo.
+    for (const p of adProducts) {
+      if (draft.message_text.includes(p.name)) {
+        draft.message_text = draft.message_text.split(p.name).join(p.cleanName);
+      }
     }
+
+    // A imagem do produto é resolvida pelo produto ATRIBUÍDO a essa mensagem (pickProductSlots),
+    // não por uma escolha livre da IA — garante que a foto batha com o que a mensagem descreve.
+    const assignedProductDataUri = assignedProduct ? batchResult.productDataUriByName.get(assignedProduct.name) : undefined;
 
     let contentImageUrl: string | null = null;
     try {
-      if (draft.use_image === "ad" && batchResult.adDataUri) {
-        contentImageUrl = (await uploadEnvioMedia({ fileName: `ai-batch-${Date.now()}-${i}.jpg`, base64Data: dataUriToBase64(batchResult.adDataUri), contentType: dataUriContentType(batchResult.adDataUri) })).url;
+      if (draft.use_image === "ad" && assignedProductDataUri) {
+        contentImageUrl = (await uploadEnvioMedia({ fileName: `ai-batch-${Date.now()}-${i}.jpg`, base64Data: dataUriToBase64(assignedProductDataUri), contentType: dataUriContentType(assignedProductDataUri) })).url;
       } else if (draft.use_image === "post" && batchResult.postDataUri) {
         contentImageUrl = (await uploadEnvioMedia({ fileName: `ai-batch-${Date.now()}-${i}.jpg`, base64Data: dataUriToBase64(batchResult.postDataUri), contentType: dataUriContentType(batchResult.postDataUri) })).url;
       } else if (draft.use_image === "generate" && draft.image_prompt) {

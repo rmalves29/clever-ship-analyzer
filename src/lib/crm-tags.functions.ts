@@ -13,8 +13,9 @@ export const updateCustomerTags = createServerFn({ method: "POST" })
     
     const { error } = await supabaseAdmin
       .from("shopify_customers")
-      .update({ tags_custom: data.tags })
+      .update({ tags_custom: data.tags } as any)
       .eq("id", data.customerId);
+
       
     if (error) throw error;
     

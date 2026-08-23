@@ -16,6 +16,7 @@ const createSchema = z.object({
   dayOfWeek: z.number().int().min(0).max(6).optional(),
   dayOfMonth: z.number().int().min(1).max(28).optional(),
   timeOfDay: z.string().regex(/^\d{2}:\d{2}$/),
+  sendNow: z.boolean().optional(),
 });
 
 export const createAiSendRoutineFn = createServerFn({ method: "POST" })

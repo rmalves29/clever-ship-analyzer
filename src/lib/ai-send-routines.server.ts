@@ -225,6 +225,31 @@ function advanceNextRunAt(recurrence: RoutineRecurrence, prevNextRunAt: string):
   return addDays(prev, 1); // daily
 }
 
+/** Manda a mensagem pros grupos vinculados à campanha (live-launchpad-79) — imediatamente se
+ *  `scheduledAtIso` for null/omitido (cai no envio em background do próprio createAndSendEnvioMessage),
+ *  ou entra na fila de agendados do Fluxo de Envio (aba Envios, já tem cron próprio) se for uma
+ *  data futura. Retorna quantos grupos foram alvo, pra o chamador decidir o que fazer se for 0. */
+async function dispatchToCampaignGroups(campaignId: string, contentText: string, contentImageUrl: string | null, scheduledAtIso?: string): Promise<{ groupCount: number }> {
+  const { getLiveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
+  const liveLaunchpadAdmin = await getLiveLaunchpadAdmin();
+
+  const { data: links } = await (liveLaunchpadAdmin.from("fe_campaign_groups") as any).select("group_id").eq("campaign_id", campaignId);
+  const groupIds = ((links ?? []) as any[]).map((l) => l.group_id as string);
+
+  if (groupIds.length > 0) {
+    const { createAndSendEnvioMessage } = await import("./envio-messages.server");
+    await createAndSendEnvioMessage({
+      groupIds,
+      contentType: contentImageUrl ? "image" : "text",
+      contentText,
+      mediaUrl: contentImageUrl ?? undefined,
+      scheduledAt: scheduledAtIso,
+    });
+  }
+
+  return { groupCount: groupIds.length };
+}
+
 export async function createAiSendRoutine(input: {
   campaignId: string;
   campaignName: string;
@@ -235,9 +260,36 @@ export async function createAiSendRoutine(input: {
   dayOfWeek?: number | undefined;
   dayOfMonth?: number | undefined;
   timeOfDay: string;
-}): Promise<{ success: true; id: string } | { success: false; error: string }> {
+  sendNow?: boolean | undefined;
+}): Promise<{ success: true; id: string; sentImmediately: boolean; groupCount: number } | { success: false; error: string }> {
   const supabaseAdmin = await admin();
-  const nextRunAt = computeInitialNextRunAt(input);
+  const firstRunAt = input.sendNow ? new Date() : computeInitialNextRunAt(input);
+
+  // Menos de 1min de diferença conta como "agora" — evita empurrar pro processador de agendados
+  // do Fluxo de Envio só por causa do arredondamento do relógio.
+  const isImmediate = firstRunAt.getTime() - Date.now() <= 60_000;
+
+  let dispatchResult: { groupCount: number };
+  try {
+    dispatchResult = await dispatchToCampaignGroups(
+      input.campaignId,
+      input.contentText,
+      input.contentImageUrl,
+      isImmediate ? undefined : firstRunAt.toISOString(),
+    );
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao enviar/agendar a primeira mensagem." };
+  }
+
+  if (dispatchResult.groupCount === 0) {
+    return { success: false, error: "Essa campanha não tem nenhum grupo vinculado. Vincule grupos em Fluxo de Envio → Campanhas antes de criar a rotina." };
+  }
+
+  // Recorrência única: a primeira (e única) ocorrência já foi despachada acima — não precisa de
+  // linha ativa no cron de rotinas. Recorrente: a próxima ocorrência do cron é a de DEPOIS dessa
+  // primeira, que já foi despachada — senão duplicaria o primeiro envio.
+  const isRecurring = input.recurrence !== "once";
+  const nextRunAt = isRecurring ? advanceNextRunAt(input.recurrence, firstRunAt.toISOString()) : firstRunAt;
 
   const { data, error } = await (supabaseAdmin.from("ai_send_routines" as any) as any)
     .insert({
@@ -251,13 +303,14 @@ export async function createAiSendRoutine(input: {
       day_of_month: input.dayOfMonth ?? null,
       time_of_day: input.timeOfDay,
       next_run_at: nextRunAt.toISOString(),
-      status: "active",
+      last_run_at: new Date().toISOString(),
+      status: isRecurring ? "active" : "done",
     })
     .select("id")
     .single();
 
   if (error) return { success: false, error: error.message };
-  return { success: true, id: (data as any).id };
+  return { success: true, id: (data as any).id, sentImmediately: isImmediate, groupCount: dispatchResult.groupCount };
 }
 
 /** Cron (a cada 15min): dispara as rotinas cujo next_run_at já passou, manda pros grupos vinculados
@@ -290,21 +343,10 @@ export async function runAiRoutinesTick(): Promise<{ processed: number; failed: 
 
 async function fireRoutine(routine: any): Promise<void> {
   const supabaseAdmin = await admin();
-  const { getLiveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
-  const liveLaunchpadAdmin = await getLiveLaunchpadAdmin();
 
-  const { data: links } = await (liveLaunchpadAdmin.from("fe_campaign_groups") as any).select("group_id").eq("campaign_id", routine.campaign_id);
-  const groupIds = ((links ?? []) as any[]).map((l) => l.group_id as string);
-
-  if (groupIds.length > 0) {
-    const { createAndSendEnvioMessage } = await import("./envio-messages.server");
-    await createAndSendEnvioMessage({
-      groupIds,
-      contentType: routine.content_image_url ? "image" : "text",
-      contentText: routine.content_text,
-      mediaUrl: routine.content_image_url ?? undefined,
-    });
-  }
+  // Chegou aqui porque next_run_at <= agora, então despacha sem scheduledAt (imediato) — o próprio
+  // Fluxo de Envio processa na hora, sem precisar esperar o cron de agendados também.
+  await dispatchToCampaignGroups(routine.campaign_id, routine.content_text, routine.content_image_url);
 
   const isRecurring = routine.recurrence !== "once";
   await (supabaseAdmin.from("ai_send_routines" as any) as any)

@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { generateAiRoutineDraftFn, createAiSendRoutineFn } from "@/lib/ai-send-routines.functions";
 import { listEnvioCampaigns } from "@/lib/envio-campaigns.functions";
 
@@ -24,6 +25,7 @@ export function AiRoutineDialog({ open, onOpenChange }: { open: boolean; onOpenC
   const [dayOfWeek, setDayOfWeek] = useState(1);
   const [dayOfMonth, setDayOfMonth] = useState(1);
   const [timeOfDay, setTimeOfDay] = useState("10:00");
+  const [sendNow, setSendNow] = useState(false);
 
   const runGenerate = useServerFn(generateAiRoutineDraftFn);
   const runCreate = useServerFn(createAiSendRoutineFn);
@@ -72,12 +74,18 @@ export function AiRoutineDialog({ open, onOpenChange }: { open: boolean; onOpenC
           dayOfWeek: recurrence === "weekly" ? dayOfWeek : undefined,
           dayOfMonth: recurrence === "monthly" ? dayOfMonth : undefined,
           timeOfDay,
+          sendNow,
         },
       });
     },
     onSuccess: (res: any) => {
       if (res.success) {
-        toast.success("Rotina de envio criada.");
+        const groupsMsg = `${res.groupCount} grupo${res.groupCount === 1 ? "" : "s"}`;
+        if (res.sentImmediately) {
+          toast.success(`Mensagem enviada agora pra ${groupsMsg}.`);
+        } else {
+          toast.success(`Agendado — vai sair pra ${groupsMsg} na data marcada (aba Envios do Fluxo de Envio).`);
+        }
         onOpenChange(false);
       } else {
         toast.error(res.error || "Falha ao criar a rotina.");
@@ -154,28 +162,38 @@ export function AiRoutineDialog({ open, onOpenChange }: { open: boolean; onOpenC
               )}
             </div>
 
+            <label className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+              <Checkbox checked={sendNow} onCheckedChange={(v) => setSendNow(Boolean(v))} />
+              <span>
+                <span className="font-medium">Enviar agora</span>
+                <span className="block text-xs text-muted-foreground">Dispara a primeira mensagem na hora, direto pra aba Envios do Fluxo de Envio.</span>
+              </span>
+            </label>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>Recorrência</Label>
+                <Label>{sendNow ? "Depois, repete" : "Recorrência"}</Label>
                 <Select value={recurrence} onValueChange={(v) => setRecurrence(v as Recurrence)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="once">Uma vez</SelectItem>
+                    <SelectItem value="once">Uma vez{sendNow ? " (não repete)" : ""}</SelectItem>
                     <SelectItem value="daily">Diária</SelectItem>
                     <SelectItem value="weekly">Semanal</SelectItem>
                     <SelectItem value="monthly">Mensal</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Horário</Label>
-                <Input type="time" value={timeOfDay} onChange={(e) => setTimeOfDay(e.target.value)} />
-              </div>
+              {!sendNow && (
+                <div className="space-y-2">
+                  <Label>Horário</Label>
+                  <Input type="time" value={timeOfDay} onChange={(e) => setTimeOfDay(e.target.value)} />
+                </div>
+              )}
             </div>
 
-            {recurrence === "weekly" && (
+            {recurrence === "weekly" && !sendNow && (
               <div className="space-y-2">
                 <Label>Dia da semana</Label>
                 <Select value={String(dayOfWeek)} onValueChange={(v) => setDayOfWeek(Number(v))}>
@@ -193,7 +211,7 @@ export function AiRoutineDialog({ open, onOpenChange }: { open: boolean; onOpenC
               </div>
             )}
 
-            {recurrence === "monthly" && (
+            {recurrence === "monthly" && !sendNow && (
               <div className="space-y-2">
                 <Label>Dia do mês</Label>
                 <Input type="number" min={1} max={28} value={dayOfMonth} onChange={(e) => setDayOfMonth(Number(e.target.value))} />

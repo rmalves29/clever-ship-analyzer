@@ -114,10 +114,13 @@ export const MessageNode = memo(function MessageNode({ data, id }: NodeProps) {
               setText(e.target.value);
               update("text", e.target.value);
             }}
-            placeholder="Olá! Aqui está o material que prometi 👇"
+            placeholder="Olá! Use @todos para marcar a audiência 👇"
             rows={3}
             className="text-sm mt-1 resize-none"
           />
+          <p className="text-[9px] text-muted-foreground mt-1">
+            Dica: Use <strong>@todos</strong> para notificar todos os membros (apenas em grupos/canais compatíveis).
+          </p>
         </div>
 
         <div>

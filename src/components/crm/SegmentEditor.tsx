@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Plus, Save, ShoppingCart, Tag, Trash2, Users, Zap, AlertTriangle, ShieldCheck } from "lucide-react";
 import { RFM_SEGMENTS_CONFIG } from "@/lib/crm-rfm-shared";
 import {
+  BRAZIL_STATES,
   CRM_FILTER_CATEGORIES,
   getCRMFilterField,
   isSupportedCRMFilter,
@@ -25,15 +26,18 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useServerFn } from "@tanstack/react-start";
-import { saveSegment } from "@/lib/crm-segmentation.functions";
+import { getCRMFilterOptions, saveSegment } from "@/lib/crm-segmentation.functions";
 import { toast } from "sonner";
+
+type RangeValue = { min: string | number; max: string | number };
+type RuleValue = string | number | boolean | string[] | RangeValue;
 
 type RuleCondition = {
   id: string;
   category: string;
   field: string;
   operator: string;
-  value: string | number | boolean;
+  value: RuleValue;
   label: string;
 };
 
@@ -42,6 +46,14 @@ type RuleGroup = {
   type: "AND" | "OR";
   conditions: RuleCondition[];
 };
+
+type FilterOptions = {
+  cities: string[];
+  customerTags: string[];
+  customTags: string[];
+};
+
+const EMPTY_FILTER_OPTIONS: FilterOptions = { cities: [], customerTags: [], customTags: [] };
 
 const CATEGORY_ICONS: Record<CRMFilterCategory["id"], typeof Users> = {
   pessoais: Users,
@@ -69,19 +81,30 @@ const OPERATORS = {
     { label: "Maior ou igual a", value: "gte" },
     { label: "Menor ou igual a", value: "lte" },
     { label: "Diferente de", value: "neq" },
+    { label: "Entre", value: "between" },
   ],
   date: [
     { label: "Antes de", value: "before" },
     { label: "Depois de", value: "after" },
     { label: "Nos últimos X dias", value: "last_days" },
+    { label: "Há mais de X dias", value: "older_than_days" },
+    { label: "Entre X e Y dias atrás", value: "between_days" },
     { label: "Exatamente em", value: "on" },
+  ],
+  rfm: [
+    { label: "É igual a", value: "eq" },
+    { label: "Não é igual a", value: "neq" },
+    { label: "É um dos", value: "in" },
+    { label: "Não é nenhum dos", value: "not_in" },
   ],
 } as const;
 
-function operatorsForKind(kind: CRMFilterKind) {
-  if (kind === "number") return OPERATORS.number;
-  if (kind === "date") return OPERATORS.date;
-  if (["boolean", "status", "profile", "rfm"].includes(kind)) return OPERATORS.exact;
+function operatorsForField(field: CRMFilterField) {
+  if (field.id === "estado") return OPERATORS.exact;
+  if (field.kind === "number") return OPERATORS.number;
+  if (field.kind === "date") return OPERATORS.date;
+  if (field.kind === "rfm") return OPERATORS.rfm;
+  if (["boolean", "status", "profile"].includes(field.kind)) return OPERATORS.exact;
   return OPERATORS.string;
 }
 
@@ -90,8 +113,33 @@ function defaultOperatorForField(field: CRMFilterField) {
   return "eq";
 }
 
-function isBlank(value: RuleCondition["value"]) {
-  return value === "" || value === null || value === undefined;
+function rangeValue(value: RuleValue): RangeValue {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as RangeValue;
+  return { min: "", max: "" };
+}
+
+function isBlank(value: RuleValue) {
+  if (value === "" || value === null || value === undefined) return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === "object") {
+    const range = value as RangeValue;
+    return range.min === "" || range.max === "" || range.min === null || range.max === null;
+  }
+  return false;
+}
+
+function nextValueForOperator(field: CRMFilterField, operator: string, current: RuleValue): RuleValue {
+  if (operator === "between" || operator === "between_days") return { min: "", max: "" };
+  if (field.kind === "rfm" && (operator === "in" || operator === "not_in")) {
+    return Array.isArray(current) ? current : [];
+  }
+  if (Array.isArray(current) || (current && typeof current === "object")) return "";
+  if (field.kind === "date") return "";
+  return current;
+}
+
+function isMoneyField(fieldId: string) {
+  return fieldId === "total_gasto" || fieldId === "ticket_medio";
 }
 
 export function SegmentEditor({
@@ -104,12 +152,26 @@ export function SegmentEditor({
   initialData?: { id: string; nome: string; descricao: string; regras: any };
 }) {
   const runSave = useServerFn(saveSegment);
+  const loadFilterOptions = useServerFn(getCRMFilterOptions);
   const [nome, setNome] = useState(initialData?.nome || "");
   const [descricao, setDescricao] = useState(initialData?.descricao || "");
   const [groups, setGroups] = useState<RuleGroup[]>(
     initialData?.regras?.groups || [{ id: "1", type: "AND", conditions: [] }],
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [filterOptions, setFilterOptions] = useState<FilterOptions>(EMPTY_FILTER_OPTIONS);
+
+  useEffect(() => {
+    let active = true;
+    void loadFilterOptions()
+      .then((options) => {
+        if (active) setFilterOptions(options as FilterOptions);
+      })
+      .catch(() => {
+        // Sugestões são apenas melhoria de UX; filtros continuam funcionando sem elas.
+      });
+    return () => { active = false; };
+  }, []);
 
   const addCondition = (groupId: string, category: CRMFilterCategory, field: CRMFilterField) => {
     setGroups((prev) =>
@@ -197,14 +259,25 @@ export function SegmentEditor({
   };
 
   const renderValueControl = (groupId: string, condition: RuleCondition, field: CRMFilterField) => {
-    const setValue = (value: string | number | boolean) => updateCondition(groupId, condition.id, { value });
+    const setValue = (value: RuleValue) => updateCondition(groupId, condition.id, { value });
+
+    if (field.id === "estado") {
+      return (
+        <Select value={String(condition.value || "")} onValueChange={setValue}>
+          <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar UF..." /></SelectTrigger>
+          <SelectContent>
+            {BRAZIL_STATES.map((uf) => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      );
+    }
 
     if (field.kind === "status") {
       return (
         <Select value={String(condition.value || "")} onValueChange={setValue}>
           <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar status..." /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="paid">Pago (Paid)</SelectItem>
+            <SelectItem value="paid">Pago</SelectItem>
             <SelectItem value="partially_paid">Parcialmente Pago</SelectItem>
             <SelectItem value="pending">Pendente</SelectItem>
             <SelectItem value="authorized">Autorizado</SelectItem>
@@ -220,6 +293,29 @@ export function SegmentEditor({
     }
 
     if (field.kind === "rfm") {
+      if (condition.operator === "in" || condition.operator === "not_in") {
+        const selected = Array.isArray(condition.value) ? condition.value : [];
+        const toggle = (segment: string) => {
+          const next = selected.includes(segment)
+            ? selected.filter((item) => item !== segment)
+            : [...selected, segment];
+          setValue(next);
+        };
+        return (
+          <div className="flex min-w-[320px] flex-1 flex-wrap gap-1 rounded-md bg-muted/30 p-1.5">
+            {(Object.keys(RFM_SEGMENTS_CONFIG) as (keyof typeof RFM_SEGMENTS_CONFIG)[]).map((segment) => (
+              <button
+                key={segment}
+                type="button"
+                onClick={() => toggle(segment)}
+                className={`rounded border px-2 py-1 text-[10px] transition-colors ${selected.includes(segment) ? "border-brand bg-brand/10 text-brand" : "border-border bg-background text-muted-foreground hover:text-foreground"}`}
+              >
+                {segment}
+              </button>
+            ))}
+          </div>
+        );
+      }
       return (
         <Select value={String(condition.value || "")} onValueChange={setValue}>
           <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar segmento..." /></SelectTrigger>
@@ -237,9 +333,9 @@ export function SegmentEditor({
         <Select value={String(condition.value || "")} onValueChange={setValue}>
           <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar perfil..." /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="carrinho">Checkout Abandonado</SelectItem>
+            <SelectItem value="carrinho">Checkout Abandonado Ativo</SelectItem>
             <SelectItem value="primeira_compra">Exatamente 1 Compra Válida</SelectItem>
-            <SelectItem value="acesso_sem_compra">Sem Compra Válida</SelectItem>
+            <SelectItem value="sem_compra">Sem Compra Válida</SelectItem>
           </SelectContent>
         </Select>
       );
@@ -258,27 +354,83 @@ export function SegmentEditor({
     }
 
     if (field.kind === "date") {
-      const lastDays = condition.operator === "last_days";
+      if (condition.operator === "between_days") {
+        const range = rangeValue(condition.value);
+        return (
+          <div className="flex flex-1 items-center gap-2">
+            <Input type="number" min={0} className="h-8 border-none bg-muted/50 text-xs" placeholder="Mín. dias" value={String(range.min)} onChange={(event) => setValue({ ...range, min: event.target.value })} />
+            <span className="text-[11px] text-muted-foreground">até</span>
+            <Input type="number" min={0} className="h-8 border-none bg-muted/50 text-xs" placeholder="Máx. dias" value={String(range.max)} onChange={(event) => setValue({ ...range, max: event.target.value })} />
+          </div>
+        );
+      }
+      const relativeDays = condition.operator === "last_days" || condition.operator === "older_than_days";
       return (
         <Input
-          type={lastDays ? "number" : "date"}
-          min={lastDays ? 0 : undefined}
+          type={relativeDays ? "number" : "date"}
+          min={relativeDays ? 0 : undefined}
           className="h-8 flex-1 border-none bg-muted/50 text-xs"
-          placeholder={lastDays ? "Número de dias" : undefined}
+          placeholder={relativeDays ? "Número de dias" : undefined}
           value={String(condition.value ?? "")}
           onChange={(event) => setValue(event.target.value)}
         />
       );
     }
 
+    if (field.kind === "number") {
+      const money = isMoneyField(field.id);
+      if (condition.operator === "between") {
+        const range = rangeValue(condition.value);
+        return (
+          <div className="flex flex-1 items-center gap-2">
+            {money && <span className="text-[11px] text-muted-foreground">R$</span>}
+            <Input type="number" step={money ? "0.01" : "1"} className="h-8 border-none bg-muted/50 text-xs" placeholder="Mínimo" value={String(range.min)} onChange={(event) => setValue({ ...range, min: event.target.value })} />
+            <span className="text-[11px] text-muted-foreground">até</span>
+            {money && <span className="text-[11px] text-muted-foreground">R$</span>}
+            <Input type="number" step={money ? "0.01" : "1"} className="h-8 border-none bg-muted/50 text-xs" placeholder="Máximo" value={String(range.max)} onChange={(event) => setValue({ ...range, max: event.target.value })} />
+          </div>
+        );
+      }
+      return (
+        <div className="flex flex-1 items-center gap-1 rounded-md bg-muted/50 pl-2">
+          {money && <span className="text-[11px] text-muted-foreground">R$</span>}
+          <Input
+            type="number"
+            step={money ? "0.01" : "1"}
+            className="h-8 flex-1 border-none bg-transparent text-xs shadow-none focus-visible:ring-0"
+            placeholder={money ? "0,00" : "Valor numérico..."}
+            value={String(condition.value ?? "")}
+            onChange={(event) => setValue(event.target.value)}
+          />
+        </div>
+      );
+    }
+
+    const suggestions = field.id === "cidade"
+      ? filterOptions.cities
+      : field.id === "customer_tag"
+        ? filterOptions.customerTags
+        : field.id === "tags_custom"
+          ? filterOptions.customTags
+          : [];
+    const listId = suggestions.length > 0 ? `crm-filter-options-${condition.id}` : undefined;
+
     return (
-      <Input
-        type={field.kind === "number" ? "number" : "text"}
-        className="h-8 flex-1 border-none bg-muted/50 text-xs"
-        placeholder={field.kind === "number" ? "Valor numérico..." : "Valor..."}
-        value={String(condition.value ?? "")}
-        onChange={(event) => setValue(event.target.value)}
-      />
+      <div className="flex-1">
+        <Input
+          list={listId}
+          type="text"
+          className="h-8 border-none bg-muted/50 text-xs"
+          placeholder={suggestions.length ? "Digite ou escolha uma opção..." : "Valor..."}
+          value={String(condition.value ?? "")}
+          onChange={(event) => setValue(event.target.value)}
+        />
+        {listId && (
+          <datalist id={listId}>
+            {suggestions.map((option) => <option key={option} value={option} />)}
+          </datalist>
+        )}
+      </div>
     );
   };
 
@@ -353,20 +505,20 @@ export function SegmentEditor({
 
                     const category = CRM_FILTER_CATEGORIES.find((item) => item.id === condition.category) ?? CRM_FILTER_CATEGORIES.find((item) => item.fields.some((itemField) => itemField.id === field.id));
                     const Icon = category ? CATEGORY_ICONS[category.id] : Users;
-                    const operators = operatorsForKind(field.kind);
+                    const operators = operatorsForField(field);
 
                     return (
                       <div key={condition.id} className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-background p-2 pr-3 shadow-sm lg:flex-nowrap">
-                        <div className="flex w-full items-center gap-2 lg:w-[230px]">
+                        <div className="flex w-full items-center gap-2 lg:w-[250px]">
                           <div className="rounded bg-muted p-1"><Icon className="size-3 text-muted-foreground" /></div>
                           <div className="min-w-0"><p className="truncate text-xs font-medium">{field.label}</p>{field.description && <p className="truncate text-[10px] text-muted-foreground" title={field.description}>{field.description}</p>}</div>
                         </div>
 
                         <Select
                           value={condition.operator}
-                          onValueChange={(operator) => updateCondition(group.id, condition.id, { operator, value: field.kind === "date" ? "" : condition.value })}
+                          onValueChange={(operator) => updateCondition(group.id, condition.id, { operator, value: nextValueForOperator(field, operator, condition.value) })}
                         >
-                          <SelectTrigger className="h-8 w-[170px] border-none bg-muted/50 text-xs font-medium"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="h-8 w-[185px] border-none bg-muted/50 text-xs font-medium"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {operators.map((operator) => <SelectItem key={operator.value} value={operator.value}>{operator.label}</SelectItem>)}
                           </SelectContent>

@@ -92,7 +92,7 @@ export type DashboardMeta = {
 export type DashboardData = {
   periodLabel: string;
   kpis: Kpi[];
-  insights: { title: string; text: string; highlight?: string; tone: Status | "info" }[];
+  insights: { title: string; text: string; highlight?: string | undefined; tone: Status | "info" }[];
   panelStatus: PanelStatus;
   meta: DashboardMeta;
   frequencia: AnalysisSeries;

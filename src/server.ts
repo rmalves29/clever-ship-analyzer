@@ -374,6 +374,9 @@ export default {
     if (pathname === AI_PLAYBOOK_TICK_PATH) {
       return handleAiPlaybookTick(request);
     }
+    if (pathname === WHATSAPP_QUEUE_TICK_PATH) {
+      return handleWhatsappQueueTick(request);
+    }
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);

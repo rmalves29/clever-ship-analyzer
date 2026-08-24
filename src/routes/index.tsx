@@ -12,7 +12,15 @@ import { AnalysisGrid } from "@/components/crm/AnalysisGrid";
 import { SuggestedActions } from "@/components/crm/SuggestedActions";
 import { Button } from "@/components/ui/button";
 
-import { getDashboardData, statusHigherIsBetter, statusLowerIsBetter, GOALS, type PeriodKey } from "@/lib/crm-mock";
+import {
+  emptyDashboardData,
+  statusHigherIsBetter,
+  statusLowerIsBetter,
+  GOALS,
+  type PeriodKey,
+  type DashboardData,
+} from "@/lib/crm-mock";
+
 import { getShopifyDashboardData } from "@/lib/shopify-dashboard.functions";
 import { syncShopifyData } from "@/lib/crm-sync.functions";
 import { getLatestAiAnalysis, generateAiAnalysis } from "@/lib/ai-analysis.functions";

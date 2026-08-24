@@ -1,6 +1,18 @@
 import { RFM_SEGMENTS_CONFIG } from "./crm-rfm-shared";
 
-export type CRMFilterKind = "string" | "number" | "date" | "boolean" | "status" | "profile" | "rfm" | "product";
+export type CRMFilterKind =
+  | "string"
+  | "number"
+  | "date"
+  | "boolean"
+  | "status"
+  | "profile"
+  | "rfm"
+  | "product"
+  | "product_date"
+  | "product_number"
+  | "product_money"
+  | "product_sku";
 
 export type CRMFilterField = {
   id: string;
@@ -24,6 +36,10 @@ export const CRM_FILTER_OPERATORS: Record<CRMFilterKind, readonly string[]> = {
   profile: ["eq", "neq"],
   rfm: ["eq", "neq", "in", "not_in"],
   product: ["bought", "not_bought"],
+  product_date: ["last_days", "older_than_days", "between_days"],
+  product_number: ["gt", "gte", "lt", "lte", "eq", "neq", "between"],
+  product_money: ["gt", "gte", "lt", "lte", "eq", "neq", "between"],
+  product_sku: ["bought", "not_bought"],
 };
 
 export const CRM_STATUS_FILTER_VALUES = [
@@ -58,8 +74,8 @@ export const BRAZIL_STATES = [
  * Catálogo do editor de segmentos.
  *
  * Regra: só entra aqui um filtro que já possui implementação real no motor
- * `matchesSegmentCondition` e cobertura de teste. Filtros futuros não devem
- * aparecer na UI antes da implementação backend.
+ * de segmentação e cobertura de teste. Filtros futuros não devem aparecer
+ * na UI antes da implementação backend.
  */
 export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
   {
@@ -119,6 +135,30 @@ export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
         kind: "product",
         description: "Comprou ou nunca comprou um produto específico. Só considera itens de pedidos válidos.",
       },
+      {
+        id: "produto_periodo",
+        label: "Última Compra do Produto",
+        kind: "product_date",
+        description: "Filtra quando o produto foi comprado pela última vez: últimos X dias, há mais de X dias ou entre X e Y dias.",
+      },
+      {
+        id: "produto_quantidade",
+        label: "Quantidade Comprada do Produto",
+        kind: "product_number",
+        description: "Quantidade acumulada do produto nos pedidos válidos disponíveis na base.",
+      },
+      {
+        id: "produto_valor_gasto",
+        label: "Valor Gasto no Produto",
+        kind: "product_money",
+        description: "Soma líquida dos itens do produto em pedidos válidos disponíveis, descontando desconto de linha quando informado.",
+      },
+      {
+        id: "produto_sku",
+        label: "SKU / Variação Comprada",
+        kind: "product_sku",
+        description: "Comprou ou não comprou um SKU específico daquele produto, considerando apenas pedidos válidos.",
+      },
     ],
   },
   {
@@ -173,6 +213,25 @@ function parseRange(value: unknown): { min: number; max: number } | null {
   const max = Number(raw.max);
   if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return null;
   return { min, max };
+}
+
+function parseProductObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  return isNonBlankString(raw.productId) ? raw : null;
+}
+
+function validateProductNumeric(fieldLabel: string, operator: string, value: unknown): string | null {
+  const raw = parseProductObject(value);
+  if (!raw) return `Selecione um produto para ${fieldLabel}.`;
+  if (operator === "between") {
+    const range = parseRange(raw);
+    return range && range.min >= 0 ? null : `Faixa inválida para ${fieldLabel}.`;
+  }
+  if (isBlankValue(raw.amount) || !Number.isFinite(Number(raw.amount)) || Number(raw.amount) < 0) {
+    return `Valor numérico inválido para ${fieldLabel}.`;
+  }
+  return null;
 }
 
 export function validateCRMFilterCondition(condition: unknown): string | null {
@@ -236,6 +295,25 @@ export function validateCRMFilterCondition(condition: unknown): string | null {
   }
   if (field.kind === "product") {
     return isNonBlankString(value) ? null : "Selecione um produto.";
+  }
+  if (field.kind === "product_date") {
+    const product = parseProductObject(value);
+    if (!product) return "Selecione um produto.";
+    if (operator === "between_days") {
+      const range = parseRange(product);
+      return range && range.min >= 0 ? null : `Intervalo de dias inválido para ${field.label}.`;
+    }
+    const days = Number(product.days);
+    return !isBlankValue(product.days) && Number.isFinite(days) && days >= 0
+      ? null
+      : `Número de dias inválido para ${field.label}.`;
+  }
+  if (field.kind === "product_number" || field.kind === "product_money") {
+    return validateProductNumeric(field.label, operator, value);
+  }
+  if (field.kind === "product_sku") {
+    const product = parseProductObject(value);
+    return product && isNonBlankString(product.sku) ? null : "Selecione um SKU/variação.";
   }
   return isNonBlankString(value) ? null : `Valor vazio para ${field.label}.`;
 }

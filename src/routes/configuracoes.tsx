@@ -277,7 +277,7 @@ function Configuracoes() {
               <ChevronLeft className="size-5" />
             </Button>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">Configurações</h1>
+              <h1 className="text-3xl font-bold tracking-tight">Qual banco de dados está sendo usado no projeto?</h1>
               <p className="text-muted-foreground">Exibir qual banco de dados está sendo usado nas configurações do sistema para eu conferir facilmente.</p>
             </div>
           </div>

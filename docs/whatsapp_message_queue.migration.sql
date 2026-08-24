@@ -1,0 +1,1 @@
+-- (revisão) migration proposta: 20260824002500_create_whatsapp_message_queue.sql

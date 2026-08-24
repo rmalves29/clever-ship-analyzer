@@ -1,6 +1,6 @@
 import { RFM_SEGMENTS_CONFIG } from "./crm-rfm-shared";
 
-export type CRMFilterKind = "string" | "number" | "date" | "boolean" | "status" | "profile" | "rfm";
+export type CRMFilterKind = "string" | "number" | "date" | "boolean" | "status" | "profile" | "rfm" | "product";
 
 export type CRMFilterField = {
   id: string;
@@ -10,7 +10,7 @@ export type CRMFilterField = {
 };
 
 export type CRMFilterCategory = {
-  id: "pessoais" | "comportamento" | "tags" | "rfm";
+  id: "pessoais" | "comportamento" | "produtos" | "tags" | "rfm";
   label: string;
   fields: CRMFilterField[];
 };
@@ -23,6 +23,7 @@ export const CRM_FILTER_OPERATORS: Record<CRMFilterKind, readonly string[]> = {
   status: ["eq", "neq"],
   profile: ["eq", "neq"],
   rfm: ["eq", "neq", "in", "not_in"],
+  product: ["bought", "not_bought"],
 };
 
 export const CRM_STATUS_FILTER_VALUES = [
@@ -105,6 +106,18 @@ export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
         label: "Sem Compra Válida",
         kind: "boolean",
         description: "Cliente sem nenhuma compra válida. Não pressupõe que houve visita ao site.",
+      },
+    ],
+  },
+  {
+    id: "produtos",
+    label: "Produtos / Cross-sell",
+    fields: [
+      {
+        id: "produto",
+        label: "Produto",
+        kind: "product",
+        description: "Comprou ou nunca comprou um produto específico. Só considera itens de pedidos válidos.",
       },
     ],
   },
@@ -220,6 +233,9 @@ export function validateCRMFilterCondition(condition: unknown): string | null {
     return Object.prototype.hasOwnProperty.call(RFM_SEGMENTS_CONFIG, String(value ?? ""))
       ? null
       : "Segmento RFM inválido.";
+  }
+  if (field.kind === "product") {
+    return isNonBlankString(value) ? null : "Selecione um produto.";
   }
   return isNonBlankString(value) ? null : `Valor vazio para ${field.label}.`;
 }

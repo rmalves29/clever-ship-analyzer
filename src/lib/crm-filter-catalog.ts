@@ -17,12 +17,12 @@ export type CRMFilterCategory = {
 
 export const CRM_FILTER_OPERATORS: Record<CRMFilterKind, readonly string[]> = {
   string: ["eq", "neq", "contains", "not_contains", "starts_with"],
-  number: ["gt", "gte", "lt", "lte", "eq", "neq"],
-  date: ["before", "after", "last_days", "on", "eq"],
+  number: ["gt", "gte", "lt", "lte", "eq", "neq", "between"],
+  date: ["before", "after", "last_days", "older_than_days", "between_days", "on", "eq"],
   boolean: ["eq", "neq"],
   status: ["eq", "neq"],
   profile: ["eq", "neq"],
-  rfm: ["eq", "neq"],
+  rfm: ["eq", "neq", "in", "not_in"],
 };
 
 export const CRM_STATUS_FILTER_VALUES = [
@@ -48,6 +48,11 @@ export const CRM_PROFILE_FILTER_VALUES = [
   "sem_compra",
 ] as const;
 
+export const BRAZIL_STATES = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG",
+  "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+] as const;
+
 /**
  * Catálogo do editor de segmentos.
  *
@@ -60,19 +65,19 @@ export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
     id: "pessoais",
     label: "Dados Pessoais",
     fields: [
-      { id: "cidade", label: "Cidade", kind: "string" },
-      { id: "estado", label: "Estado", kind: "string" },
+      { id: "cidade", label: "Cidade", kind: "string", description: "Comparação ignora maiúsculas, minúsculas e acentos." },
+      { id: "estado", label: "Estado (UF)", kind: "string" },
     ],
   },
   {
     id: "comportamento",
     label: "Comportamento de Compra",
     fields: [
-      { id: "total_gasto", label: "Gasto Total em Compras Válidas", kind: "number" },
-      { id: "total_pedidos", label: "Total de Pedidos Válidos", kind: "number" },
-      { id: "ultima_compra", label: "Data da Última Compra Válida", kind: "date" },
-      { id: "primeira_compra", label: "Data da Primeira Compra Válida", kind: "date" },
-      { id: "ticket_medio", label: "Ticket Médio de Compras Válidas", kind: "number" },
+      { id: "total_gasto", label: "Gasto Total em Compras Válidas", kind: "number", description: "Permite valor mínimo, máximo ou faixa." },
+      { id: "total_pedidos", label: "Total de Pedidos Válidos", kind: "number", description: "Permite quantidade mínima, máxima ou faixa." },
+      { id: "ultima_compra", label: "Data da Última Compra Válida", kind: "date", description: "Pode filtrar por data, últimos dias, há mais de X dias ou intervalo de dias." },
+      { id: "primeira_compra", label: "Data da Primeira Compra Válida", kind: "date", description: "Pode filtrar por data, últimos dias, há mais de X dias ou intervalo de dias." },
+      { id: "ticket_medio", label: "Ticket Médio de Compras Válidas", kind: "number", description: "Permite valor mínimo, máximo ou faixa." },
       {
         id: "recorrencia",
         label: "Cliente Recorrente (2+ Compras Válidas)",
@@ -87,7 +92,7 @@ export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
       },
       { id: "perfil", label: "Perfil do Cliente", kind: "profile" },
       { id: "data_pedido_hoje", label: "Compra Válida Realizada Hoje", kind: "boolean" },
-      { id: "data_pedido_24h", label: "Compra Válida nas Últimas 24h", kind: "boolean" },
+      { id: "data_pedido_24h", label: "Compra Válida nas Últimas 24h", kind: "boolean", description: "Janela móvel de 24 horas, diferente de 'Hoje'." },
       { id: "data_envio_hoje", label: "Pedido Válido Enviado Hoje", kind: "boolean" },
       {
         id: "checkout_abandonado",
@@ -107,15 +112,15 @@ export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
     id: "tags",
     label: "Tags",
     fields: [
-      { id: "customer_tag", label: "Tag do Cliente", kind: "string" },
-      { id: "tags_custom", label: "Tag Personalizada (Sistema)", kind: "string" },
+      { id: "customer_tag", label: "Tag do Cliente", kind: "string", description: "Sugere tags existentes na base, mas continua aceitando texto livre." },
+      { id: "tags_custom", label: "Tag Personalizada (Sistema)", kind: "string", description: "Sugere tags personalizadas existentes na base." },
     ],
   },
   {
     id: "rfm",
     label: "Análise RFM",
     fields: [
-      { id: "rfm_segment", label: "Segmento RFM", kind: "rfm" },
+      { id: "rfm_segment", label: "Segmento RFM", kind: "rfm", description: "Permite selecionar um ou vários segmentos RFM." },
     ],
   },
 ];
@@ -147,6 +152,16 @@ function isValidDateOnly(value: unknown): boolean {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === text;
 }
 
+function parseRange(value: unknown): { min: number; max: number } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as { min?: unknown; max?: unknown };
+  if (isBlankValue(raw.min) || isBlankValue(raw.max)) return null;
+  const min = Number(raw.min);
+  const max = Number(raw.max);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return null;
+  return { min, max };
+}
+
 export function validateCRMFilterCondition(condition: unknown): string | null {
   if (!condition || typeof condition !== "object") return "Condição inválida.";
   const raw = condition as { field?: unknown; operator?: unknown; value?: unknown };
@@ -161,14 +176,19 @@ export function validateCRMFilterCondition(condition: unknown): string | null {
 
   const value = raw.value;
   if (field.kind === "number") {
+    if (operator === "between") return parseRange(value) ? null : `Faixa inválida para ${field.label}.`;
     if (isBlankValue(value) || !Number.isFinite(Number(value))) return `Valor numérico inválido para ${field.label}.`;
     return null;
   }
   if (field.kind === "date") {
-    if (operator === "last_days") {
+    if (operator === "last_days" || operator === "older_than_days") {
       const days = Number(value);
       if (isBlankValue(value) || !Number.isFinite(days) || days < 0) return `Número de dias inválido para ${field.label}.`;
       return null;
+    }
+    if (operator === "between_days") {
+      const range = parseRange(value);
+      return range && range.min >= 0 ? null : `Intervalo de dias inválido para ${field.label}.`;
     }
     return isValidDateOnly(value) ? null : `Data inválida para ${field.label}.`;
   }
@@ -191,9 +211,15 @@ export function validateCRMFilterCondition(condition: unknown): string | null {
       : `Perfil inválido para ${field.label}.`;
   }
   if (field.kind === "rfm") {
+    if (operator === "in" || operator === "not_in") {
+      if (!Array.isArray(value) || value.length === 0) return "Selecione pelo menos um segmento RFM.";
+      return value.every((item) => Object.prototype.hasOwnProperty.call(RFM_SEGMENTS_CONFIG, String(item)))
+        ? null
+        : "Segmento RFM inválido.";
+    }
     return Object.prototype.hasOwnProperty.call(RFM_SEGMENTS_CONFIG, String(value ?? ""))
       ? null
-      : `Segmento RFM inválido.`;
+      : "Segmento RFM inválido.";
   }
   return isNonBlankString(value) ? null : `Valor vazio para ${field.label}.`;
 }

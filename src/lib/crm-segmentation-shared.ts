@@ -76,6 +76,24 @@ function normalizeStatus(status: unknown): string {
   return String(status ?? "").trim().toUpperCase();
 }
 
+function normalizeText(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toLocaleLowerCase("pt-BR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function parseRange(value: unknown): { min: number; max: number } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as { min?: unknown; max?: unknown };
+  if (raw.min === "" || raw.max === "" || raw.min === null || raw.max === null || raw.min === undefined || raw.max === undefined) return null;
+  const min = Number(raw.min);
+  const max = Number(raw.max);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return null;
+  return { min, max };
+}
+
 export function buildPurchaseMetricsIndex(orders: CRMOrderForSegmentation[]): Map<string, PurchaseMetrics> {
   const index = new Map<string, PurchaseMetrics>();
 
@@ -132,8 +150,6 @@ export function buildCustomerContexts(input: {
     const checkoutTime = safeTime(lastAbandonedCheckoutAt);
     const lastValidOrderTime = safeTime(metrics.lastOrderAt);
 
-    // Com timestamp real, um checkout só permanece ativo se não houve compra válida depois dele.
-    // Para chamadas legadas que fornecem apenas Set<customerId>, preservamos o comportamento anterior.
     const abandonedCheckout = checkoutTime !== null
       ? lastValidOrderTime === null || lastValidOrderTime < checkoutTime
       : legacyAbandoned.has(customer.id);
@@ -152,6 +168,10 @@ export function buildCustomerContexts(input: {
 }
 
 function compareNumber(actual: number, operator: string, expected: unknown): boolean {
+  if (operator === "between") {
+    const range = parseRange(expected);
+    return range ? actual >= range.min && actual <= range.max : false;
+  }
   const target = Number(expected);
   if (!Number.isFinite(target)) return false;
   if (operator === "gt") return actual > target;
@@ -163,8 +183,8 @@ function compareNumber(actual: number, operator: string, expected: unknown): boo
 }
 
 function compareString(actual: unknown, operator: string, expected: unknown): boolean {
-  const a = String(actual ?? "").trim().toLocaleLowerCase("pt-BR");
-  const e = String(expected ?? "").trim().toLocaleLowerCase("pt-BR");
+  const a = normalizeText(actual);
+  const e = normalizeText(expected);
   if (operator === "neq") return a !== e;
   if (operator === "contains") return a.includes(e);
   if (operator === "not_contains") return !a.includes(e);
@@ -173,8 +193,8 @@ function compareString(actual: unknown, operator: string, expected: unknown): bo
 }
 
 function compareTagList(tags: string[] | null | undefined, operator: string, expected: unknown): boolean {
-  const normalized = (tags ?? []).map((tag) => tag.trim().toLocaleLowerCase("pt-BR"));
-  const target = String(expected ?? "").trim().toLocaleLowerCase("pt-BR");
+  const normalized = (tags ?? []).map(normalizeText);
+  const target = normalizeText(expected);
   const has = normalized.some((tag) => operator.includes("contains") ? tag.includes(target) : tag === target);
   if (operator === "neq" || operator === "not_contains") return !has;
   return has;
@@ -189,16 +209,27 @@ function businessDateKey(date: Date): string {
   }).format(date);
 }
 
+function ageInDays(actual: Date, now: Date): number {
+  return Math.max(0, Math.floor((now.getTime() - actual.getTime()) / DAY_MS));
+}
+
 function compareDate(actualIso: string | null, operator: string, expected: unknown, now: Date): boolean {
   if (!actualIso) return false;
   const actual = new Date(actualIso);
   if (Number.isNaN(actual.getTime())) return false;
 
-  if (operator === "last_days") {
+  if (operator === "last_days" || operator === "older_than_days") {
     const days = Number(expected);
     if (!Number.isFinite(days) || days < 0) return false;
-    const ageDays = Math.max(0, Math.floor((now.getTime() - actual.getTime()) / DAY_MS));
-    return ageDays <= days;
+    const ageDays = ageInDays(actual, now);
+    return operator === "last_days" ? ageDays <= days : ageDays > days;
+  }
+
+  if (operator === "between_days") {
+    const range = parseRange(expected);
+    if (!range || range.min < 0) return false;
+    const ageDays = ageInDays(actual, now);
+    return ageDays >= range.min && ageDays <= range.max;
   }
 
   const expectedText = String(expected ?? "").trim();
@@ -254,6 +285,15 @@ function isBooleanToken(value: unknown): boolean {
   return ["sim", "nao", "true", "false", "1", "0", "yes", "no"].includes(String(value ?? "").trim().toLowerCase());
 }
 
+function rfmMatches(actual: string | null | undefined, operator: string, value: unknown): boolean {
+  if (operator === "in" || operator === "not_in") {
+    const options = Array.isArray(value) ? value.map(normalizeText) : [];
+    const found = options.includes(normalizeText(actual));
+    return operator === "not_in" ? !found : found;
+  }
+  return compareString(actual, operator, value);
+}
+
 export function matchesSegmentCondition(context: CRMCustomerContext, condition: SegmentCondition, now = new Date()): boolean {
   const field = condition.field;
   const operator = condition.operator || "eq";
@@ -264,7 +304,7 @@ export function matchesSegmentCondition(context: CRMCustomerContext, condition: 
   if (field === "estado") return compareString(customer.province, operator, value);
   if (field === "customer_tag") return compareTagList(customer.tags, operator, value);
   if (field === "tags_custom") return compareTagList(customer.tags_custom, operator, value);
-  if (field === "rfm_segment") return compareString(customer.rfm_segment, operator, value);
+  if (field === "rfm_segment") return rfmMatches(customer.rfm_segment, operator, value);
 
   if (field === "total_pedidos") return compareNumber(metrics.validOrderCount, operator, value);
   if (field === "total_gasto") return compareNumber(metrics.totalSpent, operator, value);
@@ -273,8 +313,6 @@ export function matchesSegmentCondition(context: CRMCustomerContext, condition: 
   if (field === "primeira_compra") return compareDate(metrics.firstOrderAt, operator, value, now);
 
   if (field === "recorrencia") {
-    // Regra nova: recorrência é um booleano de negócio (2+ compras válidas).
-    // Regras antigas numéricas continuam sendo lidas, inclusive valores serializados como string.
     const legacyNumeric = Number.isFinite(Number(value)) && !isBooleanToken(value);
     if (["gt", "gte", "lt", "lte"].includes(operator) || (["eq", "neq"].includes(operator) && legacyNumeric)) {
       return compareNumber(metrics.validOrderCount, operator, value);
@@ -302,7 +340,6 @@ export function matchesSegmentCondition(context: CRMCustomerContext, condition: 
   if (field === "checkout_abandonado") return compareBoolean(context.abandonedCheckout, operator, value);
   if (field === "acesso_sem_compra") return compareBoolean(metrics.validOrderCount === 0, operator, value);
 
-  // Filtro não suportado nunca deve passar silenciosamente e criar uma audiência incorreta.
   return false;
 }
 
@@ -314,10 +351,10 @@ export function matchesSegmentRules(context: CRMCustomerContext, rules: SegmentR
 }
 
 export function customerMatchesSearch(context: CRMCustomerContext, search: string | undefined): boolean {
-  const needle = (search ?? "").trim().toLocaleLowerCase("pt-BR");
+  const needle = normalizeText(search);
   if (!needle) return true;
   const c = context.customer;
-  return [c.first_name, c.last_name, c.email, c.phone]
+  return [c.first_name, c.last_name, c.email, c.phone, c.city, c.province]
     .filter(Boolean)
-    .some((value) => String(value).toLocaleLowerCase("pt-BR").includes(needle));
+    .some((value) => normalizeText(value).includes(needle));
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  BRAZIL_STATES,
   CRM_FILTER_CATEGORIES,
   SUPPORTED_SEGMENT_FIELD_IDS,
   getCRMFilterField,
@@ -93,9 +94,35 @@ describe("catálogo confiável de filtros do CRM", () => {
     expect(matchesSegmentCondition(context ?? buyer, { field, operator, value }, NOW)).toBe(true);
   });
 
+  it("lista todas as UFs brasileiras sem duplicidade", () => {
+    expect(BRAZIL_STATES).toHaveLength(27);
+    expect(new Set(BRAZIL_STATES).size).toBe(27);
+    expect(BRAZIL_STATES).toContain("MG");
+    expect(BRAZIL_STATES).toContain("DF");
+  });
+
   it("recorrência nova só aceita operador booleano no cadastro", () => {
     expect(validateCRMFilterCondition({ field: "recorrencia", operator: "eq", value: "sim" })).toBeNull();
     expect(validateCRMFilterCondition({ field: "recorrencia", operator: "gte", value: 2 })).toContain("Operador inválido");
+  });
+
+  it("aceita faixas numéricas válidas e rejeita faixas invertidas", () => {
+    expect(validateCRMFilterCondition({ field: "total_gasto", operator: "between", value: { min: 100, max: 500 } })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "ticket_medio", operator: "between", value: { min: "100", max: "200" } })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "total_gasto", operator: "between", value: { min: 500, max: 100 } })).toContain("Faixa inválida");
+  });
+
+  it("aceita filtros relativos de data e rejeita intervalos inválidos", () => {
+    expect(validateCRMFilterCondition({ field: "ultima_compra", operator: "older_than_days", value: 30 })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "ultima_compra", operator: "between_days", value: { min: 8, max: 30 } })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "ultima_compra", operator: "between_days", value: { min: 30, max: 8 } })).toContain("Intervalo de dias inválido");
+  });
+
+  it("aceita múltiplos segmentos RFM somente com valores conhecidos", () => {
+    expect(validateCRMFilterCondition({ field: "rfm_segment", operator: "in", value: ["Nova compra", "VIP/Leal"] })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "rfm_segment", operator: "not_in", value: ["Nova compra"] })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "rfm_segment", operator: "in", value: [] })).toContain("pelo menos um");
+    expect(validateCRMFilterCondition({ field: "rfm_segment", operator: "in", value: ["Segmento inexistente"] })).toContain("RFM inválido");
   });
 
   it("validação server-side rejeita campo, operador e valor inválidos", () => {
@@ -120,6 +147,7 @@ describe("catálogo confiável de filtros do CRM", () => {
       groups: [{ conditions: [
         { field: "estado", operator: "eq", value: "MG" },
         { field: "recorrencia", operator: "eq", value: "sim" },
+        { field: "total_gasto", operator: "between", value: { min: 100, max: 500 } },
       ] }],
     })).toEqual({ valid: true, errors: [] });
   });

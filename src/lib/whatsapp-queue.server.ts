@@ -274,16 +274,21 @@ export async function processWhatsappQueueBatch(options?: {
   /** Modo teste: percorre claim → worker sem NENHUMA chamada ao provider.
    *  O job reclamado volta para `queued` com o contador de tentativas restaurado. */
   dryRun?: boolean;
+  /** `mock` usa o provider simulado interno (sem rede) e só processa jobs com
+   *  dedup_key iniciado por `mock-test:` — qualquer outro job é devolvido à fila. */
+  provider?: "meta" | "mock";
 }) {
   const supabaseAdmin = await admin();
   const { loadSettings, sendTemplateMessage } = await import("./whatsapp-meta.server");
 
   const limit = options?.limit ?? 20;
   const dryRun = options?.dryRun === true;
-  const workerId = options?.workerId ?? `${dryRun ? "dryrun" : "worker"}-${Math.random().toString(36).slice(2, 10)}`;
+  const useMock = options?.provider === "mock";
+  const workerId =
+    options?.workerId ?? `${useMock ? "mock" : dryRun ? "dryrun" : "worker"}-${Math.random().toString(36).slice(2, 10)}`;
 
   const settings = await loadSettings();
-  if (!settings.accessToken || !settings.phoneNumberId) {
+  if (!useMock && (!settings.accessToken || !settings.phoneNumberId)) {
     return { success: false as const, error: "Credenciais do WhatsApp (Meta) não configuradas." };
   }
 
@@ -292,6 +297,7 @@ export async function processWhatsappQueueBatch(options?: {
     p_worker: workerId,
   });
   if (claimError) return { success: false as const, error: claimError.message };
+
 
   const batch = (claimed ?? []) as QueueRow[];
   if (batch.length === 0)

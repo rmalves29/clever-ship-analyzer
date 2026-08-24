@@ -416,3 +416,28 @@ export const finishEmbeddedSignup = createServerFn({ method: "POST" })
     const { exchangeEmbeddedSignupCode } = await import("./whatsapp-meta.server");
     return exchangeEmbeddedSignupCode(data);
   });
+
+/** Roda um lote do worker da fila manualmente (botão "processar fila" no painel).
+ *  Envio real acontece só aqui e no tick HTTP `/api/whatsapp/queue-tick`. */
+export const runWhatsappQueueTick = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ limit: z.number().int().min(1).max(200).optional() }).parse(data ?? {}))
+  .handler(async ({ data }) => {
+    const { processWhatsappQueueBatch } = await import("./whatsapp-queue.server");
+    return processWhatsappQueueBatch(data.limit ? { limit: data.limit } : undefined);
+  });
+
+/** Cancela os itens ainda não enviados de uma campanha. */
+export const cancelWhatsappCampaignQueue = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ campaignId: z.string().uuid() }).parse(data))
+  .handler(async ({ data }) => {
+    const { cancelCampaignQueue } = await import("./whatsapp-queue.server");
+    return cancelCampaignQueue(data.campaignId);
+  });
+
+/** Contadores da fila de uma campanha (queued/sending/retry_wait/sent/failed/cancelled/skipped). */
+export const getWhatsappCampaignQueueStatus = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ campaignId: z.string().uuid() }).parse(data))
+  .handler(async ({ data }) => {
+    const { refreshCampaignStatus } = await import("./whatsapp-queue.server");
+    return refreshCampaignStatus(data.campaignId);
+  });

@@ -115,7 +115,7 @@ export function WhatsappSendDialog({
         return;
       }
       
-      toast.success(requireApproval ? "Campanha enviada pra aprovação." : "Campanha enviada com sucesso!");
+      toast.success(requireApproval ? "Campanha enviada pra aprovação." : "Campanha enfileirada — o worker vai processar os envios.");
       onOpenChange(false);
       onDone?.();
     } catch (err: any) {

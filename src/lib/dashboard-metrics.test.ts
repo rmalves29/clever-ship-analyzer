@@ -101,7 +101,7 @@ describe("faixas exclusivas", () => {
     ]);
     const faixas = computeFaixaTicket(rows);
     expect(faixas.reduce((a, f) => a + f.value, 0)).toBeCloseTo(100, 1);
-    expect(faixas.every((f) => f.pedidos === 1)).toBe(true);
+    expect(faixas.map((f) => f.pedidos)).toEqual([1, 1, 1, 0, 1]);
   });
 
   it("curva de recompra e tempo entre compras somam 100% e não são cumulativos", () => {

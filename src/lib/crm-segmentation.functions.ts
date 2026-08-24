@@ -95,6 +95,39 @@ export const getCRMStats = createServerFn({ method: "GET" })
     };
   });
 
+export const getCRMFilterOptions = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth])
+  .handler(async () => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const PAGE_SIZE = 1000;
+    const cities = new Set<string>();
+    const customerTags = new Set<string>();
+    const customTags = new Set<string>();
+
+    for (let page = 0; ; page++) {
+      const { data, error } = await supabaseAdmin
+        .from("shopify_customers")
+        .select("city, tags, tags_custom")
+        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+
+      for (const customer of data) {
+        if (customer.city?.trim()) cities.add(customer.city.trim());
+        for (const tag of customer.tags ?? []) if (tag?.trim()) customerTags.add(tag.trim());
+        for (const tag of customer.tags_custom ?? []) if (tag?.trim()) customTags.add(tag.trim());
+      }
+      if (data.length < PAGE_SIZE) break;
+    }
+
+    const sortPt = (values: Set<string>) => [...values].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    return {
+      cities: sortPt(cities),
+      customerTags: sortPt(customerTags),
+      customTags: sortPt(customTags),
+    };
+  });
+
 export const getSegmentsList = createServerFn({ method: "GET" })
   .middleware([requireAppAuth])
   .handler(async () => {

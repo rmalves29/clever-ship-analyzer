@@ -24,6 +24,39 @@ async function admin() {
   return supabaseAdmin;
 }
 
+/**
+ * Valida a assinatura `X-Hub-Signature-256` que a Meta envia no webhook do WhatsApp,
+ * calculada com HMAC-SHA256 sobre o CORPO CRU usando o App Secret. Comparação em
+ * tempo constante.
+ *
+ * Retorna:
+ *  - `{ configured: false }` quando o App Secret ainda não está configurado
+ *    (comportamento público atual é preservado, com aviso no log);
+ *  - `{ configured: true, valid }` quando dá pra validar de fato.
+ */
+export async function verifyWhatsappWebhookSignature(
+  rawBody: string,
+  signatureHeader: string | null,
+): Promise<{ configured: boolean; valid: boolean }> {
+  const { appSecret } = await loadSettings();
+  if (!appSecret) return { configured: false, valid: false };
+  if (!signatureHeader?.startsWith("sha256=")) return { configured: true, valid: false };
+
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(appSecret), { name: "HMAC", hash: "SHA-256" }, false, [
+    "sign",
+  ]);
+  const sigBuf = await crypto.subtle.sign("HMAC", key, enc.encode(rawBody));
+  const computed = Array.from(new Uint8Array(sigBuf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  const provided = signatureHeader.slice("sha256=".length).trim().toLowerCase();
+  if (computed.length !== provided.length) return { configured: true, valid: false };
+  let diff = 0;
+  for (let i = 0; i < computed.length; i++) diff |= computed.charCodeAt(i) ^ provided.charCodeAt(i);
+  return { configured: true, valid: diff === 0 };
+}
+
 export async function loadSettings(): Promise<WhatsappSettings & { id: string | null }> {
   const supabaseAdmin = await admin();
   const { data } = await supabaseAdmin

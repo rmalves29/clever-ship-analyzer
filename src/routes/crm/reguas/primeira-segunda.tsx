@@ -159,12 +159,15 @@ function RepurchasePage() {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card label="Aguardando 2ª compra" value={summary.pending} hint="Exatamente 1 pedido válido" />
         <Card label="Converteram" value={summary.converted} hint="Já fizeram a 2ª compra" />
         <Card label="Taxa de recompra" value={pct(summary.conversionRate)} hint={`Meta inicial ${pct(summary.targetConversionRate)}`} />
-        <Card label="Receita de 2ª compra" value={brl(summary.secondRevenue)} hint={`Ticket ${brl(summary.secondAverageTicket)}`} />
-        <Card label="Tempo médio" value={`${summary.averageDaysToSecondOrder.toFixed(1)} dias`} hint="Entre 1ª e 2ª compra" />
+        <Card label="Receita da 1ª compra" value={brl(summary.firstRevenue)} hint={`Ticket médio ${brl(summary.firstAverageTicket)}`} />
+        <Card label="Dias desde a 1ª compra" value={`${summary.averageDaysSinceFirstOrderPending.toFixed(1)} dias`} hint="Média dos clientes ainda pendentes" />
+        <Card label="Receita de 2ª compra" value={brl(summary.secondRevenue)} hint={`Ticket médio ${brl(summary.secondAverageTicket)}`} />
+        <Card label="Tempo até 2ª compra" value={`${summary.averageDaysToSecondOrder.toFixed(1)} dias`} hint="Média dos clientes convertidos" />
+        <Card label="Base da jornada" value={summary.buyers} hint="Clientes com ao menos 1 pedido válido" />
       </div>
 
       <section className="surface-card p-5">
@@ -311,10 +314,20 @@ function RepurchasePage() {
         <div className="mt-4 flex items-center justify-between gap-4">
           <p className="text-xs text-muted-foreground">Página {page + 1} de {totalPages}</p>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === 0}
+              onClick={() => setPage((current) => Math.max(0, current - 1))}
+            >
               <ChevronLeft className="mr-1 size-4" /> Anterior
             </Button>
-            <Button variant="outline" size="sm" disabled={page + 1 >= totalPages} onClick={() => setPage((current) => current + 1)}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page + 1 >= totalPages}
+              onClick={() => setPage((current) => current + 1)}
+            >
               Próxima <ChevronRight className="ml-1 size-4" />
             </Button>
           </div>

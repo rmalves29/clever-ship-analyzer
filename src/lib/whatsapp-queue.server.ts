@@ -274,16 +274,21 @@ export async function processWhatsappQueueBatch(options?: {
   /** Modo teste: percorre claim → worker sem NENHUMA chamada ao provider.
    *  O job reclamado volta para `queued` com o contador de tentativas restaurado. */
   dryRun?: boolean;
+  /** `mock` usa o provider simulado interno (sem rede) e só processa jobs com
+   *  dedup_key iniciado por `mock-test:` — qualquer outro job é devolvido à fila. */
+  provider?: "meta" | "mock";
 }) {
   const supabaseAdmin = await admin();
   const { loadSettings, sendTemplateMessage } = await import("./whatsapp-meta.server");
 
   const limit = options?.limit ?? 20;
   const dryRun = options?.dryRun === true;
-  const workerId = options?.workerId ?? `${dryRun ? "dryrun" : "worker"}-${Math.random().toString(36).slice(2, 10)}`;
+  const useMock = options?.provider === "mock";
+  const workerId =
+    options?.workerId ?? `${useMock ? "mock" : dryRun ? "dryrun" : "worker"}-${Math.random().toString(36).slice(2, 10)}`;
 
   const settings = await loadSettings();
-  if (!settings.accessToken || !settings.phoneNumberId) {
+  if (!useMock && (!settings.accessToken || !settings.phoneNumberId)) {
     return { success: false as const, error: "Credenciais do WhatsApp (Meta) não configuradas." };
   }
 
@@ -292,6 +297,7 @@ export async function processWhatsappQueueBatch(options?: {
     p_worker: workerId,
   });
   if (claimError) return { success: false as const, error: claimError.message };
+
 
   const batch = (claimed ?? []) as QueueRow[];
   if (batch.length === 0)
@@ -323,21 +329,61 @@ export async function processWhatsappQueueBatch(options?: {
   let sent = 0;
   let failed = 0;
   let retry = 0;
+  let skippedNonMock = 0;
+  const mockLog: { jobId: string; ok: boolean; to: string; template: string; language: string; params: number }[] = [];
   const touchedCampaigns = new Set<string>();
 
+  const { isMockJob, sendTemplateMessageMock } = useMock
+    ? await import("./whatsapp-mock-provider.server")
+    : ({} as typeof import("./whatsapp-mock-provider.server"));
+
   for (const item of batch) {
+    if (useMock && !isMockJob(item.dedup_key)) {
+      // trava de segurança: em modo mock nenhum job real é processado
+      skippedNonMock++;
+      await supabaseAdmin
+        .from(QUEUE_TABLE)
+        .update({
+          status: "queued" satisfies QueueStatus,
+          attempts: Math.max(item.attempts - 1, 0),
+          locked_by: null,
+          locked_at: null,
+        })
+        .eq("id", item.id);
+      continue;
+    }
+
     if (item.campaign_id) touchedCampaigns.add(item.campaign_id);
 
-    const result = await sendTemplateMessage({
-      accessToken: settings.accessToken,
+    const result = useMock
+      ? await sendTemplateMessageMock({
+          jobId: item.id,
+          to: item.phone,
+          templateName: item.template_name,
+          templateLanguage: item.template_language,
+          bodyParams: Array.isArray(item.body_params) ? item.body_params : [],
+          dedupKey: item.dedup_key,
+        })
+      : await sendTemplateMessage({
+          accessToken: settings.accessToken ?? "",
+          phoneNumberId: settings.phoneNumberId ?? "",
+          to: item.phone,
+          templateName: item.template_name,
+          templateLanguage: item.template_language || settings.templateLanguage,
+          bodyParams: Array.isArray(item.body_params) ? item.body_params : [],
+          ...(item.header_media_url ? { mediaUrl: item.header_media_url } : {}),
+        });
 
-      phoneNumberId: settings.phoneNumberId,
-      to: item.phone,
-      templateName: item.template_name,
-      templateLanguage: item.template_language || settings.templateLanguage,
-      bodyParams: Array.isArray(item.body_params) ? item.body_params : [],
-      ...(item.header_media_url ? { mediaUrl: item.header_media_url } : {}),
-    });
+    if (useMock)
+      mockLog.push({
+        jobId: item.id,
+        ok: result.ok,
+        to: item.phone,
+        template: item.template_name,
+        language: item.template_language,
+        params: Array.isArray(item.body_params) ? item.body_params.length : 0,
+      });
+
 
     const now = new Date().toISOString();
 
@@ -400,5 +446,14 @@ export async function processWhatsappQueueBatch(options?: {
 
   for (const campaignId of touchedCampaigns) await refreshCampaignStatus(campaignId);
 
-  return { success: true as const, claimed: batch.length, sent, failed, retry, workerId };
+  return {
+    success: true as const,
+    claimed: batch.length,
+    sent,
+    failed,
+    retry,
+    workerId,
+    ...(useMock ? { provider: "mock" as const, skippedNonMock, mockLog } : {}),
+  };
+
 }

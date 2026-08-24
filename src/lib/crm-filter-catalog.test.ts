@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { CRM_FILTER_CATEGORIES, SUPPORTED_SEGMENT_FIELD_IDS, getCRMFilterField } from "./crm-filter-catalog";
+import {
+  CRM_FILTER_CATEGORIES,
+  SUPPORTED_SEGMENT_FIELD_IDS,
+  getCRMFilterField,
+  validateCRMFilterCondition,
+  validateSegmentRulesPayload,
+} from "./crm-filter-catalog";
 import { matchesSegmentCondition, type CRMCustomerContext } from "./crm-segmentation-shared";
 
 const NOW = new Date("2026-08-24T15:00:00-03:00");
@@ -24,8 +30,12 @@ const buyer: CRMCustomerContext = {
     validOrderIds: new Set(["o1", "o2"]),
     rawFinancialStatuses: new Set(["PAID", "REFUNDED"]),
     validFinancialStatuses: new Set(["PAID"]),
+    cancelledOrderCount: 1,
   },
   abandonedCheckout: true,
+  hadAbandonedCheckout: true,
+  abandonedCheckoutRecovered: false,
+  lastAbandonedCheckoutAt: "2026-08-24T13:00:00-03:00",
   shippedToday: true,
 };
 
@@ -41,8 +51,12 @@ const lead: CRMCustomerContext = {
     validOrderIds: new Set(),
     rawFinancialStatuses: new Set(),
     validFinancialStatuses: new Set(),
+    cancelledOrderCount: 0,
   },
   abandonedCheckout: false,
+  hadAbandonedCheckout: false,
+  abandonedCheckoutRecovered: false,
+  lastAbandonedCheckoutAt: null,
   shippedToday: false,
 };
 
@@ -54,7 +68,7 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
   { field: "ultima_compra", operator: "on", value: "2026-08-24" },
   { field: "primeira_compra", operator: "on", value: "2026-08-20" },
   { field: "ticket_medio", operator: "eq", value: 150 },
-  { field: "recorrencia", operator: "gte", value: 2 },
+  { field: "recorrencia", operator: "eq", value: "sim" },
   { field: "status_pagamento", operator: "eq", value: "paid" },
   { field: "perfil", operator: "eq", value: "carrinho" },
   { field: "data_pedido_hoje", operator: "eq", value: "sim" },
@@ -75,7 +89,34 @@ describe("catálogo confiável de filtros do CRM", () => {
 
   it.each(cases)("$field possui implementação funcional", ({ field, operator, value, context }) => {
     expect(getCRMFilterField(field)).toBeDefined();
+    expect(validateCRMFilterCondition({ field, operator, value })).toBeNull();
     expect(matchesSegmentCondition(context ?? buyer, { field, operator, value }, NOW)).toBe(true);
+  });
+
+  it("recorrência nova só aceita operador booleano no cadastro", () => {
+    expect(validateCRMFilterCondition({ field: "recorrencia", operator: "eq", value: "sim" })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "recorrencia", operator: "gte", value: 2 })).toContain("Operador inválido");
+  });
+
+  it("validação server-side rejeita campo, operador e valor inválidos", () => {
+    const result = validateSegmentRulesPayload({
+      groups: [{ conditions: [
+        { field: "campo_inexistente", operator: "eq", value: "x" },
+        { field: "total_pedidos", operator: "contains", value: 2 },
+        { field: "status_pagamento", operator: "eq", value: "qualquer_coisa" },
+      ] }],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toHaveLength(3);
+  });
+
+  it("validação server-side aceita regras corretas", () => {
+    expect(validateSegmentRulesPayload({
+      groups: [{ conditions: [
+        { field: "estado", operator: "eq", value: "MG" },
+        { field: "recorrencia", operator: "eq", value: "sim" },
+      ] }],
+    })).toEqual({ valid: true, errors: [] });
   });
 
   it("não expõe filtros que ainda não possuem fonte de dados/implementação", () => {

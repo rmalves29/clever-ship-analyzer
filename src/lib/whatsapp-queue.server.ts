@@ -439,5 +439,14 @@ export async function processWhatsappQueueBatch(options?: {
 
   for (const campaignId of touchedCampaigns) await refreshCampaignStatus(campaignId);
 
-  return { success: true as const, claimed: batch.length, sent, failed, retry, workerId };
+  return {
+    success: true as const,
+    claimed: batch.length,
+    sent,
+    failed,
+    retry,
+    workerId,
+    ...(useMock ? { provider: "mock" as const, skippedNonMock, mockLog } : {}),
+  };
+
 }

@@ -84,6 +84,8 @@ describe("filtros de comportamento", () => {
   it("mantém leitura de regra numérica antiga de recorrência", () => {
     expect(matchesSegmentRules(ctx("c1"), rule("recorrencia", "gte", 2), NOW)).toBe(true);
     expect(matchesSegmentRules(ctx("c4"), rule("recorrencia", "gte", 2), NOW)).toBe(false);
+    expect(matchesSegmentRules(ctx("c1"), rule("recorrencia", "eq", "2"), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c4"), rule("recorrencia", "eq", "2"), NOW)).toBe(false);
   });
 
   it("compra nas últimas 24h e pedido enviado hoje ignoram pedidos inválidos", () => {

@@ -75,69 +75,131 @@ function Index() {
       ? `${format(range.from, "dd/MM/yyyy", { locale: ptBR })} – ${format(range.to, "dd/MM/yyyy", { locale: ptBR })}`
       : undefined;
 
-  const mockData = useMemo(() => getDashboardData(period, customLabel), [period, customLabel]);
+  const base = useMemo(() => emptyDashboardData(period, customLabel), [period, customLabel]);
 
-  // Merge shopify data into dashboard data.
-  // Só cai para os dados de demonstração enquanto a busca real ainda não voltou —
-  // um período sem pedidos (numPedidos === 0) é um resultado real válido (ex: filtro
-  // "Diário" num dia sem vendas) e deve mostrar zero, não os números fake de mock.
+  const brl0 = (v: number) =>
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v);
+
+  // Sem fallback silencioso: enquanto os dados reais não chegam, mostramos o estado vazio.
   const data = useMemo(() => {
-    if (!shopifyData) return mockData;
+    if (!shopifyData) return base;
 
-    const mergedKpis = mockData.kpis.map(kpi => {
-      if (kpi.id === "clientes") return { ...kpi, value: String(shopifyData.uniqueCustomers), hint: `${shopifyData.numPedidos} pedidos` };
-      if (kpi.id === "pedidos") return { ...kpi, value: String(shopifyData.numPedidos) };
-      if (kpi.id === "vendas") return { ...kpi, value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(shopifyData.faturamento) };
-      if (kpi.id === "ticket") return { ...kpi, value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(shopifyData.ticketMedio) };
-      if (kpi.id === "ltv") return { ...kpi, value: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(shopifyData.uniqueCustomers ? shopifyData.faturamento / shopifyData.uniqueCustomers : 0) };
-      if (kpi.id === "pedidos-enviados") return { ...kpi, value: String(shopifyData.pedidosEnviadosCount) };
-      if (kpi.id === "produtos-enviados") return { ...kpi, value: String(shopifyData.produtosEnviadosCount) };
-      if (kpi.id === "recompra") {
-        const taxa = shopifyData.taxaRecompra ?? 0;
-        const recomprasCount = shopifyData.recomprasCount ?? 0;
-        return {
-          ...kpi,
-          value: `${taxa.toFixed(1)}%`,
-          hint: `${recomprasCount} clientes são recompras`,
-          status: statusHigherIsBetter(taxa, GOALS.taxaRecompra.meta, GOALS.taxaRecompra.regular),
-        };
+    const s = shopifyData;
+    const taxa = s.taxaRecompra ?? 0;
+    const envioDias = (s.tempoMedioEnvioHoras ?? 0) / 24;
+    const amostraEnvio = s.tempoMedioEnvioAmostra ?? 0;
+    const baseClientes = s.totalClientesBase ?? 0;
+    const madura = Boolean(s.baseMadura);
+    const gaps = s.gapsAmostra ?? 0;
+    const minSample = s.minSample ?? 5;
+
+    const kpis = base.kpis.map((kpi) => {
+      switch (kpi.id) {
+        case "clientes":
+          return { ...kpi, value: String(s.uniqueCustomers), hint: `${s.numPedidos} pedidos pagos no período` };
+        case "pedidos":
+          return { ...kpi, value: String(s.numPedidos) };
+        case "vendas":
+          return { ...kpi, value: brl0(s.faturamento) };
+        case "ticket":
+          return {
+            ...kpi,
+            value: s.numPedidos ? brl0(s.ticketMedio) : "—",
+            status: s.numPedidos
+              ? statusHigherIsBetter(s.ticketMedio, GOALS.ticketMedio.meta, GOALS.ticketMedio.regular)
+              : undefined,
+          };
+        case "ltv":
+          return { ...kpi, value: s.uniqueCustomers ? brl0(s.receitaPorCliente) : "—" };
+        case "recompra":
+          return {
+            ...kpi,
+            value: baseClientes >= minSample ? `${taxa.toFixed(1)}%` : "—",
+            hint:
+              baseClientes >= minSample
+                ? `${s.recomprasCount} de ${baseClientes} clientes recompraram`
+                : `Base insuficiente (${baseClientes} clientes)`,
+            status:
+              baseClientes >= minSample
+                ? statusHigherIsBetter(taxa, GOALS.taxaRecompra.meta, GOALS.taxaRecompra.regular)
+                : undefined,
+          };
+        case "pedidos-enviados":
+          return { ...kpi, value: String(s.pedidosEnviadosCount) };
+        case "produtos-enviados":
+          return { ...kpi, value: String(s.produtosEnviadosCount) };
+        case "tempo-envio":
+          return {
+            ...kpi,
+            value: amostraEnvio === 0 ? "—" : `${envioDias.toFixed(1)} dias`,
+            hint: amostraEnvio === 0 ? "Sem envios com rastreio no período" : `Base: ${amostraEnvio} pedido(s) enviados`,
+            status:
+              amostraEnvio === 0
+                ? undefined
+                : statusLowerIsBetter(envioDias, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
+          };
+        default:
+          return kpi;
       }
-      if (kpi.id === "tempo-envio") {
-        const horas = shopifyData.tempoMedioEnvioHoras ?? 0;
-        const amostra = shopifyData.tempoMedioEnvioAmostra ?? 0;
-        const dias = horas / 24;
-        const value = amostra === 0 ? "—" : `${dias.toFixed(1)} dias`;
-        return {
-          ...kpi,
-          value,
-          hint: amostra === 0 ? "Sem envios com rastreio no período" : `Base: ${amostra} pedido(s) enviados`,
-          status: statusLowerIsBetter(dias, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
-        };
-      }
-      return kpi;
     });
 
-    const taxa = shopifyData.taxaRecompra ?? 0;
-    const envioDias = (shopifyData.tempoMedioEnvioHoras ?? 0) / 24;
-    const insights = mockData.insights.map((i) => {
-      if (i.title === "Análise de recompra por cliente")
-        return { ...i, highlight: `${taxa.toFixed(2)}%`, tone: statusHigherIsBetter(taxa, GOALS.taxaRecompra.meta, GOALS.taxaRecompra.regular) };
-      if (i.title === "Tempo médio de envio")
-        return {
-          ...i,
-          highlight: `${envioDias.toFixed(1)} dias`,
-          tone: statusLowerIsBetter(envioDias, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
-        };
-      if (i.title === "Curva de churn")
-        return { ...i, highlight: `${(shopifyData.churn?.[0]?.value ?? 0).toFixed(1)}%` };
-      return i;
-    });
+    const panelStatus = {
+      recompra: baseClientes >= minSample
+        ? statusHigherIsBetter(taxa, GOALS.taxaRecompra.meta, GOALS.taxaRecompra.regular)
+        : ("sem-dados" as const),
+      clv: baseClientes >= minSample ? ("regular" as const) : ("sem-dados" as const),
+      ticketRecorrencia: baseClientes >= minSample ? ("regular" as const) : ("sem-dados" as const),
+      faixaTicket: s.numPedidos >= minSample ? ("regular" as const) : ("sem-dados" as const),
+      regioes: s.regioes?.length ? ("regular" as const) : ("sem-dados" as const),
+      churn: madura && baseClientes >= minSample ? ("regular" as const) : ("sem-dados" as const),
+      tempoEntreCompras: gaps >= minSample ? ("regular" as const) : ("sem-dados" as const),
+      curvaRecompra: gaps >= minSample ? ("regular" as const) : ("sem-dados" as const),
+      envios: amostraEnvio
+        ? statusLowerIsBetter(envioDias, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular)
+        : ("sem-dados" as const),
+    };
 
-    // Insights/réguas/ações reais gerados por IA (quando já existe uma análise salva)
-    // substituem os do mock, que só ficam como placeholder até a 1ª "Refazer análise".
-    // A análise fica salva por período (latest_ai_analysis_period) — se o usuário trocar
-    // o filtro sem clicar em "Refazer análise", NÃO reaproveitamos a análise de outro
-    // período (senão o Resumo Executivo fica travado nos números de um período antigo).
+    // Insights derivados dos dados reais (placeholder até a IA gerar a análise do período).
+    const realInsights: DashboardData["insights"] = [
+      {
+        title: "Recompra da base",
+        text:
+          baseClientes >= minSample
+            ? `${s.recomprasCount} de ${baseClientes} clientes com pedido pago voltaram a comprar.`
+            : "Base de clientes ainda pequena para uma leitura confiável de recompra.",
+        highlight: baseClientes >= minSample ? `${taxa.toFixed(2)}%` : undefined,
+        tone:
+          baseClientes >= minSample
+            ? statusHigherIsBetter(taxa, GOALS.taxaRecompra.meta, GOALS.taxaRecompra.regular)
+            : "info",
+      },
+      {
+        title: "Faturamento válido",
+        text: `Considera apenas pedidos pagos (PAID/PARTIALLY_PAID). Reembolsos, cancelados e expirados ficam fora.`,
+        highlight: brl0(s.faturamento),
+        tone: "info",
+      },
+      {
+        title: "Tempo médio de envio",
+        text:
+          amostraEnvio === 0
+            ? "Nenhum envio com rastreio registrado no período."
+            : `Média entre pagamento e primeiro envio, sobre ${amostraEnvio} pedido(s).`,
+        highlight: amostraEnvio === 0 ? undefined : `${envioDias.toFixed(1)} dias`,
+        tone:
+          amostraEnvio === 0
+            ? "info"
+            : statusLowerIsBetter(envioDias, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
+      },
+      {
+        title: "Maturidade da base",
+        text: madura
+          ? `Histórico pago de ${s.historyDays} dias — métricas de retenção e ciclo já são interpretáveis.`
+          : `Histórico pago de apenas ${s.historyDays} dias. Retenção, churn e curva de recompra ainda são preliminares.`,
+        tone: madura ? "info" : "regular",
+      },
+    ];
+
     const aiMatchesPeriod = aiAnalysis?.period === period;
     const ai = aiMatchesPeriod ? aiAnalysis?.analysis : undefined;
     const aiInsights = ai?.insights.map((i) =>
@@ -147,24 +209,37 @@ function Index() {
     );
 
     return {
-      ...mockData,
-      kpis: mergedKpis,
-      insights: aiInsights ?? insights,
-      reguas: ai?.reguas ?? mockData.reguas,
-      acoes: ai?.acoes ?? mockData.acoes,
-      panelStatus: ai?.panelStatus ?? mockData.panelStatus,
-      frequencia: shopifyData.frequencia ?? mockData.frequencia,
-      clv: shopifyData.clv ?? mockData.clv,
-      ticketRecorrencia: shopifyData.ticketRecorrencia ?? mockData.ticketRecorrencia,
-      faixaTicket: shopifyData.faixaTicket ?? mockData.faixaTicket,
-      regioes: shopifyData.regioes?.length ? shopifyData.regioes : [],
-      churn: shopifyData.churn ?? mockData.churn,
-      tempoEntreCompras: shopifyData.tempoEntreCompras ?? mockData.tempoEntreCompras,
-      curvaRecompra: shopifyData.curvaRecompra ?? mockData.curvaRecompra,
-      enviosPorDia: shopifyData.enviosPorDia ?? mockData.enviosPorDia,
-      produtosMaisVendidos: shopifyData.produtosMaisVendidos ?? mockData.produtosMaisVendidos,
-    };
-  }, [mockData, shopifyData, aiAnalysis]);
+      ...base,
+      kpis,
+      insights: aiInsights ?? realInsights,
+      reguas: ai?.reguas ?? [],
+      acoes: ai?.acoes ?? [],
+      panelStatus: ai?.panelStatus ?? panelStatus,
+      meta: {
+        historyDays: s.historyDays ?? 0,
+        baseMadura: madura,
+        minSample,
+        gapsAmostra: gaps,
+        totalClientesBase: baseClientes,
+        numPedidos: s.numPedidos,
+        tempoMedioEnvioAmostra: amostraEnvio,
+        hasRealData: true,
+      },
+      frequencia: s.frequencia ?? [],
+      clv: s.clv ?? [],
+      ticketRecorrencia: s.ticketRecorrencia ?? [],
+      faixaTicket: s.faixaTicket ?? [],
+      regioes: s.regioes ?? [],
+      churn: s.churn ?? [],
+      tempoEntreCompras: s.tempoEntreCompras ?? [],
+      curvaRecompra: s.curvaRecompra ?? [],
+      enviosPorDia: s.enviosPorDia ?? [],
+      cohortData: s.cohortData ?? [],
+      sessoes: s.sessoes ?? [],
+      produtosMaisVendidos: s.produtosMaisVendidos ?? [],
+    } satisfies DashboardData;
+  }, [base, shopifyData, aiAnalysis, period]);
+
 
   const runSync = useServerFn(syncShopifyData);
   const [isSyncing, setIsSyncing] = useState(false);

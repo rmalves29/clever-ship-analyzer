@@ -81,8 +81,8 @@ export function buildRepurchaseJourney(orders: RepurchaseOrder[], now = new Date
   const valid = orders.filter((order) => {
     if (!order.id || seenOrderIds.has(order.id)) return false;
     const revenueValid = isRevenueValidOrder({
-      financialStatus: order.financialStatus,
-      cancelledAt: order.cancelledAt,
+      financialStatus: order.financialStatus ?? null,
+      cancelledAt: order.cancelledAt ?? null,
       processedAt: order.processedAt,
     });
     if (!revenueValid) return false;

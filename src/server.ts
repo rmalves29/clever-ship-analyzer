@@ -2,7 +2,12 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
-import { applyMetaStatusUpdate, applyMetaTemplateStatusUpdate, getStoredVerifyToken } from "./lib/whatsapp-meta.server";
+import {
+  applyMetaStatusUpdate,
+  applyMetaTemplateStatusUpdate,
+  getStoredVerifyToken,
+  verifyWhatsappWebhookSignature,
+} from "./lib/whatsapp-meta.server";
 import { matchIncomingMessage } from "./lib/conversational-flows.server";
 import { getAutomationTickSecret, runAutomationsTickWithLog } from "./lib/automations-engine.server";
 import { runDailyEventsAnalysis } from "./lib/events.server";

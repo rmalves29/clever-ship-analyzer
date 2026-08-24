@@ -1916,6 +1916,99 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_message_queue: {
+        Row: {
+          attempts: number
+          body_params: Json
+          campaign_id: string | null
+          created_at: string
+          customer_id: string | null
+          dedup_key: string | null
+          error: string | null
+          header_media_url: string | null
+          id: string
+          locked_at: string | null
+          locked_by: string | null
+          max_attempts: number
+          next_attempt_at: string | null
+          origem: string
+          phone: string
+          priority: number
+          scheduled_at: string
+          sent_at: string | null
+          status: string
+          template_language: string
+          template_name: string
+          updated_at: string
+          wa_message_id: string | null
+        }
+        Insert: {
+          attempts?: number
+          body_params?: Json
+          campaign_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          dedup_key?: string | null
+          error?: string | null
+          header_media_url?: string | null
+          id?: string
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
+          next_attempt_at?: string | null
+          origem?: string
+          phone: string
+          priority?: number
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: string
+          template_language?: string
+          template_name: string
+          updated_at?: string
+          wa_message_id?: string | null
+        }
+        Update: {
+          attempts?: number
+          body_params?: Json
+          campaign_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          dedup_key?: string | null
+          error?: string | null
+          header_media_url?: string | null
+          id?: string
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
+          next_attempt_at?: string | null
+          origem?: string
+          phone?: string
+          priority?: number
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: string
+          template_language?: string
+          template_name?: string
+          updated_at?: string
+          wa_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_message_queue_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_message_queue_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_template_events: {
         Row: {
           category: string | null
@@ -1954,7 +2047,44 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      claim_whatsapp_message_queue: {
+        Args: { p_limit: number; p_worker: string }
+        Returns: {
+          attempts: number
+          body_params: Json
+          campaign_id: string | null
+          created_at: string
+          customer_id: string | null
+          dedup_key: string | null
+          error: string | null
+          header_media_url: string | null
+          id: string
+          locked_at: string | null
+          locked_by: string | null
+          max_attempts: number
+          next_attempt_at: string | null
+          origem: string
+          phone: string
+          priority: number
+          scheduled_at: string
+          sent_at: string | null
+          status: string
+          template_language: string
+          template_name: string
+          updated_at: string
+          wa_message_id: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "whatsapp_message_queue"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      requeue_stale_whatsapp_queue: {
+        Args: { p_stale_minutes?: number }
+        Returns: number
+      }
     }
     Enums: {
       flow_automation_status: "draft" | "active" | "paused"

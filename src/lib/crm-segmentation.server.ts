@@ -1,13 +1,17 @@
 import {
   buildCustomerContexts,
-  type CRMCustomerContext,
   type CRMOrderForSegmentation,
   type CRMOrderItemForSegmentation,
 } from "./crm-segmentation-shared";
+import type { CRMAdvancedCustomerContext } from "./crm-product-segmentation";
 import { isRevenueValidOrder } from "./crm-rfm-shared";
 
 const PAGE_SIZE = 1000;
 const ORDER_ID_BATCH = 200;
+
+type LoadedOrderItem = CRMOrderItemForSegmentation & {
+  totalDiscount?: number | null;
+};
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -56,16 +60,16 @@ async function loadOrders(): Promise<CRMOrderForSegmentation[]> {
   return rows;
 }
 
-async function loadValidOrderItems(orders: CRMOrderForSegmentation[]): Promise<CRMOrderItemForSegmentation[]> {
+async function loadValidOrderItems(orders: CRMOrderForSegmentation[]): Promise<LoadedOrderItem[]> {
   const db = await admin();
   const validOrderIds = [...new Set(orders.filter(isRevenueValidOrder).map((order) => order.id))];
-  const rows: CRMOrderItemForSegmentation[] = [];
+  const rows: LoadedOrderItem[] = [];
 
   for (let start = 0; start < validOrderIds.length; start += ORDER_ID_BATCH) {
     const ids = validOrderIds.slice(start, start + ORDER_ID_BATCH);
     const { data, error } = await db
       .from("shopify_order_items")
-      .select("order_id, product_id, variant_id, sku, title, variant_title, quantity, price")
+      .select("order_id, product_id, variant_id, sku, title, variant_title, quantity, price, total_discount")
       .in("order_id", ids);
     if (error) throw new Error(`Erro ao buscar itens de pedidos válidos do CRM: ${error.message}`);
 
@@ -80,11 +84,40 @@ async function loadValidOrderItems(orders: CRMOrderForSegmentation[]): Promise<C
         variantTitle: item.variant_title,
         quantity: item.quantity,
         price: item.price,
+        totalDiscount: item.total_discount,
       });
     }
   }
 
   return rows;
+}
+
+function buildProductSpendIndex(
+  orders: CRMOrderForSegmentation[],
+  items: LoadedOrderItem[],
+): Map<string, Map<string, number>> {
+  const validOrders = new Map(
+    orders
+      .filter((order) => order.customerId && isRevenueValidOrder(order))
+      .map((order) => [order.id, order] as const),
+  );
+  const index = new Map<string, Map<string, number>>();
+
+  for (const item of items) {
+    const order = validOrders.get(item.orderId);
+    const productId = String(item.productId ?? "").trim();
+    if (!order || !productId) continue;
+    const quantity = Number(item.quantity ?? 0);
+    const unitPrice = Number(item.price ?? 0);
+    const discount = Number(item.totalDiscount ?? 0);
+    if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice)) continue;
+    const lineNet = Math.max(0, unitPrice * quantity - (Number.isFinite(discount) ? discount : 0));
+    const customerSpend = index.get(order.customerId) ?? new Map<string, number>();
+    customerSpend.set(productId, (customerSpend.get(productId) ?? 0) + lineNet);
+    index.set(order.customerId, customerSpend);
+  }
+
+  return index;
 }
 
 async function loadLatestAbandonedCheckoutByCustomer(): Promise<Map<string, string>> {
@@ -169,7 +202,7 @@ export async function loadCRMProductFilterOptions(): Promise<Array<{ id: string;
     .sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
 }
 
-export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMCustomerContext[]> {
+export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMAdvancedCustomerContext[]> {
   const [customers, orders, abandonedCheckoutAtByCustomer] = await Promise.all([
     loadCustomers(),
     loadOrders(),
@@ -179,11 +212,16 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMC
     loadShippedTodayValidOrderIds(orders, now),
     loadValidOrderItems(orders),
   ]);
-  return buildCustomerContexts({
+  const baseContexts = buildCustomerContexts({
     customers,
     orders,
     orderItems,
     abandonedCheckoutAtByCustomer,
     shippedTodayValidOrderIds,
   });
+  const spendIndex = buildProductSpendIndex(orders, orderItems);
+  return baseContexts.map((context) => ({
+    ...context,
+    productSpentById: spendIndex.get(context.customer.id) ?? new Map<string, number>(),
+  }));
 }

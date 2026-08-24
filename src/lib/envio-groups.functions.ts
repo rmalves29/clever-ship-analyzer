@@ -1,17 +1,21 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
-export const listEnvioGroups = createServerFn({ method: "GET" }).handler(async () => {
+export const listEnvioGroups = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { listEnvioGroups: list } = await import("./envio-groups.server");
   return list();
 });
 
-export const syncEnvioGroupsFromWhatsapp = createServerFn({ method: "POST" }).handler(async () => {
+export const syncEnvioGroupsFromWhatsapp = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { syncEnvioGroupsFromWhatsapp: sync } = await import("./envio-groups.server");
   return sync();
 });
 
 export const addEnvioGroupManual = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z.object({ groupJid: z.string().min(1), groupName: z.string().min(1), inviteLink: z.string().optional() }).parse(data),
   )
@@ -21,6 +25,7 @@ export const addEnvioGroupManual = createServerFn({ method: "POST" })
   });
 
 export const updateEnvioGroup = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z
       .object({
@@ -40,6 +45,7 @@ export const updateEnvioGroup = createServerFn({ method: "POST" })
   });
 
 export const deleteEnvioGroup = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { deleteEnvioGroup: del } = await import("./envio-groups.server");

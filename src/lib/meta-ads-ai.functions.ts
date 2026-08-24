@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
 const datePresetSchema = z.enum(["today", "yesterday", "last_7d", "last_14d", "last_30d", "this_month", "last_month"]);
@@ -124,7 +125,8 @@ async function callOpenAi(apiKey: string, prompt: string) {
   return aiAnalysisSchema.parse(JSON.parse(content));
 }
 
-export const getLatestMetaAdsAnalysis = createServerFn({ method: "GET" }).handler(async () => {
+export const getLatestMetaAdsAnalysis = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await supabaseAdmin
     .from("store_settings")
@@ -142,6 +144,7 @@ export const getLatestMetaAdsAnalysis = createServerFn({ method: "GET" }).handle
 });
 
 export const generateMetaAdsAnalysis = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ datePreset: datePresetSchema }).parse(data))
   .handler(async ({ data: { datePreset } }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

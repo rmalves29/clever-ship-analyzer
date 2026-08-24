@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
 const SETTINGS_ID = "ab94b0b3-7016-4c7e-9400-b092be4adb07";
@@ -14,7 +15,8 @@ function normalizeDomain(domain: string) {
 }
 
 /** Settings for the UI — never returns the secret values. */
-export const getStoreSettings = createServerFn({ method: "GET" }).handler(async () => {
+export const getStoreSettings = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin
     .from("store_settings")
@@ -40,6 +42,7 @@ export const getStoreSettings = createServerFn({ method: "GET" }).handler(async 
 
 /** Saves credentials server-side (service role) — empty secret fields keep the stored value. */
 export const saveStoreSettings = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => saveSchema.parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

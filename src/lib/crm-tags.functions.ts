@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
 export const updateCustomerTags = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => 
     z.object({ 
       customerId: z.string(),

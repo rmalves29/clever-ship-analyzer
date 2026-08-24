@@ -1,11 +1,13 @@
 
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 
 /**
  * Script de manutenção para normalizar todos os telefones no CRM
  * e tentar recuperar telefones ausentes a partir dos metadados dos pedidos.
  */
 export const normalizeAllPhones = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     

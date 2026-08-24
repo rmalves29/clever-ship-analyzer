@@ -1,9 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
 const contentTypeSchema = z.enum(["text", "image", "audio", "video", "video_note"]);
 
 export const createAndSendEnvioMessage = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z
       .object({
@@ -20,12 +22,14 @@ export const createAndSendEnvioMessage = createServerFn({ method: "POST" })
     return create(data);
   });
 
-export const listRecentEnvioMessages = createServerFn({ method: "GET" }).handler(async () => {
+export const listRecentEnvioMessages = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { listRecentEnvioMessages: list } = await import("./envio-messages.server");
   return list();
 });
 
 export const submitMessageFeedback = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ envioMessageId: z.string().uuid(), feedback: z.enum(["good", "bad"]), note: z.string().optional() }).parse(data))
   .handler(async ({ data }) => {
     const { submitMessageFeedback: submit } = await import("./envio-messages.server");
@@ -33,6 +37,7 @@ export const submitMessageFeedback = createServerFn({ method: "POST" })
   });
 
 export const getRecentMessageFeedback = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ messageIds: z.array(z.string().uuid()) }).parse(data))
   .handler(async ({ data }) => {
     const { getRecentMessageFeedback: get } = await import("./envio-messages.server");
@@ -40,6 +45,7 @@ export const getRecentMessageFeedback = createServerFn({ method: "POST" })
   });
 
 export const editPendingEnvioMessage = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z
       .object({ id: z.string().uuid(), contentText: z.string().optional(), mediaUrl: z.string().optional(), scheduledAt: z.string().optional() })
@@ -52,6 +58,7 @@ export const editPendingEnvioMessage = createServerFn({ method: "POST" })
   });
 
 export const cancelPendingEnvioMessage = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { cancelPendingEnvioMessage: cancel } = await import("./envio-messages.server");
@@ -59,6 +66,7 @@ export const cancelPendingEnvioMessage = createServerFn({ method: "POST" })
   });
 
 export const uploadEnvioMedia = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ fileName: z.string().max(200), base64Data: z.string(), contentType: z.string().max(100) }).parse(data))
   .handler(async ({ data }) => {
     const { uploadEnvioMedia: upload } = await import("./envio-messages.server");

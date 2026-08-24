@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { startOfDay, endOfDay } from "date-fns";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
 
@@ -92,7 +93,8 @@ export type LiveViewData = {
   sessoesIndisponiveis: boolean;
 };
 
-export const getLiveViewData = createServerFn({ method: "GET" }).handler(async (): Promise<LiveViewData> => {
+export const getLiveViewData = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async (): Promise<LiveViewData> => {
   const supabaseAdmin = await admin();
   const now = toZonedTime(new Date(), TZ);
   const startISO = fromZonedTime(startOfDay(now), TZ).toISOString();

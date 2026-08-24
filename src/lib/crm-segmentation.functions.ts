@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
 export const getCustomersList = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z
       .object({
@@ -297,7 +299,8 @@ export const getCustomersList = createServerFn({ method: "POST" })
     return { customers: processed, total: count };
   });
 
-export const getCRMStats = createServerFn({ method: "GET" }).handler(async () => {
+export const getCRMStats = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   
   const { count: total } = await supabaseAdmin.from("shopify_customers").select("*", { count: "exact", head: true });
@@ -340,7 +343,8 @@ export const getCRMStats = createServerFn({ method: "GET" }).handler(async () =>
   };
 });
 
-export const getSegmentsList = createServerFn({ method: "GET" }).handler(async () => {
+export const getSegmentsList = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: segments, error } = await supabaseAdmin.from("crm_segments").select("*").order("criado_em", { ascending: false });
   if (error) throw error;
@@ -480,6 +484,7 @@ export const getSegmentsList = createServerFn({ method: "GET" }).handler(async (
 });
 
 export const saveSegment = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z.object({
       id: z.string().uuid().optional(),
@@ -519,6 +524,7 @@ export const saveSegment = createServerFn({ method: "POST" })
   });
 
 export const deleteSegment = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -527,7 +533,8 @@ export const deleteSegment = createServerFn({ method: "POST" })
     return { success: true };
   });
 
-export const getStaticLists = createServerFn({ method: "GET" }).handler(async () => {
+export const getStaticLists = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin.from("crm_static_lists").select("*").order("criado_em", { ascending: false });
   if (error) throw error;
@@ -535,6 +542,7 @@ export const getStaticLists = createServerFn({ method: "GET" }).handler(async ()
 });
 
 export const exportSegmentCustomers = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z
       .object({

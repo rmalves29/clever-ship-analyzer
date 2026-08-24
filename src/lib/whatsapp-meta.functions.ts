@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { SEGMENT_TYPES } from "./crm-mock";
@@ -8,7 +9,8 @@ const segmentTypeSchema = z.string();
 const messageTypeSchema = z.enum(["marketing", "utility"]);
 
 /** Status pra tela de Configurações — nunca devolve o token de acesso nem o App Secret. */
-export const getWhatsappMetaStatus = createServerFn({ method: "GET" }).handler(async () => {
+export const getWhatsappMetaStatus = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { loadSettings } = await import("./whatsapp-meta.server");
   const s = await loadSettings();
   return {
@@ -42,6 +44,7 @@ const saveSchema = z.object({
 
 /** Salva as credenciais da API oficial da Meta — token nunca é devolvido ao cliente depois de salvo. */
 export const saveWhatsappMetaSettings = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => saveSchema.parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -77,6 +80,7 @@ export const saveWhatsappMetaSettings = createServerFn({ method: "POST" })
 
 /** Prévia do segmento: quantos clientes reais receberiam a mensagem agora. */
 export const previewSegment = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ segmentType: z.string(), segmentId: z.string().uuid().optional() }).parse(data))
   .handler(async ({ data }) => {
     const { countSegmentRecipients } = await import("./whatsapp-meta.server");
@@ -98,6 +102,7 @@ const createCampaignSchema = z.object({
 
 /** "Aplicar ação" no CRM: cria a campanha e envia na hora, ou manda pra fila de aprovação. */
 export const createAndSendCampaign = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => createCampaignSchema.parse(data))
   .handler(async ({ data }) => {
     const { createCampaignRow, dispatchCampaign } = await import("./whatsapp-meta.server");
@@ -138,6 +143,7 @@ export const createAndSendCampaign = createServerFn({ method: "POST" })
  *  (tem runs em `whatsapp_automation_runs` vinculados), restringe o disparo a esses clientes e
  *  avança os runs pra próxima etapa — etapas seguintes desse fluxo não pedem aprovação de novo. */
 export const approveCampaign = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ campaignId: z.string().uuid(), approvedBy: z.string().optional() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -174,6 +180,7 @@ export const approveCampaign = createServerFn({ method: "POST" })
 /** Rejeita uma campanha pendente — nada é enviado. Se for um lote de automação, os runs pendentes
  *  ficam `failed` (não removidos — a trava de matrícula única impede reenrollment automático). */
 export const rejectCampaign = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ campaignId: z.string().uuid(), reason: z.string().optional() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -196,13 +203,15 @@ export const rejectCampaign = createServerFn({ method: "POST" })
   });
 
 /** Lista campanhas com métricas reais de envio, entrega, vendas e custo. */
-export const getCampaigns = createServerFn({ method: "GET" }).handler(async () => {
+export const getCampaigns = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { listCampaignsWithMetrics } = await import("./whatsapp-meta.server");
   return listCampaignsWithMetrics();
 });
 
 /** Templates aprovados no WABA — usado nas telas de campanha e automação. */
-export const listMetaTemplates = createServerFn({ method: "GET" }).handler(async () => {
+export const listMetaTemplates = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { listMetaTemplates: listTemplates } = await import("./whatsapp-meta.server");
   return listTemplates();
 });
@@ -210,6 +219,7 @@ export const listMetaTemplates = createServerFn({ method: "GET" }).handler(async
 
 /** Detalhe de 1 campanha — lista de destinatários com status, pra tela de "ver campanha". */
 export const getCampaignDetail = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ campaignId: z.string() }).parse(data))
   .handler(async ({ data }) => {
     const { getCampaignDetailRow } = await import("./whatsapp-meta.server");
@@ -217,13 +227,15 @@ export const getCampaignDetail = createServerFn({ method: "POST" })
   });
 
 /** Motivos de falha reais (retornados pela Meta), agrupados — usado na aba Relatórios. */
-export const getCampaignsFailureBreakdown = createServerFn({ method: "GET" }).handler(async () => {
+export const getCampaignsFailureBreakdown = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { getFailureBreakdown } = await import("./whatsapp-meta.server");
   return getFailureBreakdown();
 });
 
 /** Estatísticas de um template (soma de todas as campanhas que o usaram). */
 export const getTemplateStats = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ templateName: z.string() }).parse(data))
   .handler(async ({ data }) => {
     const { getTemplateStatsRows } = await import("./whatsapp-meta.server");
@@ -242,6 +254,7 @@ const templateComponentSchema = z.union([
 
 /** Cria um template novo no WABA — entra em revisão da Meta, some do "PENDING" quando ela decide. */
 export const createMetaTemplate = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z
       .object({
@@ -259,19 +272,22 @@ export const createMetaTemplate = createServerFn({ method: "POST" })
 
 /** Liga o campo `message_template_status_update` no webhook do App — sem isso a Meta nunca manda
  *  o evento de aprovação/rejeição de template (o webhook de status de entrega já funciona à parte). */
-export const activateTemplateStatusWebhook = createServerFn({ method: "POST" }).handler(async () => {
+export const activateTemplateStatusWebhook = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { ensureTemplateStatusWebhookSubscribed } = await import("./whatsapp-meta.server");
   return ensureTemplateStatusWebhookSubscribed();
 });
 
 /** Feed de aprovações/rejeições recentes — pra aba Templates não depender só do botão "Atualizar". */
-export const getRecentTemplateEvents = createServerFn({ method: "GET" }).handler(async () => {
+export const getRecentTemplateEvents = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { getRecentTemplateEvents: getEvents } = await import("./whatsapp-meta.server");
   return getEvents();
 });
 
 /** Duplica um template aprovado como novo rascunho. */
 export const duplicateMetaTemplate = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z.object({ sourceName: z.string(), components: z.array(z.any()), category: z.string(), language: z.string() }).parse(data),
   )
@@ -282,6 +298,7 @@ export const duplicateMetaTemplate = createServerFn({ method: "POST" })
 
 /** Edita o corpo de um template — se já estava aprovado, a Meta reenvia pra revisão automaticamente. */
 export const updateMetaTemplate = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ templateId: z.string(), components: z.array(z.any()) }).parse(data))
   .handler(async ({ data }) => {
     const { updateTemplateComponents } = await import("./whatsapp-meta.server");
@@ -290,6 +307,7 @@ export const updateMetaTemplate = createServerFn({ method: "POST" })
 
 /** Apaga um template (todas as línguas com esse nome). */
 export const deleteMetaTemplate = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ name: z.string() }).parse(data))
   .handler(async ({ data }) => {
     const { deleteTemplateByName } = await import("./whatsapp-meta.server");
@@ -360,18 +378,21 @@ const automationSchema = z.object({
 
 /** Cria ou atualiza uma automação (régua) — usada tanto na página do WhatsApp quanto no CRM. */
 export const saveAutomation = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => automationSchema.parse(data))
   .handler(async ({ data }) => {
     const { upsertAutomation } = await import("./whatsapp-meta.server");
     return upsertAutomation(data);
   });
 
-export const listAutomations = createServerFn({ method: "GET" }).handler(async () => {
+export const listAutomations = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { listAutomationsRows } = await import("./whatsapp-meta.server");
   return listAutomationsRows();
 });
 
 export const toggleAutomation = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid(), ativo: z.boolean() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -384,6 +405,7 @@ export const toggleAutomation = createServerFn({ method: "POST" })
   });
 
 export const deleteAutomation = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -395,6 +417,7 @@ export const deleteAutomation = createServerFn({ method: "POST" })
 /** Roda a automação agora: matricula clientes novos do segmento e processa quem já pode avançar
  *  de etapa — mesmo motor do tick agendado, só que escopado a essa automação e ignorando "pausada". */
 export const runAutomationNow = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { runAutomationsTick } = await import("./automations-engine.server");
@@ -403,13 +426,15 @@ export const runAutomationNow = createServerFn({ method: "POST" })
   });
 
 /** Contagem de runs por status/etapa de todas as automações — badges e "ver funil" na UI. */
-export const getAutomationRunMetrics = createServerFn({ method: "GET" }).handler(async () => {
+export const getAutomationRunMetrics = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { getAllAutomationRunMetrics } = await import("./automations-engine.server");
   return getAllAutomationRunMetrics();
 });
 
 /** Recebe o "code" do popup de Embedded Signup da Meta e troca por token, salvando tudo automaticamente. */
 export const finishEmbeddedSignup = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z.object({ code: z.string().min(5), phoneNumberId: z.string().min(3), wabaId: z.string().min(3) }).parse(data),
   )
@@ -421,6 +446,7 @@ export const finishEmbeddedSignup = createServerFn({ method: "POST" })
 /** Roda um lote do worker da fila manualmente (botão "processar fila" no painel).
  *  Envio real acontece só aqui e no tick HTTP `/api/whatsapp/queue-tick`. */
 export const runWhatsappQueueTick = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   // exige sessão autenticada: este é o único server fn capaz de disparar envio real
   .middleware([requireSupabaseAuth])
   .validator((data: unknown) =>
@@ -436,6 +462,7 @@ export const runWhatsappQueueTick = createServerFn({ method: "POST" })
 
 /** Cancela os itens ainda não enviados de uma campanha. */
 export const cancelWhatsappCampaignQueue = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ campaignId: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { cancelCampaignQueue } = await import("./whatsapp-queue.server");
@@ -444,6 +471,7 @@ export const cancelWhatsappCampaignQueue = createServerFn({ method: "POST" })
 
 /** Contadores da fila de uma campanha (queued/sending/retry_wait/sent/failed/cancelled/skipped). */
 export const getWhatsappCampaignQueueStatus = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ campaignId: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { refreshCampaignStatus } = await import("./whatsapp-queue.server");

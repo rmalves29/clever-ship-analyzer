@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
 /**
@@ -6,6 +7,7 @@ import { z } from "zod";
  */
 
 export const fixCustomerPhone = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => 
     z.object({ 
       email: z.string().email(),
@@ -44,6 +46,7 @@ export const fixCustomerPhone = createServerFn({ method: "POST" })
   });
 
 export const deepSyncCustomer = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ customerId: z.string() }).parse(data))
   .handler(async ({ data: { customerId } }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -92,6 +95,7 @@ export const deepSyncCustomer = createServerFn({ method: "POST" })
   });
 
 export const checkSpecificAbandonedCheckout = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ query: z.string() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

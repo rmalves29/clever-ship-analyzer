@@ -2,7 +2,12 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
-import { applyMetaStatusUpdate, applyMetaTemplateStatusUpdate, getStoredVerifyToken } from "./lib/whatsapp-meta.server";
+import {
+  applyMetaStatusUpdate,
+  applyMetaTemplateStatusUpdate,
+  getStoredVerifyToken,
+  verifyWhatsappWebhookSignature,
+} from "./lib/whatsapp-meta.server";
 import { matchIncomingMessage } from "./lib/conversational-flows.server";
 import { getAutomationTickSecret, runAutomationsTickWithLog } from "./lib/automations-engine.server";
 import { runDailyEventsAnalysis } from "./lib/events.server";
@@ -47,8 +52,22 @@ async function handleWhatsappWebhook(request: Request): Promise<Response> {
   }
 
   if (request.method === "POST") {
+    const rawBody = await request.text();
+
+    // Assinatura HMAC-SHA256 do corpo cru com o App Secret — rejeita antes de processar.
+    const signature = await verifyWhatsappWebhookSignature(rawBody, request.headers.get("x-hub-signature-256"));
+    if (signature.configured && !signature.valid) {
+      console.warn("Webhook do WhatsApp rejeitado: assinatura X-Hub-Signature-256 inválida ou ausente.");
+      return new Response("Invalid signature", { status: 401 });
+    }
+    if (!signature.configured) {
+      console.warn(
+        "Webhook do WhatsApp processado SEM validação de assinatura: App Secret da Meta não configurado em Configurações.",
+      );
+    }
+
     try {
-      const body: any = await request.json();
+      const body: any = JSON.parse(rawBody);
       const changes: any[] = body?.entry?.flatMap((e: any) => e?.changes ?? []) ?? [];
 
       const statuses = changes.flatMap((c) => (c?.field === "messages" ? (c?.value?.statuses ?? []) : []));
@@ -272,10 +291,16 @@ async function handleWhatsappQueueTick(request: Request): Promise<Response> {
     const { processWhatsappQueueBatch } = await import("./lib/whatsapp-queue.server");
     const url = new URL(request.url);
     const limitParam = Number(url.searchParams.get("limit"));
-    // `?dryRun=1` percorre claim → worker sem NENHUMA chamada ao provider (teste de fluxo).
-    const dryRun = url.searchParams.get("dryRun") === "1";
-    // `?provider=mock` usa o provider simulado interno (zero rede) e só processa jobs `mock-test:`.
-    const useMock = url.searchParams.get("provider") === "mock";
+    // `?dryRun=1` e `?provider=mock` são modos de TESTE — bloqueados em produção.
+    const testModesAllowed =
+      process.env["NODE_ENV"] !== "production" || process.env["ALLOW_QUEUE_TEST_MODES"] === "true";
+    const dryRunRequested = url.searchParams.get("dryRun") === "1";
+    const mockRequested = url.searchParams.get("provider") === "mock";
+    if (!testModesAllowed && (dryRunRequested || mockRequested)) {
+      return new Response("Test modes disabled in production", { status: 403 });
+    }
+    const dryRun = testModesAllowed && dryRunRequested;
+    const useMock = testModesAllowed && mockRequested;
     const result = await processWhatsappQueueBatch({
       ...(Number.isFinite(limitParam) && limitParam > 0 ? { limit: limitParam } : {}),
       ...(dryRun ? { dryRun: true } : {}),

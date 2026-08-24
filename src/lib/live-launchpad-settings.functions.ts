@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
-export const getLiveLaunchpadStatus = createServerFn({ method: "GET" }).handler(async () => {
+export const getLiveLaunchpadStatus = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await (supabaseAdmin.from("store_settings") as any)
     .select("live_launchpad_supabase_url, live_launchpad_supabase_service_role_key")
@@ -18,6 +20,7 @@ export const getLiveLaunchpadStatus = createServerFn({ method: "GET" }).handler(
 const saveSchema = z.object({ url: z.string().min(1), serviceRoleKey: z.string().min(1) });
 
 export const saveLiveLaunchpadSettings = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => saveSchema.parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

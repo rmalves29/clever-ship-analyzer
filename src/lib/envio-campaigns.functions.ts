@@ -1,12 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
-export const listEnvioCampaigns = createServerFn({ method: "GET" }).handler(async () => {
+export const listEnvioCampaigns = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { listEnvioCampaigns: list } = await import("./envio-campaigns.server");
   return list();
 });
 
 export const createEnvioCampaign = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ name: z.string().min(1), description: z.string().optional() }).parse(data))
   .handler(async ({ data }) => {
     const { createEnvioCampaign: create } = await import("./envio-campaigns.server");
@@ -22,6 +25,7 @@ const groupTemplateSchema = z.object({
 });
 
 export const updateEnvioCampaign = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z
       .object({
@@ -44,6 +48,7 @@ export const updateEnvioCampaign = createServerFn({ method: "POST" })
   });
 
 export const deleteEnvioCampaign = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { deleteEnvioCampaign: del } = await import("./envio-campaigns.server");
@@ -51,6 +56,7 @@ export const deleteEnvioCampaign = createServerFn({ method: "POST" })
   });
 
 export const getCampaignGroupLinks = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ campaignId: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { getCampaignGroupLinks: get } = await import("./envio-campaigns.server");
@@ -58,6 +64,7 @@ export const getCampaignGroupLinks = createServerFn({ method: "POST" })
   });
 
 export const setCampaignGroupLinks = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z
       .object({
@@ -73,6 +80,7 @@ export const setCampaignGroupLinks = createServerFn({ method: "POST" })
   });
 
 export const updateCampaignGroupWeight = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z.object({ campaignId: z.string().uuid(), groupId: z.string().uuid(), weightPercent: z.number().nullable() }).parse(data),
   )
@@ -83,6 +91,7 @@ export const updateCampaignGroupWeight = createServerFn({ method: "POST" })
   });
 
 export const spawnGroupForCampaign = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ campaignId: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { spawnGroupForCampaign: spawn } = await import("./envio-campaigns.server");

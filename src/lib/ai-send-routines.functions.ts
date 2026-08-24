@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
-export const generateAiRoutineDraftFn = createServerFn({ method: "POST" }).handler(async () => {
+export const generateAiRoutineDraftFn = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { generateAiRoutineDraft } = await import("./ai-send-routines.server");
   return generateAiRoutineDraft();
 });
@@ -20,6 +22,7 @@ const createSchema = z.object({
 });
 
 export const createAiSendRoutineFn = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => createSchema.parse(data))
   .handler(async ({ data }) => {
     const { createAiSendRoutine } = await import("./ai-send-routines.server");

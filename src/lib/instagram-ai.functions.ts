@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
 const datePresetSchema = z.enum(["today", "yesterday", "last_7d", "last_14d", "last_30d", "this_month", "last_month"]);
@@ -95,7 +96,8 @@ async function callOpenAi(apiKey: string, prompt: string) {
   return igAnalysisSchema.parse(JSON.parse(content));
 }
 
-export const getLatestInstagramAnalysis = createServerFn({ method: "GET" }).handler(async () => {
+export const getLatestInstagramAnalysis = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await supabaseAdmin
     .from("store_settings")
@@ -115,6 +117,7 @@ export const getLatestInstagramAnalysis = createServerFn({ method: "GET" }).hand
 
 /** Botão "Gerar análise": busca visão geral + público + top conteúdo reais e pede pro ChatGPT analisar. */
 export const generateInstagramAnalysis = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ datePreset: datePresetSchema }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

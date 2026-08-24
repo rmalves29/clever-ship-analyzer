@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
-export const getFlowStatus = createServerFn({ method: "GET" }).handler(async () => {
+export const getFlowStatus = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   
   // 1. Check if webhook is receiving events

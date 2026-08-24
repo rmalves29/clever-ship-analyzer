@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
-export const listEnvioAutoMessages = createServerFn({ method: "GET" }).handler(async () => {
+export const listEnvioAutoMessages = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { listEnvioAutoMessages: list } = await import("./envio-auto-messages.server");
   return list();
 });
@@ -17,6 +19,7 @@ const autoMessageSchema = z.object({
 });
 
 export const createEnvioAutoMessage = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => autoMessageSchema.parse(data))
   .handler(async ({ data }) => {
     const { createEnvioAutoMessage: create } = await import("./envio-auto-messages.server");
@@ -24,6 +27,7 @@ export const createEnvioAutoMessage = createServerFn({ method: "POST" })
   });
 
 export const updateEnvioAutoMessage = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => autoMessageSchema.partial().extend({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { updateEnvioAutoMessage: update } = await import("./envio-auto-messages.server");
@@ -32,13 +36,15 @@ export const updateEnvioAutoMessage = createServerFn({ method: "POST" })
   });
 
 export const deleteEnvioAutoMessage = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { deleteEnvioAutoMessage: del } = await import("./envio-auto-messages.server");
     return del(data.id);
   });
 
-export const listEnvioReturnAutomations = createServerFn({ method: "GET" }).handler(async () => {
+export const listEnvioReturnAutomations = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { listEnvioReturnAutomations: list } = await import("./envio-auto-messages.server");
   return list();
 });
@@ -57,6 +63,7 @@ const returnAutomationSchema = z.object({
 });
 
 export const createEnvioReturnAutomation = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => returnAutomationSchema.parse(data))
   .handler(async ({ data }) => {
     const { createEnvioReturnAutomation: create } = await import("./envio-auto-messages.server");
@@ -64,6 +71,7 @@ export const createEnvioReturnAutomation = createServerFn({ method: "POST" })
   });
 
 export const updateEnvioReturnAutomation = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => returnAutomationSchema.partial().extend({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { updateEnvioReturnAutomation: update } = await import("./envio-auto-messages.server");
@@ -72,13 +80,15 @@ export const updateEnvioReturnAutomation = createServerFn({ method: "POST" })
   });
 
 export const deleteEnvioReturnAutomation = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { deleteEnvioReturnAutomation: del } = await import("./envio-auto-messages.server");
     return del(data.id);
   });
 
-export const getEnvioReturnStats = createServerFn({ method: "GET" }).handler(async () => {
+export const getEnvioReturnStats = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { getEnvioReturnStats: get } = await import("./envio-auto-messages.server");
   return get();
 });

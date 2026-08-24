@@ -1,7 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
 export const generateAiContentBatchFn = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z
       .object({
@@ -19,6 +21,7 @@ export const generateAiContentBatchFn = createServerFn({ method: "POST" })
   });
 
 export const listContentQueueBatchFn = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ batchId: z.string().min(1) }).parse(data))
   .handler(async ({ data }) => {
     const { listContentQueueBatch } = await import("./ai-content-queue.server");
@@ -26,6 +29,7 @@ export const listContentQueueBatchFn = createServerFn({ method: "POST" })
   });
 
 export const updateContentQueueItemTextFn = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().min(1), contentText: z.string().min(1) }).parse(data))
   .handler(async ({ data }) => {
     const { updateContentQueueItemText } = await import("./ai-content-queue.server");
@@ -33,6 +37,7 @@ export const updateContentQueueItemTextFn = createServerFn({ method: "POST" })
   });
 
 export const approveContentQueueItemFn = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().min(1) }).parse(data))
   .handler(async ({ data }) => {
     const { approveContentQueueItem } = await import("./ai-content-queue.server");
@@ -40,6 +45,7 @@ export const approveContentQueueItemFn = createServerFn({ method: "POST" })
   });
 
 export const approveContentQueueBatchFn = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ batchId: z.string().min(1) }).parse(data))
   .handler(async ({ data }) => {
     const { approveContentQueueBatch } = await import("./ai-content-queue.server");
@@ -47,6 +53,7 @@ export const approveContentQueueBatchFn = createServerFn({ method: "POST" })
   });
 
 export const rejectContentQueueItemFn = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().min(1) }).parse(data))
   .handler(async ({ data }) => {
     const { rejectContentQueueItem } = await import("./ai-content-queue.server");
@@ -54,13 +61,15 @@ export const rejectContentQueueItemFn = createServerFn({ method: "POST" })
   });
 
 export const rejectContentQueueBatchFn = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ batchId: z.string().min(1) }).parse(data))
   .handler(async ({ data }) => {
     const { rejectContentQueueBatch } = await import("./ai-content-queue.server");
     return rejectContentQueueBatch(data.batchId);
   });
 
-export const getAiContentPerformanceFn = createServerFn({ method: "GET" }).handler(async () => {
+export const getAiContentPerformanceFn = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { getAiContentPerformance } = await import("./ai-content-queue.server");
   return getAiContentPerformance();
 });

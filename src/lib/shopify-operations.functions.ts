@@ -1,10 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
 /**
  * Tests the Shopify connection by fetching shop basic info and scopes.
  */
 export const testShopifyConnection = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.any().parse(data))
   .handler(async () => {
   try {

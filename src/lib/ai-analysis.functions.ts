@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
 import { computeShopifyDashboardData } from "./shopify-dashboard.functions";
@@ -149,7 +150,8 @@ async function callOpenAi(apiKey: string, prompt: string) {
 }
 
 /** Última análise gerada por IA (cache) — usada no carregamento normal da página. */
-export const getLatestAiAnalysis = createServerFn({ method: "GET" }).handler(async () => {
+export const getLatestAiAnalysis = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await supabaseAdmin
     .from("store_settings")
@@ -168,6 +170,7 @@ export const getLatestAiAnalysis = createServerFn({ method: "GET" }).handler(asy
 
 /** Botão "Refazer análise": busca os dados reais do período e pede pro ChatGPT analisar. */
 export const generateAiAnalysis = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => periodInput.parse(data))
   .handler(async ({ data: { period, range } }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -218,6 +221,7 @@ const saveKeySchema = z.object({ apiKey: z.string().min(20) });
 
 /** Salva a API key da OpenAI — nunca é devolvida ao cliente depois de salva. */
 export const saveOpenAiApiKey = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => saveKeySchema.parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

@@ -1,12 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
-export const listFlowAutomations = createServerFn({ method: "GET" }).handler(async () => {
+export const listFlowAutomations = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { listFlowAutomations: list } = await import("./flow.server");
   return list();
 });
 
 export const getFlowAutomation = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { getFlowAutomation: get } = await import("./flow.server");
@@ -14,6 +17,7 @@ export const getFlowAutomation = createServerFn({ method: "POST" })
   });
 
 export const createFlowAutomation = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ name: z.string().max(120).optional() }).parse(data))
   .handler(async ({ data }) => {
     const { createFlowAutomation: create } = await import("./flow.server");
@@ -64,6 +68,7 @@ const canvasSchema = z.object({
 });
 
 export const updateFlowAutomation = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z.object({
       id: z.string().uuid(),
@@ -83,6 +88,7 @@ export const updateFlowAutomation = createServerFn({ method: "POST" })
   });
 
 export const deleteFlowAutomation = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { deleteFlowAutomation: del } = await import("./flow.server");
@@ -90,23 +96,27 @@ export const deleteFlowAutomation = createServerFn({ method: "POST" })
   });
 
 export const duplicateFlowAutomation = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { duplicateFlowAutomation: dup } = await import("./flow.server");
     return dup(data.id);
   });
 
-export const listFlowContacts = createServerFn({ method: "GET" }).handler(async () => {
+export const listFlowContacts = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { listFlowContacts: list } = await import("./flow.server");
   return list();
 });
 
-export const listFlowLogs = createServerFn({ method: "GET" }).handler(async () => {
+export const listFlowLogs = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { listFlowLogs: list } = await import("./flow.server");
   return list();
 });
 
 export const addFlowContactTag = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ contactId: z.string().uuid(), tag: z.string().min(1).max(40) }).parse(data))
   .handler(async ({ data }) => {
     const { addFlowContactTag: add } = await import("./flow.server");
@@ -114,6 +124,7 @@ export const addFlowContactTag = createServerFn({ method: "POST" })
   });
 
 export const removeFlowContactTag = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ contactId: z.string().uuid(), tag: z.string().min(1).max(40) }).parse(data))
   .handler(async ({ data }) => {
     const { removeFlowContactTag: remove } = await import("./flow.server");
@@ -121,6 +132,7 @@ export const removeFlowContactTag = createServerFn({ method: "POST" })
   });
 
 export const uploadFlowImage = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z.object({ fileName: z.string().max(200), base64Data: z.string(), contentType: z.string().max(100) }).parse(data),
   )
@@ -130,13 +142,15 @@ export const uploadFlowImage = createServerFn({ method: "POST" })
   });
 
 export const getFlowNodeStats = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ automationId: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { getFlowNodeStats: get } = await import("./flow.server");
     return get(data.automationId);
   });
 
-export const getFlowAutomationsStats = createServerFn({ method: "GET" }).handler(async () => {
+export const getFlowAutomationsStats = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { getFlowAutomationsStats: get } = await import("./flow.server");
   return get();
 });

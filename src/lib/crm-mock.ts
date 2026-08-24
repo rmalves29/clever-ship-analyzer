@@ -15,14 +15,6 @@ export const PERIODS: { key: PeriodKey; label: string }[] = [
   { key: "personalizado", label: "Personalizado" },
 ];
 
-const MULT: Record<PeriodKey, number> = {
-  diario: 1,
-  semanal: 6.4,
-  mensal: 27,
-  anual: 320,
-  tudo: 420,
-  personalizado: 3.5,
-};
 
 export const brl = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v);

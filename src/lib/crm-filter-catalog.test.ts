@@ -7,11 +7,15 @@ import {
   validateCRMFilterCondition,
   validateSegmentRulesPayload,
 } from "./crm-filter-catalog";
-import { matchesSegmentCondition, type CRMCustomerContext } from "./crm-segmentation-shared";
+import { type CRMCustomerContext } from "./crm-segmentation-shared";
+import {
+  matchesAdvancedSegmentCondition,
+  type CRMAdvancedCustomerContext,
+} from "./crm-product-segmentation";
 
 const NOW = new Date("2026-08-24T15:00:00-03:00");
 
-const buyer: CRMCustomerContext = {
+const buyer: CRMAdvancedCustomerContext = {
   customer: {
     id: "c1",
     first_name: "Ana",
@@ -43,6 +47,7 @@ const buyer: CRMCustomerContext = {
       lastPurchasedAt: "2026-08-20T12:00:00-03:00",
     }],
   ]),
+  productSpentById: new Map([["p-brinco", 100]]),
   abandonedCheckout: true,
   hadAbandonedCheckout: true,
   abandonedCheckoutRecovered: false,
@@ -50,7 +55,7 @@ const buyer: CRMCustomerContext = {
   shippedToday: true,
 };
 
-const lead: CRMCustomerContext = {
+const lead: CRMAdvancedCustomerContext = {
   customer: { id: "c2", city: "São Paulo", province: "SP" },
   metrics: {
     customerId: "c2",
@@ -65,6 +70,7 @@ const lead: CRMCustomerContext = {
     cancelledOrderCount: 0,
   },
   purchasedProducts: new Map(),
+  productSpentById: new Map(),
   abandonedCheckout: false,
   hadAbandonedCheckout: false,
   abandonedCheckoutRecovered: false,
@@ -72,7 +78,7 @@ const lead: CRMCustomerContext = {
   shippedToday: false,
 };
 
-const cases: Array<{ field: string; operator: string; value: unknown; context?: CRMCustomerContext }> = [
+const cases: Array<{ field: string; operator: string; value: unknown; context?: CRMAdvancedCustomerContext }> = [
   { field: "cidade", operator: "eq", value: "Belo Horizonte" },
   { field: "estado", operator: "eq", value: "MG" },
   { field: "total_gasto", operator: "eq", value: 300 },
@@ -89,21 +95,25 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
   { field: "checkout_abandonado", operator: "eq", value: "sim" },
   { field: "acesso_sem_compra", operator: "eq", value: "sim", context: lead },
   { field: "produto", operator: "bought", value: "p-brinco" },
+  { field: "produto_periodo", operator: "last_days", value: { productId: "p-brinco", days: 7 } },
+  { field: "produto_quantidade", operator: "gte", value: { productId: "p-brinco", amount: 1 } },
+  { field: "produto_valor_gasto", operator: "gte", value: { productId: "p-brinco", amount: 100 } },
+  { field: "produto_sku", operator: "bought", value: { productId: "p-brinco", sku: "BR-LON" } },
   { field: "customer_tag", operator: "contains", value: "VIP" },
   { field: "tags_custom", operator: "contains", value: "Teste" },
   { field: "rfm_segment", operator: "eq", value: "Nova compra" },
 ];
 
 describe("catálogo confiável de filtros do CRM", () => {
-  it("expõe somente os 19 filtros implementados no motor", () => {
-    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(19);
+  it("expõe somente os 23 filtros implementados no motor", () => {
+    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(23);
     expect(new Set(SUPPORTED_SEGMENT_FIELD_IDS)).toEqual(new Set(cases.map((item) => item.field)));
   });
 
   it.each(cases)("$field possui implementação funcional", ({ field, operator, value, context }) => {
     expect(getCRMFilterField(field)).toBeDefined();
     expect(validateCRMFilterCondition({ field, operator, value })).toBeNull();
-    expect(matchesSegmentCondition(context ?? buyer, { field, operator, value }, NOW)).toBe(true);
+    expect(matchesAdvancedSegmentCondition(context ?? buyer, { field, operator, value }, NOW)).toBe(true);
   });
 
   it("lista todas as UFs brasileiras sem duplicidade", () => {
@@ -123,6 +133,15 @@ describe("catálogo confiável de filtros do CRM", () => {
     expect(validateCRMFilterCondition({ field: "produto", operator: "not_bought", value: "p-colar" })).toBeNull();
     expect(validateCRMFilterCondition({ field: "produto", operator: "eq", value: "p-brinco" })).toContain("Operador inválido");
     expect(validateCRMFilterCondition({ field: "produto", operator: "bought", value: "" })).toContain("Selecione um produto");
+  });
+
+  it("valida período, quantidade, valor e SKU do produto", () => {
+    expect(validateCRMFilterCondition({ field: "produto_periodo", operator: "between_days", value: { productId: "p-brinco", min: 1, max: 30 } })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "produto_periodo", operator: "between_days", value: { productId: "p-brinco", min: 30, max: 1 } })).toContain("Intervalo de dias inválido");
+    expect(validateCRMFilterCondition({ field: "produto_quantidade", operator: "gte", value: { productId: "p-brinco", amount: 2 } })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "produto_valor_gasto", operator: "between", value: { productId: "p-brinco", min: 50, max: 200 } })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "produto_sku", operator: "bought", value: { productId: "p-brinco", sku: "BR-LON" } })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "produto_sku", operator: "bought", value: { productId: "p-brinco", sku: "" } })).toContain("SKU");
   });
 
   it("aceita faixas numéricas válidas e rejeita faixas invertidas", () => {
@@ -167,6 +186,7 @@ describe("catálogo confiável de filtros do CRM", () => {
         { field: "estado", operator: "eq", value: "MG" },
         { field: "recorrencia", operator: "eq", value: "sim" },
         { field: "produto", operator: "bought", value: "p-brinco" },
+        { field: "produto_periodo", operator: "last_days", value: { productId: "p-brinco", days: 30 } },
         { field: "total_gasto", operator: "between", value: { min: 100, max: 500 } },
       ] }],
     })).toEqual({ valid: true, errors: [] });

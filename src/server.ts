@@ -47,8 +47,22 @@ async function handleWhatsappWebhook(request: Request): Promise<Response> {
   }
 
   if (request.method === "POST") {
+    const rawBody = await request.text();
+
+    // Assinatura HMAC-SHA256 do corpo cru com o App Secret — rejeita antes de processar.
+    const signature = await verifyWhatsappWebhookSignature(rawBody, request.headers.get("x-hub-signature-256"));
+    if (signature.configured && !signature.valid) {
+      console.warn("Webhook do WhatsApp rejeitado: assinatura X-Hub-Signature-256 inválida ou ausente.");
+      return new Response("Invalid signature", { status: 401 });
+    }
+    if (!signature.configured) {
+      console.warn(
+        "Webhook do WhatsApp processado SEM validação de assinatura: App Secret da Meta não configurado em Configurações.",
+      );
+    }
+
     try {
-      const body: any = await request.json();
+      const body: any = JSON.parse(rawBody);
       const changes: any[] = body?.entry?.flatMap((e: any) => e?.changes ?? []) ?? [];
 
       const statuses = changes.flatMap((c) => (c?.field === "messages" ? (c?.value?.statuses ?? []) : []));

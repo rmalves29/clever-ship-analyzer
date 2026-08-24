@@ -343,7 +343,9 @@ export async function countSegmentRecipients(segmentType: SegmentType | string, 
   };
 }
 
-async function sendTemplateMessage(params: {
+/** Chamada crua à Meta. Uso restrito ao worker da fila (`whatsapp-queue.server.ts`).
+ *  Não chame direto em fluxos de campanha — tudo passa pela queue. */
+export async function sendTemplateMessage(params: {
   accessToken: string;
   phoneNumberId: string;
   to: string;

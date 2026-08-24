@@ -178,10 +178,22 @@ async function handleDailyEventsAnalysis(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const force = url.searchParams.get("force") === "1";
     const result = await runDailyEventsAnalysis(undefined, force);
-    return new Response(JSON.stringify(result), {
+
+    // Recalculo diário do RFM — reaproveita este mesmo tick para não criar execução redundante.
+    let rfm: unknown = null;
+    try {
+      const { recalculateRFM } = await import("./lib/crm-rfm.server");
+      rfm = await recalculateRFM();
+    } catch (rfmError) {
+      console.error("Falha ao recalcular o RFM na rotina diária:", rfmError);
+      rfm = { success: false, error: String(rfmError) };
+    }
+
+    return new Response(JSON.stringify({ ...result, rfm }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
+
   } catch (error) {
     console.error("Falha ao rodar a análise diária de eventos:", error);
     return new Response("Internal Server Error", { status: 500 });

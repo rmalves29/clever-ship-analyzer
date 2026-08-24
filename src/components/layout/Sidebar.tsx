@@ -1,5 +1,18 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Settings, Sparkles, Megaphone, FileText, BarChart3, TrendingUp, Camera, CalendarClock, Workflow, Send } from "lucide-react";
+import {
+  LayoutDashboard,
+  Settings,
+  Sparkles,
+  Megaphone,
+  FileText,
+  BarChart3,
+  TrendingUp,
+  Camera,
+  CalendarClock,
+  Workflow,
+  Send,
+  RefreshCw,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -10,6 +23,7 @@ type NavItem = {
     | "/campanhas-whatsapp"
     | "/crm"
     | "/crm/live-view"
+    | "/crm/reguas/primeira-segunda"
     | "/performance/meta-ads"
     | "/instagram"
     | "/eventos"
@@ -29,6 +43,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { label: "Segmentos", to: "/crm", search: { tab: "segmentos" }, icon: Sparkles },
       { label: "Listas Estáticas", to: "/crm", search: { tab: "listas" }, icon: Sparkles },
       { label: "Análise RFM", to: "/crm", search: { tab: "rfm" }, icon: BarChart3 },
+      { label: "Régua de Recompra", to: "/crm/reguas/primeira-segunda", icon: RefreshCw },
     ],
   },
   {
@@ -48,9 +63,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
   {
     label: "Eventos",
-    items: [
-      { label: "Linha do Tempo", to: "/eventos", icon: CalendarClock },
-    ],
+    items: [{ label: "Linha do Tempo", to: "/eventos", icon: CalendarClock }],
   },
   {
     label: "Automações",
@@ -61,9 +74,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
   {
     label: "Sistema",
-    items: [
-      { label: "Configurações", to: "/configuracoes", icon: Settings },
-    ],
+    items: [{ label: "Configurações", to: "/configuracoes", icon: Settings }],
   },
 ];
 

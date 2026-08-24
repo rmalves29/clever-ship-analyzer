@@ -64,9 +64,13 @@ const aiAnalysisSchema = z.object({
 function buildPrompt(metrics: Awaited<ReturnType<typeof computeShopifyDashboardData>>) {
   return `Você é um analista de CRM para e-commerce. Analise os dados reais abaixo (extraídos agora da Shopify) e devolva um diagnóstico estratégico.
 
+REGRA DOS DADOS: todos os números abaixo consideram APENAS pedidos pagos (PAID/PARTIALLY_PAID) e não cancelados. Reembolsados, expirados, cancelados e pendentes já foram excluídos. Não relativize os valores nem sugira que incluem vendas canceladas.
+MATURIDADE DA BASE: ${metrics.historyDays} dias de histórico pago${metrics.baseMadura ? "" : " (menos de 90 dias — trate retenção, churn e curva de recompra como PRELIMINARES e não afirme churn definitivo)"}.
+AMOSTRA MÍNIMA: só comente percentuais cujo denominador esteja acima de ${metrics.minSample} registros; caso contrário, diga explicitamente que a amostra é insuficiente.
+
 DADOS DO PERÍODO:
-- Faturamento: R$ ${metrics.faturamento.toFixed(2)}
-- Pedidos: ${metrics.numPedidos}
+- Faturamento válido: R$ ${metrics.faturamento.toFixed(2)}
+- Pedidos pagos: ${metrics.numPedidos}
 - Ticket médio: R$ ${metrics.ticketMedio.toFixed(2)}
 - Clientes únicos: ${metrics.uniqueCustomers}
 - Taxa de recompra (base total): ${metrics.taxaRecompra.toFixed(2)}%
@@ -74,11 +78,13 @@ DADOS DO PERÍODO:
 - Produtos enviados: ${metrics.produtosEnviadosCount}
 - Tempo médio de envio: ${metrics.tempoMedioEnvioDias.toFixed(2)} dias (amostra: ${metrics.tempoMedioEnvioAmostra} pedidos)
 - Frequência de compra: ${JSON.stringify(metrics.frequencia)}
-- CLV por frequência: ${JSON.stringify(metrics.clv)}
+- Valor acumulado observado por frequência (não é LTV previsto): ${JSON.stringify(metrics.clv)}
 - Ticket x recorrência: ${JSON.stringify(metrics.ticketRecorrencia)}
 - Faixas de ticket: ${JSON.stringify(metrics.faixaTicket)}
-- Curva de churn: ${JSON.stringify(metrics.churn)}
-- Tempo entre 1ª e 2ª compra: ${JSON.stringify(metrics.tempoEntreCompras)}
+- Retenção por estágio (% que avançou para a compra seguinte): ${JSON.stringify(metrics.churn)}
+- Tempo entre 1ª e 2ª compra (faixas exclusivas): ${JSON.stringify(metrics.tempoEntreCompras)}
+- Quando acontece a 2ª compra (faixas exclusivas): ${JSON.stringify(metrics.curvaRecompra)}
+- Taxa de recompra por estado (mín. ${metrics.minSample} clientes por estado): ${JSON.stringify(metrics.regioes)}
 - Envios por dia da semana: ${JSON.stringify(metrics.enviosPorDia)}
 
 METAS DO SEMÁFORO (pra você classificar o "tone" de cada insight):
@@ -87,15 +93,15 @@ METAS DO SEMÁFORO (pra você classificar o "tone" de cada insight):
 - Ticket médio: tone "meta" se >= R$${GOALS.ticketMedio.meta}, "regular" se >= R$${GOALS.ticketMedio.regular}, senão "critico".
 - Para insights sem meta numérica definida, use "info" (neutro) ou julgue "regular"/"critico" pela gravidade do padrão encontrado.
 
-Além dos insights, classifique também o status ("critico" | "regular" | "meta") de cada um dos 9 painéis do dashboard, com base no padrão real dos dados acima (use seu julgamento de especialista em e-commerce quando não houver meta numérica explícita — ex: concentração excessiva em 1 única compra é crítico, curva de churn acima de 95% após a 1ª compra é crítico, CLV bem distribuído entre faixas é meta, etc.):
+Além dos insights, classifique também o status ("critico" | "regular" | "meta") de cada um dos 9 painéis do dashboard, com base no padrão real dos dados acima (use seu julgamento de especialista em e-commerce quando não houver meta numérica explícita — ex: concentração excessiva em 1 única compra é crítico, retenção abaixo de 5% da 1ª para a 2ª compra é crítico, CLV bem distribuído entre faixas é meta, etc.):
 - "recompra": distribuição de frequência de recompra (campo frequencia).
-- "clv": distribuição de CLV por estágio (campo clv).
+- "clv": distribuição do valor acumulado por estágio (campo clv).
 - "ticketRecorrencia": evolução do ticket médio conforme o cliente recompra (campo ticketRecorrencia, some no futuro).
 - "faixaTicket": concentração da base por faixa de ticket (campo faixaTicket).
-- "regioes": concentração geográfica da recompra (sem dado explícito acima — julgue pela taxa de recompra geral).
-- "churn": curva de churn por estágio de compra (campo churn).
+- "regioes": taxa de recompra por estado (campo regioes).
+- "churn": retenção por estágio de compra (campo churn; valores ALTOS são bons).
 - "tempoEntreCompras": intervalo entre 1ª e 2ª compra (campo tempoEntreCompras).
-- "curvaRecompra": retenção da base ativa ao longo do tempo (campo curvaRecompra).
+- "curvaRecompra": em quantas semanas a 2ª compra acontece (campo curvaRecompra).
 - "envios": tempo médio de envio, usando as mesmas metas do tempo médio de envio acima.
 
 Cada AÇÃO PONTUAL da lista "acoes" é executada de verdade pelo sistema — ao clicar em "Aplicar ação" o

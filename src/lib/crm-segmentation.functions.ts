@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAppAuth } from "./app-auth";
+import { validateSegmentRulesPayload } from "./crm-filter-catalog";
 import { customerMatchesSearch, matchesSegmentRules, type SegmentRules } from "./crm-segmentation-shared";
 
 async function getSegmentRules(segmentId?: string): Promise<SegmentRules | null> {
@@ -19,6 +20,11 @@ function updatedAtTime(value: string | null | undefined): number {
   const time = value ? new Date(value).getTime() : 0;
   return Number.isFinite(time) ? time : 0;
 }
+
+const segmentRulesSchema = z.unknown().superRefine((value, ctx) => {
+  const validation = validateSegmentRulesPayload(value);
+  validation.errors.forEach((message) => ctx.addIssue({ code: z.ZodIssueCode.custom, message }));
+});
 
 export const getCustomersList = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
@@ -113,9 +119,9 @@ export const saveSegment = createServerFn({ method: "POST" })
   .validator((data: unknown) =>
     z.object({
       id: z.string().uuid().optional(),
-      nome: z.string().min(1),
+      nome: z.string().trim().min(1),
       descricao: z.string().optional(),
-      regras: z.any(),
+      regras: segmentRulesSchema,
     }).parse(data),
   )
   .handler(async ({ data }) => {

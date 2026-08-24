@@ -274,10 +274,14 @@ async function handleWhatsappQueueTick(request: Request): Promise<Response> {
     const limitParam = Number(url.searchParams.get("limit"));
     // `?dryRun=1` percorre claim → worker sem NENHUMA chamada ao provider (teste de fluxo).
     const dryRun = url.searchParams.get("dryRun") === "1";
+    // `?provider=mock` usa o provider simulado interno (zero rede) e só processa jobs `mock-test:`.
+    const useMock = url.searchParams.get("provider") === "mock";
     const result = await processWhatsappQueueBatch({
       ...(Number.isFinite(limitParam) && limitParam > 0 ? { limit: limitParam } : {}),
       ...(dryRun ? { dryRun: true } : {}),
+      ...(useMock ? { provider: "mock" as const } : {}),
     });
+
     return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json" } });
 
   } catch (error) {

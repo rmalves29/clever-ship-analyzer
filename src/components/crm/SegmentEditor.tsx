@@ -1,31 +1,26 @@
 import { useState } from "react";
-import { 
-  ChevronRight, 
-  Users, 
-  ShoppingCart, 
-  Tag, 
-  MessageSquare, 
-  Mail, 
-  Zap, 
-  X, 
-  Plus,
-  Trash2,
-  Save,
-  ArrowLeft
-} from "lucide-react";
+import { ArrowLeft, Plus, Save, ShoppingCart, Tag, Trash2, Users, Zap, AlertTriangle, ShieldCheck } from "lucide-react";
 import { RFM_SEGMENTS_CONFIG } from "@/lib/crm-rfm-shared";
+import {
+  CRM_FILTER_CATEGORIES,
+  getCRMFilterField,
+  isSupportedCRMFilter,
+  type CRMFilterCategory,
+  type CRMFilterField,
+  type CRMFilterKind,
+} from "@/lib/crm-filter-catalog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger,
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuPortal,
   DropdownMenuSub,
-  DropdownMenuSubTrigger,
   DropdownMenuSubContent,
-  DropdownMenuPortal
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -48,80 +43,12 @@ type RuleGroup = {
   conditions: RuleCondition[];
 };
 
-const CATEGORIES = [
-  {
-    id: "pessoais",
-    label: "Dados Pessoais",
-    icon: Users,
-    fields: [
-      { id: "cidade", label: "Cidade" },
-      { id: "estado", label: "Estado" },
-      { id: "regiao", label: "Região" },
-      { id: "bairro", label: "Bairro" },
-      { id: "aniversario_mes", label: "Mês do Aniversário" },
-      { id: "aniversario_dia", label: "Dia do Aniversário" },
-      { id: "idade", label: "Idade" },
-      { id: "signo", label: "Signo" },
-    ]
-  },
-  {
-    id: "comportamento",
-    label: "Comportamento de Compra",
-    icon: ShoppingCart,
-    fields: [
-      { id: "total_gasto", label: "Gasto Total (LTV)" },
-      { id: "total_pedidos", label: "Total de Pedidos" },
-      { id: "ultima_compra", label: "Data da Última Compra" },
-      { id: "primeira_compra", label: "Data da Primeira Compra" },
-      { id: "ticket_medio", label: "Ticket Médio" },
-      { id: "recorrencia", label: "Recorrência" },
-      { id: "status_pagamento", label: "Status do Pagamento" },
-      { id: "perfil", label: "Perfil do Cliente" },
-      { id: "data_pedido_hoje", label: "Compra Realizada Hoje" },
-      { id: "data_pedido_24h", label: "Compra Realizada (Últimas 24h)" },
-      { id: "data_envio_hoje", label: "Pedido Enviado Hoje" },
-      { id: "checkout_abandonado", label: "Checkout Abandonado (CAR24)" },
-      { id: "acesso_sem_compra", label: "Acessou e não comprou" },
-    ]
-  },
-  {
-    id: "tags",
-    label: "Tags",
-    icon: Tag,
-    fields: [
-      { id: "customer_tag", label: "Tag do Cliente" },
-      { id: "order_tag", label: "Tag do Pedido" },
-      { id: "tags_custom", label: "Tag Personalizada (Sistema)" },
-    ]
-  },
-  {
-    id: "rfm",
-    label: "Análise RFM",
-    icon: Zap,
-    fields: [
-      { id: "rfm_segment", label: "Segmento RFM" },
-    ]
-  },
-  {
-    id: "whatsapp",
-    label: "Whatsapp Marketing",
-    icon: MessageSquare,
-    fields: [
-      { id: "recebeu_campanha", label: "Recebeu Campanha" },
-      { id: "clicou_campanha", label: "Clicou em Link" },
-      { id: "nao_recebeu", label: "Não Recebeu Mensagem" },
-    ]
-  },
-  {
-    id: "automacoes",
-    label: "Automações",
-    icon: Zap,
-    fields: [
-      { id: "entrou_fluxo", label: "Entrou em Fluxo" },
-      { id: "concluiu_fluxo", label: "Concluiu Fluxo" },
-    ]
-  }
-];
+const CATEGORY_ICONS: Record<CRMFilterCategory["id"], typeof Users> = {
+  pessoais: Users,
+  comportamento: ShoppingCart,
+  tags: Tag,
+  rfm: Zap,
+};
 
 const OPERATORS = {
   string: [
@@ -131,76 +58,104 @@ const OPERATORS = {
     { label: "Não contém", value: "not_contains" },
     { label: "Começa com", value: "starts_with" },
   ],
+  exact: [
+    { label: "É igual a", value: "eq" },
+    { label: "Não é igual a", value: "neq" },
+  ],
   number: [
     { label: "Maior que", value: "gt" },
     { label: "Menor que", value: "lt" },
     { label: "Igual a", value: "eq" },
     { label: "Maior ou igual a", value: "gte" },
     { label: "Menor ou igual a", value: "lte" },
+    { label: "Diferente de", value: "neq" },
   ],
   date: [
     { label: "Antes de", value: "before" },
     { label: "Depois de", value: "after" },
     { label: "Nos últimos X dias", value: "last_days" },
     { label: "Exatamente em", value: "on" },
-  ]
+  ],
 } as const;
 
-export function SegmentEditor({ 
-  onCancel, 
-  onSave, 
-  initialData 
-}: { 
-  onCancel: () => void, 
-  onSave: () => void,
-  initialData?: { id: string, nome: string, descricao: string, regras: any }
+function operatorsForKind(kind: CRMFilterKind) {
+  if (kind === "number") return OPERATORS.number;
+  if (kind === "date") return OPERATORS.date;
+  if (["boolean", "status", "profile", "rfm"].includes(kind)) return OPERATORS.exact;
+  return OPERATORS.string;
+}
+
+function defaultOperatorForField(field: CRMFilterField) {
+  if (field.kind === "date") return "on";
+  return "eq";
+}
+
+function isBlank(value: RuleCondition["value"]) {
+  return value === "" || value === null || value === undefined;
+}
+
+export function SegmentEditor({
+  onCancel,
+  onSave,
+  initialData,
+}: {
+  onCancel: () => void;
+  onSave: () => void;
+  initialData?: { id: string; nome: string; descricao: string; regras: any };
 }) {
   const runSave = useServerFn(saveSegment);
   const [nome, setNome] = useState(initialData?.nome || "");
   const [descricao, setDescricao] = useState(initialData?.descricao || "");
   const [groups, setGroups] = useState<RuleGroup[]>(
-    initialData?.regras?.groups || [{ id: "1", type: "AND", conditions: [] }]
+    initialData?.regras?.groups || [{ id: "1", type: "AND", conditions: [] }],
   );
   const [isSaving, setIsSaving] = useState(false);
 
-  const addCondition = (groupId: string, category: string, fieldId: string, fieldLabel: string) => {
-    setGroups(prev => prev.map(g => {
-      if (g.id !== groupId) return g;
-      return {
-        ...g,
-        conditions: [
-          ...g.conditions,
-          {
-            id: Math.random().toString(36).substr(2, 9),
-            category,
-            field: fieldId,
-            label: fieldLabel,
-            operator: "eq",
-            value: ""
-          }
-        ]
-      };
-    }));
+  const addCondition = (groupId: string, category: CRMFilterCategory, field: CRMFilterField) => {
+    setGroups((prev) =>
+      prev.map((group) => {
+        if (group.id !== groupId) return group;
+        return {
+          ...group,
+          conditions: [
+            ...group.conditions,
+            {
+              id: crypto.randomUUID(),
+              category: category.id,
+              field: field.id,
+              label: field.label,
+              operator: defaultOperatorForField(field),
+              value: "",
+            },
+          ],
+        };
+      }),
+    );
   };
 
   const removeCondition = (groupId: string, conditionId: string) => {
-    setGroups(prev => prev.map(g => {
-      if (g.id !== groupId) return g;
-      return {
-        ...g,
-        conditions: g.conditions.filter(c => c.id !== conditionId)
-      };
-    }));
+    setGroups((prev) =>
+      prev.map((group) =>
+        group.id === groupId
+          ? { ...group, conditions: group.conditions.filter((condition) => condition.id !== conditionId) }
+          : group,
+      ),
+    );
   };
 
   const updateCondition = (groupId: string, conditionId: string, patch: Partial<RuleCondition>) => {
-    setGroups(prev => prev.map(g => {
-      if (g.id !== groupId) return g;
-      return {
-        ...g,
-        conditions: g.conditions.map(c => c.id === conditionId ? { ...c, ...patch } : c)
-      };
-    }));
+    setGroups((prev) =>
+      prev.map((group) =>
+        group.id === groupId
+          ? {
+              ...group,
+              conditions: group.conditions.map((condition) =>
+                condition.id === conditionId ? { ...condition, ...patch } : condition,
+              ),
+            }
+          : group,
+      ),
+    );
   };
 
   const handleSave = async () => {
@@ -208,37 +163,133 @@ export function SegmentEditor({
       toast.error("Dê um nome ao segmento.");
       return;
     }
-    
+
+    const conditions = groups.flatMap((group) => group.conditions);
+    const unsupported = conditions.filter((condition) => !isSupportedCRMFilter(condition.field));
+    if (unsupported.length > 0) {
+      toast.error("Este segmento possui filtro antigo sem suporte. Remova o filtro marcado antes de salvar.");
+      return;
+    }
+
+    const incomplete = conditions.find((condition) => isBlank(condition.value));
+    if (incomplete) {
+      toast.error(`Preencha o valor do filtro “${incomplete.label}”.`);
+      return;
+    }
+
     setIsSaving(true);
     try {
       await runSave({
         data: {
           id: initialData?.id,
-          nome,
-          descricao,
+          nome: nome.trim(),
+          descricao: descricao.trim(),
           regras: { groups },
-          tipo: "dinamico"
-        }
+        },
       });
       toast.success(initialData?.id ? "Segmento atualizado com sucesso!" : "Segmento criado com sucesso!");
       onSave();
     } catch (err: any) {
-      toast.error("Erro ao salvar: " + err.message);
+      toast.error(`Erro ao salvar: ${err?.message || "erro desconhecido"}`);
     } finally {
       setIsSaving(false);
     }
   };
 
+  const renderValueControl = (groupId: string, condition: RuleCondition, field: CRMFilterField) => {
+    const setValue = (value: string | number | boolean) => updateCondition(groupId, condition.id, { value });
+
+    if (field.kind === "status") {
+      return (
+        <Select value={String(condition.value || "")} onValueChange={setValue}>
+          <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar status..." /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="paid">Pago (Paid)</SelectItem>
+            <SelectItem value="partially_paid">Parcialmente Pago</SelectItem>
+            <SelectItem value="pending">Pendente</SelectItem>
+            <SelectItem value="authorized">Autorizado</SelectItem>
+            <SelectItem value="refunded">Reembolsado</SelectItem>
+            <SelectItem value="partially_refunded">Parcialmente Reembolsado</SelectItem>
+            <SelectItem value="voided">Anulado</SelectItem>
+            <SelectItem value="expired">Expirado</SelectItem>
+            <SelectItem value="unpaid">Não Pago</SelectItem>
+            <SelectItem value="cancelled">Cancelado</SelectItem>
+          </SelectContent>
+        </Select>
+      );
+    }
+
+    if (field.kind === "rfm") {
+      return (
+        <Select value={String(condition.value || "")} onValueChange={setValue}>
+          <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar segmento..." /></SelectTrigger>
+          <SelectContent>
+            {(Object.keys(RFM_SEGMENTS_CONFIG) as (keyof typeof RFM_SEGMENTS_CONFIG)[]).map((segment) => (
+              <SelectItem key={segment} value={segment}>{segment}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
+    }
+
+    if (field.kind === "profile") {
+      return (
+        <Select value={String(condition.value || "")} onValueChange={setValue}>
+          <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar perfil..." /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="carrinho">Checkout Abandonado</SelectItem>
+            <SelectItem value="primeira_compra">Exatamente 1 Compra Válida</SelectItem>
+            <SelectItem value="acesso_sem_compra">Sem Compra Válida</SelectItem>
+          </SelectContent>
+        </Select>
+      );
+    }
+
+    if (field.kind === "boolean") {
+      return (
+        <Select value={String(condition.value || "")} onValueChange={setValue}>
+          <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="sim">Sim</SelectItem>
+            <SelectItem value="nao">Não</SelectItem>
+          </SelectContent>
+        </Select>
+      );
+    }
+
+    if (field.kind === "date") {
+      const lastDays = condition.operator === "last_days";
+      return (
+        <Input
+          type={lastDays ? "number" : "date"}
+          min={lastDays ? 0 : undefined}
+          className="h-8 flex-1 border-none bg-muted/50 text-xs"
+          placeholder={lastDays ? "Número de dias" : undefined}
+          value={String(condition.value ?? "")}
+          onChange={(event) => setValue(event.target.value)}
+        />
+      );
+    }
+
+    return (
+      <Input
+        type={field.kind === "number" ? "number" : "text"}
+        className="h-8 flex-1 border-none bg-muted/50 text-xs"
+        placeholder={field.kind === "number" ? "Valor numérico..." : "Valor..."}
+        value={String(condition.value ?? "")}
+        onChange={(event) => setValue(event.target.value)}
+      />
+    );
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={onCancel}>
-            <ArrowLeft className="size-5" />
-          </Button>
+          <Button variant="ghost" size="icon" onClick={onCancel}><ArrowLeft className="size-5" /></Button>
           <div>
             <h2 className="text-2xl font-semibold tracking-tight">{initialData?.id ? "Editar Segmento" : "Criar Segmento"}</h2>
-            <p className="text-sm text-muted-foreground">Defina regras para agrupar seus clientes automaticamente.</p>
+            <p className="text-sm text-muted-foreground">Defina regras reais para agrupar seus clientes automaticamente.</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -249,195 +300,107 @@ export function SegmentEditor({
         </div>
       </div>
 
+      <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-muted-foreground">
+        <div className="flex items-start gap-2">
+          <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+          <p><strong className="text-foreground">Filtros validados:</strong> o editor mostra somente critérios que já possuem implementação real no CRM. Métricas de compra usam apenas pedidos válidos, seguindo a mesma regra do RFM.</p>
+        </div>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="nome">Nome do Segmento</Label>
-          <Input 
-            id="nome" 
-            placeholder="Ex: Clientes VIPs" 
-            value={nome} 
-            onChange={e => setNome(e.target.value)}
-          />
+          <Input id="nome" placeholder="Ex: Clientes VIPs" value={nome} onChange={(event) => setNome(event.target.value)} />
         </div>
         <div className="space-y-2">
           <Label htmlFor="desc">Descrição (opcional)</Label>
-          <Input 
-            id="desc" 
-            placeholder="Ex: Clientes que gastaram mais de R$ 500" 
-            value={descricao}
-            onChange={e => setDescricao(e.target.value)}
-          />
+          <Input id="desc" placeholder="Ex: Clientes que gastaram mais de R$ 500" value={descricao} onChange={(event) => setDescricao(event.target.value)} />
         </div>
       </div>
 
       <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-        <h3 className="mb-4 flex items-center gap-2 text-lg font-medium">
-          Regras de Segmentação
-          <Badge variant="secondary">Dinâmico</Badge>
-        </h3>
+        <h3 className="mb-1 flex items-center gap-2 text-lg font-medium">Regras de Segmentação <Badge variant="secondary">Dinâmico</Badge></h3>
+        <p className="mb-4 text-xs text-muted-foreground">Dentro de cada grupo usamos E. Entre grupos usamos OU.</p>
 
         <div className="space-y-6">
-          {groups.map((group, gIdx) => (
+          {groups.map((group, groupIndex) => (
             <div key={group.id} className="relative space-y-4">
-              {gIdx > 0 && (
-                <div className="flex justify-center relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-border" />
-                  </div>
-                  <Badge className="bg-brand text-white relative z-10 px-4">OU</Badge>
+              {groupIndex > 0 && (
+                <div className="relative flex justify-center">
+                  <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+                  <Badge className="relative z-10 bg-brand px-4 text-white">OU</Badge>
                 </div>
               )}
-              
+
               <div className="rounded-lg border border-border bg-muted/20 p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-[10px] font-normal border-brand/20 text-brand uppercase tracking-wider">
-                      Corresponder a TODAS as regras (E)
-                    </Badge>
-                  </div>
-                </div>
+                <div className="mb-4"><Badge variant="outline" className="border-brand/20 text-[10px] font-normal uppercase tracking-wider text-brand">Corresponder a TODAS as regras (E)</Badge></div>
 
                 <div className="space-y-3">
-                  {group.conditions.map((condition) => (
-                    <div key={condition.id} className="flex items-center gap-2 rounded-md border border-border bg-background p-2 pr-4 shadow-sm">
-                      <div className="flex items-center gap-2 w-[180px]">
-                        <div className="bg-muted p-1 rounded">
-                          {(() => {
-                            const cat = CATEGORIES.find(c => c.id === condition.category);
-                            const Icon = cat?.icon || Users;
-                            return <Icon className="size-3 text-muted-foreground" />;
-                          })()}
+                  {group.conditions.map((condition) => {
+                    const field = getCRMFilterField(condition.field);
+                    if (!field) {
+                      return (
+                        <div key={condition.id} className="flex items-center gap-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+                          <AlertTriangle className="size-4 shrink-0 text-amber-600" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium">Filtro antigo sem suporte: {condition.label || condition.field}</p>
+                            <p className="text-[11px] text-muted-foreground">Este critério não é executado pelo motor atual. Remova-o antes de salvar.</p>
+                          </div>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeCondition(group.id, condition.id)}><Trash2 className="size-4" /></Button>
                         </div>
-                        <span className="text-xs font-medium truncate">{condition.label}</span>
+                      );
+                    }
+
+                    const category = CRM_FILTER_CATEGORIES.find((item) => item.id === condition.category) ?? CRM_FILTER_CATEGORIES.find((item) => item.fields.some((itemField) => itemField.id === field.id));
+                    const Icon = category ? CATEGORY_ICONS[category.id] : Users;
+                    const operators = operatorsForKind(field.kind);
+
+                    return (
+                      <div key={condition.id} className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-background p-2 pr-3 shadow-sm lg:flex-nowrap">
+                        <div className="flex w-full items-center gap-2 lg:w-[230px]">
+                          <div className="rounded bg-muted p-1"><Icon className="size-3 text-muted-foreground" /></div>
+                          <div className="min-w-0"><p className="truncate text-xs font-medium">{field.label}</p>{field.description && <p className="truncate text-[10px] text-muted-foreground" title={field.description}>{field.description}</p>}</div>
+                        </div>
+
+                        <Select
+                          value={condition.operator}
+                          onValueChange={(operator) => updateCondition(group.id, condition.id, { operator, value: field.kind === "date" ? "" : condition.value })}
+                        >
+                          <SelectTrigger className="h-8 w-[170px] border-none bg-muted/50 text-xs font-medium"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {operators.map((operator) => <SelectItem key={operator.value} value={operator.value}>{operator.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+
+                        {renderValueControl(group.id, condition, field)}
+
+                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" onClick={() => removeCondition(group.id, condition.id)}><Trash2 className="size-4" /></Button>
                       </div>
-                      
-                      <Select 
-                        value={condition.operator} 
-                        onValueChange={v => updateCondition(group.id, condition.id, { operator: v })}
-                      >
-                        <SelectTrigger className="h-8 w-[160px] border-none bg-muted/50 text-xs font-medium">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(() => {
-                            if (condition.field.includes("gasto") || condition.field.includes("total") || condition.field.includes("ticket") || condition.field.includes("idade")) {
-                              return OPERATORS.number.map(op => <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>);
-                            }
-                            if (condition.field.includes("compra")) {
-                              return OPERATORS.date.map(op => <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>);
-                            }
-                            return OPERATORS.string.map(op => <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>);
-                          })()}
-                        </SelectContent>
-                      </Select>
-
-                      {condition.field === "status_pagamento" ? (
-                        <Select
-                          value={condition.value as string}
-                          onValueChange={v => updateCondition(group.id, condition.id, { value: v })}
-                        >
-                          <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs">
-                            <SelectValue placeholder="Selecionar status..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="paid">Pago (Paid)</SelectItem>
-                            <SelectItem value="pending">Pendente (Pending)</SelectItem>
-                            <SelectItem value="refunded">Reembolsado (Refunded)</SelectItem>
-                            <SelectItem value="partially_refunded">Parcialmente Reembolsado</SelectItem>
-                            <SelectItem value="voided">Anulado (Voided)</SelectItem>
-                            <SelectItem value="authorized">Autorizado (Authorized)</SelectItem>
-                            <SelectItem value="partially_paid">Parcialmente Pago</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : condition.field === "rfm_segment" ? (
-                        <Select
-                          value={condition.value as string}
-                          onValueChange={v => updateCondition(group.id, condition.id, { value: v })}
-                        >
-                          <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs">
-                            <SelectValue placeholder="Selecionar segmento..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(Object.keys(RFM_SEGMENTS_CONFIG) as (keyof typeof RFM_SEGMENTS_CONFIG)[]).map(seg => (
-                              <SelectItem key={seg} value={seg}>{seg}</SelectItem>
-                            ))}
-                          </SelectContent>
-
-                        </Select>
-                      ) : condition.field === "perfil" ? (
-                        <Select
-                          value={condition.value as string}
-                          onValueChange={v => updateCondition(group.id, condition.id, { value: v })}
-                        >
-                          <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs">
-                            <SelectValue placeholder="Selecionar perfil..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="carrinho">Checkout Abandonado</SelectItem>
-                            <SelectItem value="primeira_compra">Primeira Compra</SelectItem>
-                            <SelectItem value="acesso_sem_compra">Acessou e não comprou</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : condition.field === "checkout_abandonado" || condition.field === "data_pedido_hoje" || condition.field === "data_pedido_24h" || condition.field === "data_envio_hoje" || condition.field === "acesso_sem_compra" ? (
-                        <Select
-                          value={condition.value as string}
-                          onValueChange={v => updateCondition(group.id, condition.id, { value: v })}
-                        >
-                          <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs">
-                            <SelectValue placeholder="Selecionar..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="sim">Sim</SelectItem>
-                            <SelectItem value="nao">Não</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Input 
-                          className="h-8 flex-1 border-none bg-muted/50 text-xs" 
-                          placeholder="Valor..." 
-                          value={condition.value as string}
-                          onChange={e => updateCondition(group.id, condition.id, { value: e.target.value })}
-                        />
-                      )}
-
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => removeCondition(group.id, condition.id)}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="w-full border-dashed border-2 gap-2 text-muted-foreground hover:text-brand hover:border-brand/50">
-                        <Plus className="size-4" /> Adicionar Filtro
-                      </Button>
+                      <Button variant="outline" size="sm" className="w-full gap-2 border-2 border-dashed text-muted-foreground hover:border-brand/50 hover:text-brand"><Plus className="size-4" /> Adicionar Filtro</Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-64" align="start">
-                      {CATEGORIES.map(cat => (
-                        <DropdownMenuSub key={cat.id}>
-                          <DropdownMenuSubTrigger className="gap-2">
-                            <cat.icon className="size-4" />
-                            <span>{cat.label}</span>
-                          </DropdownMenuSubTrigger>
-                          <DropdownMenuPortal>
-                            <DropdownMenuSubContent className="w-64">
-                              {cat.fields.map(field => (
-                                <DropdownMenuItem 
-                                  key={field.id}
-                                  onClick={() => addCondition(group.id, cat.id, field.id, field.label)}
-                                >
-                                  {field.label}
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuSubContent>
-                          </DropdownMenuPortal>
-                        </DropdownMenuSub>
-                      ))}
+                    <DropdownMenuContent className="w-72" align="start">
+                      {CRM_FILTER_CATEGORIES.map((category) => {
+                        const Icon = CATEGORY_ICONS[category.id];
+                        return (
+                          <DropdownMenuSub key={category.id}>
+                            <DropdownMenuSubTrigger className="gap-2"><Icon className="size-4" /><span>{category.label}</span></DropdownMenuSubTrigger>
+                            <DropdownMenuPortal>
+                              <DropdownMenuSubContent className="w-80">
+                                {category.fields.map((field) => (
+                                  <DropdownMenuItem key={field.id} onClick={() => addCondition(group.id, category, field)}>
+                                    <div><p>{field.label}</p>{field.description && <p className="max-w-72 text-[10px] text-muted-foreground">{field.description}</p>}</div>
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuSubContent>
+                            </DropdownMenuPortal>
+                          </DropdownMenuSub>
+                        );
+                      })}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -445,11 +408,7 @@ export function SegmentEditor({
             </div>
           ))}
 
-          <Button 
-            variant="ghost" 
-            className="w-full gap-2 text-brand hover:bg-brand/5 hover:text-brand border border-dashed border-brand/30"
-            onClick={() => setGroups(prev => [...prev, { id: Math.random().toString(), type: "OR", conditions: [] }])}
-          >
+          <Button variant="ghost" className="w-full gap-2 border border-dashed border-brand/30 text-brand hover:bg-brand/5 hover:text-brand" onClick={() => setGroups((prev) => [...prev, { id: crypto.randomUUID(), type: "OR", conditions: [] }])}>
             <Plus className="size-4" /> Adicionar novo grupo de regras (OU)
           </Button>
         </div>

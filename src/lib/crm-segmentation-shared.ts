@@ -170,12 +170,19 @@ function compareDate(actualIso: string | null, operator: string, expected: unkno
     return ageDays <= days;
   }
 
-  const target = new Date(String(expected ?? ""));
-  if (operator === "on") {
-    if (Number.isNaN(target.getTime())) return businessDateKey(actual) === String(expected ?? "").slice(0, 10);
-    return businessDateKey(actual) === businessDateKey(target);
+  const expectedText = String(expected ?? "").trim();
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(expectedText);
+  if (isDateOnly) {
+    const actualKey = businessDateKey(actual);
+    if (operator === "on" || operator === "eq") return actualKey === expectedText;
+    if (operator === "before") return actualKey < expectedText;
+    if (operator === "after") return actualKey > expectedText;
+    return false;
   }
+
+  const target = new Date(expectedText);
   if (Number.isNaN(target.getTime())) return false;
+  if (operator === "on") return businessDateKey(actual) === businessDateKey(target);
   if (operator === "before") return actual < target;
   if (operator === "after") return actual > target;
   return actual.getTime() === target.getTime();

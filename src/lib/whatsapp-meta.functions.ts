@@ -420,10 +420,15 @@ export const finishEmbeddedSignup = createServerFn({ method: "POST" })
 /** Roda um lote do worker da fila manualmente (botão "processar fila" no painel).
  *  Envio real acontece só aqui e no tick HTTP `/api/whatsapp/queue-tick`. */
 export const runWhatsappQueueTick = createServerFn({ method: "POST" })
-  .validator((data: unknown) => z.object({ limit: z.number().int().min(1).max(200).optional() }).parse(data ?? {}))
+  .validator((data: unknown) =>
+    z.object({ limit: z.number().int().min(1).max(200).optional(), dryRun: z.boolean().optional() }).parse(data ?? {}),
+  )
   .handler(async ({ data }) => {
     const { processWhatsappQueueBatch } = await import("./whatsapp-queue.server");
-    return processWhatsappQueueBatch(data.limit ? { limit: data.limit } : undefined);
+    return processWhatsappQueueBatch({
+      ...(data.limit ? { limit: data.limit } : {}),
+      ...(data.dryRun ? { dryRun: true } : {}),
+    });
   });
 
 /** Cancela os itens ainda não enviados de uma campanha. */

@@ -110,6 +110,11 @@ describe("catálogo confiável de filtros do CRM", () => {
     expect(result.errors).toHaveLength(3);
   });
 
+  it("validação server-side rejeita valor numérico vazio", () => {
+    expect(validateCRMFilterCondition({ field: "total_pedidos", operator: "eq", value: "" })).toContain("Valor numérico inválido");
+    expect(validateCRMFilterCondition({ field: "ultima_compra", operator: "last_days", value: "" })).toContain("Número de dias inválido");
+  });
+
   it("validação server-side aceita regras corretas", () => {
     expect(validateSegmentRulesPayload({
       groups: [{ conditions: [

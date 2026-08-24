@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
 export type RFMSegment = 
@@ -30,6 +31,7 @@ export const RFM_SEGMENTS_CONFIG: Record<RFMSegment, { color: string; descriptio
  * Calcula os scores RFM e atualiza a base de clientes
  */
 export const calculateRFMSegments = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     
@@ -131,6 +133,7 @@ export const calculateRFMSegments = createServerFn({ method: "POST" })
   });
 
 export const getRFMStats = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth])
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     

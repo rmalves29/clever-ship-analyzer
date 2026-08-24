@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 import { format, startOfDay, endOfDay, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfWeek, subMonths, eachMonthOfInterval } from "date-fns";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
@@ -353,5 +354,6 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
 }
 
 export const getShopifyDashboardData = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => dashboardInput.parse(data))
   .handler(async ({ data }) => computeShopifyDashboardData(data));

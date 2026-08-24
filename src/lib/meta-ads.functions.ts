@@ -1,15 +1,18 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
 const datePresetSchema = z.enum(["today", "yesterday", "last_7d", "last_14d", "last_30d", "this_month", "last_month"]);
 const levelSchema = z.enum(["campaign", "adset", "ad"]);
 
-export const getMetaAdsConnectionStatus = createServerFn({ method: "GET" }).handler(async () => {
+export const getMetaAdsConnectionStatus = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { getMetaAdsConnectionStatus: getStatus } = await import("./meta-ads.server");
   return getStatus();
 });
 
 export const getMetaAdsSummary = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ datePreset: datePresetSchema }).parse(data))
   .handler(async ({ data }) => {
     const { getMetaAdsSummary: getSummary } = await import("./meta-ads.server");
@@ -17,6 +20,7 @@ export const getMetaAdsSummary = createServerFn({ method: "POST" })
   });
 
 export const getMetaAdsRows = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ level: levelSchema, datePreset: datePresetSchema }).parse(data))
   .handler(async ({ data }) => {
     const { getMetaAdsRows: getRows } = await import("./meta-ads.server");
@@ -24,6 +28,7 @@ export const getMetaAdsRows = createServerFn({ method: "POST" })
   });
 
 export const getMetaAdsDayparting = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ datePreset: datePresetSchema }).parse(data))
   .handler(async ({ data }) => {
     const { getMetaAdsDayparting: getDayparting } = await import("./meta-ads.server");
@@ -31,18 +36,21 @@ export const getMetaAdsDayparting = createServerFn({ method: "POST" })
   });
 
 export const getMetaAdsPulse = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ datePreset: datePresetSchema }).parse(data))
   .handler(async ({ data }) => {
     const { getMetaAdsPulse: getPulse } = await import("./meta-ads.server");
     return getPulse(data.datePreset);
   });
 
-export const listMetaAdsRules = createServerFn({ method: "GET" }).handler(async () => {
+export const listMetaAdsRules = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { listMetaAdsRules: list } = await import("./meta-ads.server");
   return list();
 });
 
 export const createMetaAdsRule = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z.object({ metric: z.enum(["cpa", "roas"]), operator: z.enum(["gt", "lt"]), value: z.number().positive() }).parse(data),
   )
@@ -52,6 +60,7 @@ export const createMetaAdsRule = createServerFn({ method: "POST" })
   });
 
 export const toggleMetaAdsRule = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid(), ativa: z.boolean() }).parse(data))
   .handler(async ({ data }) => {
     const { toggleMetaAdsRule: toggle } = await import("./meta-ads.server");
@@ -59,6 +68,7 @@ export const toggleMetaAdsRule = createServerFn({ method: "POST" })
   });
 
 export const deleteMetaAdsRule = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { deleteMetaAdsRule: del } = await import("./meta-ads.server");
@@ -66,28 +76,33 @@ export const deleteMetaAdsRule = createServerFn({ method: "POST" })
   });
 
 export const getMetaAdsCreatives = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ datePreset: datePresetSchema }).parse(data))
   .handler(async ({ data }) => {
     const { getMetaAdsCreatives: getCreatives } = await import("./meta-ads.server");
     return getCreatives(data.datePreset);
   });
 
-export const getMetaAdsPlanningBaseline = createServerFn({ method: "GET" }).handler(async () => {
+export const getMetaAdsPlanningBaseline = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { getMetaAdsPlanningBaseline: getBaseline } = await import("./meta-ads.server");
   return getBaseline();
 });
 
-export const getMetaAdsPlanningRanges = createServerFn({ method: "GET" }).handler(async () => {
+export const getMetaAdsPlanningRanges = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { getMetaAdsPlanningRanges: getRanges } = await import("./meta-ads.server");
   return getRanges();
 });
 
-export const getMetaAdsPlan = createServerFn({ method: "GET" }).handler(async () => {
+export const getMetaAdsPlan = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { getMetaAdsPlan: getPlan } = await import("./meta-ads.server");
   return getPlan();
 });
 
 export const saveMetaAdsPlan = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) =>
     z
       .object({
@@ -105,6 +120,7 @@ export const saveMetaAdsPlan = createServerFn({ method: "POST" })
   });
 
 export const getMetaAdsPreview = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ adId: z.string().min(1) }).parse(data))
   .handler(async ({ data }) => {
     const { getMetaAdsPreview: getPreview } = await import("./meta-ads.server");
@@ -112,6 +128,7 @@ export const getMetaAdsPreview = createServerFn({ method: "POST" })
   });
 
 export const setMetaAdsStatus = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().min(1), status: z.enum(["ACTIVE", "PAUSED"]) }).parse(data))
   .handler(async ({ data }) => {
     const { setMetaAdsStatus: setStatus } = await import("./meta-ads.server");

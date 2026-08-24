@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
 const decisionConditionSchema = z.discriminatedUnion("kind", [
@@ -44,6 +45,7 @@ const flowSchema = z.object({
 /** Cria ou atualiza um fluxo conversacional. Valida que o 1º passo é um envio e que toda
  *  referência (nextStepId/yesStepId/noStepId) aponta pra um id que existe entre os steps. */
 export const saveConversationalFlow = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => flowSchema.parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -82,13 +84,15 @@ export const saveConversationalFlow = createServerFn({ method: "POST" })
     return { success: true as const, id: (inserted as { id: string }).id };
   });
 
-export const listConversationalFlows = createServerFn({ method: "GET" }).handler(async () => {
+export const listConversationalFlows = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await supabaseAdmin.from("whatsapp_conversational_flows").select("*").order("created_at", { ascending: false });
   return (data ?? []) as any[];
 });
 
 export const toggleConversationalFlow = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid(), ativo: z.boolean() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -101,6 +105,7 @@ export const toggleConversationalFlow = createServerFn({ method: "POST" })
   });
 
 export const deleteConversationalFlow = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -110,7 +115,8 @@ export const deleteConversationalFlow = createServerFn({ method: "POST" })
   });
 
 /** Contagem de runs por status/etapa de todos os fluxos — badges na listagem. */
-export const getConversationRunMetrics = createServerFn({ method: "GET" }).handler(async () => {
+export const getConversationRunMetrics = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await supabaseAdmin.from("whatsapp_conversation_runs").select("flow_id, status");
   const rows = (data ?? []) as { flow_id: string; status: string }[];
@@ -126,7 +132,8 @@ export const getConversationRunMetrics = createServerFn({ method: "GET" }).handl
 
 /** Templates usados em campanhas recentes — pra escolher no gatilho "clique em botão" (só templates
  *  que já foram de fato enviados têm botões conhecidos, diferente da lista completa da Meta). */
-export const getRecentlyUsedTemplateNames = createServerFn({ method: "GET" }).handler(async () => {
+export const getRecentlyUsedTemplateNames = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await supabaseAdmin
     .from("whatsapp_campaigns")

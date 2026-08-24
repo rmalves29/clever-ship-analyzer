@@ -1,10 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 
 /**
  * Script to identify and fix "Leads" that actually have abandoned checkouts or pending payments.
  * It cross-references customers with their orders and updates their tags/profile.
  */
 export const identifyAbandonedCheckouts = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     

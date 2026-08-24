@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
 const categoryEnum = z.enum(["preco", "campanha", "criativo", "estoque", "feriado", "concorrencia", "conteudo", "outro"]);
@@ -14,6 +15,7 @@ const eventInput = z.object({
 });
 
 export const listCrmEvents = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => rangeSchema.parse(data))
   .handler(async ({ data }) => {
     const { listEvents } = await import("./events.server");
@@ -21,6 +23,7 @@ export const listCrmEvents = createServerFn({ method: "POST" })
   });
 
 export const createCrmEvent = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => eventInput.parse(data))
   .handler(async ({ data }) => {
     const { createEvent } = await import("./events.server");
@@ -28,6 +31,7 @@ export const createCrmEvent = createServerFn({ method: "POST" })
   });
 
 export const updateCrmEvent = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => eventInput.extend({ id: z.string() }).parse(data))
   .handler(async ({ data }) => {
     const { updateEvent } = await import("./events.server");
@@ -35,6 +39,7 @@ export const updateCrmEvent = createServerFn({ method: "POST" })
   });
 
 export const deleteCrmEvent = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string() }).parse(data))
   .handler(async ({ data }) => {
     const { deleteEvent } = await import("./events.server");
@@ -42,6 +47,7 @@ export const deleteCrmEvent = createServerFn({ method: "POST" })
   });
 
 export const getEventsTimelineData = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => rangeSchema.parse(data))
   .handler(async ({ data }) => {
     const { getEventsTimeline } = await import("./events.server");
@@ -49,6 +55,7 @@ export const getEventsTimelineData = createServerFn({ method: "POST" })
   });
 
 export const getCalendarMonthDataFn = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ year: z.number().int(), month: z.number().int().min(1).max(12) }).parse(data))
   .handler(async ({ data }) => {
     const { getCalendarMonthData } = await import("./events.server");
@@ -112,7 +119,8 @@ async function callOpenAi(apiKey: string, prompt: string) {
   return eventsAnalysisSchema.parse(JSON.parse(content));
 }
 
-export const getLatestEventsAnalysis = createServerFn({ method: "GET" }).handler(async () => {
+export const getLatestEventsAnalysis = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await supabaseAdmin
     .from("store_settings")
@@ -130,6 +138,7 @@ export const getLatestEventsAnalysis = createServerFn({ method: "GET" }).handler
 });
 
 export const generateEventsAnalysis = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .validator((data: unknown) => rangeSchema.parse(data))
   .handler(async ({ data: range }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

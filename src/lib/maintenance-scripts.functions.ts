@@ -6,6 +6,7 @@ import { createServerFn } from "@tanstack/react-start";
  * e tentar recuperar telefones ausentes a partir dos metadados dos pedidos.
  */
 export const normalizeAllPhones = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     

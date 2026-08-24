@@ -9,6 +9,24 @@ export type CRMAdvancedCustomerContext = CRMCustomerContext & {
   productSpentById: Map<string, number>;
 };
 
+type RawProductMetricValue = {
+  productId?: unknown;
+  amount?: unknown;
+  min?: unknown;
+  max?: unknown;
+  days?: unknown;
+  sku?: unknown;
+};
+
+type ParsedProductMetricValue = {
+  productId: string;
+  amount?: number;
+  min?: number;
+  max?: number;
+  days?: number;
+  sku?: string;
+};
+
 const DAY_MS = 86_400_000;
 
 function normalize(value: unknown): string {
@@ -20,26 +38,12 @@ function numeric(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function parseProductMetricValue(value: unknown): {
-  productId: string;
-  amount?: number;
-  min?: number;
-  max?: number;
-  days?: number;
-  sku?: string;
-} | null {
+function parseProductMetricValue(value: unknown): ParsedProductMetricValue | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const raw = value as Record<string, unknown>;
+  const raw = value as RawProductMetricValue;
   const productId = String(raw.productId ?? "").trim();
   if (!productId) return null;
-  const parsed: {
-    productId: string;
-    amount?: number;
-    min?: number;
-    max?: number;
-    days?: number;
-    sku?: string;
-  } = { productId };
+  const parsed: ParsedProductMetricValue = { productId };
 
   if (raw.amount !== undefined && raw.amount !== "") {
     const amount = numeric(raw.amount);
@@ -65,7 +69,7 @@ function parseProductMetricValue(value: unknown): {
   return parsed;
 }
 
-function compareNumber(actual: number, operator: string, value: ReturnType<typeof parseProductMetricValue>): boolean {
+function compareNumber(actual: number, operator: string, value: ParsedProductMetricValue | null): boolean {
   if (!value) return false;
   if (operator === "between") {
     return value.min !== undefined && value.max !== undefined && value.min <= value.max
@@ -81,7 +85,7 @@ function compareNumber(actual: number, operator: string, value: ReturnType<typeo
   return actual === value.amount;
 }
 
-function compareProductDate(actualIso: string | null, operator: string, value: ReturnType<typeof parseProductMetricValue>, now: Date): boolean {
+function compareProductDate(actualIso: string | null, operator: string, value: ParsedProductMetricValue | null, now: Date): boolean {
   if (!actualIso || !value) return false;
   const actual = new Date(actualIso);
   if (Number.isNaN(actual.getTime())) return false;

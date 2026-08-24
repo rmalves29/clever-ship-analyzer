@@ -215,9 +215,18 @@ function parseRange(value: unknown): { min: number; max: number } | null {
   return { min, max };
 }
 
-function parseProductObject(value: unknown): Record<string, unknown> | null {
+type ProductFilterObject = {
+  productId?: unknown;
+  amount?: unknown;
+  min?: unknown;
+  max?: unknown;
+  days?: unknown;
+  sku?: unknown;
+};
+
+function parseProductObject(value: unknown): ProductFilterObject | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const raw = value as Record<string, unknown>;
+  const raw = value as ProductFilterObject;
   return isNonBlankString(raw.productId) ? raw : null;
 }
 

@@ -2,7 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAppAuth } from "./app-auth";
 import { validateSegmentRulesPayload } from "./crm-filter-catalog";
-import { customerMatchesSearch, matchesSegmentRules, type SegmentRules } from "./crm-segmentation-shared";
+import { customerMatchesSearch, type SegmentRules } from "./crm-segmentation-shared";
+import { matchesAdvancedSegmentRules } from "./crm-product-segmentation";
 
 async function getSegmentRules(segmentId?: string): Promise<SegmentRules | null> {
   if (!segmentId) return null;
@@ -44,7 +45,7 @@ export const getCustomersList = createServerFn({ method: "POST" })
     ]);
 
     const filtered = contexts
-      .filter((context) => matchesSegmentRules(context, rules))
+      .filter((context) => matchesAdvancedSegmentRules(context, rules))
       .filter((context) => customerMatchesSearch(context, data.search))
       .sort((a, b) => updatedAtTime(b.customer.updated_at) - updatedAtTime(a.customer.updated_at));
 
@@ -146,7 +147,7 @@ export const getSegmentsList = createServerFn({ method: "GET" })
     return (segments ?? []).map((segment) => ({
       ...segment,
       memberCount: contexts.filter((context) =>
-        matchesSegmentRules(context, segment.regras as SegmentRules),
+        matchesAdvancedSegmentRules(context, segment.regras as SegmentRules),
       ).length,
     }));
   });
@@ -220,7 +221,7 @@ export const exportSegmentCustomers = createServerFn({ method: "POST" })
     ]);
 
     const rows = contexts
-      .filter((context) => matchesSegmentRules(context, rules))
+      .filter((context) => matchesAdvancedSegmentRules(context, rules))
       .filter((context) => customerMatchesSearch(context, data.search))
       .sort((a, b) => updatedAtTime(b.customer.updated_at) - updatedAtTime(a.customer.updated_at))
       .map(({ customer, metrics }) => ({

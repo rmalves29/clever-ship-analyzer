@@ -6,9 +6,9 @@ import {
   CRM_FILTER_CATEGORIES,
   getCRMFilterField,
   isSupportedCRMFilter,
+  validateCRMFilterCondition,
   type CRMFilterCategory,
   type CRMFilterField,
-  type CRMFilterKind,
 } from "@/lib/crm-filter-catalog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +30,15 @@ import { getCRMFilterOptions, saveSegment } from "@/lib/crm-segmentation.functio
 import { toast } from "sonner";
 
 type RangeValue = { min: string | number; max: string | number };
-type RuleValue = string | number | boolean | string[] | RangeValue;
+type ProductMetricValue = {
+  productId: string;
+  amount?: string | number;
+  min?: string | number;
+  max?: string | number;
+  days?: string | number;
+  sku?: string;
+};
+type RuleValue = string | number | boolean | string[] | RangeValue | ProductMetricValue;
 
 type RuleCondition = {
   id: string;
@@ -99,6 +107,11 @@ const OPERATORS = {
     { label: "Entre X e Y dias atrás", value: "between_days" },
     { label: "Exatamente em", value: "on" },
   ],
+  productDate: [
+    { label: "Nos últimos X dias", value: "last_days" },
+    { label: "Há mais de X dias", value: "older_than_days" },
+    { label: "Entre X e Y dias atrás", value: "between_days" },
+  ],
   rfm: [
     { label: "É igual a", value: "eq" },
     { label: "Não é igual a", value: "neq" },
@@ -117,37 +130,56 @@ function operatorsForField(field: CRMFilterField) {
   if (field.kind === "date") return OPERATORS.date;
   if (field.kind === "rfm") return OPERATORS.rfm;
   if (field.kind === "product") return OPERATORS.product;
+  if (field.kind === "product_date") return OPERATORS.productDate;
+  if (field.kind === "product_number" || field.kind === "product_money") return OPERATORS.number;
+  if (field.kind === "product_sku") return OPERATORS.product;
   if (["boolean", "status", "profile"].includes(field.kind)) return OPERATORS.exact;
   return OPERATORS.string;
 }
 
 function defaultOperatorForField(field: CRMFilterField) {
   if (field.kind === "date") return "on";
-  if (field.kind === "product") return "bought";
+  if (field.kind === "product" || field.kind === "product_sku") return "bought";
+  if (field.kind === "product_date") return "last_days";
+  if (field.kind === "product_number" || field.kind === "product_money") return "gte";
   return "eq";
 }
 
 function rangeValue(value: RuleValue): RangeValue {
-  if (value && typeof value === "object" && !Array.isArray(value)) return value as RangeValue;
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const raw = value as Partial<RangeValue>;
+    return { min: raw.min ?? "", max: raw.max ?? "" };
+  }
   return { min: "", max: "" };
 }
 
-function isBlank(value: RuleValue) {
-  if (value === "" || value === null || value === undefined) return true;
-  if (Array.isArray(value)) return value.length === 0;
-  if (typeof value === "object") {
-    const range = value as RangeValue;
-    return range.min === "" || range.max === "" || range.min === null || range.max === null;
+function productMetricValue(value: RuleValue): ProductMetricValue {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const raw = value as ProductMetricValue;
+    return { ...raw, productId: String(raw.productId ?? "") };
   }
-  return false;
+  return { productId: "" };
 }
 
 function nextValueForOperator(field: CRMFilterField, operator: string, current: RuleValue): RuleValue {
+  if (field.kind === "product_date") {
+    const base = productMetricValue(current);
+    return operator === "between_days"
+      ? { productId: base.productId, min: "", max: "" }
+      : { productId: base.productId, days: "" };
+  }
+  if (field.kind === "product_number" || field.kind === "product_money") {
+    const base = productMetricValue(current);
+    return operator === "between"
+      ? { productId: base.productId, min: "", max: "" }
+      : { productId: base.productId, amount: "" };
+  }
   if (operator === "between" || operator === "between_days") return { min: "", max: "" };
   if (field.kind === "rfm" && (operator === "in" || operator === "not_in")) {
     return Array.isArray(current) ? current : [];
   }
   if (field.kind === "product") return typeof current === "string" ? current : "";
+  if (field.kind === "product_sku") return productMetricValue(current);
   if (Array.isArray(current) || (current && typeof current === "object")) return "";
   if (field.kind === "date") return "";
   return current;
@@ -192,6 +224,7 @@ export function SegmentEditor({
     setGroups((prev) =>
       prev.map((group) => {
         if (group.id !== groupId) return group;
+        const advancedProduct = ["product_date", "product_number", "product_money", "product_sku"].includes(field.kind);
         return {
           ...group,
           conditions: [
@@ -202,7 +235,7 @@ export function SegmentEditor({
               field: field.id,
               label: field.label,
               operator: defaultOperatorForField(field),
-              value: "",
+              value: advancedProduct ? { productId: "" } : "",
             },
           ],
         };
@@ -248,9 +281,11 @@ export function SegmentEditor({
       return;
     }
 
-    const incomplete = conditions.find((condition) => isBlank(condition.value));
-    if (incomplete) {
-      toast.error(`Preencha o valor do filtro “${incomplete.label}”.`);
+    const invalid = conditions
+      .map((condition) => ({ condition, error: validateCRMFilterCondition(condition) }))
+      .find((item) => item.error);
+    if (invalid) {
+      toast.error(`${invalid.condition.label}: ${invalid.error}`);
       return;
     }
 
@@ -276,6 +311,24 @@ export function SegmentEditor({
   const renderValueControl = (groupId: string, condition: RuleCondition, field: CRMFilterField) => {
     const setValue = (value: RuleValue) => updateCondition(groupId, condition.id, { value });
 
+    const productSelect = (selectedProductId: string, onSelect: (productId: string) => void) => {
+      if (filterOptions.products.length === 0) {
+        return <Input disabled className="h-8 min-w-[260px] flex-1 border-none bg-muted/50 text-xs" placeholder="Nenhum produto válido encontrado" />;
+      }
+      return (
+        <Select value={selectedProductId} onValueChange={onSelect}>
+          <SelectTrigger className="h-8 min-w-[260px] flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar produto..." /></SelectTrigger>
+          <SelectContent className="max-h-[360px]">
+            {filterOptions.products.map((product) => (
+              <SelectItem key={product.id} value={product.id}>
+                {product.title}{product.skus.length > 0 ? ` · SKU ${product.skus.slice(0, 2).join(", ")}` : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
+    };
+
     if (field.id === "estado") {
       return (
         <Select value={String(condition.value || "")} onValueChange={setValue}>
@@ -288,16 +341,68 @@ export function SegmentEditor({
     }
 
     if (field.kind === "product") {
-      if (filterOptions.products.length === 0) {
-        return <Input disabled className="h-8 flex-1 border-none bg-muted/50 text-xs" placeholder="Nenhum produto de compra válida encontrado" />;
-      }
+      return productSelect(String(condition.value || ""), setValue);
+    }
+
+    if (field.kind === "product_date") {
+      const value = productMetricValue(condition.value);
       return (
-        <Select value={String(condition.value || "")} onValueChange={setValue}>
-          <SelectTrigger className="h-8 min-w-[320px] flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar produto..." /></SelectTrigger>
+        <div className="flex min-w-[480px] flex-1 items-center gap-2">
+          {productSelect(value.productId, (productId) => setValue({ ...value, productId }))}
+          {condition.operator === "between_days" ? (
+            <>
+              <Input type="number" min={0} className="h-8 w-24 border-none bg-muted/50 text-xs" placeholder="Mín. dias" value={String(value.min ?? "")} onChange={(event) => setValue({ ...value, min: event.target.value })} />
+              <span className="text-[11px] text-muted-foreground">até</span>
+              <Input type="number" min={0} className="h-8 w-24 border-none bg-muted/50 text-xs" placeholder="Máx. dias" value={String(value.max ?? "")} onChange={(event) => setValue({ ...value, max: event.target.value })} />
+            </>
+          ) : (
+            <Input type="number" min={0} className="h-8 w-28 border-none bg-muted/50 text-xs" placeholder="Dias" value={String(value.days ?? "")} onChange={(event) => setValue({ ...value, days: event.target.value })} />
+          )}
+        </div>
+      );
+    }
+
+    if (field.kind === "product_number" || field.kind === "product_money") {
+      const value = productMetricValue(condition.value);
+      const money = field.kind === "product_money";
+      return (
+        <div className="flex min-w-[520px] flex-1 items-center gap-2">
+          {productSelect(value.productId, (productId) => setValue({ ...value, productId }))}
+          {condition.operator === "between" ? (
+            <>
+              {money && <span className="text-[11px] text-muted-foreground">R$</span>}
+              <Input type="number" min={0} step={money ? "0.01" : "1"} className="h-8 w-24 border-none bg-muted/50 text-xs" placeholder="Mínimo" value={String(value.min ?? "")} onChange={(event) => setValue({ ...value, min: event.target.value })} />
+              <span className="text-[11px] text-muted-foreground">até</span>
+              {money && <span className="text-[11px] text-muted-foreground">R$</span>}
+              <Input type="number" min={0} step={money ? "0.01" : "1"} className="h-8 w-24 border-none bg-muted/50 text-xs" placeholder="Máximo" value={String(value.max ?? "")} onChange={(event) => setValue({ ...value, max: event.target.value })} />
+            </>
+          ) : (
+            <div className="flex items-center gap-1 rounded-md bg-muted/50 pl-2">
+              {money && <span className="text-[11px] text-muted-foreground">R$</span>}
+              <Input type="number" min={0} step={money ? "0.01" : "1"} className="h-8 w-28 border-none bg-transparent text-xs shadow-none focus-visible:ring-0" placeholder={money ? "0,00" : "Quantidade"} value={String(value.amount ?? "")} onChange={(event) => setValue({ ...value, amount: event.target.value })} />
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (field.kind === "product_sku") {
+      const value = productMetricValue(condition.value);
+      const skuOptions = filterOptions.products.flatMap((product) => product.skus.map((sku) => ({ productId: product.id, title: product.title, sku })));
+      const encoded = value.productId && value.sku ? `${value.productId}::${value.sku}` : "";
+      return (
+        <Select
+          value={encoded}
+          onValueChange={(selected) => {
+            const separator = selected.indexOf("::");
+            setValue({ productId: selected.slice(0, separator), sku: selected.slice(separator + 2) });
+          }}
+        >
+          <SelectTrigger className="h-8 min-w-[360px] flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar SKU / variação..." /></SelectTrigger>
           <SelectContent className="max-h-[360px]">
-            {filterOptions.products.map((product) => (
-              <SelectItem key={product.id} value={product.id}>
-                {product.title}{product.skus.length > 0 ? ` · SKU ${product.skus.slice(0, 2).join(", ")}` : ""}
+            {skuOptions.map((option) => (
+              <SelectItem key={`${option.productId}:${option.sku}`} value={`${option.productId}::${option.sku}`}>
+                {option.title} · SKU {option.sku}
               </SelectItem>
             ))}
           </SelectContent>

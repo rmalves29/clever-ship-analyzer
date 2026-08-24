@@ -250,6 +250,10 @@ function paymentStatusMatches(context: CRMCustomerContext, targetRaw: unknown): 
     : context.metrics.rawFinancialStatuses.has(target);
 }
 
+function isBooleanToken(value: unknown): boolean {
+  return ["sim", "nao", "true", "false", "1", "0", "yes", "no"].includes(String(value ?? "").trim().toLowerCase());
+}
+
 export function matchesSegmentCondition(context: CRMCustomerContext, condition: SegmentCondition, now = new Date()): boolean {
   const field = condition.field;
   const operator = condition.operator || "eq";
@@ -270,8 +274,9 @@ export function matchesSegmentCondition(context: CRMCustomerContext, condition: 
 
   if (field === "recorrencia") {
     // Regra nova: recorrência é um booleano de negócio (2+ compras válidas).
-    // Mantemos leitura das regras numéricas antigas para não quebrar segmentos já persistidos.
-    if (["gt", "gte", "lt", "lte"].includes(operator) || (operator === "eq" && typeof value === "number")) {
+    // Regras antigas numéricas continuam sendo lidas, inclusive valores serializados como string.
+    const legacyNumeric = Number.isFinite(Number(value)) && !isBooleanToken(value);
+    if (["gt", "gte", "lt", "lte"].includes(operator) || (["eq", "neq"].includes(operator) && legacyNumeric)) {
       return compareNumber(metrics.validOrderCount, operator, value);
     }
     return compareBoolean(metrics.validOrderCount >= 2, operator, value);

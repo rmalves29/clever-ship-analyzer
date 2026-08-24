@@ -278,7 +278,7 @@ function Configuracoes() {
             </Button>
             <div>
               <h1 className="text-3xl font-bold tracking-tight">Configurações</h1>
-              <p className="text-muted-foreground">Gerencie a conexão com sua loja Shopify</p>
+              <p className="text-muted-foreground">Exibir qual banco de dados está sendo usado nas configurações do sistema para eu conferir facilmente.</p>
             </div>
           </div>
           <Badge variant={settings?.syncStatus === "connected" ? "default" : "secondary"} className="h-6">

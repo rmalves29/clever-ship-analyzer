@@ -1,8 +1,31 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
-import { format, startOfDay, endOfDay, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfWeek, subMonths, eachMonthOfInterval } from "date-fns";
+import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, startOfWeek, subMonths, eachMonthOfInterval } from "date-fns";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
+import {
+  MATURE_HISTORY_DAYS,
+  MIN_SAMPLE,
+  VALID_FINANCIAL_STATUSES,
+  buildCustomerAggregates,
+  buildFirstFulfillmentByOrder,
+  computeCohort,
+  computeCommercialKpis,
+  computeCurvaRecompra,
+  computeFaixaTicket,
+  computeFrequencyDistribution,
+  computeGapsPrimeiraSegunda,
+  computeHistoryDaysFromOrders,
+  computePedidosPorLanding,
+  computeRegioesRecompra,
+  computeRetencaoPorEstagio,
+  computeTaxaRecompra,
+  computeTempoEntreCompras,
+  computeTempoMedioEnvio,
+  computeTicketRecorrencia,
+  computeValorAcumulado,
+  filterValidOrders,
+} from "./dashboard-metrics";
 
 const TZ = "America/Sao_Paulo";
 
@@ -16,7 +39,10 @@ const dashboardInput = z.object({
 
 export type DashboardPeriod = z.infer<typeof dashboardInput>;
 
-/** Lógica pura, reaproveitada pela server function abaixo e pela análise via IA. */
+/**
+ * Lógica do dashboard. TODAS as métricas usam a mesma regra de pedido válido
+ * (`dashboard-metrics.ts` → `crm-rfm-shared.ts`): apenas PAID/PARTIALLY_PAID e não cancelados.
+ */
 export async function computeShopifyDashboardData({ period, range }: DashboardPeriod) {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
@@ -46,52 +72,47 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
 
     const { getBestSellingProducts } = await import("./shopify-products.server");
 
-    // As 4 buscas abaixo são independentes entre si (nenhuma usa o resultado da outra),
-    // então rodam em paralelo em vez de em série — eram 4 idas-e-voltas sequenciais ao banco.
-    const [{ data: orders }, { data: fulfillments }, { data: allOrders }, { data: landingData }, bestSellers] = await Promise.all([
+    const validStatuses = [...VALID_FINANCIAL_STATUSES];
+
+    // Buscas independentes rodam em paralelo. O filtro de status já vai no banco;
+    // o filtro de cancelamento (raw_data.cancelledAt) é reaplicado em memória.
+    const [{ data: orders }, { data: fulfillments }, { data: allOrders }, bestSellers] = await Promise.all([
       supabaseAdmin
         .from("shopify_orders")
-        .select("*")
+        .select("id, customer_id, total_price, processed_at, created_at, province, financial_status, landing_site, raw_data")
         .gte("processed_at", startISO)
         .lte("processed_at", endISO)
-        .neq("financial_status", "VOIDED"),
+        .in("financial_status", validStatuses),
       supabaseAdmin
         .from("shopify_fulfillments")
-        .select("*, shopify_orders!inner(processed_at)")
+        .select("order_id, created_at, updated_at, tracking_number, shopify_orders!inner(processed_at, financial_status)")
         .not("tracking_number", "is", null)
-        .gte("updated_at", startISO)
-        .lte("updated_at", endISO),
+        .gte("created_at", startISO)
+        .lte("created_at", endISO),
       supabaseAdmin
         .from("shopify_orders")
-        .select("customer_id, total_price, processed_at, created_at, province")
+        .select("customer_id, total_price, processed_at, created_at, province, financial_status, raw_data")
         .lte("processed_at", endISO)
-        .neq("financial_status", "VOIDED"),
-      supabaseAdmin
-        .from("shopify_orders")
-        .select("landing_site")
-        .gte("processed_at", startISO)
-        .lte("processed_at", endISO)
-        .not("landing_site", "is", null),
+        .in("financial_status", validStatuses),
       getBestSellingProducts({ startISO, endISO, limit: 5 }).catch(() => []),
     ]);
 
     if (!orders) throw new Error("Falha ao ler pedidos");
 
-    const validOrders = orders.filter(o => o.financial_status !== "REFUNDED");
+    const validOrders = filterValidOrders(orders as any[]);
+    const { faturamento, numPedidos, ticketMedio, uniqueCustomers, receitaPorCliente } =
+      computeCommercialKpis(validOrders);
 
-    const faturamento = validOrders.reduce((acc, o) => acc + Number(o.total_price), 0);
-    const numPedidos = validOrders.length;
-    const ticketMedio = numPedidos > 0 ? faturamento / numPedidos : 0;
-
-    const uniqueCustomers = new Set(validOrders.map(o => o.customer_id)).size;
+    // Envios: só de pedidos válidos (pedido reembolsado/cancelado não conta como operação boa).
+    const validFulfillments = (fulfillments ?? []).filter((f: any) =>
+      f.shopify_orders && (validStatuses as string[]).includes(String(f.shopify_orders.financial_status ?? "").toUpperCase()),
+    );
 
     const shippedOrderIds = Array.from(
-      new Set((fulfillments ?? []).map((f) => f.order_id).filter(Boolean) as string[]),
+      new Set(validFulfillments.map((f: any) => f.order_id).filter(Boolean) as string[]),
     );
     const pedidosEnviadosCount = shippedOrderIds.length;
 
-    // Uma única busca de itens, reaproveitada tanto pra contagem de produtos enviados
-    // quanto pro mapa por pedido (itemsByOrder) mais abaixo — antes era buscada 2x à toa.
     let shippedItems: { quantity: number | null; order_id: string | null }[] = [];
     if (shippedOrderIds.length > 0) {
       const { data: items } = await supabaseAdmin
@@ -102,145 +123,44 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
     }
     const produtosEnviadosCount = shippedItems.reduce((acc, i) => acc + (i.quantity ?? 0), 0);
 
-    const firstFulfillmentByOrder = new Map<string, { at: string; processedAt: string | null }>();
-    for (const f of fulfillments ?? []) {
-      if (!f.order_id || !f.updated_at) continue;
-      const processedAt = (f.shopify_orders as any)?.processed_at ?? null;
-      const current = firstFulfillmentByOrder.get(f.order_id);
-      if (!current || new Date(f.updated_at) < new Date(current.at)) {
-        firstFulfillmentByOrder.set(f.order_id, { at: f.updated_at, processedAt });
-      }
+    const processedAtByOrder = new Map<string, string | null>();
+    for (const f of validFulfillments as any[]) {
+      if (f.order_id) processedAtByOrder.set(f.order_id, f.shopify_orders?.processed_at ?? null);
     }
+    const firstFulfillmentByOrder = buildFirstFulfillmentByOrder(validFulfillments as any[], processedAtByOrder);
+    const { tempoMedioEnvioHoras, tempoMedioEnvioDias, amostra: countWithTime } =
+      computeTempoMedioEnvio(firstFulfillmentByOrder);
 
-    let totalSendTimeHours = 0;
-    let countWithTime = 0;
-    firstFulfillmentByOrder.forEach(({ at, processedAt }) => {
-      if (!processedAt) return;
-      totalSendTimeHours += (new Date(at).getTime() - new Date(processedAt).getTime()) / 3_600_000;
-      countWithTime++;
-    });
+    // Base histórica (todos os pedidos válidos até o fim do período) para métricas de ciclo de vida.
+    const customers = buildCustomerAggregates((allOrders ?? []) as any[]);
+    const historicValidOrders = filterValidOrders((allOrders ?? []) as any[]);
+    const historyDays = computeHistoryDaysFromOrders(historicValidOrders, Date.now());
+    const baseMadura = historyDays >= MATURE_HISTORY_DAYS;
 
-    const tempoMedioEnvioHoras = countWithTime > 0 ? totalSendTimeHours / countWithTime : 0;
-    const tempoMedioEnvioDias = tempoMedioEnvioHoras / 24;
+    const frequencia = computeFrequencyDistribution(customers);
+    const clv = computeValorAcumulado(customers);
+    const ticketRecorrencia = computeTicketRecorrencia(customers);
+    const faixaTicket = computeFaixaTicket(validOrders);
+    const regioes = computeRegioesRecompra(customers, MIN_SAMPLE);
+    const churn = computeRetencaoPorEstagio(customers);
+    const gapsDias = computeGapsPrimeiraSegunda(customers);
+    const tempoEntreCompras = computeTempoEntreCompras(gapsDias);
+    const curvaRecompra = computeCurvaRecompra(gapsDias);
+    const { taxaRecompra, recomprasCount, baseClientes } = computeTaxaRecompra(customers);
 
-    type CustomerAgg = { dates: number[]; total: number; province: string | null };
-    const byCustomer = new Map<string, CustomerAgg>();
-    for (const o of allOrders ?? []) {
-      const key = o.customer_id;
-      if (!key) continue;
-      const at = new Date(o.processed_at ?? o.created_at).getTime();
-      const agg = byCustomer.get(key) ?? { dates: [], total: 0, province: o.province ?? null };
-      agg.dates.push(at);
-      agg.total += Number(o.total_price ?? 0);
-      if (!agg.province && o.province) agg.province = o.province;
-      byCustomer.set(key, agg);
-    }
-    const customers = Array.from(byCustomer.values()).map((c) => ({
-      ...c,
-      dates: c.dates.sort((a, b) => a - b),
-      count: c.dates.length,
-    }));
-    const totalCustomers = customers.length;
-    const pct = (n: number) => (totalCustomers > 0 ? (n / totalCustomers) * 100 : 0);
-
-    const buckets = [
-      { name: "1x", match: (n: number) => n === 1 },
-      { name: "2x", match: (n: number) => n === 2 },
-      { name: "3x", match: (n: number) => n === 3 },
-      { name: "4x+", match: (n: number) => n >= 4 },
-    ];
-
-    const frequencia = buckets.map((b) => ({
-      name: b.name,
-      value: Number(pct(customers.filter((c) => b.match(c.count)).length).toFixed(1)),
-    }));
-
-    const clv = buckets.map((b) => {
-      const group = customers.filter((c) => b.match(c.count));
-      const avg = group.length ? group.reduce((a, c) => a + c.total, 0) / group.length : 0;
-      return { name: b.name, value: Number(avg.toFixed(2)) };
-    });
-
-    const ticketRecorrencia = buckets.map((b, i) => {
-      const group = customers.filter((c) => b.match(c.count));
-      const ticket = group.length
-        ? group.reduce((a, c) => a + c.total, 0) / group.reduce((a, c) => a + c.count, 0)
-        : 0;
-      return { label: `${b.name} compra${i === 0 ? "" : "s"}`, clientes: group.length, ticket: Number(ticket.toFixed(2)), delta: null as number | null };
-    });
-    for (let i = 1; i < ticketRecorrencia.length; i++) {
-      const prev = ticketRecorrencia[i - 1]!.ticket;
-      const cur = ticketRecorrencia[i]!;
-      cur.delta = prev > 0 ? Number((((cur.ticket - prev) / prev) * 100).toFixed(1)) : null;
-    }
-
-    const faixas = [
-      { name: "< R$100", max: 100 },
-      { name: "R$100-200", max: 200 },
-      { name: "R$200-400", max: 400 },
-      { name: "R$400-800", max: 800 },
-      { name: "R$800+", max: Infinity },
-    ];
-    const faixaTicket = faixas.map((f, i) => {
-      const min = i === 0 ? 0 : faixas[i - 1]!.max;
-      const n = validOrders.filter((o) => Number(o.total_price) >= min && Number(o.total_price) < f.max).length;
-      return { name: f.name, value: Number((numPedidos > 0 ? (n / numPedidos) * 100 : 0).toFixed(1)) };
-    });
-
-    const repeatByProvince = new Map<string, number>();
-    for (const c of customers) {
-      if (c.count < 2 || !c.province) continue;
-      repeatByProvince.set(c.province, (repeatByProvince.get(c.province) ?? 0) + 1);
-    }
-    const regioes = Array.from(repeatByProvince.entries())
-      .map(([name, n]) => ({ name, value: Number(pct(n).toFixed(1)) }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
-
-    const churn = [1, 2, 3].map((n) => {
-      const reached = customers.filter((c) => c.count >= n).length;
-      const advanced = customers.filter((c) => c.count >= n + 1).length;
-      return {
-        name: `Após ${n}ª compra`,
-        value: Number((reached > 0 ? ((reached - advanced) / reached) * 100 : 0).toFixed(1)),
-      };
-    });
-
-    const gapsDias = customers
-      .filter((c) => c.count >= 2)
-      .map((c) => (c.dates[1]! - c.dates[0]!) / 86_400_000);
-    const gapBuckets = [
-      { name: "<15d", match: (d: number) => d < 15 },
-      { name: "16-60d", match: (d: number) => d >= 15 && d <= 60 },
-      { name: "61-90d", match: (d: number) => d > 60 && d <= 90 },
-      { name: "90d+", match: (d: number) => d > 90 },
-    ];
-    const tempoEntreCompras = gapBuckets.map((b) => ({
-      name: b.name,
-      value: Number(
-        (gapsDias.length ? (gapsDias.filter(b.match).length / gapsDias.length) * 100 : 0).toFixed(1),
-      ),
-    }));
-
-    const curvaRecompra = [4, 8, 12, 9999].map((weeks, i) => {
-      const labels = ["Semana 1-4", "Semana 5-8", "Semana 9-12", "Semana 13+"];
-      const n = gapsDias.filter((d) => d <= weeks * 7).length;
-      return {
-        name: labels[i]!,
-        value: Number((gapsDias.length ? (n / gapsDias.length) * 100 : 0).toFixed(1)),
-      };
-    });
-
+    // Envios por dia da semana (com base no created_at do fulfillment).
     const diasLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
     const perDay = new Map<number, { pedidos: Set<string>; horas: number[] }>();
-    for (const f of fulfillments ?? []) {
-      if (!f.order_id || !f.updated_at) continue;
-      const d = toZonedTime(new Date(f.updated_at), TZ).getDay();
+    for (const f of validFulfillments as any[]) {
+      const at = f.created_at ?? f.updated_at;
+      if (!f.order_id || !at) continue;
+      const d = toZonedTime(new Date(at), TZ).getDay();
       const slot = perDay.get(d) ?? { pedidos: new Set<string>(), horas: [] };
       slot.pedidos.add(f.order_id);
-      const processedAt = (f.shopify_orders as any)?.processed_at ?? null;
+      const processedAt = f.shopify_orders?.processed_at ?? null;
       if (processedAt) {
-        slot.horas.push((new Date(f.updated_at).getTime() - new Date(processedAt).getTime()) / 3_600_000);
+        const h = (new Date(at).getTime() - new Date(processedAt).getTime()) / 3_600_000;
+        if (h >= 0 && h <= 24 * 90) slot.horas.push(h);
       }
       perDay.set(d, slot);
     }
@@ -257,82 +177,44 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
         dia: diasLabels[d]!,
         pedidos: pedidosIds.length,
         produtos: pedidosIds.reduce((a, id) => a + (itemsByOrder.get(id) ?? 0), 0),
-        tempoMedio: Number(
-          (horas.length ? horas.reduce((a, h) => a + h, 0) / horas.length / 24 : 0).toFixed(2),
-        ),
+        tempoMedio: Number((horas.length ? horas.reduce((a, h) => a + h, 0) / horas.length / 24 : 0).toFixed(2)),
       };
     });
 
-    const recompras = customers.filter((c) => {
-      if (c.count < 2) return false;
-      // Verifica se houve uma nova compra em até 90 dias após a primeira
-      const gap = (c.dates[1]! - c.dates[0]!) / 86_400_000;
-      return gap <= 90;
-    });
-
-    const taxaRecompra = Number(
-      (totalCustomers > 0 ? (recompras.length / totalCustomers) * 100 : 0).toFixed(2),
-    );
-
-    // ---------- Análise de Coorte (Cohort) ----------
-    const cohortStart = startOfMonth(subMonths(now, 7));
-    const monthsInterval = eachMonthOfInterval({ start: cohortStart, end: endOfMonth(now) });
+    // ---------- Coorte (por mês de 1ª compra válida) ----------
+    const monthsInterval = eachMonthOfInterval({ start: startOfMonth(subMonths(now, 7)), end: endOfMonth(now) });
     const ptBRModule = await import("date-fns/locale/pt-BR");
     const ptBR = (ptBRModule as any).default || ptBRModule;
+    const cohortData = computeCohort(
+      customers,
+      monthsInterval.map((m) => ({
+        start: startOfMonth(m).getTime(),
+        end: endOfMonth(m).getTime(),
+        label: format(m, "MMM 'de' yyyy", { locale: ptBR }),
+      })),
+    );
 
-    const cohortData = monthsInterval.map((monthDate) => {
-      const monthStart = startOfMonth(monthDate).getTime();
-      const monthEnd = endOfMonth(monthDate).getTime();
-      const firstTimers = customers.filter(c => {
-        const firstDate = c.dates[0];
-        return firstDate !== undefined && firstDate >= monthStart && firstDate <= monthEnd;
-      });
-      const cohortSize = firstTimers.length;
-      
-      const retention = monthsInterval.map((targetMonthDate) => {
-        const targetMonthStart = startOfMonth(targetMonthDate).getTime();
-        const targetMonthEnd = endOfMonth(targetMonthDate).getTime();
-        if (targetMonthStart < monthStart) return null;
-        const returned = firstTimers.filter(c => 
-          c.dates.some(d => d >= targetMonthStart && d <= targetMonthEnd)
-        ).length;
-        return cohortSize > 0 ? Number(((returned / cohortSize) * 100).toFixed(1)) : 0;
-      });
-
-      return {
-        month: format(monthDate, "MMM 'de' yyyy", { locale: ptBR }),
-        size: cohortSize,
-        retention
-      };
-    });
-
-    // ---------- Sessões por Página ----------
-    const landingCounts = new Map<string, number>();
-    (landingData ?? []).forEach(o => {
-      if (o.landing_site) {
-        const path = o.landing_site.replace(/^https?:\/\/[^\/]+/, "") || "/";
-        landingCounts.set(path, (landingCounts.get(path) ?? 0) + 1);
-      }
-    });
-
-    const topLandings = Array.from(landingCounts.entries())
-      .map(([path, count]) => ({ page: path, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
+    // ---------- Pedidos por página de entrada (NÃO é sessão) ----------
+    const sessoes = computePedidosPorLanding(validOrders, 10);
 
     return {
       faturamento,
       numPedidos,
       ticketMedio,
       uniqueCustomers,
+      receitaPorCliente,
       pedidosEnviadosCount,
       produtosEnviadosCount,
       tempoMedioEnvioDias,
       tempoMedioEnvioHoras,
       tempoMedioEnvioAmostra: countWithTime,
       taxaRecompra,
-      recomprasCount: recompras.length,
-      totalClientesBase: totalCustomers,
+      recomprasCount,
+      totalClientesBase: baseClientes,
+      historyDays,
+      baseMadura,
+      minSample: MIN_SAMPLE,
+      gapsAmostra: gapsDias.length,
       frequencia,
       clv,
       ticketRecorrencia,
@@ -343,7 +225,7 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
       curvaRecompra,
       enviosPorDia,
       cohortData,
-      sessoes: topLandings,
+      sessoes,
       produtosMaisVendidos: bestSellers.map((p) => ({
         productId: p.productId,
         nome: p.title,

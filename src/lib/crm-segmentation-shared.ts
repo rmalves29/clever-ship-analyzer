@@ -34,12 +34,17 @@ export type PurchaseMetrics = {
   validOrderIds: Set<string>;
   rawFinancialStatuses: Set<string>;
   validFinancialStatuses: Set<string>;
+  cancelledOrderCount: number;
 };
 
 export type CRMCustomerContext = {
   customer: CRMCustomerForSegmentation;
   metrics: PurchaseMetrics;
+  /** Compatibilidade: representa somente checkout abandonado ATIVO. */
   abandonedCheckout: boolean;
+  hadAbandonedCheckout: boolean;
+  abandonedCheckoutRecovered: boolean;
+  lastAbandonedCheckoutAt: string | null;
   shippedToday: boolean;
 };
 
@@ -64,6 +69,7 @@ const EMPTY_METRICS = (customerId: string): PurchaseMetrics => ({
   validOrderIds: new Set<string>(),
   rawFinancialStatuses: new Set<string>(),
   validFinancialStatuses: new Set<string>(),
+  cancelledOrderCount: 0,
 });
 
 function normalizeStatus(status: unknown): string {
@@ -78,6 +84,7 @@ export function buildPurchaseMetricsIndex(orders: CRMOrderForSegmentation[]): Ma
     const metrics = index.get(order.customerId) ?? EMPTY_METRICS(order.customerId);
     const status = normalizeStatus(order.financialStatus);
     if (status) metrics.rawFinancialStatuses.add(status);
+    if (order.cancelledAt || status === "CANCELLED" || status === "CANCELED") metrics.cancelledOrderCount += 1;
 
     if (isRevenueValidOrder(order)) {
       const date = new Date(order.processedAt);
@@ -99,22 +106,46 @@ export function buildPurchaseMetricsIndex(orders: CRMOrderForSegmentation[]): Ma
   return index;
 }
 
+function safeTime(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
 export function buildCustomerContexts(input: {
   customers: CRMCustomerForSegmentation[];
   orders: CRMOrderForSegmentation[];
+  /** @deprecated Prefer abandonedCheckoutAtByCustomer para distinguir ativo de recuperado. */
   abandonedCustomerIds?: Set<string>;
+  abandonedCheckoutAtByCustomer?: Map<string, string>;
   shippedTodayValidOrderIds?: Set<string>;
 }): CRMCustomerContext[] {
   const metricsIndex = buildPurchaseMetricsIndex(input.orders);
-  const abandoned = input.abandonedCustomerIds ?? new Set<string>();
+  const legacyAbandoned = input.abandonedCustomerIds ?? new Set<string>();
+  const checkoutAtByCustomer = input.abandonedCheckoutAtByCustomer ?? new Map<string, string>();
   const shipped = input.shippedTodayValidOrderIds ?? new Set<string>();
 
   return input.customers.map((customer) => {
     const metrics = metricsIndex.get(customer.id) ?? EMPTY_METRICS(customer.id);
+    const lastAbandonedCheckoutAt = checkoutAtByCustomer.get(customer.id) ?? null;
+    const hadAbandonedCheckout = checkoutAtByCustomer.has(customer.id) || legacyAbandoned.has(customer.id);
+    const checkoutTime = safeTime(lastAbandonedCheckoutAt);
+    const lastValidOrderTime = safeTime(metrics.lastOrderAt);
+
+    // Com timestamp real, um checkout só permanece ativo se não houve compra válida depois dele.
+    // Para chamadas legadas que fornecem apenas Set<customerId>, preservamos o comportamento anterior.
+    const abandonedCheckout = checkoutTime !== null
+      ? lastValidOrderTime === null || lastValidOrderTime < checkoutTime
+      : legacyAbandoned.has(customer.id);
+    const abandonedCheckoutRecovered = hadAbandonedCheckout && !abandonedCheckout && lastValidOrderTime !== null;
+
     return {
       customer,
       metrics,
-      abandonedCheckout: abandoned.has(customer.id),
+      abandonedCheckout,
+      hadAbandonedCheckout,
+      abandonedCheckoutRecovered,
+      lastAbandonedCheckoutAt,
       shippedToday: [...metrics.validOrderIds].some((id) => shipped.has(id)),
     };
   });
@@ -212,10 +243,15 @@ function purchasedInLast24h(context: CRMCustomerContext, now: Date): boolean {
 function paymentStatusMatches(context: CRMCustomerContext, targetRaw: unknown): boolean {
   const target = normalizeStatus(targetRaw);
   if (!target) return false;
+  if (target === "CANCELLED" || target === "CANCELED") return context.metrics.cancelledOrderCount > 0;
   const validStatuses = VALID_FINANCIAL_STATUSES as readonly string[];
   return validStatuses.includes(target)
     ? context.metrics.validFinancialStatuses.has(target)
     : context.metrics.rawFinancialStatuses.has(target);
+}
+
+function isBooleanToken(value: unknown): boolean {
+  return ["sim", "nao", "true", "false", "1", "0", "yes", "no"].includes(String(value ?? "").trim().toLowerCase());
 }
 
 export function matchesSegmentCondition(context: CRMCustomerContext, condition: SegmentCondition, now = new Date()): boolean {
@@ -237,11 +273,13 @@ export function matchesSegmentCondition(context: CRMCustomerContext, condition: 
   if (field === "primeira_compra") return compareDate(metrics.firstOrderAt, operator, value, now);
 
   if (field === "recorrencia") {
-    const recurrence = metrics.validOrderCount >= 2;
-    if (["gt", "gte", "lt", "lte"].includes(operator) || Number.isFinite(Number(value))) {
+    // Regra nova: recorrência é um booleano de negócio (2+ compras válidas).
+    // Regras antigas numéricas continuam sendo lidas, inclusive valores serializados como string.
+    const legacyNumeric = Number.isFinite(Number(value)) && !isBooleanToken(value);
+    if (["gt", "gte", "lt", "lte"].includes(operator) || (["eq", "neq"].includes(operator) && legacyNumeric)) {
       return compareNumber(metrics.validOrderCount, operator, value);
     }
-    return compareBoolean(recurrence, operator, value);
+    return compareBoolean(metrics.validOrderCount >= 2, operator, value);
   }
 
   if (field === "status_pagamento") {
@@ -250,11 +288,11 @@ export function matchesSegmentCondition(context: CRMCustomerContext, condition: 
   }
 
   if (field === "perfil") {
-    const profile = String(value ?? "");
+    const profile = String(value ?? "").trim().toLowerCase();
     let matches = false;
-    if (profile === "carrinho") matches = context.abandonedCheckout;
+    if (profile === "carrinho" || profile === "checkout_abandonado_ativo") matches = context.abandonedCheckout;
     else if (profile === "primeira_compra") matches = metrics.validOrderCount === 1;
-    else if (profile === "lead" || profile === "acesso_sem_compra") matches = metrics.validOrderCount === 0 && !context.abandonedCheckout;
+    else if (["lead", "acesso_sem_compra", "sem_compra"].includes(profile)) matches = metrics.validOrderCount === 0;
     return operator === "neq" ? !matches : matches;
   }
 
@@ -262,9 +300,7 @@ export function matchesSegmentCondition(context: CRMCustomerContext, condition: 
   if (field === "data_pedido_24h") return compareBoolean(purchasedInLast24h(context, now), operator, value);
   if (field === "data_envio_hoje") return compareBoolean(context.shippedToday, operator, value);
   if (field === "checkout_abandonado") return compareBoolean(context.abandonedCheckout, operator, value);
-  if (field === "acesso_sem_compra") {
-    return compareBoolean(metrics.validOrderCount === 0 && !context.abandonedCheckout, operator, value);
-  }
+  if (field === "acesso_sem_compra") return compareBoolean(metrics.validOrderCount === 0, operator, value);
 
   // Filtro não suportado nunca deve passar silenciosamente e criar uma audiência incorreta.
   return false;

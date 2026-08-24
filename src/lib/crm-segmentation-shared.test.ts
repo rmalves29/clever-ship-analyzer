@@ -28,7 +28,10 @@ function contexts() {
   return buildCustomerContexts({
     customers,
     orders,
-    abandonedCustomerIds: new Set(["c2"]),
+    abandonedCheckoutAtByCustomer: new Map([
+      ["c1", isoDaysAgo(3)],
+      ["c2", isoDaysAgo(1)],
+    ]),
     shippedTodayValidOrderIds: new Set(["o5"]),
   });
 }
@@ -48,8 +51,10 @@ describe("métricas de compra válidas no CRM", () => {
     expect(ctx("c2").metrics.totalSpent).toBe(0);
   });
 
-  it("pedido pago cancelado não vira compra", () => {
+  it("pedido pago cancelado não vira compra e continua auditável como cancelado", () => {
     expect(ctx("c3").metrics.validOrderCount).toBe(0);
+    expect(ctx("c3").metrics.cancelledOrderCount).toBe(1);
+    expect(matchesSegmentRules(ctx("c3"), rule("status_pagamento", "eq", "cancelled"), NOW)).toBe(true);
   });
 });
 
@@ -70,9 +75,17 @@ describe("filtros de comportamento", () => {
     expect(matchesSegmentRules(ctx("c1"), rule("perfil", "eq", "primeira_compra"), NOW)).toBe(false);
   });
 
-  it("recorrência significa duas ou mais compras válidas", () => {
+  it("recorrência é booleano e significa duas ou mais compras válidas", () => {
     expect(matchesSegmentRules(ctx("c1"), rule("recorrencia", "eq", "sim"), NOW)).toBe(true);
     expect(matchesSegmentRules(ctx("c4"), rule("recorrencia", "eq", "sim"), NOW)).toBe(false);
+    expect(matchesSegmentRules(ctx("c4"), rule("recorrencia", "eq", "nao"), NOW)).toBe(true);
+  });
+
+  it("mantém leitura de regra numérica antiga de recorrência", () => {
+    expect(matchesSegmentRules(ctx("c1"), rule("recorrencia", "gte", 2), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c4"), rule("recorrencia", "gte", 2), NOW)).toBe(false);
+    expect(matchesSegmentRules(ctx("c1"), rule("recorrencia", "eq", "2"), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c4"), rule("recorrencia", "eq", "2"), NOW)).toBe(false);
   });
 
   it("compra nas últimas 24h e pedido enviado hoje ignoram pedidos inválidos", () => {
@@ -86,9 +99,21 @@ describe("filtros de comportamento", () => {
     expect(matchesSegmentRules(ctx("c2"), rule("status_pagamento", "eq", "refunded"), NOW)).toBe(true);
   });
 
-  it("acesso sem compra não inclui checkout abandonado", () => {
+  it("Sem Compra Válida significa zero compras válidas, inclusive quando há checkout ativo", () => {
     expect(matchesSegmentRules(ctx("c3"), rule("acesso_sem_compra", "eq", "sim"), NOW)).toBe(true);
-    expect(matchesSegmentRules(ctx("c2"), rule("acesso_sem_compra", "eq", "sim"), NOW)).toBe(false);
+    expect(matchesSegmentRules(ctx("c2"), rule("acesso_sem_compra", "eq", "sim"), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c1"), rule("acesso_sem_compra", "eq", "sim"), NOW)).toBe(false);
+  });
+
+  it("checkout abandonado ativo deixa de ser ativo quando existe compra válida posterior", () => {
+    expect(ctx("c2").hadAbandonedCheckout).toBe(true);
+    expect(ctx("c2").abandonedCheckout).toBe(true);
+    expect(ctx("c2").abandonedCheckoutRecovered).toBe(false);
+
+    expect(ctx("c1").hadAbandonedCheckout).toBe(true);
+    expect(ctx("c1").abandonedCheckout).toBe(false);
+    expect(ctx("c1").abandonedCheckoutRecovered).toBe(true);
+    expect(matchesSegmentRules(ctx("c1"), rule("checkout_abandonado", "eq", "sim"), NOW)).toBe(false);
   });
 });
 

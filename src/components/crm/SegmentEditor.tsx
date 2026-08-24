@@ -13,6 +13,7 @@ import {
   Save,
   ArrowLeft
 } from "lucide-react";
+import { RFM_SEGMENTS_CONFIG } from "@/lib/crm-rfm-shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

@@ -42,7 +42,7 @@ import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment, exportSe
 import { syncShopifyData } from "@/lib/crm-sync.functions";
 import { RFMAnalysis } from "@/components/crm/RFMAnalysis";
 import { fixCustomerPhone, deepSyncCustomer, checkSpecificAbandonedCheckout } from "@/lib/admin-maintenance.functions";
-import { RFM_SEGMENTS_CONFIG } from "@/lib/crm-rfm.functions";
+import { RFM_SEGMENTS_CONFIG } from "@/lib/crm-rfm-shared";
 import { normalizeAllPhones } from "@/lib/maintenance-scripts.functions";
 import { identifyAbandonedCheckouts } from "@/lib/abandoned-checkout.functions";
 import { brl } from "@/lib/crm-mock";

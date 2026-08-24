@@ -50,20 +50,27 @@ async function loadOrders(): Promise<CRMOrderForSegmentation[]> {
   return rows;
 }
 
-async function loadAbandonedCustomerIds(): Promise<Set<string>> {
+async function loadLatestAbandonedCheckoutByCustomer(): Promise<Map<string, string>> {
   const db = await admin();
-  const ids = new Set<string>();
+  const latest = new Map<string, string>();
   for (let page = 0; ; page++) {
     const { data, error } = await db
       .from("shopify_abandoned_checkouts")
-      .select("customer_id")
+      .select("customer_id, created_at")
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
     if (error) throw new Error(`Erro ao buscar checkouts abandonados: ${error.message}`);
     if (!data || data.length === 0) break;
-    for (const row of data) if (row.customer_id) ids.add(String(row.customer_id));
+    for (const row of data) {
+      if (!row.customer_id || !row.created_at) continue;
+      const customerId = String(row.customer_id);
+      const current = latest.get(customerId);
+      if (!current || new Date(row.created_at).getTime() > new Date(current).getTime()) {
+        latest.set(customerId, row.created_at);
+      }
+    }
     if (data.length < PAGE_SIZE) break;
   }
-  return ids;
+  return latest;
 }
 
 function startOfBusinessDay(now: Date): Date {
@@ -74,8 +81,6 @@ function startOfBusinessDay(now: Date): Date {
     day: "2-digit",
   }).formatToParts(now);
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
-  // São Paulo is UTC-3 in the current business context; using an explicit offset makes the
-  // boundary deterministic for the CRM's "hoje" filters.
   return new Date(`${get("year")}-${get("month")}-${get("day")}T00:00:00-03:00`);
 }
 
@@ -105,11 +110,11 @@ async function loadShippedTodayValidOrderIds(orders: CRMOrderForSegmentation[], 
 }
 
 export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMCustomerContext[]> {
-  const [customers, orders, abandonedCustomerIds] = await Promise.all([
+  const [customers, orders, abandonedCheckoutAtByCustomer] = await Promise.all([
     loadCustomers(),
     loadOrders(),
-    loadAbandonedCustomerIds(),
+    loadLatestAbandonedCheckoutByCustomer(),
   ]);
   const shippedTodayValidOrderIds = await loadShippedTodayValidOrderIds(orders, now);
-  return buildCustomerContexts({ customers, orders, abandonedCustomerIds, shippedTodayValidOrderIds });
+  return buildCustomerContexts({ customers, orders, abandonedCheckoutAtByCustomer, shippedTodayValidOrderIds });
 }

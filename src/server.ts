@@ -27,6 +27,7 @@ const ENVIO_RETURN_DISPATCH_PATH = "/api/envio/return-dispatch";
 const ENVIO_CLEANUP_EVENTS_PATH = "/api/envio/cleanup-events";
 const AI_ROUTINES_TICK_PATH = "/api/ai-routines/tick";
 const AI_PLAYBOOK_TICK_PATH = "/api/ai-routines/playbook-tick";
+const WHATSAPP_QUEUE_TICK_PATH = "/api/whatsapp/queue-tick";
 
 // Webhook da Meta é chamado diretamente por eles, fora do protocolo de RPC do
 // createServerFn — por isso é tratado aqui, antes do handler SSR do TanStack Start.

@@ -268,12 +268,19 @@ export async function refreshCampaignStatus(campaignId: string) {
  * Worker: reivindica um lote via RPC (`claim_whatsapp_message_queue`) e envia.
  * Único ponto do sistema autorizado a chamar a Meta para mensagens de campanha.
  */
-export async function processWhatsappQueueBatch(options?: { limit?: number; workerId?: string }) {
+export async function processWhatsappQueueBatch(options?: {
+  limit?: number;
+  workerId?: string;
+  /** Modo teste: percorre claim → worker sem NENHUMA chamada ao provider.
+   *  O job reclamado volta para `queued` com o contador de tentativas restaurado. */
+  dryRun?: boolean;
+}) {
   const supabaseAdmin = await admin();
   const { loadSettings, sendTemplateMessage } = await import("./whatsapp-meta.server");
 
   const limit = options?.limit ?? 20;
-  const workerId = options?.workerId ?? `worker-${Math.random().toString(36).slice(2, 10)}`;
+  const dryRun = options?.dryRun === true;
+  const workerId = options?.workerId ?? `${dryRun ? "dryrun" : "worker"}-${Math.random().toString(36).slice(2, 10)}`;
 
   const settings = await loadSettings();
   if (!settings.accessToken || !settings.phoneNumberId) {
@@ -287,7 +294,31 @@ export async function processWhatsappQueueBatch(options?: { limit?: number; work
   if (claimError) return { success: false as const, error: claimError.message };
 
   const batch = (claimed ?? []) as QueueRow[];
-  if (batch.length === 0) return { success: true as const, claimed: 0, sent: 0, failed: 0, retry: 0 };
+  if (batch.length === 0)
+    return { success: true as const, claimed: 0, sent: 0, failed: 0, retry: 0, dryRun, workerId };
+
+  if (dryRun) {
+    const preview: { id: string; phone: string; template: string; attemptsAfterClaim: number }[] = [];
+    for (const item of batch) {
+      preview.push({
+        id: item.id,
+        phone: item.phone,
+        template: item.template_name,
+        attemptsAfterClaim: item.attempts,
+      });
+      // devolve o job ao estado inerte, sem consumir tentativa e sem tocar em campanhas/destinatários
+      await supabaseAdmin
+        .from(QUEUE_TABLE)
+        .update({
+          status: "queued" satisfies QueueStatus,
+          attempts: Math.max(item.attempts - 1, 0),
+          locked_by: null,
+          locked_at: null,
+        })
+        .eq("id", item.id);
+    }
+    return { success: true as const, dryRun: true, claimed: batch.length, sent: 0, failed: 0, retry: 0, workerId, preview };
+  }
 
   let sent = 0;
   let failed = 0;
@@ -299,6 +330,7 @@ export async function processWhatsappQueueBatch(options?: { limit?: number; work
 
     const result = await sendTemplateMessage({
       accessToken: settings.accessToken,
+
       phoneNumberId: settings.phoneNumberId,
       to: item.phone,
       templateName: item.template_name,

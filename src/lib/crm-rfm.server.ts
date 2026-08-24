@@ -39,7 +39,7 @@ async function loadOrders(): Promise<ValidOrder[]> {
   for (let page = 0; ; page++) {
     const { data, error } = await db
       .from("shopify_orders")
-      .select("customer_id, total_price, processed_at, created_at, financial_status")
+      .select("customer_id, total_price, processed_at, created_at, financial_status, cancelled_at")
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
     if (error) throw new Error(`Erro ao buscar pedidos: ${error.message}`);
     if (!data || data.length === 0) break;
@@ -50,6 +50,7 @@ async function loadOrders(): Promise<ValidOrder[]> {
         totalPrice: Number(o.total_price ?? 0),
         processedAt: String(o.processed_at ?? o.created_at ?? ""),
         financialStatus: o.financial_status,
+        cancelledAt: o.cancelled_at,
       });
     }
     if (data.length < PAGE_SIZE) break;

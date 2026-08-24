@@ -28,6 +28,9 @@ import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
+/** Momento da correção geral das métricas — análises de IA anteriores são descartadas. */
+const METRICS_REVISION_AT = Date.parse("2026-08-24T11:00:00Z");
+
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -76,13 +79,15 @@ function Index() {
     queryFn: () => getAiAnalysis(),
   });
 
-  // A análise da IA só é reaproveitada quando é do MESMO período e tem menos de 24h.
+  // A análise da IA só é reaproveitada quando é do MESMO período, tem menos de 24h e foi gerada
+  // DEPOIS da correção das métricas (análises anteriores usavam faturamento contaminado).
   // Análises antigas foram geradas antes da correção das métricas e não podem contaminar o painel.
   const aiIsFresh =
     Boolean(aiAnalysis?.analysis) &&
     aiAnalysis?.period === period &&
     Boolean(aiAnalysis?.generatedAt) &&
-    Date.now() - new Date(aiAnalysis!.generatedAt!).getTime() < 24 * 60 * 60 * 1000;
+    Date.now() - new Date(aiAnalysis!.generatedAt!).getTime() < 24 * 60 * 60 * 1000 &&
+    new Date(aiAnalysis!.generatedAt!).getTime() >= METRICS_REVISION_AT;
   const aiIsStaleForPeriod = Boolean(aiAnalysis?.analysis) && !aiIsFresh;
 
   const customLabel =

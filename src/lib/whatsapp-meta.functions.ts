@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { SEGMENT_TYPES } from "./crm-mock";
 export { getSegmentsList } from "./crm-segmentation.functions";
 
@@ -420,6 +421,8 @@ export const finishEmbeddedSignup = createServerFn({ method: "POST" })
 /** Roda um lote do worker da fila manualmente (botão "processar fila" no painel).
  *  Envio real acontece só aqui e no tick HTTP `/api/whatsapp/queue-tick`. */
 export const runWhatsappQueueTick = createServerFn({ method: "POST" })
+  // exige sessão autenticada: este é o único server fn capaz de disparar envio real
+  .middleware([requireSupabaseAuth])
   .validator((data: unknown) =>
     z.object({ limit: z.number().int().min(1).max(200).optional(), dryRun: z.boolean().optional() }).parse(data ?? {}),
   )

@@ -10,12 +10,24 @@ import {
 } from "./crm-repurchase-shared";
 
 const PAGE_SIZE = 1000;
-const repurchaseWindowSchema = z.enum(REPURCHASE_WINDOWS as [RepurchaseWindow, ...RepurchaseWindow[]]);
+const repurchaseWindowSchema = z.enum(REPURCHASE_WINDOWS);
 
 type CustomerRow = {
   id: string;
   first_name: string | null;
   last_name: string | null;
+  city: string | null;
+  province: string | null;
+};
+
+type OrderRow = {
+  id: string;
+  customer_id: string | null;
+  total_price: number;
+  processed_at: string | null;
+  created_at: string;
+  financial_status: string | null;
+  source_name: string | null;
   city: string | null;
   province: string | null;
 };
@@ -27,19 +39,9 @@ type OrderItemRow = {
   quantity: number | null;
 };
 
-async function loadAllOrders() {
+async function loadAllOrders(): Promise<OrderRow[]> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const rows: Array<{
-    id: string;
-    customer_id: string | null;
-    total_price: number;
-    processed_at: string | null;
-    created_at: string;
-    financial_status: string | null;
-    source_name: string | null;
-    city: string | null;
-    province: string | null;
-  }> = [];
+  const rows: OrderRow[] = [];
 
   for (let page = 0; ; page += 1) {
     const { data, error } = await supabaseAdmin
@@ -54,7 +56,7 @@ async function loadAllOrders() {
   return rows;
 }
 
-async function loadAllCustomers() {
+async function loadAllCustomers(): Promise<CustomerRow[]> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const rows: CustomerRow[] = [];
   for (let page = 0; ; page += 1) {
@@ -104,38 +106,70 @@ function productLabels(items: OrderItemRow[] | undefined): string[] {
 async function loadRepurchaseData() {
   const [orders, customers] = await Promise.all([loadAllOrders(), loadAllCustomers()]);
   const journey = buildRepurchaseJourney(
-    orders.map((o) => ({
-      id: String(o.id),
-      customerId: String(o.customer_id ?? ""),
-      totalPrice: Number(o.total_price ?? 0),
-      processedAt: String(o.processed_at ?? o.created_at ?? ""),
-      financialStatus: o.financial_status,
-      sourceName: o.source_name,
+    orders.map((order) => ({
+      id: String(order.id),
+      customerId: String(order.customer_id ?? ""),
+      totalPrice: Number(order.total_price ?? 0),
+      processedAt: String(order.processed_at ?? order.created_at ?? ""),
+      financialStatus: order.financial_status,
+      sourceName: order.source_name,
     })),
   );
 
-  const customerMap = new Map(customers.map((c) => [String(c.id), c]));
-  const orderMap = new Map(orders.map((o) => [String(o.id), o]));
-  const relevantOrderIds = journey.flatMap((row) => [row.firstOrderId, row.secondOrderId].filter((id): id is string => Boolean(id)));
+  const customerMap = new Map(customers.map((customer) => [String(customer.id), customer]));
+  const orderMap = new Map(orders.map((order) => [String(order.id), order]));
+  const relevantOrderIds = journey.flatMap((row) =>
+    [row.firstOrderId, row.secondOrderId].filter((id): id is string => Boolean(id)),
+  );
   const itemsByOrder = await loadItemsForOrders(relevantOrderIds);
 
   return { journey, customerMap, orderMap, itemsByOrder };
 }
 
-function enrichCustomer(
-  row: Awaited<ReturnType<typeof loadRepurchaseData>>["journey"][number],
-  data: Awaited<ReturnType<typeof loadRepurchaseData>>,
-) {
-  const c = data.customerMap.get(row.customerId);
+type RepurchaseData = Awaited<ReturnType<typeof loadRepurchaseData>>;
+
+function enrichCustomer(row: RepurchaseData["journey"][number], data: RepurchaseData) {
+  const customer = data.customerMap.get(row.customerId);
   const firstOrder = data.orderMap.get(row.firstOrderId);
-  const name = [c?.first_name, c?.last_name].filter(Boolean).join(" ") || "Cliente";
+  const name = [customer?.first_name, customer?.last_name].filter(Boolean).join(" ") || "Cliente";
   return {
     ...row,
     name,
-    city: c?.city ?? firstOrder?.city ?? null,
-    province: c?.province ?? firstOrder?.province ?? null,
+    city: customer?.city ?? firstOrder?.city ?? null,
+    province: customer?.province ?? firstOrder?.province ?? null,
     products: productLabels(data.itemsByOrder.get(row.firstOrderId)),
     sourceName: row.firstOrderSourceName ?? firstOrder?.source_name ?? null,
+  };
+}
+
+function buildCampaignContext(stage: RepurchaseWindow, data: RepurchaseData) {
+  const rows = data.journey.filter((row) => !row.converted && row.stage === stage);
+  const avgTicket = rows.length ? rows.reduce((sum, row) => sum + row.firstOrderRevenue, 0) / rows.length : 0;
+  const topProducts = new Map<string, number>();
+
+  for (const row of rows) {
+    for (const product of productLabels(data.itemsByOrder.get(row.firstOrderId))) {
+      topProducts.set(product, (topProducts.get(product) ?? 0) + 1);
+    }
+  }
+
+  return {
+    audience: "1ª compra → 2ª compra",
+    dynamicAudienceKey: `repurchase:first-to-second:${stage}`,
+    stage,
+    customerCount: rows.length,
+    averageFirstOrderTicket: avgTicket,
+    averageDaysSinceFirstOrder: rows.length
+      ? rows.reduce((sum, row) => sum + row.daysSinceFirstOrder, 0) / rows.length
+      : 0,
+    topProducts: [...topProducts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, count]) => ({ name, count })),
+    allowedActions: ["draft_campaign", "ai_suggestion"] as const,
+    sendingEnabled: false,
+    attributionRequired: true,
+    note: "Rascunho somente. Nenhuma mensagem é enfileirada ou enviada por esta função.",
   };
 }
 
@@ -186,40 +220,15 @@ export const getRepurchaseCampaignContext = createServerFn({ method: "POST" })
   .validator((input: unknown) => z.object({ stage: repurchaseWindowSchema }).parse(input))
   .handler(async ({ data: input }) => {
     const data = await loadRepurchaseData();
-    const rows = data.journey.filter((x) => !x.converted && x.stage === input.stage);
-    const avgTicket = rows.length ? rows.reduce((s, x) => s + x.firstOrderRevenue, 0) / rows.length : 0;
-    const topProducts = new Map<string, number>();
-    for (const row of rows) {
-      for (const product of productLabels(data.itemsByOrder.get(row.firstOrderId))) {
-        topProducts.set(product, (topProducts.get(product) ?? 0) + 1);
-      }
-    }
-
-    return {
-      audience: "1ª compra → 2ª compra",
-      dynamicAudienceKey: `repurchase:first-to-second:${input.stage}`,
-      stage: input.stage,
-      customerCount: rows.length,
-      averageFirstOrderTicket: avgTicket,
-      averageDaysSinceFirstOrder: rows.length
-        ? rows.reduce((s, x) => s + x.daysSinceFirstOrder, 0) / rows.length
-        : 0,
-      topProducts: [...topProducts.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([name, count]) => ({ name, count })),
-      allowedActions: ["draft_campaign", "ai_suggestion"] as const,
-      sendingEnabled: false,
-      attributionRequired: true,
-      note: "Rascunho somente. Nenhuma mensagem é enfileirada ou enviada por esta função.",
-    };
+    return buildCampaignContext(input.stage, data);
   });
 
 export const createRepurchaseCampaignDraft = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((input: unknown) => z.object({ stage: repurchaseWindowSchema }).parse(input))
   .handler(async ({ data: input }) => {
-    const context = await getRepurchaseCampaignContext({ data: { stage: input.stage } } as never);
+    const data = await loadRepurchaseData();
+    const context = buildCampaignContext(input.stage, data);
     return {
       status: "draft" as const,
       persisted: false,
@@ -229,7 +238,13 @@ export const createRepurchaseCampaignDraft = createServerFn({ method: "POST" })
       audience: context,
       attribution: {
         required: true,
-        acceptedEvidence: ["coupon", "tracked_link", "campaign_specific_landing", "explicit_customer_reply", "manual_verified"],
+        acceptedEvidence: [
+          "coupon",
+          "tracked_link",
+          "campaign_specific_landing",
+          "explicit_customer_reply",
+          "manual_verified",
+        ] as const,
         temporalOnlyAttributionAllowed: false,
       },
     };
@@ -250,16 +265,7 @@ export const suggestRepurchaseCampaign = createServerFn({ method: "POST" })
   .handler(async ({ data: input }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const data = await loadRepurchaseData();
-    const rows = data.journey.filter((x) => !x.converted && x.stage === input.stage);
-    const averageTicket = rows.length ? rows.reduce((s, x) => s + x.firstOrderRevenue, 0) / rows.length : 0;
-    const averageDays = rows.length ? rows.reduce((s, x) => s + x.daysSinceFirstOrder, 0) / rows.length : 0;
-    const productCounts = new Map<string, number>();
-    for (const row of rows) {
-      for (const product of productLabels(data.itemsByOrder.get(row.firstOrderId))) {
-        productCounts.set(product, (productCounts.get(product) ?? 0) + 1);
-      }
-    }
-    const topProducts = [...productCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const context = buildCampaignContext(input.stage, data);
 
     const { data: settings } = await supabaseAdmin
       .from("store_settings")
@@ -272,17 +278,23 @@ export const suggestRepurchaseCampaign = createServerFn({ method: "POST" })
       return { success: false as const, error: "API de IA não configurada." };
     }
 
-    const prompt = `Você é especialista em CRM de e-commerce de semijoias. Crie UMA sugestão de campanha para estimular a segunda compra, sem inventar dados e sem executar qualquer envio.\n\nSegmento: ${input.stage}\nClientes: ${rows.length}\nTicket médio da primeira compra: R$ ${averageTicket.toFixed(2)}\nDias médios desde a primeira compra: ${averageDays.toFixed(1)}\nProdutos mais frequentes: ${JSON.stringify(topProducts)}\n\nResponda em JSON estrito com: approach, message, incentive, cta, offer, rationale. A mensagem deve ser curta, natural, em português do Brasil, e não deve prometer desconto inexistente; quando sugerir incentivo, deixe claro que é uma recomendação para aprovação humana.`;
+    const prompt = `Você é especialista em CRM de e-commerce de semijoias. Crie UMA sugestão de campanha para estimular a segunda compra, sem inventar dados e sem executar qualquer envio.\n\nSegmento: ${context.stage}\nClientes: ${context.customerCount}\nTicket médio da primeira compra: R$ ${context.averageFirstOrderTicket.toFixed(2)}\nDias médios desde a primeira compra: ${context.averageDaysSinceFirstOrder.toFixed(1)}\nProdutos mais frequentes: ${JSON.stringify(context.topProducts)}\n\nResponda em JSON estrito com: approach, message, incentive, cta, offer, rationale. A mensagem deve ser curta, natural, em português do Brasil, e não deve prometer desconto inexistente; quando sugerir incentivo, deixe claro que é uma recomendação para aprovação humana.`;
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.openai_api_key}` },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${settings.openai_api_key}`,
+      },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         temperature: 0.5,
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: "Você cria sugestões de CRM para aprovação humana. Nunca executa campanhas nem afirma que algo foi enviado." },
+          {
+            role: "system",
+            content: "Você cria sugestões de CRM para aprovação humana. Nunca executa campanhas nem afirma que algo foi enviado.",
+          },
           { role: "user", content: prompt },
         ],
       }),

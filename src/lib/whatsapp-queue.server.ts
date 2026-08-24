@@ -340,18 +340,29 @@ export async function processWhatsappQueueBatch(options?: { limit?: number; work
     }
 
     if (item.campaign_id) {
-      await supabaseAdmin.from("whatsapp_campaign_recipients").upsert(
-        {
-          campaign_id: item.campaign_id,
-          customer_id: item.customer_id,
-          phone: item.phone,
-          wa_message_id: result.ok ? (result.waMessageId ?? null) : null,
-          status: result.ok ? "sent" : "failed",
-          error: result.ok ? null : result.error,
-          sent_at: result.ok ? now : null,
-        },
-        { onConflict: "campaign_id,phone" },
-      );
+      const recipientPatch = {
+        campaign_id: item.campaign_id,
+        customer_id: item.customer_id,
+        phone: item.phone,
+        wa_message_id: result.ok ? (result.waMessageId ?? null) : null,
+        status: result.ok ? "sent" : "failed",
+        error: result.ok ? null : result.error,
+        sent_at: result.ok ? now : null,
+      };
+      const { data: existing } = await supabaseAdmin
+        .from("whatsapp_campaign_recipients")
+        .select("id")
+        .eq("campaign_id", item.campaign_id)
+        .eq("phone", item.phone)
+        .maybeSingle();
+      if (existing) {
+        await supabaseAdmin
+          .from("whatsapp_campaign_recipients")
+          .update(recipientPatch)
+          .eq("id", (existing as { id: string }).id);
+      } else {
+        await supabaseAdmin.from("whatsapp_campaign_recipients").insert(recipientPatch);
+      }
     }
   }
 

@@ -270,11 +270,16 @@ async function handleWhatsappQueueTick(request: Request): Promise<Response> {
   if (!(await checkAutomationSecret(request))) return new Response("Forbidden", { status: 401 });
   try {
     const { processWhatsappQueueBatch } = await import("./lib/whatsapp-queue.server");
-    const limitParam = Number(new URL(request.url).searchParams.get("limit"));
-    const result = await processWhatsappQueueBatch(
-      Number.isFinite(limitParam) && limitParam > 0 ? { limit: limitParam } : undefined,
-    );
+    const url = new URL(request.url);
+    const limitParam = Number(url.searchParams.get("limit"));
+    // `?dryRun=1` percorre claim → worker sem NENHUMA chamada ao provider (teste de fluxo).
+    const dryRun = url.searchParams.get("dryRun") === "1";
+    const result = await processWhatsappQueueBatch({
+      ...(Number.isFinite(limitParam) && limitParam > 0 ? { limit: limitParam } : {}),
+      ...(dryRun ? { dryRun: true } : {}),
+    });
     return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json" } });
+
   } catch (error) {
     console.error("Falha ao processar a fila do WhatsApp:", error);
     return new Response("Internal Server Error", { status: 500 });

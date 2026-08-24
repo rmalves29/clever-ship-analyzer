@@ -58,18 +58,43 @@ export type Kpi = {
   icon: "users" | "bag" | "trend" | "repeat" | "truck" | "box" | "clock" | "receipt" | "dollar";
 };
 
-export type AnalysisSeries = { name: string; value: number }[];
+/** Série de gráfico. Campos extras carregam o TAMANHO DA AMOSTRA por trás do percentual. */
+export type AnalysisSeries = {
+  name: string;
+  value: number;
+  clientes?: number;
+  pedidos?: number;
+  base?: number;
+  avancaram?: number;
+  recompraram?: number;
+}[];
+
+/** "sem-dados" = amostra insuficiente; nunca pintar de verde/vermelho um número sem base. */
+export type PanelBadge = Status | "sem-dados";
 
 export type PanelStatus = {
-  recompra: Status;
-  clv: Status;
-  ticketRecorrencia: Status;
-  faixaTicket: Status;
-  regioes: Status;
-  churn: Status;
-  tempoEntreCompras: Status;
-  curvaRecompra: Status;
-  envios: Status;
+  recompra: PanelBadge;
+  clv: PanelBadge;
+  ticketRecorrencia: PanelBadge;
+  faixaTicket: PanelBadge;
+  regioes: PanelBadge;
+  churn: PanelBadge;
+  tempoEntreCompras: PanelBadge;
+  curvaRecompra: PanelBadge;
+  envios: PanelBadge;
+};
+
+/** Metadados de confiabilidade exibidos junto dos painéis. */
+export type DashboardMeta = {
+  historyDays: number;
+  baseMadura: boolean;
+  minSample: number;
+  gapsAmostra: number;
+  totalClientesBase: number;
+  numPedidos: number;
+  tempoMedioEnvioAmostra: number;
+  /** false enquanto os dados reais ainda não chegaram — a UI mostra estado vazio, nunca mock. */
+  hasRealData: boolean;
 };
 
 export type DashboardData = {
@@ -77,6 +102,7 @@ export type DashboardData = {
   kpis: Kpi[];
   insights: { title: string; text: string; highlight?: string; tone: Status | "info" }[];
   panelStatus: PanelStatus;
+  meta: DashboardMeta;
   frequencia: AnalysisSeries;
   clv: AnalysisSeries;
   ticketRecorrencia: { label: string; clientes: number; ticket: number; delta: number | null }[];
@@ -89,6 +115,7 @@ export type DashboardData = {
   cohortData: { month: string; size: number; retention: (number | null)[] }[];
   sessoes: { page: string; count: number; trend?: number }[];
   produtosMaisVendidos: { productId: string | null; nome: string; quantidade: number; faturamento: number }[];
+
   reguas: {
     titulo: string;
     tag: string;

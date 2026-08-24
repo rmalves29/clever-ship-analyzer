@@ -135,6 +135,10 @@ function isNonBlankString(value: unknown): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function isBlankValue(value: unknown): boolean {
+  return value === null || value === undefined || (typeof value === "string" && value.trim() === "");
+}
+
 function isValidDateOnly(value: unknown): boolean {
   if (!isNonBlankString(value)) return false;
   const text = String(value);
@@ -157,13 +161,13 @@ export function validateCRMFilterCondition(condition: unknown): string | null {
 
   const value = raw.value;
   if (field.kind === "number") {
-    if (!Number.isFinite(Number(value))) return `Valor numérico inválido para ${field.label}.`;
+    if (isBlankValue(value) || !Number.isFinite(Number(value))) return `Valor numérico inválido para ${field.label}.`;
     return null;
   }
   if (field.kind === "date") {
     if (operator === "last_days") {
       const days = Number(value);
-      if (!Number.isFinite(days) || days < 0) return `Número de dias inválido para ${field.label}.`;
+      if (isBlankValue(value) || !Number.isFinite(days) || days < 0) return `Número de dias inválido para ${field.label}.`;
       return null;
     }
     return isValidDateOnly(value) ? null : `Data inválida para ${field.label}.`;

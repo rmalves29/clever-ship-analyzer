@@ -10,10 +10,10 @@ const NOW = new Date("2026-08-24T15:00:00-03:00");
 const isoDaysAgo = (days: number) => new Date(NOW.getTime() - days * 86_400_000).toISOString();
 
 const customers: CRMCustomerForSegmentation[] = [
-  { id: "c1", first_name: "Ana", city: "Belo Horizonte", province: "MG", tags: ["VIP"], created_at: isoDaysAgo(10) },
-  { id: "c2", first_name: "Bia", city: "São Paulo", province: "SP", created_at: isoDaysAgo(20) },
-  { id: "c3", first_name: "Clara", city: "Curitiba", province: "PR", created_at: isoDaysAgo(40) },
-  { id: "c4", first_name: "Dani", city: "Recife", province: "PE", created_at: isoDaysAgo(5) },
+  { id: "c1", first_name: "Ana", city: "Belo Horizonte", province: "MG", tags: ["VIP", "Coleção Verão"], rfm_segment: "Nova compra", created_at: isoDaysAgo(10) },
+  { id: "c2", first_name: "Bia", city: "São Paulo", province: "SP", rfm_segment: "Sem compra", created_at: isoDaysAgo(20) },
+  { id: "c3", first_name: "Clara", city: "Curitiba", province: "PR", rfm_segment: "Sem compra", created_at: isoDaysAgo(40) },
+  { id: "c4", first_name: "Dani", city: "Recife", province: "PE", rfm_segment: "Nova compra", created_at: isoDaysAgo(5) },
 ];
 
 const orders: CRMOrderForSegmentation[] = [
@@ -64,10 +64,23 @@ describe("filtros de comportamento", () => {
     expect(matchesSegmentRules(ctx("c4"), rule("total_pedidos", "gte", 2), NOW)).toBe(false);
   });
 
+  it("filtros numéricos aceitam faixa inclusiva", () => {
+    expect(matchesSegmentRules(ctx("c1"), rule("total_gasto", "between", { min: 250, max: 350 }), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c4"), rule("total_gasto", "between", { min: 250, max: 350 }), NOW)).toBe(false);
+    expect(matchesSegmentRules(ctx("c1"), rule("ticket_medio", "between", { min: 140, max: 160 }), NOW)).toBe(true);
+  });
+
   it("total_gasto e ticket_medio usam somente receita válida", () => {
     expect(matchesSegmentRules(ctx("c1"), rule("total_gasto", "gt", 250), NOW)).toBe(true);
     expect(matchesSegmentRules(ctx("c2"), rule("total_gasto", "gt", 1), NOW)).toBe(false);
     expect(matchesSegmentRules(ctx("c1"), rule("ticket_medio", "eq", 150), NOW)).toBe(true);
+  });
+
+  it("datas aceitam últimos dias, mais de X dias e intervalo de dias", () => {
+    expect(matchesSegmentRules(ctx("c1"), rule("ultima_compra", "last_days", 2), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c1"), rule("ultima_compra", "older_than_days", 0), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c1"), rule("ultima_compra", "between_days", { min: 1, max: 2 }), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c4"), rule("ultima_compra", "older_than_days", 0), NOW)).toBe(false);
   });
 
   it("primeira compra identifica exatamente uma compra válida", () => {
@@ -114,6 +127,19 @@ describe("filtros de comportamento", () => {
     expect(ctx("c1").abandonedCheckout).toBe(false);
     expect(ctx("c1").abandonedCheckoutRecovered).toBe(true);
     expect(matchesSegmentRules(ctx("c1"), rule("checkout_abandonado", "eq", "sim"), NOW)).toBe(false);
+  });
+});
+
+describe("filtros de dados, tags e RFM", () => {
+  it("cidade e tags ignoram acentos e caixa", () => {
+    expect(matchesSegmentRules(ctx("c2"), rule("cidade", "eq", "sao paulo"), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c1"), rule("customer_tag", "contains", "colecao verao"), NOW)).toBe(true);
+  });
+
+  it("RFM aceita seleção múltipla", () => {
+    expect(matchesSegmentRules(ctx("c1"), rule("rfm_segment", "in", ["Nova compra", "Recorrente"]), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c2"), rule("rfm_segment", "in", ["Nova compra", "Recorrente"]), NOW)).toBe(false);
+    expect(matchesSegmentRules(ctx("c2"), rule("rfm_segment", "not_in", ["Nova compra", "Recorrente"]), NOW)).toBe(true);
   });
 });
 

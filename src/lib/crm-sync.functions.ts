@@ -156,7 +156,9 @@ export const syncShopifyData = createServerFn({ method: "POST" })
             });
           }
 
-          await supabaseAdmin.from("shopify_orders").upsert({
+          // `cancelled_at` já existe no banco, mas o snapshot local de types.ts ainda está defasado.
+          // O cast fica restrito a este upsert até os tipos Supabase serem regenerados.
+          await (supabaseAdmin.from("shopify_orders") as any).upsert({
             id: order.id,
             order_number: order.name,
             customer_id: customerId,

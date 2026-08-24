@@ -4,6 +4,7 @@ import {
   matchesSegmentRules,
   type CRMCustomerForSegmentation,
   type CRMOrderForSegmentation,
+  type CRMOrderItemForSegmentation,
 } from "./crm-segmentation-shared";
 
 const NOW = new Date("2026-08-24T15:00:00-03:00");
@@ -24,10 +25,19 @@ const orders: CRMOrderForSegmentation[] = [
   { id: "o5", customerId: "c4", totalPrice: 150, processedAt: NOW.toISOString(), financialStatus: "PARTIALLY_PAID" },
 ];
 
+const orderItems: CRMOrderItemForSegmentation[] = [
+  { orderId: "o1", productId: "p-brinco", title: "Brinco Londres", sku: "BR-LON", quantity: 1, price: 100 },
+  { orderId: "o2", productId: "p-colar", title: "Colar Riviera", sku: "CO-RIV", quantity: 2, price: 100 },
+  { orderId: "o3", productId: "p-refund", title: "Produto Reembolsado", sku: "REF-1", quantity: 1, price: 500 },
+  { orderId: "o4", productId: "p-cancel", title: "Produto Cancelado", sku: "CAN-1", quantity: 1, price: 80 },
+  { orderId: "o5", productId: "p-anel", title: "Anel Sol", sku: "AN-SOL", quantity: 1, price: 150 },
+];
+
 function contexts() {
   return buildCustomerContexts({
     customers,
     orders,
+    orderItems,
     abandonedCheckoutAtByCustomer: new Map([
       ["c1", isoDaysAgo(3)],
       ["c2", isoDaysAgo(1)],
@@ -127,6 +137,39 @@ describe("filtros de comportamento", () => {
     expect(ctx("c1").abandonedCheckout).toBe(false);
     expect(ctx("c1").abandonedCheckoutRecovered).toBe(true);
     expect(matchesSegmentRules(ctx("c1"), rule("checkout_abandonado", "eq", "sim"), NOW)).toBe(false);
+  });
+});
+
+describe("filtros de produto / cross-sell", () => {
+  it("indexa somente produtos de pedidos válidos", () => {
+    expect(ctx("c1").purchasedProducts.has("p-brinco")).toBe(true);
+    expect(ctx("c1").purchasedProducts.has("p-colar")).toBe(true);
+    expect(ctx("c2").purchasedProducts.has("p-refund")).toBe(false);
+    expect(ctx("c3").purchasedProducts.has("p-cancel")).toBe(false);
+    expect(ctx("c4").purchasedProducts.has("p-anel")).toBe(true);
+  });
+
+  it("Comprou e Não comprou funcionam por product_id estável", () => {
+    expect(matchesSegmentRules(ctx("c1"), rule("produto", "bought", "p-brinco"), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c1"), rule("produto", "not_bought", "p-anel"), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c4"), rule("produto", "bought", "p-brinco"), NOW)).toBe(false);
+  });
+
+  it("permite montar cross-sell específico com AND", () => {
+    const crossSell = {
+      groups: [{ conditions: [
+        { field: "produto", operator: "bought", value: "p-brinco" },
+        { field: "produto", operator: "not_bought", value: "p-anel" },
+      ] }],
+    };
+    expect(matchesSegmentRules(ctx("c1"), crossSell, NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c4"), crossSell, NOW)).toBe(false);
+  });
+
+  it("item de pedido reembolsado ou cancelado não conta como produto comprado", () => {
+    expect(matchesSegmentRules(ctx("c2"), rule("produto", "bought", "p-refund"), NOW)).toBe(false);
+    expect(matchesSegmentRules(ctx("c2"), rule("produto", "not_bought", "p-refund"), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c3"), rule("produto", "bought", "p-cancel"), NOW)).toBe(false);
   });
 });
 

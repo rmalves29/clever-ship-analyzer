@@ -99,10 +99,12 @@ export const getCRMFilterOptions = createServerFn({ method: "GET" })
   .middleware([requireAppAuth])
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { loadCRMProductFilterOptions } = await import("./crm-segmentation.server");
     const PAGE_SIZE = 1000;
     const cities = new Set<string>();
     const customerTags = new Set<string>();
     const customTags = new Set<string>();
+    const productsPromise = loadCRMProductFilterOptions();
 
     for (let page = 0; ; page++) {
       const { data, error } = await supabaseAdmin
@@ -120,11 +122,13 @@ export const getCRMFilterOptions = createServerFn({ method: "GET" })
       if (data.length < PAGE_SIZE) break;
     }
 
+    const products = await productsPromise;
     const sortPt = (values: Set<string>) => [...values].sort((a, b) => a.localeCompare(b, "pt-BR"));
     return {
       cities: sortPt(cities),
       customerTags: sortPt(customerTags),
       customTags: sortPt(customTags),
+      products,
     };
   });
 

@@ -9,6 +9,17 @@ export type CRMOrderForSegmentation = {
   cancelledAt?: string | null;
 };
 
+export type CRMOrderItemForSegmentation = {
+  orderId: string;
+  productId?: string | null;
+  variantId?: string | null;
+  sku?: string | null;
+  title?: string | null;
+  variantTitle?: string | null;
+  quantity?: number | null;
+  price?: number | null;
+};
+
 export type CRMCustomerForSegmentation = {
   id: string;
   first_name?: string | null;
@@ -37,9 +48,19 @@ export type PurchaseMetrics = {
   cancelledOrderCount: number;
 };
 
+export type ProductPurchaseSummary = {
+  productId: string;
+  title: string | null;
+  skus: Set<string>;
+  quantity: number;
+  orderIds: Set<string>;
+  lastPurchasedAt: string | null;
+};
+
 export type CRMCustomerContext = {
   customer: CRMCustomerForSegmentation;
   metrics: PurchaseMetrics;
+  purchasedProducts: Map<string, ProductPurchaseSummary>;
   /** Compatibilidade: representa somente checkout abandonado ATIVO. */
   abandonedCheckout: boolean;
   hadAbandonedCheckout: boolean;
@@ -124,6 +145,54 @@ export function buildPurchaseMetricsIndex(orders: CRMOrderForSegmentation[]): Ma
   return index;
 }
 
+export function buildProductPurchaseIndex(
+  orders: CRMOrderForSegmentation[],
+  orderItems: CRMOrderItemForSegmentation[],
+): Map<string, Map<string, ProductPurchaseSummary>> {
+  const validOrderById = new Map(
+    orders
+      .filter((order) => order.customerId && isRevenueValidOrder(order))
+      .map((order) => [order.id, order] as const),
+  );
+  const index = new Map<string, Map<string, ProductPurchaseSummary>>();
+
+  for (const item of orderItems) {
+    const order = validOrderById.get(item.orderId);
+    const productId = String(item.productId ?? "").trim();
+    if (!order || !productId) continue;
+
+    const quantity = Number(item.quantity ?? 0);
+    if (!Number.isFinite(quantity) || quantity <= 0) continue;
+
+    const customerProducts = index.get(order.customerId) ?? new Map<string, ProductPurchaseSummary>();
+    const current = customerProducts.get(productId) ?? {
+      productId,
+      title: item.title?.trim() || null,
+      skus: new Set<string>(),
+      quantity: 0,
+      orderIds: new Set<string>(),
+      lastPurchasedAt: null,
+    };
+
+    current.quantity += quantity;
+    current.orderIds.add(order.id);
+    if (!current.title && item.title?.trim()) current.title = item.title.trim();
+    if (item.sku?.trim()) current.skus.add(item.sku.trim());
+
+    const purchasedAt = new Date(order.processedAt);
+    if (!Number.isNaN(purchasedAt.getTime())) {
+      if (!current.lastPurchasedAt || purchasedAt > new Date(current.lastPurchasedAt)) {
+        current.lastPurchasedAt = purchasedAt.toISOString();
+      }
+    }
+
+    customerProducts.set(productId, current);
+    index.set(order.customerId, customerProducts);
+  }
+
+  return index;
+}
+
 function safeTime(value: string | null | undefined): number | null {
   if (!value) return null;
   const time = new Date(value).getTime();
@@ -133,12 +202,14 @@ function safeTime(value: string | null | undefined): number | null {
 export function buildCustomerContexts(input: {
   customers: CRMCustomerForSegmentation[];
   orders: CRMOrderForSegmentation[];
+  orderItems?: CRMOrderItemForSegmentation[];
   /** @deprecated Prefer abandonedCheckoutAtByCustomer para distinguir ativo de recuperado. */
   abandonedCustomerIds?: Set<string>;
   abandonedCheckoutAtByCustomer?: Map<string, string>;
   shippedTodayValidOrderIds?: Set<string>;
 }): CRMCustomerContext[] {
   const metricsIndex = buildPurchaseMetricsIndex(input.orders);
+  const productsIndex = buildProductPurchaseIndex(input.orders, input.orderItems ?? []);
   const legacyAbandoned = input.abandonedCustomerIds ?? new Set<string>();
   const checkoutAtByCustomer = input.abandonedCheckoutAtByCustomer ?? new Map<string, string>();
   const shipped = input.shippedTodayValidOrderIds ?? new Set<string>();
@@ -158,6 +229,7 @@ export function buildCustomerContexts(input: {
     return {
       customer,
       metrics,
+      purchasedProducts: productsIndex.get(customer.id) ?? new Map<string, ProductPurchaseSummary>(),
       abandonedCheckout,
       hadAbandonedCheckout,
       abandonedCheckoutRecovered,
@@ -305,6 +377,15 @@ export function matchesSegmentCondition(context: CRMCustomerContext, condition: 
   if (field === "customer_tag") return compareTagList(customer.tags, operator, value);
   if (field === "tags_custom") return compareTagList(customer.tags_custom, operator, value);
   if (field === "rfm_segment") return rfmMatches(customer.rfm_segment, operator, value);
+
+  if (field === "produto") {
+    const productId = String(value ?? "").trim();
+    if (!productId) return false;
+    const bought = context.purchasedProducts.has(productId);
+    if (operator === "bought") return bought;
+    if (operator === "not_bought") return !bought;
+    return false;
+  }
 
   if (field === "total_pedidos") return compareNumber(metrics.validOrderCount, operator, value);
   if (field === "total_gasto") return compareNumber(metrics.totalSpent, operator, value);

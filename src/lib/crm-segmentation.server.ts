@@ -1,7 +1,13 @@
-import { buildCustomerContexts, type CRMCustomerContext, type CRMOrderForSegmentation } from "./crm-segmentation-shared";
+import {
+  buildCustomerContexts,
+  type CRMCustomerContext,
+  type CRMOrderForSegmentation,
+  type CRMOrderItemForSegmentation,
+} from "./crm-segmentation-shared";
 import { isRevenueValidOrder } from "./crm-rfm-shared";
 
 const PAGE_SIZE = 1000;
+const ORDER_ID_BATCH = 200;
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -47,6 +53,37 @@ async function loadOrders(): Promise<CRMOrderForSegmentation[]> {
     }
     if (data.length < PAGE_SIZE) break;
   }
+  return rows;
+}
+
+async function loadValidOrderItems(orders: CRMOrderForSegmentation[]): Promise<CRMOrderItemForSegmentation[]> {
+  const db = await admin();
+  const validOrderIds = [...new Set(orders.filter(isRevenueValidOrder).map((order) => order.id))];
+  const rows: CRMOrderItemForSegmentation[] = [];
+
+  for (let start = 0; start < validOrderIds.length; start += ORDER_ID_BATCH) {
+    const ids = validOrderIds.slice(start, start + ORDER_ID_BATCH);
+    const { data, error } = await db
+      .from("shopify_order_items")
+      .select("order_id, product_id, variant_id, sku, title, variant_title, quantity, price")
+      .in("order_id", ids);
+    if (error) throw new Error(`Erro ao buscar itens de pedidos válidos do CRM: ${error.message}`);
+
+    for (const item of data ?? []) {
+      if (!item.order_id) continue;
+      rows.push({
+        orderId: String(item.order_id),
+        productId: item.product_id ? String(item.product_id) : null,
+        variantId: item.variant_id ? String(item.variant_id) : null,
+        sku: item.sku,
+        title: item.title,
+        variantTitle: item.variant_title,
+        quantity: item.quantity,
+        price: item.price,
+      });
+    }
+  }
+
   return rows;
 }
 
@@ -109,12 +146,44 @@ async function loadShippedTodayValidOrderIds(orders: CRMOrderForSegmentation[], 
   return shipped;
 }
 
+export async function loadCRMProductFilterOptions(): Promise<Array<{ id: string; title: string; skus: string[] }>> {
+  const orders = await loadOrders();
+  const items = await loadValidOrderItems(orders);
+  const products = new Map<string, { id: string; title: string; skus: Set<string> }>();
+
+  for (const item of items) {
+    const id = String(item.productId ?? "").trim();
+    if (!id) continue;
+    const current = products.get(id) ?? {
+      id,
+      title: item.title?.trim() || `Produto ${id}`,
+      skus: new Set<string>(),
+    };
+    if ((!current.title || current.title.startsWith("Produto ")) && item.title?.trim()) current.title = item.title.trim();
+    if (item.sku?.trim()) current.skus.add(item.sku.trim());
+    products.set(id, current);
+  }
+
+  return [...products.values()]
+    .map((product) => ({ ...product, skus: [...product.skus].sort((a, b) => a.localeCompare(b, "pt-BR")) }))
+    .sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
+}
+
 export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMCustomerContext[]> {
   const [customers, orders, abandonedCheckoutAtByCustomer] = await Promise.all([
     loadCustomers(),
     loadOrders(),
     loadLatestAbandonedCheckoutByCustomer(),
   ]);
-  const shippedTodayValidOrderIds = await loadShippedTodayValidOrderIds(orders, now);
-  return buildCustomerContexts({ customers, orders, abandonedCheckoutAtByCustomer, shippedTodayValidOrderIds });
+  const [shippedTodayValidOrderIds, orderItems] = await Promise.all([
+    loadShippedTodayValidOrderIds(orders, now),
+    loadValidOrderItems(orders),
+  ]);
+  return buildCustomerContexts({
+    customers,
+    orders,
+    orderItems,
+    abandonedCheckoutAtByCustomer,
+    shippedTodayValidOrderIds,
+  });
 }

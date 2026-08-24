@@ -137,6 +137,7 @@ export const ORDERS_QUERY = `
           createdAt
           processedAt
           updatedAt
+          cancelledAt
           displayFinancialStatus
           displayFulfillmentStatus
           currencyCode

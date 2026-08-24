@@ -37,19 +37,21 @@ async function loadOrders(): Promise<ValidOrder[]> {
   const db = await admin();
   const orders: ValidOrder[] = [];
   for (let page = 0; ; page++) {
-    const { data, error } = await db
-      .from("shopify_orders")
-      .select("customer_id, total_price, processed_at, created_at, financial_status")
+    // `cancelled_at` existe no banco atual, mas o snapshot local de types.ts ainda está defasado.
+    // O cast fica isolado nesta query até os tipos Supabase serem regenerados.
+    const { data, error } = await (db.from("shopify_orders") as any)
+      .select("customer_id, total_price, processed_at, created_at, financial_status, cancelled_at")
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
     if (error) throw new Error(`Erro ao buscar pedidos: ${error.message}`);
     if (!data || data.length === 0) break;
-    for (const o of data) {
+    for (const o of data as any[]) {
       if (!o.customer_id) continue;
       orders.push({
         customerId: String(o.customer_id),
         totalPrice: Number(o.total_price ?? 0),
         processedAt: String(o.processed_at ?? o.created_at ?? ""),
         financialStatus: o.financial_status,
+        cancelledAt: o.cancelled_at,
       });
     }
     if (data.length < PAGE_SIZE) break;

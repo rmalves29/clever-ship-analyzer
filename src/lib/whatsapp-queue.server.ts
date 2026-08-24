@@ -10,7 +10,7 @@
  * (`enqueueCampaign`) e o worker (`processWhatsappQueueBatch`) são o único caminho de envio.
  */
 
-import type { SegmentType } from "./whatsapp-meta.server";
+import type { SegmentType } from "./crm-mock";
 
 export const QUEUE_STATUSES = [
   "queued",

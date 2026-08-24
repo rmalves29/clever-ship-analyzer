@@ -47,7 +47,15 @@ O webhook `/api/whatsapp-webhook` atualiza depois `delivered`/`read` via `applyM
 ## Passo 4 — depois do teste
 Reagendar o job para 2036 ou removê-lo, e só então avaliar ligar o cron do worker.
 
-## Bloqueio conhecido
-O `whatsapp_meta_access_token` armazenado retornou `401 Malformed access token` em teste direto.
-Antes do envio real é preciso revalidar/atualizar o token da Meta em Configurações — sem isso o
-worker marcará o job como `failed`.
+## Resultado do smoke test real (24/08/2026 01:05 UTC)
+Executado 1 lote (`limit=1`) com o job `19addc38...` e o template `teste_queue_ptbr`.
+- Worker: `claimed:1 sent:0 failed:1` — arquitetura funcionou fim a fim.
+- Meta respondeu: `(#133010) Account not registered`.
+- Token da Meta: VALIDO (`/me`, phone number e templates retornaram 200).
+- Diagnostico do numero `1104775929375335` (+1 555-772-5720): `status = PENDING`,
+  `platform_type = NOT_APPLICABLE` -> numero ainda NAO registrado na Cloud API.
+
+## Bloqueio atual
+Registrar o numero na Cloud API (`POST /{phone-number-id}/register` com PIN de 6 digitos
+definido pelo usuario) ou usar um numero ja registrado. Enquanto isso, nenhum envio real
+e possivel. Job devolvido ao estado inerte (`queued`, `attempts 0`, agendado para 2036).

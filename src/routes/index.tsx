@@ -76,7 +76,14 @@ function Index() {
     queryFn: () => getAiAnalysis(),
   });
 
-  const aiIsStaleForPeriod = Boolean(aiAnalysis?.analysis) && aiAnalysis?.period !== period;
+  // A análise da IA só é reaproveitada quando é do MESMO período e tem menos de 24h.
+  // Análises antigas foram geradas antes da correção das métricas e não podem contaminar o painel.
+  const aiIsFresh =
+    Boolean(aiAnalysis?.analysis) &&
+    aiAnalysis?.period === period &&
+    Boolean(aiAnalysis?.generatedAt) &&
+    Date.now() - new Date(aiAnalysis!.generatedAt!).getTime() < 24 * 60 * 60 * 1000;
+  const aiIsStaleForPeriod = Boolean(aiAnalysis?.analysis) && !aiIsFresh;
 
   const customLabel =
     range?.from && range?.to
@@ -208,8 +215,7 @@ function Index() {
       },
     ];
 
-    const aiMatchesPeriod = aiAnalysis?.period === period;
-    const ai = aiMatchesPeriod ? aiAnalysis?.analysis : undefined;
+    const ai = aiIsFresh ? aiAnalysis?.analysis : undefined;
     const aiInsights = ai?.insights.map((i) =>
       i.highlight
         ? { title: i.title, text: i.text, tone: i.tone, highlight: i.highlight }
@@ -246,7 +252,7 @@ function Index() {
       sessoes: s.sessoes ?? [],
       produtosMaisVendidos: s.produtosMaisVendidos ?? [],
     } satisfies DashboardData;
-  }, [base, shopifyData, aiAnalysis, period]);
+  }, [base, shopifyData, aiAnalysis, aiIsFresh]);
 
 
   const runSync = useServerFn(syncShopifyData);
@@ -343,8 +349,8 @@ function Index() {
 
         {aiIsStaleForPeriod && (
           <div className="mt-6 rounded-lg border border-warning/30 bg-warning-soft/60 px-4 py-2.5 text-sm text-warning">
-            A última análise por IA foi gerada para outro período. Os insights abaixo usam os dados reais deste
-            período, mas para a análise completa da IA clique em "Refazer análise".
+            A última análise por IA é de outro período ou tem mais de 24h. Os insights abaixo vêm direto dos dados
+            reais deste período — clique em "Refazer análise" para a leitura completa da IA.
           </div>
         )}
 

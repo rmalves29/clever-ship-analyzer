@@ -68,7 +68,7 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
       <Panel
         index="01"
         title="Análise de recompra por cliente"
-        description="Distribuição de frequência de pedidos por cliente único no período."
+        description="qual o banco de dados que estamos usando"
         status={data.panelStatus.recompra}
       >
         <ResponsiveContainer width="100%" height="100%">

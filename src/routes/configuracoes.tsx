@@ -394,7 +394,7 @@ function Configuracoes() {
               </div>
               <CardDescription>
                 Usada pelo botão "Refazer análise" no dashboard para gerar o resumo executivo e as ações
-                sugeridas a partir dos dados reais da Shopify.
+                qual o banco de dados que estamos usando a partir dos dados reais da Shopify.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

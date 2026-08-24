@@ -1,3 +1,5 @@
+import { VALID_FINANCIAL_STATUSES } from "./dashboard-metrics";
+
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
@@ -26,8 +28,7 @@ export async function getBestSellingProducts(params: {
     .select("id")
     .gte("processed_at", params.startISO)
     .lte("processed_at", params.endISO)
-    .neq("financial_status", "VOIDED")
-    .neq("financial_status", "REFUNDED");
+    .in("financial_status", [...VALID_FINANCIAL_STATUSES]);
 
   const orderIds = (orders ?? []).map((o: any) => o.id as string);
   if (orderIds.length === 0) return [];

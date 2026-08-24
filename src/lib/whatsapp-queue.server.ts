@@ -329,21 +329,54 @@ export async function processWhatsappQueueBatch(options?: {
   let sent = 0;
   let failed = 0;
   let retry = 0;
+  let skippedNonMock = 0;
+  const mockLog: Record<string, unknown>[] = [];
   const touchedCampaigns = new Set<string>();
 
+  const { isMockJob, sendTemplateMessageMock } = useMock
+    ? await import("./whatsapp-mock-provider.server")
+    : ({} as typeof import("./whatsapp-mock-provider.server"));
+
   for (const item of batch) {
+    if (useMock && !isMockJob(item.dedup_key)) {
+      // trava de segurança: em modo mock nenhum job real é processado
+      skippedNonMock++;
+      await supabaseAdmin
+        .from(QUEUE_TABLE)
+        .update({
+          status: "queued" satisfies QueueStatus,
+          attempts: Math.max(item.attempts - 1, 0),
+          locked_by: null,
+          locked_at: null,
+        })
+        .eq("id", item.id);
+      continue;
+    }
+
     if (item.campaign_id) touchedCampaigns.add(item.campaign_id);
 
-    const result = await sendTemplateMessage({
-      accessToken: settings.accessToken,
+    const result = useMock
+      ? await sendTemplateMessageMock({
+          jobId: item.id,
+          to: item.phone,
+          templateName: item.template_name,
+          templateLanguage: item.template_language,
+          bodyParams: Array.isArray(item.body_params) ? item.body_params : [],
+          dedupKey: item.dedup_key,
+        })
+      : await sendTemplateMessage({
+          accessToken: settings.accessToken,
 
-      phoneNumberId: settings.phoneNumberId,
-      to: item.phone,
-      templateName: item.template_name,
-      templateLanguage: item.template_language || settings.templateLanguage,
-      bodyParams: Array.isArray(item.body_params) ? item.body_params : [],
-      ...(item.header_media_url ? { mediaUrl: item.header_media_url } : {}),
-    });
+          phoneNumberId: settings.phoneNumberId,
+          to: item.phone,
+          templateName: item.template_name,
+          templateLanguage: item.template_language || settings.templateLanguage,
+          bodyParams: Array.isArray(item.body_params) ? item.body_params : [],
+          ...(item.header_media_url ? { mediaUrl: item.header_media_url } : {}),
+        });
+
+    if (useMock) mockLog.push({ jobId: item.id, ...(result as any).raw, ok: result.ok });
+
 
     const now = new Date().toISOString();
 

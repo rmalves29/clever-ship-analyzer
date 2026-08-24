@@ -15,10 +15,28 @@ import {
   AreaChart,
 } from "recharts";
 import { Maximize2 } from "lucide-react";
-import type { DashboardData, Status } from "@/lib/crm-mock";
+import type { DashboardData, PanelBadge } from "@/lib/crm-mock";
 import { brlCents } from "@/lib/crm-mock";
 import { statusChip, statusLabel } from "./KpiCard";
 import { cn } from "@/lib/utils";
+
+/** Chip do painel. "sem-dados" = amostra insuficiente, nunca pintado como bom/ruim. */
+const badgeChip: Record<PanelBadge, string> = {
+  ...statusChip,
+  "sem-dados": "bg-muted text-muted-foreground",
+};
+const badgeLabel: Record<PanelBadge, string> = {
+  ...statusLabel,
+  "sem-dados": "sem dados",
+};
+
+function EmptyState({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+      {children}
+    </div>
+  );
+}
 
 const CHART = ["var(--color-chart-1)", "var(--color-chart-3)", "var(--color-chart-2)", "var(--color-chart-5)"];
 
@@ -27,12 +45,18 @@ function Panel({
   title,
   description,
   status,
+  footnote,
+  empty,
   children,
 }: {
   index: string;
   title: string;
   description: string;
-  status: Status;
+  status: PanelBadge;
+  /** Tamanho da amostra / ressalva metodológica exibida abaixo do gráfico. */
+  footnote?: string;
+  /** Mensagem exibida no lugar do gráfico quando não há amostra suficiente. */
+  empty?: string | null;
   children: React.ReactNode;
 }) {
   return (
@@ -43,12 +67,13 @@ function Panel({
           <h3 className="text-base font-semibold">{title}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         </div>
-        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase", statusChip[status])}>
-          {statusLabel[status]}
+        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase", badgeChip[status])}>
+          {badgeLabel[status]}
         </span>
         <Maximize2 className="size-4 text-muted-foreground" />
       </header>
-      <div className="mt-4 h-[240px]">{children}</div>
+      <div className="mt-4 h-[240px]">{empty ? <EmptyState>{empty}</EmptyState> : children}</div>
+      {footnote && <p className="mt-2 text-[11px] text-muted-foreground">{footnote}</p>}
     </section>
   );
 }
@@ -67,9 +92,11 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
     <div className="grid gap-5 lg:grid-cols-2">
       <Panel
         index="01"
-        title="Análise de recompra por cliente"
-        description="qual o banco de dados que estamos usando"
+        title="Frequência de compra por cliente"
+        description="% de clientes por número de pedidos PAGOS no histórico da base."
         status={data.panelStatus.recompra}
+        footnote={`Base: ${data.meta.totalClientesBase} cliente(s) com pedido pago.`}
+        empty={data.frequencia.length ? null : "Sem clientes com pedido pago para este período."}
       >
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -85,9 +112,11 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
 
       <Panel
         index="02"
-        title="Customer Lifetime Value (CLV)"
-        description="Valor financeiro acumulado por cliente em cada estágio da jornada."
+        title="Valor acumulado por cliente"
+        description="Média do valor já gasto (pedidos pagos) por faixa de recorrência. Não é LTV previsto."
         status={data.panelStatus.clv}
+        footnote="Valor observado até hoje — nenhuma projeção de vida útil é aplicada."
+        empty={data.clv.length ? null : "Sem clientes com pedido pago para este período."}
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data.clv}>
@@ -112,10 +141,10 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
           <span
             className={cn(
               "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase",
-              statusChip[data.panelStatus.ticketRecorrencia],
+              badgeChip[data.panelStatus.ticketRecorrencia],
             )}
           >
-            {statusLabel[data.panelStatus.ticketRecorrencia]}
+            {badgeLabel[data.panelStatus.ticketRecorrencia]}
           </span>
         </header>
         <ul className="mt-4 space-y-4">
@@ -153,9 +182,11 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
 
       <Panel
         index="04"
-        title="Base por faixa de ticket"
-        description="Segmentação de clientes por valor gasto no pedido mais recente."
+        title="Pedidos por faixa de ticket"
+        description="% dos pedidos PAGOS do período distribuídos por valor do pedido."
         status={data.panelStatus.faixaTicket}
+        footnote={`Base: ${data.meta.numPedidos} pedido(s) pago(s) no período.`}
+        empty={data.faixaTicket.length ? null : "Sem pedidos pagos no período selecionado."}
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data.faixaTicket}>
@@ -170,9 +201,11 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
 
       <Panel
         index="05"
-        title="Top 5 regiões que recompram"
-        description="Estados com maior taxa de recompra da base."
+        title="Top 5 estados por taxa de recompra"
+        description="Clientes do estado com 2+ pedidos pagos ÷ total de clientes daquele estado."
         status={data.panelStatus.regioes}
+        footnote={`Só entram estados com pelo menos ${data.meta.minSample} clientes.`}
+        empty={data.regioes.length ? null : `Nenhum estado atingiu a amostra mínima de ${data.meta.minSample} clientes.`}
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data.regioes}>
@@ -185,12 +218,23 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         </ResponsiveContainer>
       </Panel>
 
-      <Panel index="06" title="Curva de churn" description="Volume de clientes perdidos por estágio de compra." status={data.panelStatus.churn}>
+      <Panel
+        index="06"
+        title={data.meta.baseMadura ? "Retenção por estágio de compra" : "Retenção por estágio (preliminar)"}
+        description="% dos clientes que avançaram para a compra seguinte."
+        status={data.panelStatus.churn}
+        footnote={
+          data.meta.baseMadura
+            ? `Base: ${data.meta.totalClientesBase} cliente(s) com pedido pago.`
+            : `Histórico pago de apenas ${data.meta.historyDays} dias — leitura preliminar, não indica churn definitivo.`
+        }
+        empty={data.churn.length ? null : "Sem clientes com pedido pago para calcular retenção."}
+      >
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data.churn}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
             <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={11} />
-            <YAxis tickLine={false} axisLine={false} fontSize={11} unit="%" width={44} domain={[90, 100]} />
+            <YAxis tickLine={false} axisLine={false} fontSize={11} unit="%" width={44} domain={[0, 100]} />
             <Tooltip formatter={(v: number) => `${v}%`} {...tooltipStyle} />
             <Area dataKey="value" stroke="var(--color-warning)" fill="var(--color-warning-soft)" strokeWidth={2} />
           </AreaChart>
@@ -200,8 +244,14 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
       <Panel
         index="07"
         title="Tempo entre 1ª e 2ª compra"
-        description="Intervalo de dias entre o primeiro e o segundo pedido do mesmo cliente."
+        description="Intervalo em dias entre o 1º e o 2º pedido pago do mesmo cliente (faixas exclusivas)."
         status={data.panelStatus.tempoEntreCompras}
+        footnote={`Base: ${data.meta.gapsAmostra} cliente(s) com 2ª compra paga.`}
+        empty={
+          data.meta.gapsAmostra >= data.meta.minSample
+            ? null
+            : `Amostra insuficiente: ${data.meta.gapsAmostra} cliente(s) com 2ª compra.`
+        }
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data.tempoEntreCompras}>
@@ -214,7 +264,18 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         </ResponsiveContainer>
       </Panel>
 
-      <Panel index="08" title="Curva de recompra" description="Evolução da base de clientes ativos ao longo do tempo." status={data.panelStatus.curvaRecompra}>
+      <Panel
+        index="08"
+        title="Quando acontece a 2ª compra"
+        description="Distribuição das 2ªs compras por faixa de semanas (faixas exclusivas, somam 100%)."
+        status={data.panelStatus.curvaRecompra}
+        footnote={`Base: ${data.meta.gapsAmostra} cliente(s) com 2ª compra paga.`}
+        empty={
+          data.meta.gapsAmostra >= data.meta.minSample
+            ? null
+            : `Amostra insuficiente: ${data.meta.gapsAmostra} cliente(s) com 2ª compra.`
+        }
+      >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data.curvaRecompra}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
@@ -232,16 +293,16 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
           <div className="flex-1">
             <h3 className="text-base font-semibold">Operação de envio</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Pedidos e produtos enviados por dia (com rastreio) e tempo médio de envio (rastreio − pagamento).
+              Pedidos e produtos enviados por dia (pedidos pagos com rastreio). Tempo médio = 1º envio − pagamento.
             </p>
           </div>
           <span
             className={cn(
               "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase",
-              statusChip[data.panelStatus.envios],
+              badgeChip[data.panelStatus.envios],
             )}
           >
-            {statusLabel[data.panelStatus.envios]}
+            {badgeLabel[data.panelStatus.envios]}
           </span>
         </header>
         <div className="mt-4 h-[280px]">
@@ -263,7 +324,9 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
           <span className="mt-1 text-xs font-mono text-muted-foreground">10</span>
           <div className="flex-1">
             <h3 className="text-base font-semibold">Análise de coorte de clientes</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Retenção de clientes por mês de primeira compra.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Retenção por mês da 1ª compra paga. Células vazias = mês sem coorte (não é 0%).
+            </p>
           </div>
         </header>
         <div className="mt-4 overflow-x-auto pb-2">
@@ -277,7 +340,9 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
             <tbody>
               {data.cohortData?.map((cohort, idx) => (
                 <tr key={idx} className="hover:bg-muted/50 transition-colors">
-                  <td className="p-2 font-medium whitespace-nowrap border-b border-border">{cohort.month}</td>
+                  <td className="p-2 font-medium whitespace-nowrap border-b border-border">
+                    {cohort.month} <span className="text-muted-foreground">({cohort.size})</span>
+                  </td>
                   {cohort.retention.map((val, i) => (
                     <td 
                       key={i} 
@@ -303,8 +368,10 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         <header className="flex items-start gap-3 border-b border-border pb-3">
           <span className="mt-1 text-xs font-mono text-muted-foreground">11</span>
           <div className="flex-1">
-            <h3 className="text-base font-semibold">Sessões por página de destino</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Principais páginas de entrada na loja.</p>
+            <h3 className="text-base font-semibold">Pedidos por página de entrada</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Página de entrada (landing site) registrada nos pedidos pagos. Não é contagem de sessões.
+            </p>
           </div>
         </header>
         <ul className="mt-4 space-y-2">
@@ -312,14 +379,13 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
             <li key={i} className="flex items-center justify-between text-xs p-2 rounded-md hover:bg-muted/50 transition-colors">
               <span className="truncate max-w-[300px]" title={s.page}>{s.page}</span>
               <div className="flex items-center gap-3">
-                <span className="font-semibold">{s.count}</span>
-                {s.trend && (
-                  <span className="text-meta font-medium">↗ {(s.trend/100).toFixed(1)} mil%</span>
-                )}
-                {!s.trend && <span className="text-muted-foreground">—</span>}
+                <span className="font-semibold">{s.count} pedido(s)</span>
               </div>
             </li>
           ))}
+          {(!data.sessoes || data.sessoes.length === 0) && (
+            <li className="p-2 text-xs text-muted-foreground">Nenhum pedido pago com página de entrada registrada.</li>
+          )}
         </ul>
       </section>
 
@@ -328,7 +394,7 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
           <span className="mt-1 text-xs font-mono text-muted-foreground">12</span>
           <div className="flex-1">
             <h3 className="text-base font-semibold">Produtos mais vendidos</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Por quantidade vendida no período selecionado.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Quantidade vendida em pedidos pagos no período.</p>
           </div>
         </header>
         <ul className="mt-4 space-y-2">

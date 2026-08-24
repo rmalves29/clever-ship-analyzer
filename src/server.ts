@@ -291,10 +291,16 @@ async function handleWhatsappQueueTick(request: Request): Promise<Response> {
     const { processWhatsappQueueBatch } = await import("./lib/whatsapp-queue.server");
     const url = new URL(request.url);
     const limitParam = Number(url.searchParams.get("limit"));
-    // `?dryRun=1` percorre claim → worker sem NENHUMA chamada ao provider (teste de fluxo).
-    const dryRun = url.searchParams.get("dryRun") === "1";
-    // `?provider=mock` usa o provider simulado interno (zero rede) e só processa jobs `mock-test:`.
-    const useMock = url.searchParams.get("provider") === "mock";
+    // `?dryRun=1` e `?provider=mock` são modos de TESTE — bloqueados em produção.
+    const testModesAllowed =
+      process.env["NODE_ENV"] !== "production" || process.env["ALLOW_QUEUE_TEST_MODES"] === "true";
+    const dryRunRequested = url.searchParams.get("dryRun") === "1";
+    const mockRequested = url.searchParams.get("provider") === "mock";
+    if (!testModesAllowed && (dryRunRequested || mockRequested)) {
+      return new Response("Test modes disabled in production", { status: 403 });
+    }
+    const dryRun = testModesAllowed && dryRunRequested;
+    const useMock = testModesAllowed && mockRequested;
     const result = await processWhatsappQueueBatch({
       ...(Number.isFinite(limitParam) && limitParam > 0 ? { limit: limitParam } : {}),
       ...(dryRun ? { dryRun: true } : {}),

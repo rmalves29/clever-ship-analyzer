@@ -46,7 +46,7 @@ export type Kpi = {
   label: string;
   value: string;
   hint?: string;
-  status?: Status;
+  status?: Status | undefined;
   icon: "users" | "bag" | "trend" | "repeat" | "truck" | "box" | "clock" | "receipt" | "dollar";
 };
 

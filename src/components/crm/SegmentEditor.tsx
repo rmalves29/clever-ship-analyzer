@@ -47,17 +47,25 @@ type RuleGroup = {
   conditions: RuleCondition[];
 };
 
+type ProductOption = {
+  id: string;
+  title: string;
+  skus: string[];
+};
+
 type FilterOptions = {
   cities: string[];
   customerTags: string[];
   customTags: string[];
+  products: ProductOption[];
 };
 
-const EMPTY_FILTER_OPTIONS: FilterOptions = { cities: [], customerTags: [], customTags: [] };
+const EMPTY_FILTER_OPTIONS: FilterOptions = { cities: [], customerTags: [], customTags: [], products: [] };
 
 const CATEGORY_ICONS: Record<CRMFilterCategory["id"], typeof Users> = {
   pessoais: Users,
   comportamento: ShoppingCart,
+  produtos: ShoppingCart,
   tags: Tag,
   rfm: Zap,
 };
@@ -97,6 +105,10 @@ const OPERATORS = {
     { label: "É um dos", value: "in" },
     { label: "Não é nenhum dos", value: "not_in" },
   ],
+  product: [
+    { label: "Comprou", value: "bought" },
+    { label: "Não comprou", value: "not_bought" },
+  ],
 } as const;
 
 function operatorsForField(field: CRMFilterField) {
@@ -104,12 +116,14 @@ function operatorsForField(field: CRMFilterField) {
   if (field.kind === "number") return OPERATORS.number;
   if (field.kind === "date") return OPERATORS.date;
   if (field.kind === "rfm") return OPERATORS.rfm;
+  if (field.kind === "product") return OPERATORS.product;
   if (["boolean", "status", "profile"].includes(field.kind)) return OPERATORS.exact;
   return OPERATORS.string;
 }
 
 function defaultOperatorForField(field: CRMFilterField) {
   if (field.kind === "date") return "on";
+  if (field.kind === "product") return "bought";
   return "eq";
 }
 
@@ -133,6 +147,7 @@ function nextValueForOperator(field: CRMFilterField, operator: string, current: 
   if (field.kind === "rfm" && (operator === "in" || operator === "not_in")) {
     return Array.isArray(current) ? current : [];
   }
+  if (field.kind === "product") return typeof current === "string" ? current : "";
   if (Array.isArray(current) || (current && typeof current === "object")) return "";
   if (field.kind === "date") return "";
   return current;
@@ -267,6 +282,24 @@ export function SegmentEditor({
           <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar UF..." /></SelectTrigger>
           <SelectContent>
             {BRAZIL_STATES.map((uf) => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      );
+    }
+
+    if (field.kind === "product") {
+      if (filterOptions.products.length === 0) {
+        return <Input disabled className="h-8 flex-1 border-none bg-muted/50 text-xs" placeholder="Nenhum produto de compra válida encontrado" />;
+      }
+      return (
+        <Select value={String(condition.value || "")} onValueChange={setValue}>
+          <SelectTrigger className="h-8 min-w-[320px] flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar produto..." /></SelectTrigger>
+          <SelectContent className="max-h-[360px]">
+            {filterOptions.products.map((product) => (
+              <SelectItem key={product.id} value={product.id}>
+                {product.title}{product.skus.length > 0 ? ` · SKU ${product.skus.slice(0, 2).join(", ")}` : ""}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       );
@@ -455,7 +488,7 @@ export function SegmentEditor({
       <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-muted-foreground">
         <div className="flex items-start gap-2">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" />
-          <p><strong className="text-foreground">Filtros validados:</strong> o editor mostra somente critérios que já possuem implementação real no CRM. Métricas de compra usam apenas pedidos válidos, seguindo a mesma regra do RFM.</p>
+          <p><strong className="text-foreground">Filtros validados:</strong> o editor mostra somente critérios que já possuem implementação real no CRM. Métricas e produtos comprados usam apenas pedidos válidos, seguindo a mesma regra do RFM.</p>
         </div>
       </div>
 
@@ -466,7 +499,7 @@ export function SegmentEditor({
         </div>
         <div className="space-y-2">
           <Label htmlFor="desc">Descrição (opcional)</Label>
-          <Input id="desc" placeholder="Ex: Clientes que gastaram mais de R$ 500" value={descricao} onChange={(event) => setDescricao(event.target.value)} />
+          <Input id="desc" placeholder="Ex: Comprou brinco e não comprou colar" value={descricao} onChange={(event) => setDescricao(event.target.value)} />
         </div>
       </div>
 

@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CampanhasWhatsappRouteImport } from './routes/campanhas-whatsapp'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as EventosRouteImport } from './routes/eventos'
@@ -27,6 +28,11 @@ import { Route as PerformanceMetaAdsRouteImport } from './routes/performance/met
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CampanhasWhatsappRoute = CampanhasWhatsappRouteImport.update({
@@ -97,6 +103,7 @@ const PerformanceMetaAdsRoute = PerformanceMetaAdsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/eventos': typeof EventosRoute
@@ -113,6 +120,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/eventos': typeof EventosRoute
@@ -130,6 +138,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/eventos': typeof EventosRoute
@@ -148,6 +157,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/auth'
     | '/campanhas-whatsapp'
     | '/configuracoes'
     | '/eventos'
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/auth'
     | '/campanhas-whatsapp'
     | '/configuracoes'
     | '/eventos'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/auth'
     | '/campanhas-whatsapp'
     | '/configuracoes'
     | '/eventos'
@@ -197,6 +209,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthRoute: typeof AuthRoute
   CampanhasWhatsappRoute: typeof CampanhasWhatsappRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   EventosRoute: typeof EventosRoute
@@ -219,6 +232,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/campanhas-whatsapp': {
@@ -317,6 +337,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthRoute: AuthRoute,
   CampanhasWhatsappRoute: CampanhasWhatsappRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
   EventosRoute: EventosRoute,

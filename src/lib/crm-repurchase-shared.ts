@@ -1,15 +1,15 @@
 import { isRevenueValidOrder } from "./crm-rfm-shared";
 
-export type RepurchaseWindow = "0–7 dias" | "8–15 dias" | "16–30 dias" | "31–60 dias" | "61–90 dias" | "90+ dias";
-
-export const REPURCHASE_WINDOWS: RepurchaseWindow[] = [
+export const REPURCHASE_WINDOWS = [
   "0–7 dias",
   "8–15 dias",
   "16–30 dias",
   "31–60 dias",
   "61–90 dias",
   "90+ dias",
-];
+] as const;
+
+export type RepurchaseWindow = (typeof REPURCHASE_WINDOWS)[number];
 
 /** Meta inicial exibida no painel. Pode virar configuração persistida em uma fase futura. */
 export const DEFAULT_REPURCHASE_TARGET = 0.15;
@@ -78,14 +78,16 @@ export function repurchaseWindow(days: number): RepurchaseWindow {
  */
 export function buildRepurchaseJourney(orders: RepurchaseOrder[], now = new Date()): RepurchaseCustomer[] {
   const seenOrderIds = new Set<string>();
-  const valid = orders.filter((o) => {
-    if (!o.id || seenOrderIds.has(o.id)) return false;
-    seenOrderIds.add(o.id);
-    return isRevenueValidOrder({
-      financialStatus: o.financialStatus,
-      cancelledAt: o.cancelledAt,
-      processedAt: o.processedAt,
+  const valid = orders.filter((order) => {
+    if (!order.id || seenOrderIds.has(order.id)) return false;
+    const revenueValid = isRevenueValidOrder({
+      financialStatus: order.financialStatus,
+      cancelledAt: order.cancelledAt,
+      processedAt: order.processedAt,
     });
+    if (!revenueValid) return false;
+    seenOrderIds.add(order.id);
+    return true;
   });
 
   const byCustomer = new Map<string, RepurchaseOrder[]>();

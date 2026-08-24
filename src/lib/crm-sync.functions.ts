@@ -108,6 +108,7 @@ export const syncShopifyData = createServerFn({ method: "POST" })
       // 2. Sync Orders
       cursor = null;
       hasNextPage = true;
+      totalImported = 0;
       const orderSearchQuery =
         !fullSync && settings.last_sync_at
           ? `updated_at:>='${new Date(settings.last_sync_at).toISOString()}'`
@@ -164,6 +165,7 @@ export const syncShopifyData = createServerFn({ method: "POST" })
             created_at: order.createdAt,
             processed_at: order.processedAt,
             updated_at: order.updatedAt,
+            cancelled_at: order.cancelledAt ?? null,
             financial_status: order.displayFinancialStatus,
             fulfillment_status: order.displayFulfillmentStatus,
             currency_code: order.currencyCode,
@@ -310,7 +312,10 @@ export const syncShopifyData = createServerFn({ method: "POST" })
         }
       }
 
-
+      // O RFM só é considerado sincronizado depois que os dados da Shopify terminaram de entrar.
+      // Se o recálculo falhar, a sincronização não é marcada como "connected"; o catch registra o erro.
+      const { recalculateRFM } = await import("./crm-rfm.server");
+      const rfmResult = await recalculateRFM();
 
       await supabaseAdmin
         .from("store_settings")
@@ -319,11 +324,19 @@ export const syncShopifyData = createServerFn({ method: "POST" })
           last_sync_at: new Date().toISOString(),
           last_sync_error: null,
           total_orders_imported: totalImported,
-          last_imported_order_at: lastUpdatedAt,
+          last_imported_order_at: lastUpdatedAt ?? settings.last_imported_order_at,
         })
         .eq("id", settings.id);
 
-      return { success: true, totalImported };
+      return {
+        success: true,
+        totalImported,
+        rfm: {
+          updatedCustomers: rfmResult.count,
+          historyDays: rfmResult.historyDays,
+          classicMode: rfmResult.classicMode,
+        },
+      };
     } catch (error: any) {
       console.error("Sync failed:", error);
       await supabaseAdmin

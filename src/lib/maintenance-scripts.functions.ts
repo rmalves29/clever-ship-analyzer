@@ -1,5 +1,6 @@
 
 import { createServerFn } from "@tanstack/react-start";
+import { requireAppAuth } from "./app-auth";
 
 /**
  * Script de manutenção para normalizar todos os telefones no CRM

@@ -1,48 +1,47 @@
-import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
   Cell,
-  LineChart,
-  Line,
-  Legend
 } from "recharts";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { 
-  RefreshCw, 
-  Info, 
-  Users, 
-  ShoppingBag, 
-  TrendingUp, 
+import {
+  RefreshCw,
+  Info,
+  Users,
+  ShoppingBag,
+  TrendingUp,
   Sparkles,
-  ArrowRight
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getRFMStats, calculateRFMSegments, RFM_SEGMENTS_CONFIG } from "@/lib/crm-rfm.functions";
+import { getRFMStats, calculateRFMSegments } from "@/lib/crm-rfm.functions";
+import { RFM_SEGMENTS_CONFIG, CLASSIC_MODE_MIN_HISTORY_DAYS, type RFMSegment } from "@/lib/crm-rfm-shared";
 import { brl } from "@/lib/crm-mock";
+
+const segColor = (name: string) => RFM_SEGMENTS_CONFIG[name as RFMSegment]?.color ?? "#94a3b8";
 
 export function RFMAnalysis() {
   const queryClient = useQueryClient();
   const fetchStats = useServerFn(getRFMStats);
   const runCalculate = useServerFn(calculateRFMSegments);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["rfm-stats"],
     queryFn: () => fetchStats(),
   });
@@ -57,7 +56,7 @@ export function RFMAnalysis() {
     },
     onError: (err: any) => {
       toast.error("Erro ao calcular RFM: " + err.message);
-    }
+    },
   });
 
   if (isLoading) {
@@ -71,26 +70,29 @@ export function RFMAnalysis() {
     );
   }
 
-  const summary = data?.summary || [];
-  
-  // Dados para o gráfico de distribuição
-  const chartData = summary.map(s => ({
-    name: s.name,
-    clientes: s.clientes,
-    receita: s.receita,
-    color: RFM_SEGMENTS_CONFIG[s.name as keyof typeof RFM_SEGMENTS_CONFIG]?.color || "#ccc"
-  })).sort((a, b) => b.clientes - a.clientes);
+  const summary = data?.summary ?? [];
+  const activeSegments = (Object.keys(RFM_SEGMENTS_CONFIG) as RFMSegment[]).filter(
+    (s) => data?.classicMode || RFM_SEGMENTS_CONFIG[s].mode === "base",
+  );
+
+  const chartData = summary
+    .map((s) => ({ name: s.name, clientes: s.clientes, receita: s.receita, color: segColor(s.name) }))
+    .sort((a, b) => b.clientes - a.clientes);
+
+  const freqData = (data?.frequencia ?? []).filter((f) => f.faixa !== "0x");
 
   return (
     <div className="space-y-8 pb-12">
-      {/* Header com Ação */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold tracking-tight">Análise RFM</h2>
-          <p className="text-sm text-muted-foreground">Recência, Frequência e Valor Monetário da sua base.</p>
+          <p className="text-sm text-muted-foreground">
+            Recência, Frequência e Valor — considerando apenas pedidos pagos (reembolsados, expirados,
+            anulados e não pagos ficam de fora).
+          </p>
         </div>
-        <Button 
-          onClick={() => calculateMutation.mutate()} 
+        <Button
+          onClick={() => calculateMutation.mutate()}
           disabled={calculateMutation.isPending}
           className="gap-2 bg-brand hover:bg-brand/90 text-white"
         >
@@ -103,7 +105,23 @@ export function RFMAnalysis() {
         </Button>
       </div>
 
-      {/* Grid de KPIs Rápidos */}
+      {/* Aviso de maturidade da base */}
+      {!data?.classicMode && (
+        <div className="surface-card flex items-start gap-3 border-l-4 border-l-amber-500 p-4">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-500" />
+          <div className="text-sm">
+            <p className="font-semibold">Base nova — modo de segmentação inicial ativo</p>
+            <p className="text-muted-foreground">
+              Há {data?.historyDays ?? 0} dias de histórico pago. Segmentos clássicos de risco
+              (Em Risco, Hibernando, Perdidos) só são liberados a partir de {CLASSIC_MODE_MIN_HISTORY_DAYS} dias —
+              até lá ninguém é rotulado como perdido. <strong>LTV projetado indisponível</strong>: exibimos apenas
+              métricas reais observadas.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* KPIs reais */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="surface-card p-5">
           <div className="flex items-center gap-3">
@@ -111,8 +129,11 @@ export function RFMAnalysis() {
               <Users className="size-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase">Base Total</p>
-              <h3 className="text-2xl font-bold">{new Intl.NumberFormat().format(data?.totalClientes || 0)}</h3>
+              <p className="text-xs font-medium uppercase text-muted-foreground">Base Total</p>
+              <h3 className="text-2xl font-bold">{new Intl.NumberFormat().format(data?.totalClientes ?? 0)}</h3>
+              <p className="text-[11px] text-muted-foreground">
+                {new Intl.NumberFormat().format(data?.compradores ?? 0)} com compra paga
+              </p>
             </div>
           </div>
         </div>
@@ -122,8 +143,11 @@ export function RFMAnalysis() {
               <ShoppingBag className="size-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase">Receita Total</p>
-              <h3 className="text-2xl font-bold">{brl(data?.totalReceita || 0)}</h3>
+              <p className="text-xs font-medium uppercase text-muted-foreground">Receita Válida</p>
+              <h3 className="text-2xl font-bold">{brl(data?.totalReceita ?? 0)}</h3>
+              <p className="text-[11px] text-muted-foreground">
+                {new Intl.NumberFormat().format(data?.totalPedidos ?? 0)} pedidos pagos
+              </p>
             </div>
           </div>
         </div>
@@ -133,56 +157,52 @@ export function RFMAnalysis() {
               <TrendingUp className="size-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase">Segmento Líder</p>
-              <h3 className="text-2xl font-bold truncate">{chartData[0]?.name || "-"}</h3>
+              <p className="text-xs font-medium uppercase text-muted-foreground">AOV Real</p>
+              <h3 className="text-2xl font-bold">{brl(data?.aovGeral ?? 0)}</h3>
             </div>
           </div>
         </div>
         <div className="surface-card p-5">
           <div className="flex items-center gap-3">
             <div className="rounded-lg bg-amber-500/10 p-2 text-amber-500">
-              <Sparkles className="size-5" />
+              <AlertTriangle className="size-5" />
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase">AOV Geral</p>
-              <h3 className="text-2xl font-bold">
-                {brl((data?.totalReceita || 0) / (summary.reduce((acc, s) => acc + s.pedidos, 0) || 1))}
-              </h3>
+              <p className="text-xs font-medium uppercase text-muted-foreground">Excluído do RFM</p>
+              <h3 className="text-2xl font-bold">{brl(data?.receitaExcluida ?? 0)}</h3>
+              <p className="text-[11px] text-muted-foreground">
+                {data?.pedidosExcluidos ?? 0} pedidos não pagos/reembolsados
+              </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Gráficos de Distribuição */}
+      {/* Distribuição */}
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="surface-card p-6">
-          <h3 className="text-lg font-bold mb-6">Volume de Clientes por Segmento</h3>
+          <h3 className="mb-6 text-lg font-bold">Clientes por Segmento</h3>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(255,255,255,0.05)" />
+                <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} stroke="rgba(255,255,255,0.05)" />
                 <XAxis type="number" hide />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  width={150} 
-                  axisLine={false} 
-                  tickLine={false} 
+                <YAxis
+                  dataKey="name"
+                  type="category"
+                  width={150}
+                  axisLine={false}
+                  tickLine={false}
                   tick={{ fontSize: 12, fill: "currentColor", opacity: 0.7 }}
                 />
-                <Tooltip 
+                <Tooltip
                   cursor={{ fill: "rgba(255,255,255,0.05)" }}
-                  contentStyle={{ 
-                    backgroundColor: "white", 
-                    border: "1px solid rgba(0,0,0,0.1)", 
-                    borderRadius: "8px",
-                    color: "#333"
-                  }}
+                  contentStyle={{ backgroundColor: "white", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "8px", color: "#333" }}
                   itemStyle={{ color: "#333" }}
                 />
                 <Bar dataKey="clientes" radius={[0, 4, 4, 0]}>
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  {chartData.map((entry, i) => (
+                    <Cell key={i} fill={entry.color} />
                   ))}
                 </Bar>
               </BarChart>
@@ -191,47 +211,32 @@ export function RFMAnalysis() {
         </div>
 
         <div className="surface-card p-6">
-          <h3 className="text-lg font-bold mb-6">Receita por Segmento</h3>
+          <h3 className="mb-6 text-lg font-bold">Clientes por Frequência de Compra</h3>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(255,255,255,0.05)" />
-                <XAxis type="number" hide />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  width={150} 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 12, fill: "currentColor", opacity: 0.7 }}
-                />
-                <Tooltip 
+              <BarChart data={freqData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="faixa" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "currentColor", opacity: 0.7 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "currentColor", opacity: 0.7 }} />
+                <Tooltip
                   cursor={{ fill: "rgba(255,255,255,0.05)" }}
-                  formatter={(value: number) => brl(value)}
-                  contentStyle={{ 
-                    backgroundColor: "white", 
-                    border: "1px solid rgba(0,0,0,0.1)", 
-                    borderRadius: "8px",
-                    color: "#333"
-                  }}
+                  contentStyle={{ backgroundColor: "white", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "8px", color: "#333" }}
                   itemStyle={{ color: "#333" }}
                 />
-                <Bar dataKey="receita" radius={[0, 4, 4, 0]}>
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
+                <Bar dataKey="clientes" fill="#3b82f6" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
       </div>
 
-      {/* Tabela Resumo dos Segmentos */}
+      {/* Tabela resumo */}
       <div className="surface-card overflow-hidden">
         <div className="border-b border-border p-6">
           <h3 className="text-lg font-bold">Resumo dos Segmentos</h3>
-          <p className="text-sm text-muted-foreground">Detalhamento completo das métricas por categoria RFM.</p>
+          <p className="text-sm text-muted-foreground">
+            Métricas reais observadas. Sem projeção de LTV — {data?.ltvDisponivel ? "histórico suficiente" : "LTV indisponível por histórico insuficiente"}.
+          </p>
         </div>
         <div className="overflow-x-auto">
           <Table>
@@ -240,69 +245,69 @@ export function RFMAnalysis() {
                 <TableHead className="w-[200px]">Segmento</TableHead>
                 <TableHead className="text-right">Clientes</TableHead>
                 <TableHead className="text-right">% Base</TableHead>
-                <TableHead className="text-right">Pedidos</TableHead>
+                <TableHead className="text-right">Pedidos Pagos</TableHead>
                 <TableHead className="text-right">Freq. Média</TableHead>
-                <TableHead className="text-right">Receita</TableHead>
+                <TableHead className="text-right">Receita Válida</TableHead>
                 <TableHead className="text-right">% Receita</TableHead>
-                <TableHead className="text-right">Ticket Médio (AOV)</TableHead>
-                <TableHead className="text-right">LTV Est. (365d)</TableHead>
+                <TableHead className="text-right">AOV</TableHead>
+                <TableHead className="text-right">Receita / Cliente</TableHead>
+                <TableHead className="text-right">Tempo de Base</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {summary.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
+                  <TableCell colSpan={10} className="h-32 text-center text-muted-foreground">
                     Nenhum dado RFM processado. Clique em "Recalcular Análise RFM" para começar.
                   </TableCell>
                 </TableRow>
               ) : (
-                summary.sort((a, b) => b.receita - a.receita).map((s) => (
-                  <TableRow key={s.name} className="hover:bg-muted/20 transition-colors group">
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <div 
-                          className="size-2 rounded-full" 
-                          style={{ backgroundColor: RFM_SEGMENTS_CONFIG[s.name as keyof typeof RFM_SEGMENTS_CONFIG]?.color }} 
-                        />
-                        {s.name}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">{new Intl.NumberFormat().format(s.clientes)}</TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant="secondary" className="font-normal">{s.pctBase.toFixed(1)}%</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">{new Intl.NumberFormat().format(s.pedidos)}</TableCell>
-                    <TableCell className="text-right">{s.frequenciaMedia.toFixed(2)}x</TableCell>
-                    <TableCell className="text-right font-bold text-emerald-500">{brl(s.receita)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="w-full bg-muted/50 rounded-full h-1.5 mt-1 overflow-hidden">
-                        <div 
-                          className="bg-emerald-500 h-full transition-all duration-500" 
-                          style={{ width: `${s.pctReceita}%` }}
-                        />
-                      </div>
-                      <span className="text-[10px] text-muted-foreground mt-1 block">{s.pctReceita.toFixed(1)}%</span>
-                    </TableCell>
-                    <TableCell className="text-right">{brl(s.aov)}</TableCell>
-                    <TableCell className="text-right text-blue-400">{brl(s.ltv365)}</TableCell>
-                  </TableRow>
-                ))
+                [...summary]
+                  .sort((a, b) => b.receita - a.receita || b.clientes - a.clientes)
+                  .map((s) => (
+                    <TableRow key={s.name} className="group transition-colors hover:bg-muted/20">
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          <div className="size-2 rounded-full" style={{ backgroundColor: segColor(s.name) }} />
+                          {s.name}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">{new Intl.NumberFormat().format(s.clientes)}</TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant="secondary" className="font-normal">{s.pctBase.toFixed(1)}%</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">{new Intl.NumberFormat().format(s.pedidos)}</TableCell>
+                      <TableCell className="text-right">{s.frequenciaMedia.toFixed(2)}x</TableCell>
+                      <TableCell className="text-right font-bold text-emerald-500">{brl(s.receita)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted/50">
+                          <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${s.pctReceita}%` }} />
+                        </div>
+                        <span className="mt-1 block text-[10px] text-muted-foreground">{s.pctReceita.toFixed(1)}%</span>
+                      </TableCell>
+                      <TableCell className="text-right">{brl(s.aov)}</TableCell>
+                      <TableCell className="text-right text-blue-400">{brl(s.receitaPorCliente)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {s.tenureMedioDias === null ? "—" : `${Math.round(s.tenureMedioDias)}d`}
+                      </TableCell>
+                    </TableRow>
+                  ))
               )}
             </TableBody>
           </Table>
         </div>
       </div>
 
-      {/* Explicação RFM */}
+      {/* Dicionário dos segmentos ativos */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {Object.entries(RFM_SEGMENTS_CONFIG).map(([name, config]) => (
-          <div key={name} className="surface-card p-5 border-l-4" style={{ borderLeftColor: config.color }}>
-            <h4 className="font-bold flex items-center justify-between">
+        {activeSegments.map((name) => (
+          <div key={name} className="surface-card border-l-4 p-5" style={{ borderLeftColor: RFM_SEGMENTS_CONFIG[name].color }}>
+            <h4 className="flex items-center justify-between font-bold">
               {name}
               <Info className="size-4 text-muted-foreground" />
             </h4>
-            <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-              {config.description}
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              {RFM_SEGMENTS_CONFIG[name].description}
             </p>
           </div>
         ))}

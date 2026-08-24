@@ -13,6 +13,7 @@ import {
   Save,
   ArrowLeft
 } from "lucide-react";
+import { RFM_SEGMENTS_CONFIG } from "@/lib/crm-rfm-shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -357,17 +358,11 @@ export function SegmentEditor({
                             <SelectValue placeholder="Selecionar segmento..." />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="Campeões">Campeões</SelectItem>
-                            <SelectItem value="Leais">Leais</SelectItem>
-                            <SelectItem value="Potencialmente Leais">Potencialmente Leais</SelectItem>
-                            <SelectItem value="Novos">Novos</SelectItem>
-                            <SelectItem value="Precisa de Atenção">Precisa de Atenção</SelectItem>
-                            <SelectItem value="Quase Hibernando">Quase Hibernando</SelectItem>
-                            <SelectItem value="Em Risco">Em Risco</SelectItem>
-                            <SelectItem value="Hibernando">Hibernando</SelectItem>
-                            <SelectItem value="Não pode perder">Não pode perder</SelectItem>
-                            <SelectItem value="Perdidos">Perdidos</SelectItem>
+                            {(Object.keys(RFM_SEGMENTS_CONFIG) as (keyof typeof RFM_SEGMENTS_CONFIG)[]).map(seg => (
+                              <SelectItem key={seg} value={seg}>{seg}</SelectItem>
+                            ))}
                           </SelectContent>
+
                         </Select>
                       ) : condition.field === "perfil" ? (
                         <Select

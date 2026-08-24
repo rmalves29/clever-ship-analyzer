@@ -343,7 +343,9 @@ export async function countSegmentRecipients(segmentType: SegmentType | string, 
   };
 }
 
-async function sendTemplateMessage(params: {
+/** Chamada crua à Meta. Uso restrito ao worker da fila (`whatsapp-queue.server.ts`).
+ *  Não chame direto em fluxos de campanha — tudo passa pela queue. */
+export async function sendTemplateMessage(params: {
   accessToken: string;
   phoneNumberId: string;
   to: string;
@@ -533,123 +535,28 @@ export async function resolveSegmentRecipients(segmentType: string, ids: string[
   return getCustomersWithPhone(ids);
 }
 
-/** Dispara de fato a campanha já criada e loga cada envio.
- *  `restrictToCustomerIds`, quando informado, pula o recálculo do segmento inteiro e manda só
+/** Enfileira a campanha já criada. NÃO envia nada direto — o envio real é feito pelo worker
+ *  (`processWhatsappQueueBatch` em `whatsapp-queue.server.ts`).
+ *  `restrictToCustomerIds`, quando informado, pula o recálculo do segmento inteiro e enfileira só
  *  pra essa lista — usado pelo motor de automação pra não reenviar pra quem já recebeu antes. */
 export async function dispatchCampaign(campaignId: string, restrictToCustomerIds?: string[]) {
-  const supabaseAdmin = await admin();
-  const settings = await loadSettings();
+  const { enqueueCampaign } = await import("./whatsapp-queue.server");
+  const result = await enqueueCampaign(campaignId, restrictToCustomerIds);
+  if (!result.success) return result;
 
-  const { data: campaignRow } = await supabaseAdmin
-    .from("whatsapp_campaigns")
-    .select("id, segment_type, segment_id, template_name, template_language, body_params, campaign_tag")
-    .eq("id", campaignId)
-    .maybeSingle();
-
-  if (!campaignRow) return { success: false as const, error: "Campanha não encontrada." };
-  if (!settings.accessToken || !settings.phoneNumberId) {
-    return { success: false as const, error: "Credenciais do WhatsApp (Meta) não configuradas." };
-  }
-
-  const campaign = campaignRow as any;
-
-  await supabaseAdmin.from("whatsapp_campaigns").update({ status: "enviando" } as never).eq("id", campaignId);
-
-  const bodyParams = Array.isArray(campaign.body_params) ? (campaign.body_params as string[]) : [];
-  let ids = await getSegmentCustomerIds(campaign.segment_type as SegmentType, campaign.segment_id || undefined);
-  if (restrictToCustomerIds) {
-    const restrictSet = new Set(restrictToCustomerIds);
-    ids = ids.filter((id) => restrictSet.has(id));
-  }
-
-  const recipients = await resolveSegmentRecipients(campaign.segment_type, ids);
-
-  let sent = 0;
-  let failed = 0;
-  const sampleErrors: string[] = [];
-
-  for (const c of recipients) {
-    const to = toE164(c.phone);
-    if (!to) {
-      failed++;
-      continue;
-    }
-
-    // Resolvendo variáveis dinâmicas se existirem
-    let resolvedParams = [...bodyParams];
-    if (resolvedParams.some(p => p.includes("{{"))) {
-      const { data: lastOrder } = await supabaseAdmin
-        .from("shopify_orders")
-        .select("*")
-        .eq("customer_id", c.id)
-        .order("processed_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      const order = lastOrder as any;
-      const rawData = order?.raw_data as any;
-      
-      const replacements: Record<string, string> = {
-        "{{NOME_CLIENTE}}": c.first_name || "Cliente",
-        "{{NUMERO_PEDIDO}}": order?.order_number || order?.name || "—",
-        "{{VALOR_TOTAL}}": order?.total_price ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(order.total_price) : "—",
-        "{{ITENS_COMPRADOS}}": order?.line_items_summary || "—",
-        "{{CUPOM_DESCONTO}}": rawData?.discount_codes?.[0]?.code || "—",
-        "{{FRETE_ESCOLHIDO}}": rawData?.shipping_lines?.[0]?.title || "—",
-        "{{RASTREIO}}": order?.tracking_number || "—",
-        "{{STATUS_PEDIDO}}": order?.fulfillment_status === "fulfilled" ? "Enviado" : "Processando",
-        "{{LINK_CHECKOUT}}": (c as any).checkout_url || "—",
-      };
-
-      resolvedParams = resolvedParams.map(p => {
-        let text = p;
-        for (const [key, val] of Object.entries(replacements)) {
-          text = text.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), val);
-        }
-        return text;
-      });
-    }
-
-    const result = await sendTemplateMessage({
-      accessToken: settings.accessToken,
-      phoneNumberId: settings.phoneNumberId,
-      to,
-      templateName: campaign.template_name,
-      templateLanguage: campaign.template_language ?? settings.templateLanguage,
-      bodyParams: resolvedParams,
-      // Só passa mediaUrl se for uma URL real e válida, não placeholder
-      mediaUrl: (c as any).video_url && /^https?:\/\//i.test((c as any).video_url) && !(c as any).video_url.includes("placeholder") && !(c as any).video_url.includes("undefined") ? (c as any).video_url : undefined,
-    });
-
-    await supabaseAdmin.from("whatsapp_campaign_recipients").insert({
-      campaign_id: campaignId,
-      customer_id: c.id,
-      phone: to,
-      wa_message_id: result.ok ? (result.waMessageId ?? null) : null,
-      status: result.ok ? "sent" : "failed",
-      error: result.ok ? null : result.error,
-    } as never);
-
-    if (result.ok) sent++;
-    else {
-      failed++;
-      if (sampleErrors.length < 3) sampleErrors.push(result.error);
-    }
-  }
-
-  await supabaseAdmin
-    .from("whatsapp_campaigns")
-    .update({
-      status: "finalizada",
-      enviadas: sent,
-      falhas: failed,
-      total_destinatarios: recipients.length,
-      sent_at: new Date().toISOString(),
-    } as never)
-    .eq("id", campaignId);
-
-  return { success: true as const, campaignId, total: recipients.length, sent, failed, sampleErrors };
+  return {
+    success: true as const,
+    campaignId,
+    total: result.total,
+    queued: result.queued,
+    skipped: result.skipped,
+    // Envio é assíncrono: os contadores reais são preenchidos pelo worker via refreshCampaignStatus.
+    sent: 0,
+    failed: 0,
+    sampleErrors: [] as string[],
+  };
 }
+
 
 const RANK: Record<string, number> = { sent: 0, delivered: 1, read: 2, failed: 3 };
 

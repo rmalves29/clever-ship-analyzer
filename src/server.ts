@@ -27,6 +27,7 @@ const ENVIO_RETURN_DISPATCH_PATH = "/api/envio/return-dispatch";
 const ENVIO_CLEANUP_EVENTS_PATH = "/api/envio/cleanup-events";
 const AI_ROUTINES_TICK_PATH = "/api/ai-routines/tick";
 const AI_PLAYBOOK_TICK_PATH = "/api/ai-routines/playbook-tick";
+const WHATSAPP_QUEUE_TICK_PATH = "/api/whatsapp/queue-tick";
 
 // Webhook da Meta é chamado diretamente por eles, fora do protocolo de RPC do
 // createServerFn — por isso é tratado aqui, antes do handler SSR do TanStack Start.
@@ -262,6 +263,25 @@ async function handleAiPlaybookTick(request: Request): Promise<Response> {
   }
 }
 
+// Worker da fila do WhatsApp — único caminho de envio real. Chamado periodicamente por
+// pg_cron+pg_net (agendamento a criar junto da migration da fila), autenticado pelo mesmo segredo.
+async function handleWhatsappQueueTick(request: Request): Promise<Response> {
+  if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+  if (!(await checkAutomationSecret(request))) return new Response("Forbidden", { status: 401 });
+  try {
+    const { processWhatsappQueueBatch } = await import("./lib/whatsapp-queue.server");
+    const limitParam = Number(new URL(request.url).searchParams.get("limit"));
+    const result = await processWhatsappQueueBatch(
+      Number.isFinite(limitParam) && limitParam > 0 ? { limit: limitParam } : undefined,
+    );
+    return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json" } });
+  } catch (error) {
+    console.error("Falha ao processar a fila do WhatsApp:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}
+
+
 async function handleEnvioCleanupEvents(request: Request): Promise<Response> {
   if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
   if (!(await checkAutomationSecret(request))) return new Response("Forbidden", { status: 401 });
@@ -353,6 +373,9 @@ export default {
     }
     if (pathname === AI_PLAYBOOK_TICK_PATH) {
       return handleAiPlaybookTick(request);
+    }
+    if (pathname === WHATSAPP_QUEUE_TICK_PATH) {
+      return handleWhatsappQueueTick(request);
     }
     try {
       const handler = await getServerEntry();

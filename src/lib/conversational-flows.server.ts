@@ -228,6 +228,12 @@ type IncomingMessage = {
  *  15min pela resposta de um fluxo conversacional). Ignorado se já existe um run ativo pra esse
  *  telefone nesse fluxo (evita disparo duplo por reentrega do webhook da Meta). */
 export async function matchIncomingMessage(message: IncomingMessage): Promise<void> {
+  // Opt-out tem precedência sobre qualquer palavra-chave/botão de fluxo. Ao receber SAIR/PARAR/etc.,
+  // registra a supressão central e não dispara resposta promocional naquela mesma mensagem.
+  const { registerWhatsappOptOutFromMessage } = await import("./whatsapp-suppression.server");
+  const optOut = await registerWhatsappOptOutFromMessage(message);
+  if (optOut.optedOut) return;
+
   const { toE164 } = await import("./whatsapp-meta.server");
   const phone = toE164(message.from);
   if (!phone) return;

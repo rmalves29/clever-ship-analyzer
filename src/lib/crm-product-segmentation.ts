@@ -7,6 +7,8 @@ import {
 
 export type CRMAdvancedCustomerContext = CRMCustomerContext & {
   productSpentById: Map<string, number>;
+  purchasedProductTypes: Set<string>;
+  purchasedCollectionIds: Set<string>;
 };
 
 type RawProductMetricValue = {
@@ -30,7 +32,11 @@ type ParsedProductMetricValue = {
 const DAY_MS = 86_400_000;
 
 function normalize(value: unknown): string {
-  return String(value ?? "").trim().toLocaleLowerCase("pt-BR");
+  return String(value ?? "")
+    .trim()
+    .toLocaleLowerCase("pt-BR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
 function numeric(value: unknown): number | null {
@@ -101,6 +107,17 @@ function compareProductDate(actualIso: string | null, operator: string, value: P
   return false;
 }
 
+function taxonomyMatches(values: Set<string>, operator: string, expected: unknown, normalizeValues: boolean): boolean {
+  const target = normalizeValues ? normalize(expected) : String(expected ?? "").trim();
+  if (!target) return false;
+  const bought = normalizeValues
+    ? [...values].some((value) => normalize(value) === target)
+    : values.has(target);
+  if (operator === "bought") return bought;
+  if (operator === "not_bought") return !bought;
+  return false;
+}
+
 export function matchesAdvancedSegmentCondition(
   context: CRMAdvancedCustomerContext,
   condition: SegmentCondition,
@@ -108,6 +125,15 @@ export function matchesAdvancedSegmentCondition(
 ): boolean {
   const field = condition.field;
   const operator = condition.operator || "eq";
+
+  if (field === "categoria_produto") {
+    return taxonomyMatches(context.purchasedProductTypes, operator, condition.value, true);
+  }
+
+  if (field === "colecao_produto") {
+    return taxonomyMatches(context.purchasedCollectionIds, operator, condition.value, false);
+  }
+
   const value = parseProductMetricValue(condition.value);
 
   if (field === "produto_periodo") {

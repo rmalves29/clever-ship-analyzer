@@ -12,7 +12,8 @@ export type CRMFilterKind =
   | "product_date"
   | "product_number"
   | "product_money"
-  | "product_sku";
+  | "product_sku"
+  | "product_taxonomy";
 
 export type CRMFilterField = {
   id: string;
@@ -40,29 +41,16 @@ export const CRM_FILTER_OPERATORS: Record<CRMFilterKind, readonly string[]> = {
   product_number: ["gt", "gte", "lt", "lte", "eq", "neq", "between"],
   product_money: ["gt", "gte", "lt", "lte", "eq", "neq", "between"],
   product_sku: ["bought", "not_bought"],
+  product_taxonomy: ["bought", "not_bought"],
 };
 
 export const CRM_STATUS_FILTER_VALUES = [
-  "paid",
-  "partially_paid",
-  "pending",
-  "authorized",
-  "refunded",
-  "partially_refunded",
-  "voided",
-  "expired",
-  "unpaid",
-  "cancelled",
-  "canceled",
+  "paid", "partially_paid", "pending", "authorized", "refunded", "partially_refunded",
+  "voided", "expired", "unpaid", "cancelled", "canceled",
 ] as const;
 
 export const CRM_PROFILE_FILTER_VALUES = [
-  "carrinho",
-  "checkout_abandonado_ativo",
-  "primeira_compra",
-  "lead",
-  "acesso_sem_compra",
-  "sem_compra",
+  "carrinho", "checkout_abandonado_ativo", "primeira_compra", "lead", "acesso_sem_compra", "sem_compra",
 ] as const;
 
 export const BRAZIL_STATES = [
@@ -70,13 +58,6 @@ export const BRAZIL_STATES = [
   "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
 ] as const;
 
-/**
- * Catálogo do editor de segmentos.
- *
- * Regra: só entra aqui um filtro que já possui implementação real no motor
- * de segmentação e cobertura de teste. Filtros futuros não devem aparecer
- * na UI antes da implementação backend.
- */
 export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
   {
     id: "pessoais",
@@ -95,77 +76,34 @@ export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
       { id: "ultima_compra", label: "Data da Última Compra Válida", kind: "date", description: "Pode filtrar por data, últimos dias, há mais de X dias ou intervalo de dias." },
       { id: "primeira_compra", label: "Data da Primeira Compra Válida", kind: "date", description: "Pode filtrar por data, últimos dias, há mais de X dias ou intervalo de dias." },
       { id: "ticket_medio", label: "Ticket Médio de Compras Válidas", kind: "number", description: "Permite valor mínimo, máximo ou faixa." },
-      {
-        id: "recorrencia",
-        label: "Cliente Recorrente (2+ Compras Válidas)",
-        kind: "boolean",
-        description: "Sim quando o cliente possui duas ou mais compras válidas.",
-      },
-      {
-        id: "status_pagamento",
-        label: "Status do Pagamento",
-        kind: "status",
-        description: "Permite auditoria de estados históricos. Cancelado considera também cancelled_at, mesmo se o status financeiro ainda estiver como pago.",
-      },
+      { id: "recorrencia", label: "Cliente Recorrente (2+ Compras Válidas)", kind: "boolean", description: "Sim quando o cliente possui duas ou mais compras válidas." },
+      { id: "status_pagamento", label: "Status do Pagamento", kind: "status", description: "Cancelado considera também cancelled_at." },
       { id: "perfil", label: "Perfil do Cliente", kind: "profile" },
       { id: "data_pedido_hoje", label: "Compra Válida Realizada Hoje", kind: "boolean" },
-      { id: "data_pedido_24h", label: "Compra Válida nas Últimas 24h", kind: "boolean", description: "Janela móvel de 24 horas, diferente de 'Hoje'." },
+      { id: "data_pedido_24h", label: "Compra Válida nas Últimas 24h", kind: "boolean", description: "Janela móvel de 24 horas." },
       { id: "data_envio_hoje", label: "Pedido Válido Enviado Hoje", kind: "boolean" },
-      {
-        id: "checkout_abandonado",
-        label: "Checkout Abandonado Ativo",
-        kind: "boolean",
-        description: "Checkout mais recente sem uma compra válida posterior.",
-      },
-      {
-        id: "acesso_sem_compra",
-        label: "Sem Compra Válida",
-        kind: "boolean",
-        description: "Cliente sem nenhuma compra válida. Não pressupõe que houve visita ao site.",
-      },
+      { id: "checkout_abandonado", label: "Checkout Abandonado Ativo", kind: "boolean", description: "Checkout mais recente sem uma compra válida posterior." },
+      { id: "acesso_sem_compra", label: "Sem Compra Válida", kind: "boolean", description: "Cliente sem nenhuma compra válida." },
     ],
   },
   {
     id: "produtos",
     label: "Produtos / Cross-sell",
     fields: [
-      {
-        id: "produto",
-        label: "Produto",
-        kind: "product",
-        description: "Comprou ou nunca comprou um produto específico. Só considera itens de pedidos válidos.",
-      },
-      {
-        id: "produto_periodo",
-        label: "Última Compra do Produto",
-        kind: "product_date",
-        description: "Filtra quando o produto foi comprado pela última vez: últimos X dias, há mais de X dias ou entre X e Y dias.",
-      },
-      {
-        id: "produto_quantidade",
-        label: "Quantidade Comprada do Produto",
-        kind: "product_number",
-        description: "Quantidade acumulada do produto nos pedidos válidos disponíveis na base.",
-      },
-      {
-        id: "produto_valor_gasto",
-        label: "Valor Gasto no Produto",
-        kind: "product_money",
-        description: "Soma líquida dos itens do produto em pedidos válidos disponíveis, descontando desconto de linha quando informado.",
-      },
-      {
-        id: "produto_sku",
-        label: "SKU / Variação Comprada",
-        kind: "product_sku",
-        description: "Comprou ou não comprou um SKU específico daquele produto, considerando apenas pedidos válidos.",
-      },
+      { id: "produto", label: "Produto", kind: "product", description: "Comprou ou nunca comprou um produto específico." },
+      { id: "categoria_produto", label: "Categoria / Tipo de Produto", kind: "product_taxonomy", description: "Comprou ou nunca comprou qualquer produto de um tipo/categoria preenchido na Shopify." },
+      { id: "colecao_produto", label: "Coleção", kind: "product_taxonomy", description: "Comprou ou nunca comprou qualquer produto pertencente a uma coleção atual da Shopify." },
+      { id: "produto_periodo", label: "Última Compra do Produto", kind: "product_date", description: "Últimos X dias, há mais de X dias ou entre X e Y dias." },
+      { id: "produto_quantidade", label: "Quantidade Comprada do Produto", kind: "product_number", description: "Quantidade acumulada em pedidos válidos." },
+      { id: "produto_valor_gasto", label: "Valor Gasto no Produto", kind: "product_money", description: "Soma líquida do produto em pedidos válidos." },
+      { id: "produto_sku", label: "SKU / Variação Comprada", kind: "product_sku", description: "Comprou ou não comprou um SKU específico." },
     ],
   },
   {
     id: "tags",
     label: "Tags",
     fields: [
-      { id: "customer_tag", label: "Tag do Cliente", kind: "string", description: "Sugere tags existentes na base, mas continua aceitando texto livre." },
+      { id: "customer_tag", label: "Tag do Cliente", kind: "string", description: "Sugere tags existentes na base." },
       { id: "tags_custom", label: "Tag Personalizada (Sistema)", kind: "string", description: "Sugere tags personalizadas existentes na base." },
     ],
   },
@@ -251,21 +189,17 @@ export function validateCRMFilterCondition(condition: unknown): string | null {
   if (!field) return `Filtro sem suporte: ${fieldId || "sem campo"}.`;
 
   const operator = String(raw.operator ?? "eq");
-  if (!CRM_FILTER_OPERATORS[field.kind].includes(operator)) {
-    return `Operador inválido para ${field.label}: ${operator}.`;
-  }
-
+  if (!CRM_FILTER_OPERATORS[field.kind].includes(operator)) return `Operador inválido para ${field.label}: ${operator}.`;
   const value = raw.value;
+
   if (field.kind === "number") {
     if (operator === "between") return parseRange(value) ? null : `Faixa inválida para ${field.label}.`;
-    if (isBlankValue(value) || !Number.isFinite(Number(value))) return `Valor numérico inválido para ${field.label}.`;
-    return null;
+    return isBlankValue(value) || !Number.isFinite(Number(value)) ? `Valor numérico inválido para ${field.label}.` : null;
   }
   if (field.kind === "date") {
     if (operator === "last_days" || operator === "older_than_days") {
       const days = Number(value);
-      if (isBlankValue(value) || !Number.isFinite(days) || days < 0) return `Número de dias inválido para ${field.label}.`;
-      return null;
+      return isBlankValue(value) || !Number.isFinite(days) || days < 0 ? `Número de dias inválido para ${field.label}.` : null;
     }
     if (operator === "between_days") {
       const range = parseRange(value);
@@ -275,35 +209,23 @@ export function validateCRMFilterCondition(condition: unknown): string | null {
   }
   if (field.kind === "boolean") {
     const normalized = String(value ?? "").trim().toLowerCase();
-    return ["sim", "nao", "true", "false", "1", "0", "yes", "no"].includes(normalized)
-      ? null
-      : `Valor booleano inválido para ${field.label}.`;
+    return ["sim", "nao", "true", "false", "1", "0", "yes", "no"].includes(normalized) ? null : `Valor booleano inválido para ${field.label}.`;
   }
   if (field.kind === "status") {
-    const normalized = String(value ?? "").trim().toLowerCase();
-    return (CRM_STATUS_FILTER_VALUES as readonly string[]).includes(normalized)
-      ? null
-      : `Status inválido para ${field.label}.`;
+    return (CRM_STATUS_FILTER_VALUES as readonly string[]).includes(String(value ?? "").trim().toLowerCase()) ? null : `Status inválido para ${field.label}.`;
   }
   if (field.kind === "profile") {
-    const normalized = String(value ?? "").trim().toLowerCase();
-    return (CRM_PROFILE_FILTER_VALUES as readonly string[]).includes(normalized)
-      ? null
-      : `Perfil inválido para ${field.label}.`;
+    return (CRM_PROFILE_FILTER_VALUES as readonly string[]).includes(String(value ?? "").trim().toLowerCase()) ? null : `Perfil inválido para ${field.label}.`;
   }
   if (field.kind === "rfm") {
     if (operator === "in" || operator === "not_in") {
       if (!Array.isArray(value) || value.length === 0) return "Selecione pelo menos um segmento RFM.";
-      return value.every((item) => Object.prototype.hasOwnProperty.call(RFM_SEGMENTS_CONFIG, String(item)))
-        ? null
-        : "Segmento RFM inválido.";
+      return value.every((item) => Object.prototype.hasOwnProperty.call(RFM_SEGMENTS_CONFIG, String(item))) ? null : "Segmento RFM inválido.";
     }
-    return Object.prototype.hasOwnProperty.call(RFM_SEGMENTS_CONFIG, String(value ?? ""))
-      ? null
-      : "Segmento RFM inválido.";
+    return Object.prototype.hasOwnProperty.call(RFM_SEGMENTS_CONFIG, String(value ?? "")) ? null : "Segmento RFM inválido.";
   }
-  if (field.kind === "product") {
-    return isNonBlankString(value) ? null : "Selecione um produto.";
+  if (field.kind === "product" || field.kind === "product_taxonomy") {
+    return isNonBlankString(value) ? null : `Selecione um valor para ${field.label}.`;
   }
   if (field.kind === "product_date") {
     const product = parseProductObject(value);
@@ -313,13 +235,9 @@ export function validateCRMFilterCondition(condition: unknown): string | null {
       return range && range.min >= 0 ? null : `Intervalo de dias inválido para ${field.label}.`;
     }
     const days = Number(product.days);
-    return !isBlankValue(product.days) && Number.isFinite(days) && days >= 0
-      ? null
-      : `Número de dias inválido para ${field.label}.`;
+    return !isBlankValue(product.days) && Number.isFinite(days) && days >= 0 ? null : `Número de dias inválido para ${field.label}.`;
   }
-  if (field.kind === "product_number" || field.kind === "product_money") {
-    return validateProductNumeric(field.label, operator, value);
-  }
+  if (field.kind === "product_number" || field.kind === "product_money") return validateProductNumeric(field.label, operator, value);
   if (field.kind === "product_sku") {
     const product = parseProductObject(value);
     return product && isNonBlankString(product.sku) ? null : "Selecione um SKU/variação.";
@@ -331,7 +249,6 @@ export function validateSegmentRulesPayload(rules: unknown): { valid: boolean; e
   if (!rules || typeof rules !== "object") return { valid: false, errors: ["Regras do segmento são inválidas."] };
   const groups = (rules as { groups?: unknown }).groups;
   if (!Array.isArray(groups)) return { valid: false, errors: ["Regras do segmento precisam conter grupos."] };
-
   const errors: string[] = [];
   groups.forEach((group, groupIndex) => {
     if (!group || typeof group !== "object") {

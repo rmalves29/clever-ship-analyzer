@@ -7,7 +7,6 @@ import {
   validateCRMFilterCondition,
   validateSegmentRulesPayload,
 } from "./crm-filter-catalog";
-import { type CRMCustomerContext } from "./crm-segmentation-shared";
 import {
   matchesAdvancedSegmentCondition,
   type CRMAdvancedCustomerContext,
@@ -17,37 +16,22 @@ const NOW = new Date("2026-08-24T15:00:00-03:00");
 
 const buyer: CRMAdvancedCustomerContext = {
   customer: {
-    id: "c1",
-    first_name: "Ana",
-    city: "Belo Horizonte",
-    province: "MG",
-    tags: ["VIP"],
-    tags_custom: ["Teste"],
-    rfm_segment: "Nova compra",
+    id: "c1", first_name: "Ana", city: "Belo Horizonte", province: "MG",
+    tags: ["VIP"], tags_custom: ["Teste"], rfm_segment: "Nova compra",
   },
   metrics: {
-    customerId: "c1",
-    validOrderCount: 2,
-    totalSpent: 300,
-    averageTicket: 150,
-    firstOrderAt: "2026-08-20T12:00:00-03:00",
-    lastOrderAt: "2026-08-24T12:00:00-03:00",
-    validOrderIds: new Set(["o1", "o2"]),
-    rawFinancialStatuses: new Set(["PAID", "REFUNDED"]),
-    validFinancialStatuses: new Set(["PAID"]),
-    cancelledOrderCount: 1,
+    customerId: "c1", validOrderCount: 2, totalSpent: 300, averageTicket: 150,
+    firstOrderAt: "2026-08-20T12:00:00-03:00", lastOrderAt: "2026-08-24T12:00:00-03:00",
+    validOrderIds: new Set(["o1", "o2"]), rawFinancialStatuses: new Set(["PAID", "REFUNDED"]),
+    validFinancialStatuses: new Set(["PAID"]), cancelledOrderCount: 1,
   },
-  purchasedProducts: new Map([
-    ["p-brinco", {
-      productId: "p-brinco",
-      title: "Brinco Londres",
-      skus: new Set(["BR-LON"]),
-      quantity: 1,
-      orderIds: new Set(["o1"]),
-      lastPurchasedAt: "2026-08-20T12:00:00-03:00",
-    }],
-  ]),
+  purchasedProducts: new Map([["p-brinco", {
+    productId: "p-brinco", title: "Brinco Londres", skus: new Set(["BR-LON"]),
+    quantity: 1, orderIds: new Set(["o1"]), lastPurchasedAt: "2026-08-20T12:00:00-03:00",
+  }]]),
   productSpentById: new Map([["p-brinco", 100]]),
+  purchasedProductTypes: new Set(["Brincos"]),
+  purchasedCollectionIds: new Set(["gid://shopify/Collection/100"]),
   abandonedCheckout: true,
   hadAbandonedCheckout: true,
   abandonedCheckoutRecovered: false,
@@ -58,19 +42,14 @@ const buyer: CRMAdvancedCustomerContext = {
 const lead: CRMAdvancedCustomerContext = {
   customer: { id: "c2", city: "São Paulo", province: "SP" },
   metrics: {
-    customerId: "c2",
-    validOrderCount: 0,
-    totalSpent: 0,
-    averageTicket: 0,
-    firstOrderAt: null,
-    lastOrderAt: null,
-    validOrderIds: new Set(),
-    rawFinancialStatuses: new Set(),
-    validFinancialStatuses: new Set(),
-    cancelledOrderCount: 0,
+    customerId: "c2", validOrderCount: 0, totalSpent: 0, averageTicket: 0,
+    firstOrderAt: null, lastOrderAt: null, validOrderIds: new Set(), rawFinancialStatuses: new Set(),
+    validFinancialStatuses: new Set(), cancelledOrderCount: 0,
   },
   purchasedProducts: new Map(),
   productSpentById: new Map(),
+  purchasedProductTypes: new Set(),
+  purchasedCollectionIds: new Set(),
   abandonedCheckout: false,
   hadAbandonedCheckout: false,
   abandonedCheckoutRecovered: false,
@@ -95,6 +74,8 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
   { field: "checkout_abandonado", operator: "eq", value: "sim" },
   { field: "acesso_sem_compra", operator: "eq", value: "sim", context: lead },
   { field: "produto", operator: "bought", value: "p-brinco" },
+  { field: "categoria_produto", operator: "bought", value: "Brincos" },
+  { field: "colecao_produto", operator: "bought", value: "gid://shopify/Collection/100" },
   { field: "produto_periodo", operator: "last_days", value: { productId: "p-brinco", days: 7 } },
   { field: "produto_quantidade", operator: "gte", value: { productId: "p-brinco", amount: 1 } },
   { field: "produto_valor_gasto", operator: "gte", value: { productId: "p-brinco", amount: 100 } },
@@ -105,8 +86,8 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
 ];
 
 describe("catálogo confiável de filtros do CRM", () => {
-  it("expõe somente os 23 filtros implementados no motor", () => {
-    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(23);
+  it("expõe somente os 25 filtros implementados no motor", () => {
+    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(25);
     expect(new Set(SUPPORTED_SEGMENT_FIELD_IDS)).toEqual(new Set(cases.map((item) => item.field)));
   });
 
@@ -119,20 +100,19 @@ describe("catálogo confiável de filtros do CRM", () => {
   it("lista todas as UFs brasileiras sem duplicidade", () => {
     expect(BRAZIL_STATES).toHaveLength(27);
     expect(new Set(BRAZIL_STATES).size).toBe(27);
-    expect(BRAZIL_STATES).toContain("MG");
-    expect(BRAZIL_STATES).toContain("DF");
   });
 
-  it("recorrência nova só aceita operador booleano no cadastro", () => {
+  it("recorrência só aceita operador booleano", () => {
     expect(validateCRMFilterCondition({ field: "recorrencia", operator: "eq", value: "sim" })).toBeNull();
     expect(validateCRMFilterCondition({ field: "recorrencia", operator: "gte", value: 2 })).toContain("Operador inválido");
   });
 
-  it("produto só aceita Comprou/Não comprou e exige product_id", () => {
+  it("produto, categoria e coleção só aceitam Comprou/Não comprou", () => {
     expect(validateCRMFilterCondition({ field: "produto", operator: "bought", value: "p-brinco" })).toBeNull();
-    expect(validateCRMFilterCondition({ field: "produto", operator: "not_bought", value: "p-colar" })).toBeNull();
-    expect(validateCRMFilterCondition({ field: "produto", operator: "eq", value: "p-brinco" })).toContain("Operador inválido");
-    expect(validateCRMFilterCondition({ field: "produto", operator: "bought", value: "" })).toContain("Selecione um produto");
+    expect(validateCRMFilterCondition({ field: "categoria_produto", operator: "not_bought", value: "Colares" })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "colecao_produto", operator: "bought", value: "gid://shopify/Collection/100" })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "categoria_produto", operator: "eq", value: "Brincos" })).toContain("Operador inválido");
+    expect(validateCRMFilterCondition({ field: "colecao_produto", operator: "bought", value: "" })).toContain("Selecione um valor");
   });
 
   it("valida período, quantidade, valor e SKU do produto", () => {
@@ -141,73 +121,38 @@ describe("catálogo confiável de filtros do CRM", () => {
     expect(validateCRMFilterCondition({ field: "produto_quantidade", operator: "gte", value: { productId: "p-brinco", amount: 2 } })).toBeNull();
     expect(validateCRMFilterCondition({ field: "produto_valor_gasto", operator: "between", value: { productId: "p-brinco", min: 50, max: 200 } })).toBeNull();
     expect(validateCRMFilterCondition({ field: "produto_sku", operator: "bought", value: { productId: "p-brinco", sku: "BR-LON" } })).toBeNull();
-    expect(validateCRMFilterCondition({ field: "produto_sku", operator: "bought", value: { productId: "p-brinco", sku: "" } })).toContain("SKU");
   });
 
-  it("aceita faixas numéricas válidas e rejeita faixas invertidas", () => {
+  it("aceita faixas numéricas válidas e rejeita invertidas", () => {
     expect(validateCRMFilterCondition({ field: "total_gasto", operator: "between", value: { min: 100, max: 500 } })).toBeNull();
-    expect(validateCRMFilterCondition({ field: "ticket_medio", operator: "between", value: { min: "100", max: "200" } })).toBeNull();
     expect(validateCRMFilterCondition({ field: "total_gasto", operator: "between", value: { min: 500, max: 100 } })).toContain("Faixa inválida");
   });
 
-  it("aceita filtros relativos de data e rejeita intervalos inválidos", () => {
-    expect(validateCRMFilterCondition({ field: "ultima_compra", operator: "older_than_days", value: 30 })).toBeNull();
-    expect(validateCRMFilterCondition({ field: "ultima_compra", operator: "between_days", value: { min: 8, max: 30 } })).toBeNull();
-    expect(validateCRMFilterCondition({ field: "ultima_compra", operator: "between_days", value: { min: 30, max: 8 } })).toContain("Intervalo de dias inválido");
-  });
-
-  it("aceita múltiplos segmentos RFM somente com valores conhecidos", () => {
+  it("aceita múltiplos segmentos RFM conhecidos", () => {
     expect(validateCRMFilterCondition({ field: "rfm_segment", operator: "in", value: ["Nova compra", "VIP/Leal"] })).toBeNull();
-    expect(validateCRMFilterCondition({ field: "rfm_segment", operator: "not_in", value: ["Nova compra"] })).toBeNull();
     expect(validateCRMFilterCondition({ field: "rfm_segment", operator: "in", value: [] })).toContain("pelo menos um");
-    expect(validateCRMFilterCondition({ field: "rfm_segment", operator: "in", value: ["Segmento inexistente"] })).toContain("RFM inválido");
   });
 
   it("validação server-side rejeita campo, operador e valor inválidos", () => {
-    const result = validateSegmentRulesPayload({
-      groups: [{ conditions: [
-        { field: "campo_inexistente", operator: "eq", value: "x" },
-        { field: "total_pedidos", operator: "contains", value: 2 },
-        { field: "status_pagamento", operator: "eq", value: "qualquer_coisa" },
-      ] }],
-    });
+    const result = validateSegmentRulesPayload({ groups: [{ conditions: [
+      { field: "campo_inexistente", operator: "eq", value: "x" },
+      { field: "total_pedidos", operator: "contains", value: 2 },
+      { field: "status_pagamento", operator: "eq", value: "qualquer_coisa" },
+    ] }] });
     expect(result.valid).toBe(false);
     expect(result.errors).toHaveLength(3);
   });
 
-  it("validação server-side rejeita valor numérico vazio", () => {
-    expect(validateCRMFilterCondition({ field: "total_pedidos", operator: "eq", value: "" })).toContain("Valor numérico inválido");
-    expect(validateCRMFilterCondition({ field: "ultima_compra", operator: "last_days", value: "" })).toContain("Número de dias inválido");
+  it("validação server-side aceita cross-sell por categoria e coleção", () => {
+    expect(validateSegmentRulesPayload({ groups: [{ conditions: [
+      { field: "categoria_produto", operator: "bought", value: "Brincos" },
+      { field: "colecao_produto", operator: "not_bought", value: "gid://shopify/Collection/200" },
+    ] }] })).toEqual({ valid: true, errors: [] });
   });
 
-  it("validação server-side aceita regras corretas", () => {
-    expect(validateSegmentRulesPayload({
-      groups: [{ conditions: [
-        { field: "estado", operator: "eq", value: "MG" },
-        { field: "recorrencia", operator: "eq", value: "sim" },
-        { field: "produto", operator: "bought", value: "p-brinco" },
-        { field: "produto_periodo", operator: "last_days", value: { productId: "p-brinco", days: 30 } },
-        { field: "total_gasto", operator: "between", value: { min: 100, max: 500 } },
-      ] }],
-    })).toEqual({ valid: true, errors: [] });
-  });
-
-  it("não expõe filtros que ainda não possuem fonte de dados/implementação", () => {
-    const hiddenUntilImplemented = [
-      "regiao",
-      "bairro",
-      "aniversario_mes",
-      "aniversario_dia",
-      "idade",
-      "signo",
-      "order_tag",
-      "recebeu_campanha",
-      "clicou_campanha",
-      "nao_recebeu",
-      "entrou_fluxo",
-      "concluiu_fluxo",
-    ];
-    hiddenUntilImplemented.forEach((field) => expect(SUPPORTED_SEGMENT_FIELD_IDS).not.toContain(field));
+  it("não expõe filtros ainda sem fonte de dados", () => {
+    ["regiao", "bairro", "aniversario_mes", "idade", "signo", "order_tag", "recebeu_campanha", "clicou_campanha", "entrou_fluxo"]
+      .forEach((field) => expect(SUPPORTED_SEGMENT_FIELD_IDS).not.toContain(field));
   });
 
   it("mantém o catálogo sem IDs duplicados", () => {

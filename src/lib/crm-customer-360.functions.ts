@@ -240,13 +240,14 @@ async function loadCustomerAdvancedContext(
     (fulfillmentResult.data ?? []).map((row: any) => String(row.order_id)).filter(Boolean),
   );
 
-  const [baseContext] = buildCustomerContexts({
+  const baseContext = buildCustomerContexts({
     customers: [customer],
     orders,
     orderItems: items,
     abandonedCheckoutAtByCustomer,
     shippedTodayValidOrderIds,
-  });
+  })[0];
+  if (!baseContext) throw new Error("Não foi possível montar o contexto da cliente.");
 
   const productIds = [
     ...new Set(
@@ -374,9 +375,15 @@ export const getCustomer360 = createServerFn({ method: "POST" })
     const daysSinceLastPurchase = lastOrderAt
       ? Math.max(0, Math.floor((now.getTime() - new Date(lastOrderAt).getTime()) / DAY_MS))
       : null;
-    const daysToSecondPurchase = validOrders.length >= 2
-      ? Math.max(0, Math.round((new Date(validOrders[1].processedAt).getTime() - new Date(validOrders[0].processedAt).getTime()) / DAY_MS))
-      : null;
+    let daysToSecondPurchase: number | null = null;
+    const firstValidOrder = validOrders[0];
+    const secondValidOrder = validOrders[1];
+    if (firstValidOrder && secondValidOrder) {
+      daysToSecondPurchase = Math.max(
+        0,
+        Math.round((new Date(secondValidOrder.processedAt).getTime() - new Date(firstValidOrder.processedAt).getTime()) / DAY_MS),
+      );
+    }
 
     const orderById = new Map(orders.map((order) => [order.id, order] as const));
     const itemsByOrder = new Map<string, LoadedItem[]>();

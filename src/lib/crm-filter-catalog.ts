@@ -13,7 +13,8 @@ export type CRMFilterKind =
   | "product_number"
   | "product_money"
   | "product_sku"
-  | "product_taxonomy";
+  | "product_taxonomy"
+  | "product_taxonomy_date";
 
 export type CRMFilterField = {
   id: string;
@@ -42,6 +43,7 @@ export const CRM_FILTER_OPERATORS: Record<CRMFilterKind, readonly string[]> = {
   product_money: ["gt", "gte", "lt", "lte", "eq", "neq", "between"],
   product_sku: ["bought", "not_bought"],
   product_taxonomy: ["bought", "not_bought"],
+  product_taxonomy_date: ["last_days", "older_than_days", "between_days"],
 };
 
 export const CRM_STATUS_FILTER_VALUES = [
@@ -92,7 +94,9 @@ export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
     fields: [
       { id: "produto", label: "Produto", kind: "product", description: "Comprou ou nunca comprou um produto específico." },
       { id: "categoria_produto", label: "Categoria / Tipo de Produto", kind: "product_taxonomy", description: "Comprou ou nunca comprou qualquer produto de um tipo/categoria preenchido na Shopify." },
+      { id: "categoria_periodo", label: "Última Compra da Categoria", kind: "product_taxonomy_date", description: "Quando comprou pela última vez qualquer produto daquele tipo/categoria." },
       { id: "colecao_produto", label: "Coleção", kind: "product_taxonomy", description: "Comprou ou nunca comprou qualquer produto pertencente a uma coleção atual da Shopify." },
+      { id: "colecao_periodo", label: "Última Compra da Coleção", kind: "product_taxonomy_date", description: "Quando comprou pela última vez qualquer produto daquela coleção." },
       { id: "produto_periodo", label: "Última Compra do Produto", kind: "product_date", description: "Últimos X dias, há mais de X dias ou entre X e Y dias." },
       { id: "produto_quantidade", label: "Quantidade Comprada do Produto", kind: "product_number", description: "Quantidade acumulada em pedidos válidos." },
       { id: "produto_valor_gasto", label: "Valor Gasto no Produto", kind: "product_money", description: "Soma líquida do produto em pedidos válidos." },
@@ -162,10 +166,23 @@ type ProductFilterObject = {
   sku?: unknown;
 };
 
+type TaxonomyDateFilterObject = {
+  taxonomyValue?: unknown;
+  min?: unknown;
+  max?: unknown;
+  days?: unknown;
+};
+
 function parseProductObject(value: unknown): ProductFilterObject | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const raw = value as ProductFilterObject;
   return isNonBlankString(raw.productId) ? raw : null;
+}
+
+function parseTaxonomyDateObject(value: unknown): TaxonomyDateFilterObject | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as TaxonomyDateFilterObject;
+  return isNonBlankString(raw.taxonomyValue) ? raw : null;
 }
 
 function validateProductNumeric(fieldLabel: string, operator: string, value: unknown): string | null {
@@ -179,6 +196,19 @@ function validateProductNumeric(fieldLabel: string, operator: string, value: unk
     return `Valor numérico inválido para ${fieldLabel}.`;
   }
   return null;
+}
+
+function validateTaxonomyDate(fieldLabel: string, operator: string, value: unknown): string | null {
+  const raw = parseTaxonomyDateObject(value);
+  if (!raw) return `Selecione uma categoria/coleção para ${fieldLabel}.`;
+  if (operator === "between_days") {
+    const range = parseRange(raw);
+    return range && range.min >= 0 ? null : `Intervalo de dias inválido para ${fieldLabel}.`;
+  }
+  const days = Number(raw.days);
+  return !isBlankValue(raw.days) && Number.isFinite(days) && days >= 0
+    ? null
+    : `Número de dias inválido para ${fieldLabel}.`;
 }
 
 export function validateCRMFilterCondition(condition: unknown): string | null {
@@ -227,6 +257,7 @@ export function validateCRMFilterCondition(condition: unknown): string | null {
   if (field.kind === "product" || field.kind === "product_taxonomy") {
     return isNonBlankString(value) ? null : `Selecione um valor para ${field.label}.`;
   }
+  if (field.kind === "product_taxonomy_date") return validateTaxonomyDate(field.label, operator, value);
   if (field.kind === "product_date") {
     const product = parseProductObject(value);
     if (!product) return "Selecione um produto.";

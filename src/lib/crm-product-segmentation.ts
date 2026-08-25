@@ -9,6 +9,8 @@ export type CRMAdvancedCustomerContext = CRMCustomerContext & {
   productSpentById: Map<string, number>;
   purchasedProductTypes: Set<string>;
   purchasedCollectionIds: Set<string>;
+  productTypeLastPurchasedAt: Map<string, string>;
+  collectionLastPurchasedAt: Map<string, string>;
 };
 
 type RawProductMetricValue = {
@@ -27,6 +29,20 @@ type ParsedProductMetricValue = {
   max?: number;
   days?: number;
   sku?: string;
+};
+
+type RawTaxonomyDateValue = {
+  taxonomyValue?: unknown;
+  min?: unknown;
+  max?: unknown;
+  days?: unknown;
+};
+
+type ParsedTaxonomyDateValue = {
+  taxonomyValue: string;
+  min?: number;
+  max?: number;
+  days?: number;
 };
 
 const DAY_MS = 86_400_000;
@@ -75,6 +91,31 @@ function parseProductMetricValue(value: unknown): ParsedProductMetricValue | nul
   return parsed;
 }
 
+function parseTaxonomyDateValue(value: unknown): ParsedTaxonomyDateValue | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as RawTaxonomyDateValue;
+  const taxonomyValue = String(raw.taxonomyValue ?? "").trim();
+  if (!taxonomyValue) return null;
+  const parsed: ParsedTaxonomyDateValue = { taxonomyValue };
+
+  if (raw.min !== undefined && raw.min !== "") {
+    const min = numeric(raw.min);
+    if (min === null) return null;
+    parsed.min = min;
+  }
+  if (raw.max !== undefined && raw.max !== "") {
+    const max = numeric(raw.max);
+    if (max === null) return null;
+    parsed.max = max;
+  }
+  if (raw.days !== undefined && raw.days !== "") {
+    const days = numeric(raw.days);
+    if (days === null) return null;
+    parsed.days = days;
+  }
+  return parsed;
+}
+
 function compareNumber(actual: number, operator: string, value: ParsedProductMetricValue | null): boolean {
   if (!value) return false;
   if (operator === "between") {
@@ -91,7 +132,12 @@ function compareNumber(actual: number, operator: string, value: ParsedProductMet
   return actual === value.amount;
 }
 
-function compareProductDate(actualIso: string | null, operator: string, value: ParsedProductMetricValue | null, now: Date): boolean {
+function compareRelativeDate(
+  actualIso: string | null,
+  operator: string,
+  value: { days?: number; min?: number; max?: number } | null,
+  now: Date,
+): boolean {
   if (!actualIso || !value) return false;
   const actual = new Date(actualIso);
   if (Number.isNaN(actual.getTime())) return false;
@@ -118,6 +164,19 @@ function taxonomyMatches(values: Set<string>, operator: string, expected: unknow
   return false;
 }
 
+function taxonomyDate(
+  values: Map<string, string>,
+  expected: string,
+  normalizeValues: boolean,
+): string | null {
+  if (!normalizeValues) return values.get(expected) ?? null;
+  const target = normalize(expected);
+  for (const [key, date] of values) {
+    if (normalize(key) === target) return date;
+  }
+  return null;
+}
+
 export function matchesAdvancedSegmentCondition(
   context: CRMAdvancedCustomerContext,
   condition: SegmentCondition,
@@ -134,12 +193,24 @@ export function matchesAdvancedSegmentCondition(
     return taxonomyMatches(context.purchasedCollectionIds, operator, condition.value, false);
   }
 
+  if (field === "categoria_periodo" || field === "colecao_periodo") {
+    const value = parseTaxonomyDateValue(condition.value);
+    if (!value) return false;
+    const isCategory = field === "categoria_periodo";
+    const actual = taxonomyDate(
+      isCategory ? context.productTypeLastPurchasedAt : context.collectionLastPurchasedAt,
+      value.taxonomyValue,
+      isCategory,
+    );
+    return compareRelativeDate(actual, operator, value, now);
+  }
+
   const value = parseProductMetricValue(condition.value);
 
   if (field === "produto_periodo") {
     if (!value) return false;
     const summary = context.purchasedProducts.get(value.productId);
-    return compareProductDate(summary?.lastPurchasedAt ?? null, operator, value, now);
+    return compareRelativeDate(summary?.lastPurchasedAt ?? null, operator, value, now);
   }
 
   if (field === "produto_quantidade") {
@@ -166,7 +237,7 @@ export function matchesAdvancedSegmentCondition(
   return matchesSegmentCondition(context, condition, now);
 }
 
-/** AND dentro de cada grupo e OR entre grupos, incluindo os filtros avançados de produto. */
+/** AND dentro de cada grupo e OR entre grupos, incluindo filtros de produto e taxonomia. */
 export function matchesAdvancedSegmentRules(
   context: CRMAdvancedCustomerContext,
   rules: SegmentRules | null | undefined,

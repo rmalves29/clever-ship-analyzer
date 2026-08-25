@@ -32,6 +32,8 @@ const buyer: CRMAdvancedCustomerContext = {
   productSpentById: new Map([["p-brinco", 100]]),
   purchasedProductTypes: new Set(["Brincos"]),
   purchasedCollectionIds: new Set(["gid://shopify/Collection/100"]),
+  productTypeLastPurchasedAt: new Map([["Brincos", "2026-08-20T12:00:00-03:00"]]),
+  collectionLastPurchasedAt: new Map([["gid://shopify/Collection/100", "2026-08-20T12:00:00-03:00"]]),
   abandonedCheckout: true,
   hadAbandonedCheckout: true,
   abandonedCheckoutRecovered: false,
@@ -50,6 +52,8 @@ const lead: CRMAdvancedCustomerContext = {
   productSpentById: new Map(),
   purchasedProductTypes: new Set(),
   purchasedCollectionIds: new Set(),
+  productTypeLastPurchasedAt: new Map(),
+  collectionLastPurchasedAt: new Map(),
   abandonedCheckout: false,
   hadAbandonedCheckout: false,
   abandonedCheckoutRecovered: false,
@@ -75,7 +79,9 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
   { field: "acesso_sem_compra", operator: "eq", value: "sim", context: lead },
   { field: "produto", operator: "bought", value: "p-brinco" },
   { field: "categoria_produto", operator: "bought", value: "Brincos" },
+  { field: "categoria_periodo", operator: "last_days", value: { taxonomyValue: "Brincos", days: 7 } },
   { field: "colecao_produto", operator: "bought", value: "gid://shopify/Collection/100" },
+  { field: "colecao_periodo", operator: "last_days", value: { taxonomyValue: "gid://shopify/Collection/100", days: 7 } },
   { field: "produto_periodo", operator: "last_days", value: { productId: "p-brinco", days: 7 } },
   { field: "produto_quantidade", operator: "gte", value: { productId: "p-brinco", amount: 1 } },
   { field: "produto_valor_gasto", operator: "gte", value: { productId: "p-brinco", amount: 100 } },
@@ -86,8 +92,8 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
 ];
 
 describe("catálogo confiável de filtros do CRM", () => {
-  it("expõe somente os 25 filtros implementados no motor", () => {
-    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(25);
+  it("expõe somente os 27 filtros implementados no motor", () => {
+    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(27);
     expect(new Set(SUPPORTED_SEGMENT_FIELD_IDS)).toEqual(new Set(cases.map((item) => item.field)));
   });
 
@@ -113,6 +119,13 @@ describe("catálogo confiável de filtros do CRM", () => {
     expect(validateCRMFilterCondition({ field: "colecao_produto", operator: "bought", value: "gid://shopify/Collection/100" })).toBeNull();
     expect(validateCRMFilterCondition({ field: "categoria_produto", operator: "eq", value: "Brincos" })).toContain("Operador inválido");
     expect(validateCRMFilterCondition({ field: "colecao_produto", operator: "bought", value: "" })).toContain("Selecione um valor");
+  });
+
+  it("valida períodos de categoria e coleção", () => {
+    expect(validateCRMFilterCondition({ field: "categoria_periodo", operator: "last_days", value: { taxonomyValue: "Brincos", days: 30 } })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "colecao_periodo", operator: "between_days", value: { taxonomyValue: "gid://shopify/Collection/100", min: 8, max: 30 } })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "categoria_periodo", operator: "between_days", value: { taxonomyValue: "Brincos", min: 30, max: 8 } })).toContain("Intervalo de dias inválido");
+    expect(validateCRMFilterCondition({ field: "colecao_periodo", operator: "last_days", value: { taxonomyValue: "", days: 30 } })).toContain("Selecione uma categoria/coleção");
   });
 
   it("valida período, quantidade, valor e SKU do produto", () => {
@@ -143,9 +156,9 @@ describe("catálogo confiável de filtros do CRM", () => {
     expect(result.errors).toHaveLength(3);
   });
 
-  it("validação server-side aceita cross-sell por categoria e coleção", () => {
+  it("validação server-side aceita cross-sell temporal por categoria e coleção", () => {
     expect(validateSegmentRulesPayload({ groups: [{ conditions: [
-      { field: "categoria_produto", operator: "bought", value: "Brincos" },
+      { field: "categoria_periodo", operator: "last_days", value: { taxonomyValue: "Brincos", days: 30 } },
       { field: "colecao_produto", operator: "not_bought", value: "gid://shopify/Collection/200" },
     ] }] })).toEqual({ valid: true, errors: [] });
   });

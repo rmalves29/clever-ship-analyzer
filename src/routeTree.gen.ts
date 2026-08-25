@@ -24,6 +24,7 @@ import { Route as CrmSegmentosRouteImport } from './routes/crm/segmentos'
 import { Route as FlowIndexRouteImport } from './routes/flow/index'
 import { Route as FlowIdRouteImport } from './routes/flow/$id'
 import { Route as PerformanceMetaAdsRouteImport } from './routes/performance/meta-ads'
+import { Route as CrmReguasPrimeiraSegundaRouteImport } from './routes/crm/reguas/primeira-segunda'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -100,6 +101,12 @@ const PerformanceMetaAdsRoute = PerformanceMetaAdsRouteImport.update({
   path: '/performance/meta-ads',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CrmReguasPrimeiraSegundaRoute =
+  CrmReguasPrimeiraSegundaRouteImport.update({
+    id: '/crm/reguas/primeira-segunda',
+    path: '/crm/reguas/primeira-segunda',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -117,6 +124,7 @@ export interface FileRoutesByFullPath {
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/crm/': typeof CrmIndexRoute
   '/flow/': typeof FlowIndexRoute
+  '/crm/reguas/primeira-segunda': typeof CrmReguasPrimeiraSegundaRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -134,6 +142,7 @@ export interface FileRoutesByTo {
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/crm': typeof CrmIndexRoute
   '/flow': typeof FlowIndexRoute
+  '/crm/reguas/primeira-segunda': typeof CrmReguasPrimeiraSegundaRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -152,6 +161,7 @@ export interface FileRoutesById {
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/crm/': typeof CrmIndexRoute
   '/flow/': typeof FlowIndexRoute
+  '/crm/reguas/primeira-segunda': typeof CrmReguasPrimeiraSegundaRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | '/performance/meta-ads'
     | '/crm/'
     | '/flow/'
+    | '/crm/reguas/primeira-segunda'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -188,6 +199,7 @@ export interface FileRouteTypes {
     | '/performance/meta-ads'
     | '/crm'
     | '/flow'
+    | '/crm/reguas/primeira-segunda'
   id:
     | '__root__'
     | '/'
@@ -205,6 +217,7 @@ export interface FileRouteTypes {
     | '/performance/meta-ads'
     | '/crm/'
     | '/flow/'
+    | '/crm/reguas/primeira-segunda'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -223,6 +236,7 @@ export interface RootRouteChildren {
   PerformanceMetaAdsRoute: typeof PerformanceMetaAdsRoute
   CrmIndexRoute: typeof CrmIndexRoute
   FlowIndexRoute: typeof FlowIndexRoute
+  CrmReguasPrimeiraSegundaRoute: typeof CrmReguasPrimeiraSegundaRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -332,6 +346,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PerformanceMetaAdsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/crm/reguas/primeira-segunda': {
+      id: '/crm/reguas/primeira-segunda'
+      path: '/crm/reguas/primeira-segunda'
+      fullPath: '/crm/reguas/primeira-segunda'
+      preLoaderRoute: typeof CrmReguasPrimeiraSegundaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -351,6 +372,7 @@ const rootRouteChildren: RootRouteChildren = {
   PerformanceMetaAdsRoute: PerformanceMetaAdsRoute,
   CrmIndexRoute: CrmIndexRoute,
   FlowIndexRoute: FlowIndexRoute,
+  CrmReguasPrimeiraSegundaRoute: CrmReguasPrimeiraSegundaRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

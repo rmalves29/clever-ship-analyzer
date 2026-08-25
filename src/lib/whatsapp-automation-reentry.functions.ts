@@ -115,3 +115,49 @@ export const listAutomationsWithReentry = createServerFn({ method: "GET" })
       };
     });
   });
+
+export const getAutomationReentry = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: row, error } = await (supabaseAdmin.from("whatsapp_automations") as any)
+      .select("reentry_mode, reentry_after_days")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (error) return { success: false as const, error: error.message };
+    return {
+      success: true as const,
+      reentryMode: row?.reentry_mode ?? "once",
+      reentryAfterDays: row?.reentry_after_days ?? null,
+    };
+  });
+
+export const updateAutomationReentry = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        reentryMode: z.enum(AUTOMATION_REENTRY_MODES),
+        reentryAfterDays: z.number().int().min(1).max(3650).optional(),
+      })
+      .superRefine((value, ctx) => {
+        if (value.reentryMode === "after_days" && value.reentryAfterDays == null) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["reentryAfterDays"], message: "Informe o intervalo." });
+        }
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await (supabaseAdmin.from("whatsapp_automations") as any)
+      .update({
+        reentry_mode: data.reentryMode,
+        reentry_after_days: data.reentryMode === "after_days" ? data.reentryAfterDays : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", data.id);
+    if (error) return { success: false as const, error: error.message };
+    return { success: true as const };
+  });

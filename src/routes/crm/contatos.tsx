@@ -1,9 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/crm/contatos')({
-  component: RouteComponent,
+  beforeLoad: () => {
+    throw redirect({ to: '/crm', search: { tab: 'contatos' } })
+  },
 })
-
-function RouteComponent() {
-  return <div>Hello "/crm/contatos"!</div>
-}

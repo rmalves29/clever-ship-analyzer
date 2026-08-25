@@ -32,7 +32,13 @@ type ProductMetricValue = {
   days?: string | number;
   sku?: string;
 };
-type RuleValue = string | number | boolean | string[] | RangeValue | ProductMetricValue;
+type TaxonomyDateValue = {
+  taxonomyValue: string;
+  min?: string | number;
+  max?: string | number;
+  days?: string | number;
+};
+type RuleValue = string | number | boolean | string[] | RangeValue | ProductMetricValue | TaxonomyDateValue;
 type RuleCondition = { id: string; category: string; field: string; operator: string; value: RuleValue; label: string };
 type RuleGroup = { id: string; type: "AND" | "OR"; conditions: RuleCondition[] };
 type ProductOption = { id: string; title: string; skus: string[] };
@@ -89,7 +95,7 @@ function operatorsForField(field: CRMFilterField) {
   if (field.kind === "date") return OPERATORS.date;
   if (field.kind === "rfm") return OPERATORS.rfm;
   if (field.kind === "product" || field.kind === "product_sku" || field.kind === "product_taxonomy") return OPERATORS.product;
-  if (field.kind === "product_date") return OPERATORS.productDate;
+  if (field.kind === "product_date" || field.kind === "product_taxonomy_date") return OPERATORS.productDate;
   if (field.kind === "product_number" || field.kind === "product_money") return OPERATORS.number;
   if (["boolean", "status", "profile"].includes(field.kind)) return OPERATORS.exact;
   return OPERATORS.string;
@@ -98,7 +104,7 @@ function operatorsForField(field: CRMFilterField) {
 function defaultOperatorForField(field: CRMFilterField) {
   if (field.kind === "date") return "on";
   if (["product", "product_sku", "product_taxonomy"].includes(field.kind)) return "bought";
-  if (field.kind === "product_date") return "last_days";
+  if (field.kind === "product_date" || field.kind === "product_taxonomy_date") return "last_days";
   if (field.kind === "product_number" || field.kind === "product_money") return "gte";
   return "eq";
 }
@@ -119,10 +125,24 @@ function productMetricValue(value: RuleValue): ProductMetricValue {
   return { productId: "" };
 }
 
+function taxonomyDateValue(value: RuleValue): TaxonomyDateValue {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const raw = value as TaxonomyDateValue;
+    return { ...raw, taxonomyValue: String(raw.taxonomyValue ?? "") };
+  }
+  return { taxonomyValue: "" };
+}
+
 function nextValueForOperator(field: CRMFilterField, operator: string, current: RuleValue): RuleValue {
   if (field.kind === "product_date") {
     const base = productMetricValue(current);
     return operator === "between_days" ? { productId: base.productId, min: "", max: "" } : { productId: base.productId, days: "" };
+  }
+  if (field.kind === "product_taxonomy_date") {
+    const base = taxonomyDateValue(current);
+    return operator === "between_days"
+      ? { taxonomyValue: base.taxonomyValue, min: "", max: "" }
+      : { taxonomyValue: base.taxonomyValue, days: "" };
   }
   if (field.kind === "product_number" || field.kind === "product_money") {
     const base = productMetricValue(current);
@@ -162,11 +182,13 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
 
   const addCondition = (groupId: string, category: CRMFilterCategory, field: CRMFilterField) => {
     const advancedProduct = ["product_date", "product_number", "product_money", "product_sku"].includes(field.kind);
+    const taxonomyDate = field.kind === "product_taxonomy_date";
     setGroups((prev) => prev.map((group) => group.id !== groupId ? group : ({
       ...group,
       conditions: [...group.conditions, {
         id: crypto.randomUUID(), category: category.id, field: field.id, label: field.label,
-        operator: defaultOperatorForField(field), value: advancedProduct ? { productId: "" } : "",
+        operator: defaultOperatorForField(field),
+        value: taxonomyDate ? { taxonomyValue: "", days: "" } : advancedProduct ? { productId: "" } : "",
       }],
     })));
   };
@@ -210,21 +232,39 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
         </SelectContent>
       </Select>
     );
+    const taxonomyOptions = (fieldId: string) => fieldId.startsWith("categoria_")
+      ? filterOptions.productTypes.map((value) => ({ id: value, title: value }))
+      : filterOptions.collections;
 
     if (field.id === "estado") return (
       <Select value={String(condition.value || "")} onValueChange={setValue}><SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar UF..." /></SelectTrigger><SelectContent>{BRAZIL_STATES.map((uf) => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}</SelectContent></Select>
     );
 
     if (field.kind === "product_taxonomy") {
-      const options = field.id === "categoria_produto"
-        ? filterOptions.productTypes.map((value) => ({ id: value, title: value }))
-        : filterOptions.collections;
+      const options = taxonomyOptions(field.id);
       return (
         <Select value={String(condition.value || "")} onValueChange={setValue}>
           <SelectTrigger className="h-8 min-w-[300px] flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder={field.id === "categoria_produto" ? "Selecionar categoria/tipo..." : "Selecionar coleção..."} /></SelectTrigger>
           <SelectContent className="max-h-[360px]">{options.map((option) => <SelectItem key={option.id} value={option.id}>{option.title}</SelectItem>)}</SelectContent>
         </Select>
       );
+    }
+
+    if (field.kind === "product_taxonomy_date") {
+      const value = taxonomyDateValue(condition.value);
+      const options = taxonomyOptions(field.id);
+      const isCategory = field.id === "categoria_periodo";
+      return <div className="flex min-w-[500px] flex-1 items-center gap-2">
+        <Select value={value.taxonomyValue} onValueChange={(taxonomyValue) => setValue({ ...value, taxonomyValue })}>
+          <SelectTrigger className="h-8 min-w-[280px] flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder={isCategory ? "Selecionar categoria/tipo..." : "Selecionar coleção..."} /></SelectTrigger>
+          <SelectContent className="max-h-[360px]">{options.map((option) => <SelectItem key={option.id} value={option.id}>{option.title}</SelectItem>)}</SelectContent>
+        </Select>
+        {condition.operator === "between_days" ? <>
+          <Input type="number" min={0} className="h-8 w-24 border-none bg-muted/50 text-xs" placeholder="Mín. dias" value={String(value.min ?? "")} onChange={(e) => setValue({ ...value, min: e.target.value })} />
+          <span className="text-[11px] text-muted-foreground">até</span>
+          <Input type="number" min={0} className="h-8 w-24 border-none bg-muted/50 text-xs" placeholder="Máx. dias" value={String(value.max ?? "")} onChange={(e) => setValue({ ...value, max: e.target.value })} />
+        </> : <Input type="number" min={0} className="h-8 w-28 border-none bg-muted/50 text-xs" placeholder="Dias" value={String(value.days ?? "")} onChange={(e) => setValue({ ...value, days: e.target.value })} />}
+      </div>;
     }
 
     if (field.kind === "product") return productSelect(String(condition.value || ""), setValue);
@@ -306,8 +346,8 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
 
   return <div className="space-y-6">
     <div className="flex items-center justify-between gap-4"><div className="flex items-center gap-4"><Button variant="ghost" size="icon" onClick={onCancel}><ArrowLeft className="size-5" /></Button><div><h2 className="text-2xl font-semibold tracking-tight">{initialData?.id ? "Editar Segmento" : "Criar Segmento"}</h2><p className="text-sm text-muted-foreground">Defina regras reais para agrupar seus clientes automaticamente.</p></div></div><div className="flex gap-2"><Button variant="outline" onClick={onCancel}>Cancelar</Button><Button onClick={handleSave} disabled={isSaving} className="gap-2 bg-brand text-white hover:bg-brand/90">{isSaving ? "Salvando..." : <><Save className="size-4" /> Salvar Segmento</>}</Button></div></div>
-    <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-muted-foreground"><div className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" /><p><strong className="text-foreground">Filtros validados:</strong> compras, produtos, categorias e coleções usam somente pedidos válidos. Categoria e coleção são resolvidas do cadastro atual da Shopify.</p></div></div>
-    <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="nome">Nome do Segmento</Label><Input id="nome" placeholder="Ex: Comprou brinco e não comprou colar" value={nome} onChange={(e) => setNome(e.target.value)} /></div><div className="space-y-2"><Label htmlFor="desc">Descrição (opcional)</Label><Input id="desc" value={descricao} onChange={(e) => setDescricao(e.target.value)} /></div></div>
+    <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-muted-foreground"><div className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" /><p><strong className="text-foreground">Filtros validados:</strong> compras, produtos, categorias e coleções usam somente pedidos válidos. Períodos usam a última compra válida da categoria/coleção com a taxonomia atual da Shopify.</p></div></div>
+    <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="nome">Nome do Segmento</Label><Input id="nome" placeholder="Ex: Brincos 30d sem colar" value={nome} onChange={(e) => setNome(e.target.value)} /></div><div className="space-y-2"><Label htmlFor="desc">Descrição (opcional)</Label><Input id="desc" value={descricao} onChange={(e) => setDescricao(e.target.value)} /></div></div>
     <div className="rounded-xl border border-border bg-card p-6 shadow-sm"><h3 className="mb-1 flex items-center gap-2 text-lg font-medium">Regras de Segmentação <Badge variant="secondary">Dinâmico</Badge></h3><p className="mb-4 text-xs text-muted-foreground">Dentro de cada grupo usamos E. Entre grupos usamos OU.</p><div className="space-y-6">
       {groups.map((group, groupIndex) => <div key={group.id} className="relative space-y-4">{groupIndex > 0 && <div className="relative flex justify-center"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div><Badge className="relative z-10 bg-brand px-4 text-white">OU</Badge></div>}<div className="rounded-lg border border-border bg-muted/20 p-4"><div className="mb-4"><Badge variant="outline" className="border-brand/20 text-[10px] font-normal uppercase tracking-wider text-brand">Corresponder a TODAS as regras (E)</Badge></div><div className="space-y-3">
         {group.conditions.map((condition) => {

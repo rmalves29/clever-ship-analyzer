@@ -14,7 +14,13 @@ export type CRMFilterKind =
   | "product_money"
   | "product_sku"
   | "product_taxonomy"
-  | "product_taxonomy_date";
+  | "product_taxonomy_date"
+  | "period_number"
+  | "period_money"
+  | "product_taxonomy_number"
+  | "product_taxonomy_money"
+  | "campaign_behavior"
+  | "automation_behavior";
 
 export type CRMFilterField = {
   id: string;
@@ -24,14 +30,16 @@ export type CRMFilterField = {
 };
 
 export type CRMFilterCategory = {
-  id: "pessoais" | "comportamento" | "produtos" | "tags" | "rfm";
+  id: "pessoais" | "comportamento" | "produtos" | "marketing" | "tags" | "rfm";
   label: string;
   fields: CRMFilterField[];
 };
 
+const NUMBER_OPERATORS = ["gt", "gte", "lt", "lte", "eq", "neq", "between"] as const;
+
 export const CRM_FILTER_OPERATORS: Record<CRMFilterKind, readonly string[]> = {
   string: ["eq", "neq", "contains", "not_contains", "starts_with"],
-  number: ["gt", "gte", "lt", "lte", "eq", "neq", "between"],
+  number: NUMBER_OPERATORS,
   date: ["before", "after", "last_days", "older_than_days", "between_days", "on", "eq"],
   boolean: ["eq", "neq"],
   status: ["eq", "neq"],
@@ -39,11 +47,17 @@ export const CRM_FILTER_OPERATORS: Record<CRMFilterKind, readonly string[]> = {
   rfm: ["eq", "neq", "in", "not_in"],
   product: ["bought", "not_bought"],
   product_date: ["last_days", "older_than_days", "between_days"],
-  product_number: ["gt", "gte", "lt", "lte", "eq", "neq", "between"],
-  product_money: ["gt", "gte", "lt", "lte", "eq", "neq", "between"],
+  product_number: NUMBER_OPERATORS,
+  product_money: NUMBER_OPERATORS,
   product_sku: ["bought", "not_bought"],
   product_taxonomy: ["bought", "not_bought"],
   product_taxonomy_date: ["last_days", "older_than_days", "between_days"],
+  period_number: NUMBER_OPERATORS,
+  period_money: NUMBER_OPERATORS,
+  product_taxonomy_number: NUMBER_OPERATORS,
+  product_taxonomy_money: NUMBER_OPERATORS,
+  campaign_behavior: ["sent", "not_sent", "delivered", "not_delivered", "read", "not_read", "failed", "not_failed"],
+  automation_behavior: ["entered", "not_entered", "completed", "not_completed"],
 };
 
 export const CRM_STATUS_FILTER_VALUES = [
@@ -75,6 +89,8 @@ export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
     fields: [
       { id: "total_gasto", label: "Gasto Total em Compras Válidas", kind: "number", description: "Permite valor mínimo, máximo ou faixa." },
       { id: "total_pedidos", label: "Total de Pedidos Válidos", kind: "number", description: "Permite quantidade mínima, máxima ou faixa." },
+      { id: "pedidos_periodo", label: "Pedidos Válidos nos Últimos X Dias", kind: "period_number", description: "Ex.: 3 ou mais compras válidas nos últimos 60 dias." },
+      { id: "gasto_periodo", label: "Valor Gasto nos Últimos X Dias", kind: "period_money", description: "Ex.: gastou R$ 500 ou mais nos últimos 90 dias." },
       { id: "ultima_compra", label: "Data da Última Compra Válida", kind: "date", description: "Pode filtrar por data, últimos dias, há mais de X dias ou intervalo de dias." },
       { id: "primeira_compra", label: "Data da Primeira Compra Válida", kind: "date", description: "Pode filtrar por data, últimos dias, há mais de X dias ou intervalo de dias." },
       { id: "ticket_medio", label: "Ticket Médio de Compras Válidas", kind: "number", description: "Permite valor mínimo, máximo ou faixa." },
@@ -95,12 +111,24 @@ export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
       { id: "produto", label: "Produto", kind: "product", description: "Comprou ou nunca comprou um produto específico." },
       { id: "categoria_produto", label: "Categoria / Tipo de Produto", kind: "product_taxonomy", description: "Comprou ou nunca comprou qualquer produto de um tipo/categoria preenchido na Shopify." },
       { id: "categoria_periodo", label: "Última Compra da Categoria", kind: "product_taxonomy_date", description: "Quando comprou pela última vez qualquer produto daquele tipo/categoria." },
+      { id: "categoria_quantidade", label: "Quantidade Comprada da Categoria", kind: "product_taxonomy_number", description: "Quantidade acumulada comprada naquela categoria em pedidos válidos." },
+      { id: "categoria_valor_gasto", label: "Valor Gasto na Categoria", kind: "product_taxonomy_money", description: "Soma líquida dos itens daquela categoria em pedidos válidos." },
       { id: "colecao_produto", label: "Coleção", kind: "product_taxonomy", description: "Comprou ou nunca comprou qualquer produto pertencente a uma coleção atual da Shopify." },
       { id: "colecao_periodo", label: "Última Compra da Coleção", kind: "product_taxonomy_date", description: "Quando comprou pela última vez qualquer produto daquela coleção." },
+      { id: "colecao_quantidade", label: "Quantidade Comprada da Coleção", kind: "product_taxonomy_number", description: "Quantidade acumulada comprada naquela coleção em pedidos válidos." },
+      { id: "colecao_valor_gasto", label: "Valor Gasto na Coleção", kind: "product_taxonomy_money", description: "Soma líquida dos itens daquela coleção em pedidos válidos." },
       { id: "produto_periodo", label: "Última Compra do Produto", kind: "product_date", description: "Últimos X dias, há mais de X dias ou entre X e Y dias." },
       { id: "produto_quantidade", label: "Quantidade Comprada do Produto", kind: "product_number", description: "Quantidade acumulada em pedidos válidos." },
       { id: "produto_valor_gasto", label: "Valor Gasto no Produto", kind: "product_money", description: "Soma líquida do produto em pedidos válidos." },
       { id: "produto_sku", label: "SKU / Variação Comprada", kind: "product_sku", description: "Comprou ou não comprou um SKU específico." },
+    ],
+  },
+  {
+    id: "marketing",
+    label: "Campanhas e Automações",
+    fields: [
+      { id: "campanha_whatsapp", label: "Campanha WhatsApp", kind: "campaign_behavior", description: "Enviada, entregue, lida ou com falha para uma campanha específica." },
+      { id: "automacao_whatsapp", label: "Automação WhatsApp", kind: "automation_behavior", description: "Entrou ou concluiu uma automação específica." },
     ],
   },
   {
@@ -166,11 +194,19 @@ type ProductFilterObject = {
   sku?: unknown;
 };
 
-type TaxonomyDateFilterObject = {
+type TaxonomyMetricFilterObject = {
   taxonomyValue?: unknown;
+  amount?: unknown;
   min?: unknown;
   max?: unknown;
   days?: unknown;
+};
+
+type PeriodMetricFilterObject = {
+  days?: unknown;
+  amount?: unknown;
+  min?: unknown;
+  max?: unknown;
 };
 
 function parseProductObject(value: unknown): ProductFilterObject | null {
@@ -179,15 +215,13 @@ function parseProductObject(value: unknown): ProductFilterObject | null {
   return isNonBlankString(raw.productId) ? raw : null;
 }
 
-function parseTaxonomyDateObject(value: unknown): TaxonomyDateFilterObject | null {
+function parseTaxonomyObject(value: unknown): TaxonomyMetricFilterObject | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const raw = value as TaxonomyDateFilterObject;
+  const raw = value as TaxonomyMetricFilterObject;
   return isNonBlankString(raw.taxonomyValue) ? raw : null;
 }
 
-function validateProductNumeric(fieldLabel: string, operator: string, value: unknown): string | null {
-  const raw = parseProductObject(value);
-  if (!raw) return `Selecione um produto para ${fieldLabel}.`;
+function validateNumericPayload(fieldLabel: string, operator: string, raw: { amount?: unknown; min?: unknown; max?: unknown }): string | null {
   if (operator === "between") {
     const range = parseRange(raw);
     return range && range.min >= 0 ? null : `Faixa inválida para ${fieldLabel}.`;
@@ -198,8 +232,20 @@ function validateProductNumeric(fieldLabel: string, operator: string, value: unk
   return null;
 }
 
+function validateProductNumeric(fieldLabel: string, operator: string, value: unknown): string | null {
+  const raw = parseProductObject(value);
+  if (!raw) return `Selecione um produto para ${fieldLabel}.`;
+  return validateNumericPayload(fieldLabel, operator, raw);
+}
+
+function validateTaxonomyNumeric(fieldLabel: string, operator: string, value: unknown): string | null {
+  const raw = parseTaxonomyObject(value);
+  if (!raw) return `Selecione uma categoria/coleção para ${fieldLabel}.`;
+  return validateNumericPayload(fieldLabel, operator, raw);
+}
+
 function validateTaxonomyDate(fieldLabel: string, operator: string, value: unknown): string | null {
-  const raw = parseTaxonomyDateObject(value);
+  const raw = parseTaxonomyObject(value);
   if (!raw) return `Selecione uma categoria/coleção para ${fieldLabel}.`;
   if (operator === "between_days") {
     const range = parseRange(raw);
@@ -209,6 +255,14 @@ function validateTaxonomyDate(fieldLabel: string, operator: string, value: unkno
   return !isBlankValue(raw.days) && Number.isFinite(days) && days >= 0
     ? null
     : `Número de dias inválido para ${fieldLabel}.`;
+}
+
+function validatePeriodMetric(fieldLabel: string, operator: string, value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return `Defina período e valor para ${fieldLabel}.`;
+  const raw = value as PeriodMetricFilterObject;
+  const days = Number(raw.days);
+  if (isBlankValue(raw.days) || !Number.isFinite(days) || days < 0) return `Número de dias inválido para ${fieldLabel}.`;
+  return validateNumericPayload(fieldLabel, operator, raw);
 }
 
 export function validateCRMFilterCondition(condition: unknown): string | null {
@@ -226,6 +280,7 @@ export function validateCRMFilterCondition(condition: unknown): string | null {
     if (operator === "between") return parseRange(value) ? null : `Faixa inválida para ${field.label}.`;
     return isBlankValue(value) || !Number.isFinite(Number(value)) ? `Valor numérico inválido para ${field.label}.` : null;
   }
+  if (field.kind === "period_number" || field.kind === "period_money") return validatePeriodMetric(field.label, operator, value);
   if (field.kind === "date") {
     if (operator === "last_days" || operator === "older_than_days") {
       const days = Number(value);
@@ -254,10 +309,11 @@ export function validateCRMFilterCondition(condition: unknown): string | null {
     }
     return Object.prototype.hasOwnProperty.call(RFM_SEGMENTS_CONFIG, String(value ?? "")) ? null : "Segmento RFM inválido.";
   }
-  if (field.kind === "product" || field.kind === "product_taxonomy") {
+  if (field.kind === "product" || field.kind === "product_taxonomy" || field.kind === "campaign_behavior" || field.kind === "automation_behavior") {
     return isNonBlankString(value) ? null : `Selecione um valor para ${field.label}.`;
   }
   if (field.kind === "product_taxonomy_date") return validateTaxonomyDate(field.label, operator, value);
+  if (field.kind === "product_taxonomy_number" || field.kind === "product_taxonomy_money") return validateTaxonomyNumeric(field.label, operator, value);
   if (field.kind === "product_date") {
     const product = parseProductObject(value);
     if (!product) return "Selecione um produto.";

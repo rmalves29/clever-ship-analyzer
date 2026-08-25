@@ -2,6 +2,7 @@
  *  (esperar + enviar) e estado por cliente. */
 
 import { automationDeliveryAction } from "./whatsapp-automation-delivery-state";
+import { decideAutomationReentry } from "./whatsapp-automation-reentry";
 
 export type SendStep = {
   id: string;
@@ -223,16 +224,7 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
   const ids: string[] = await resolveWhatsappSegmentCustomerIds(automation.segment_type, automation.segment_id || undefined);
   if (ids.length === 0) return 0;
 
-  const { data: existingRuns } = await supabaseAdmin
-    .from("whatsapp_automation_runs")
-    .select("customer_id")
-    .eq("automation_id", automation.id)
-    .in("customer_id", ids);
-  const existingIds = new Set(((existingRuns ?? []) as { customer_id: string }[]).map((r) => r.customer_id));
-  const newIds = ids.filter((id) => !existingIds.has(id));
-  if (newIds.length === 0) return 0;
-
-  const recipients = (await resolveSegmentRecipients(automation.segment_type, newIds)) as Array<{ id: string; phone: string }>;
+  const recipients = (await resolveSegmentRecipients(automation.segment_type, ids)) as Array<{ id: string; phone: string }>;
   if (recipients.length === 0) return 0;
 
   const firstStep = steps[0];
@@ -244,6 +236,31 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
       ...(await captureAutomationEventContext(recipient.id)),
     })),
   );
+
+  const { data: existingRuns, error: existingRunsError } = await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+    .select("customer_id, enrollment_key, context_key, enrolled_at, status")
+    .eq("automation_id", automation.id)
+    .in("customer_id", recipientsWithContext.map((recipient) => recipient.id));
+  if (existingRunsError) throw new Error(`Erro ao consultar histórico de reentrada: ${existingRunsError.message}`);
+
+  const runsByCustomer = new Map<string, any[]>();
+  for (const run of existingRuns ?? []) {
+    const customerId = String(run.customer_id);
+    const list = runsByCustomer.get(customerId) ?? [];
+    list.push(run);
+    runsByCustomer.set(customerId, list);
+  }
+
+  const eligibleRecipients = recipientsWithContext.flatMap((recipient) => {
+    const decision = decideAutomationReentry({
+      mode: automation.reentry_mode ?? "once",
+      contextKey: recipient.contextKey,
+      previousRuns: runsByCustomer.get(recipient.id) ?? [],
+      reentryAfterDays: automation.reentry_after_days ?? null,
+    });
+    return decision.eligible ? [{ ...recipient, enrollmentKey: decision.enrollmentKey }] : [];
+  });
+  if (eligibleRecipients.length === 0) return 0;
 
   if (automation.requer_aprovacao) {
     const created = await createCampaignRow(
@@ -258,13 +275,13 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
         couponCode: firstStep.couponCode ?? undefined,
         origem: "automacao",
         automationId: automation.id,
-        totalDestinatariosOverride: recipientsWithContext.length,
+        totalDestinatariosOverride: eligibleRecipients.length,
       },
       "aguardando_aprovacao",
     );
     if (!created.success) return 0;
 
-    const rows = recipientsWithContext.map((r) => ({
+    const rows = eligibleRecipients.map((r) => ({
       automation_id: automation.id,
       customer_id: r.id,
       phone: r.phone,
@@ -274,17 +291,18 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
       campaign_id: created.campaignId,
       event_context: r.context,
       context_key: r.contextKey,
+      enrollment_key: r.enrollmentKey,
     }));
     const { error } = await (supabaseAdmin.from("whatsapp_automation_runs") as any).upsert(rows, {
-      onConflict: "automation_id,customer_id",
+      onConflict: "automation_id,customer_id,enrollment_key",
       ignoreDuplicates: true,
     });
     if (error) throw new Error(`Erro ao matricular automação: ${error.message}`);
-    return recipientsWithContext.length;
+    return eligibleRecipients.length;
   }
 
   const nextRunAt = new Date(Date.now() + firstStep.waitHours * 3_600_000).toISOString();
-  const rows = recipientsWithContext.map((r) => ({
+  const rows = eligibleRecipients.map((r) => ({
     automation_id: automation.id,
     customer_id: r.id,
     phone: r.phone,
@@ -293,13 +311,14 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
     next_run_at: nextRunAt,
     event_context: r.context,
     context_key: r.contextKey,
+    enrollment_key: r.enrollmentKey,
   }));
   const { error } = await (supabaseAdmin.from("whatsapp_automation_runs") as any).upsert(rows, {
-    onConflict: "automation_id,customer_id",
+    onConflict: "automation_id,customer_id,enrollment_key",
     ignoreDuplicates: true,
   });
   if (error) throw new Error(`Erro ao matricular automação: ${error.message}`);
-  return recipientsWithContext.length;
+  return eligibleRecipients.length;
 }
 
 async function advanceRuns(runs: any[], steps: AutomationStep[], campaignId: string | null): Promise<number> {

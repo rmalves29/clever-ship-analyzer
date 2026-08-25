@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CRM_SEGMENT_TEMPLATES } from "./crm-segment-templates";
+import { CRM_SEGMENT_TEMPLATES, buildPersistedRulesFromTemplate } from "./crm-segment-templates";
 import { getCRMFilterField, validateCRMFilterCondition, validateSegmentRulesPayload } from "./crm-filter-catalog";
 
 describe("modelos prontos de segmentos", () => {
@@ -49,5 +49,20 @@ describe("modelos prontos de segmentos", () => {
       "vip-leais",
       "baixo-ticket-recente",
     ].forEach((id) => expect(ids.has(id)).toBe(true));
+  });
+
+  it.each(CRM_SEGMENT_TEMPLATES)("$name gera regras persistíveis e editáveis", (template) => {
+    const regras = buildPersistedRulesFromTemplate(template);
+    expect(regras.groups).toHaveLength(1);
+    expect(regras.groups[0]?.type).toBe("AND");
+    expect(regras.groups[0]?.conditions).toHaveLength(template.conditions.length);
+    expect(validateSegmentRulesPayload(regras)).toEqual({ valid: true, errors: [] });
+
+    for (const condition of regras.groups[0]!.conditions) {
+      expect(condition.id).not.toBe("");
+      expect(condition.category).not.toBe("");
+      expect(condition.label).not.toBe("");
+      expect(getCRMFilterField(condition.field)).toBeDefined();
+    }
   });
 });

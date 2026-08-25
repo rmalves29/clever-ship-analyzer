@@ -4,6 +4,7 @@ import { requireAppAuth } from "./app-auth";
 import { validateSegmentRulesPayload } from "./crm-filter-catalog";
 import { customerMatchesSearch, type SegmentRules } from "./crm-segmentation-shared";
 import { matchesAdvancedSegmentRules } from "./crm-product-segmentation";
+import { CRM_SEGMENT_TEMPLATES, buildPersistedRulesFromTemplate } from "./crm-segment-templates";
 
 async function getSegmentRules(segmentId?: string): Promise<SegmentRules | null> {
   if (!segmentId) return null;
@@ -22,6 +23,41 @@ const segmentRulesSchema = z.unknown().superRefine((value, ctx) => {
   const validation = validateSegmentRulesPayload(value);
   validation.errors.forEach((message) => ctx.addIssue({ code: z.ZodIssueCode.custom, message }));
 });
+
+async function createRecommendedSegmentsInDatabase() {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data: existing, error: existingError } = await supabaseAdmin.from("crm_segments").select("nome");
+  if (existingError) throw new Error(`Não foi possível verificar os segmentos existentes: ${existingError.message}`);
+
+  const existingNames = new Set((existing ?? []).map((row) => String(row.nome).trim().toLocaleLowerCase("pt-BR")));
+  const now = new Date().toISOString();
+  const missing = CRM_SEGMENT_TEMPLATES.filter((template) => !existingNames.has(template.name.trim().toLocaleLowerCase("pt-BR")));
+
+  if (missing.length === 0) {
+    return { created: 0, skipped: CRM_SEGMENT_TEMPLATES.length, names: [] as string[] };
+  }
+
+  const rows = missing.map((template) => ({
+    nome: template.name,
+    descricao: template.description,
+    regras: buildPersistedRulesFromTemplate(template),
+    criado_em: now,
+    atualizado_em: now,
+  }));
+
+  const { data: inserted, error: insertError } = await supabaseAdmin
+    .from("crm_segments")
+    .insert(rows as never)
+    .select("id, nome");
+
+  if (insertError) throw new Error(`Não foi possível criar os segmentos recomendados: ${insertError.message}`);
+
+  return {
+    created: inserted?.length ?? rows.length,
+    skipped: CRM_SEGMENT_TEMPLATES.length - (inserted?.length ?? rows.length),
+    names: (inserted ?? []).map((row) => String(row.nome)),
+  };
+}
 
 export const getCustomersList = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
@@ -174,6 +210,10 @@ export const getSegmentsList = createServerFn({ method: "GET" })
     }));
   });
 
+export const createRecommendedSegments = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .handler(async () => createRecommendedSegmentsInDatabase());
+
 export const saveSegment = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({
@@ -181,19 +221,51 @@ export const saveSegment = createServerFn({ method: "POST" })
     nome: z.string().trim().min(1),
     descricao: z.string().optional(),
     regras: segmentRulesSchema,
+    tipo: z.string().optional(),
   }).parse(data))
   .handler(async ({ data }) => {
+    // Compatibilidade com o botão legado "Criar Segmentos Sugeridos" da tela de CRM.
+    // Ele chama saveSegment várias vezes com tipo="dinamico". Em vez de persistir a lista
+    // antiga, a primeira chamada cria a biblioteca comercial atual inteira de forma idempotente;
+    // as chamadas seguintes apenas detectam que os modelos já existem.
+    if (!data.id && data.tipo === "dinamico") {
+      return createRecommendedSegmentsInDatabase();
+    }
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const payload: any = {
-      nome: data.nome,
-      descricao: data.descricao || null,
-      regras: data.regras,
-      atualizado_em: new Date().toISOString(),
-    };
-    if (data.id) payload.id = data.id;
-    else payload.criado_em = new Date().toISOString();
-    const { data: result, error } = await supabaseAdmin.from("crm_segments").upsert(payload).select().single();
-    if (error) throw error;
+    const now = new Date().toISOString();
+
+    if (data.id) {
+      const { data: result, error } = await supabaseAdmin
+        .from("crm_segments")
+        .update({
+          nome: data.nome,
+          descricao: data.descricao || null,
+          regras: data.regras,
+          atualizado_em: now,
+        } as never)
+        .eq("id", data.id)
+        .select()
+        .single();
+      if (error) throw new Error(`Não foi possível atualizar o segmento: ${error.message}`);
+      if (!result) throw new Error("O segmento não foi encontrado após a atualização.");
+      return result;
+    }
+
+    const { data: result, error } = await supabaseAdmin
+      .from("crm_segments")
+      .insert({
+        nome: data.nome,
+        descricao: data.descricao || null,
+        regras: data.regras,
+        criado_em: now,
+        atualizado_em: now,
+      } as never)
+      .select()
+      .single();
+
+    if (error) throw new Error(`Não foi possível criar o segmento: ${error.message}`);
+    if (!result) throw new Error("O segmento não foi retornado pelo banco após a criação.");
     return result;
   });
 

@@ -173,7 +173,7 @@ export const approveCampaign = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { dispatchCampaign } = await import("./whatsapp-meta.server");
-    const { advanceRunsForApprovedCampaign } = await import("./automations-engine.server");
+    const { markRunsWaitingForApprovedCampaign } = await import("./automations-engine.server");
 
     const { data: row } = await supabaseAdmin
       .from("whatsapp_campaigns")
@@ -206,9 +206,8 @@ export const approveCampaign = createServerFn({ method: "POST" })
       );
     }
 
-    const result = await dispatchCampaign(data.campaignId, resolvedIds);
-    if (runCustomerIds.length > 0) await advanceRunsForApprovedCampaign(data.campaignId);
-    return result;
+    if (runCustomerIds.length > 0) await markRunsWaitingForApprovedCampaign(data.campaignId);
+    return dispatchCampaign(data.campaignId, resolvedIds);
   });
 
 /** Rejeita uma campanha pendente — nada é enviado. Se for um lote de automação, os runs pendentes

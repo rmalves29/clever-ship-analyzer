@@ -5,7 +5,7 @@ import {
 } from "./crm-segmentation-shared";
 import type { CRMAdvancedCustomerContext } from "./crm-product-segmentation";
 import { isRevenueValidOrder } from "./crm-rfm-shared";
-import { getShopifyProductTaxonomyByIds } from "./crm-product-taxonomy.server";
+import { getShopifyProductTaxonomyByIds, type ShopifyProductTaxonomy } from "./crm-product-taxonomy.server";
 
 const PAGE_SIZE = 1000;
 const ORDER_ID_BATCH = 200;
@@ -16,6 +16,11 @@ type LoadedOrderItem = CRMOrderItemForSegmentation & {
 
 export type CRMProductOption = { id: string; title: string; skus: string[] };
 export type CRMCollectionOption = { id: string; title: string };
+
+type TaxonomyDateIndex = {
+  productTypes: Map<string, Map<string, string>>;
+  collections: Map<string, Map<string, string>>;
+};
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -121,6 +126,49 @@ function buildProductSpendIndex(
   }
 
   return index;
+}
+
+function setLatestDate(index: Map<string, string>, key: string, date: string) {
+  const current = index.get(key);
+  if (!current || new Date(date).getTime() > new Date(current).getTime()) index.set(key, date);
+}
+
+function buildTaxonomyDateIndex(
+  orders: CRMOrderForSegmentation[],
+  items: LoadedOrderItem[],
+  taxonomy: Map<string, ShopifyProductTaxonomy>,
+): TaxonomyDateIndex {
+  const validOrders = new Map(
+    orders
+      .filter((order) => order.customerId && isRevenueValidOrder(order))
+      .map((order) => [order.id, order] as const),
+  );
+  const productTypes = new Map<string, Map<string, string>>();
+  const collections = new Map<string, Map<string, string>>();
+
+  for (const item of items) {
+    const order = validOrders.get(item.orderId);
+    const productId = String(item.productId ?? "").trim();
+    if (!order || !productId || !order.processedAt) continue;
+    const productTaxonomy = taxonomy.get(productId);
+    if (!productTaxonomy) continue;
+
+    if (productTaxonomy.productType?.trim()) {
+      const customerTypes = productTypes.get(order.customerId) ?? new Map<string, string>();
+      setLatestDate(customerTypes, productTaxonomy.productType.trim(), order.processedAt);
+      productTypes.set(order.customerId, customerTypes);
+    }
+
+    if (productTaxonomy.collections.length > 0) {
+      const customerCollections = collections.get(order.customerId) ?? new Map<string, string>();
+      for (const collection of productTaxonomy.collections) {
+        setLatestDate(customerCollections, collection.id, order.processedAt);
+      }
+      collections.set(order.customerId, customerCollections);
+    }
+  }
+
+  return { productTypes, collections };
 }
 
 async function loadLatestAbandonedCheckoutByCustomer(): Promise<Map<string, string>> {
@@ -253,6 +301,7 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
   });
   const spendIndex = buildProductSpendIndex(orders, orderItems);
   const taxonomy = await getShopifyProductTaxonomyByIds(productIdsFromItems(orderItems));
+  const taxonomyDates = buildTaxonomyDateIndex(orders, orderItems, taxonomy);
 
   return baseContexts.map((context) => {
     const purchasedProductTypes = new Set<string>();
@@ -269,6 +318,8 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
       productSpentById: spendIndex.get(context.customer.id) ?? new Map<string, number>(),
       purchasedProductTypes,
       purchasedCollectionIds,
+      productTypeLastPurchasedAt: taxonomyDates.productTypes.get(context.customer.id) ?? new Map<string, string>(),
+      collectionLastPurchasedAt: taxonomyDates.collections.get(context.customer.id) ?? new Map<string, string>(),
     };
   });
 }

@@ -15,8 +15,26 @@ export type CRMSegmentTemplate = {
  * Modelos intencionalmente prontos para uso: não possuem placeholders vazios.
  * Cross-sell específico continua sendo montado pelo editor porque depende da
  * categoria/coleção/produto real escolhido pelo usuário.
+ *
+ * A ordem prioriza segmentos com maior potencial comercial imediato: abandono,
+ * 2ª compra, recorrência, frequência, valor, fidelização e reativação.
  */
 export const CRM_SEGMENT_TEMPLATES: CRMSegmentTemplate[] = [
+  {
+    id: "checkout-abandonado-ativo",
+    name: "Checkout abandonado ativo",
+    description: "Clientes com checkout abandonado ativo e sem uma compra válida posterior. Público de recuperação com alta intenção.",
+    conditions: [{ field: "checkout_abandonado", operator: "eq", value: "sim" }],
+  },
+  {
+    id: "segunda-compra-8-14",
+    name: "2ª compra pendente · 8–14 dias",
+    description: "Clientes com exatamente uma compra válida feita entre 8 e 14 dias atrás. Boa janela para incentivar a primeira recompra.",
+    conditions: [
+      { field: "total_pedidos", operator: "eq", value: 1 },
+      { field: "ultima_compra", operator: "between_days", value: { min: 8, max: 14 } },
+    ],
+  },
   {
     id: "segunda-compra-15-30",
     name: "2ª compra pendente · 15–30 dias",
@@ -27,28 +45,28 @@ export const CRM_SEGMENT_TEMPLATES: CRMSegmentTemplate[] = [
     ],
   },
   {
-    id: "vip-leais",
-    name: "Clientes VIP / Leais",
-    description: "Clientes atualmente classificados como VIP/Leal pela matriz RFM.",
-    conditions: [{ field: "rfm_segment", operator: "eq", value: "VIP/Leal" }],
+    id: "novos-7d",
+    name: "Novos compradores · 7 dias",
+    description: "Clientes com exatamente uma compra válida realizada nos últimos 7 dias. Útil para onboarding e preparação da 2ª compra.",
+    conditions: [
+      { field: "total_pedidos", operator: "eq", value: 1 },
+      { field: "ultima_compra", operator: "last_days", value: 7 },
+    ],
   },
   {
     id: "recorrentes-recentes",
     name: "Recorrentes recentes · 30 dias",
-    description: "Clientes recorrentes com compra válida nos últimos 30 dias.",
+    description: "Clientes recorrentes com compra válida nos últimos 30 dias. Público quente para novidades, kits e lançamentos.",
     conditions: [
       { field: "recorrencia", operator: "eq", value: "sim" },
       { field: "ultima_compra", operator: "last_days", value: 30 },
     ],
   },
   {
-    id: "clientes-esfriando",
-    name: "Clientes esfriando · 60+ dias",
-    description: "Clientes que já compraram, mas estão há mais de 60 dias sem uma compra válida.",
-    conditions: [
-      { field: "total_pedidos", operator: "gte", value: 1 },
-      { field: "ultima_compra", operator: "older_than_days", value: 60 },
-    ],
+    id: "frequencia-2-30d",
+    name: "Frequência alta · 2+ em 30 dias",
+    description: "Clientes com pelo menos duas compras válidas nos últimos 30 dias. Indica forte propensão de recompra no curto prazo.",
+    conditions: [{ field: "pedidos_periodo", operator: "gte", value: { days: 30, amount: 2 } }],
   },
   {
     id: "alta-frequencia-60d",
@@ -57,18 +75,73 @@ export const CRM_SEGMENT_TEMPLATES: CRMSegmentTemplate[] = [
     conditions: [{ field: "pedidos_periodo", operator: "gte", value: { days: 60, amount: 3 } }],
   },
   {
+    id: "alto-valor-30d",
+    name: "Alto valor · R$300+ em 30 dias",
+    description: "Clientes que gastaram pelo menos R$300 em compras válidas nos últimos 30 dias. Bom público para ofertas premium e lançamentos.",
+    conditions: [{ field: "gasto_periodo", operator: "gte", value: { days: 30, amount: 300 } }],
+  },
+  {
     id: "alto-valor-90d",
     name: "Alto valor · R$500+ em 90 dias",
     description: "Clientes que gastaram pelo menos R$500 em compras válidas nos últimos 90 dias.",
     conditions: [{ field: "gasto_periodo", operator: "gte", value: { days: 90, amount: 500 } }],
   },
   {
-    id: "novos-7d",
-    name: "Novos compradores · 7 dias",
-    description: "Clientes com exatamente uma compra válida realizada nos últimos 7 dias.",
+    id: "compra-unica-alto-valor",
+    name: "1 compra de alto valor · R$300+",
+    description: "Clientes que compraram apenas uma vez, mas já gastaram R$300 ou mais. Prioridade para transformar uma boa primeira compra em recorrência.",
     conditions: [
       { field: "total_pedidos", operator: "eq", value: 1 },
-      { field: "ultima_compra", operator: "last_days", value: 7 },
+      { field: "total_gasto", operator: "gte", value: 300 },
+    ],
+  },
+  {
+    id: "ticket-alto-recente",
+    name: "Ticket alto + compra recente",
+    description: "Clientes com ticket médio de R$300 ou mais e compra válida nos últimos 30 dias. Público indicado para produtos de maior valor.",
+    conditions: [
+      { field: "ticket_medio", operator: "gte", value: 300 },
+      { field: "ultima_compra", operator: "last_days", value: 30 },
+    ],
+  },
+  {
+    id: "recorrente-alto-valor",
+    name: "Recorrentes de alto valor",
+    description: "Clientes recorrentes, com R$500 ou mais em gasto válido acumulado e compra nos últimos 30 dias. Público comercial prioritário.",
+    conditions: [
+      { field: "recorrencia", operator: "eq", value: "sim" },
+      { field: "total_gasto", operator: "gte", value: 500 },
+      { field: "ultima_compra", operator: "last_days", value: 30 },
+    ],
+  },
+  {
+    id: "vip-em-formacao",
+    name: "VIP em formação",
+    description: "Clientes classificados pela matriz RFM como VIP em formação. Boa audiência para acelerar frequência e fidelização.",
+    conditions: [{ field: "rfm_segment", operator: "eq", value: "VIP em formação" }],
+  },
+  {
+    id: "vip-leais",
+    name: "Clientes VIP / Leais",
+    description: "Clientes atualmente classificados como VIP/Leal pela matriz RFM. Público para exclusividade, acesso antecipado e lançamentos.",
+    conditions: [{ field: "rfm_segment", operator: "eq", value: "VIP/Leal" }],
+  },
+  {
+    id: "baixo-ticket-recente",
+    name: "Ticket abaixo de R$150 + recente",
+    description: "Clientes com ticket médio abaixo de R$150 e compra nos últimos 30 dias. Útil para testar kits, progressivos e aumento de ticket.",
+    conditions: [
+      { field: "ticket_medio", operator: "lt", value: 150 },
+      { field: "ultima_compra", operator: "last_days", value: 30 },
+    ],
+  },
+  {
+    id: "clientes-esfriando",
+    name: "Clientes esfriando · 60+ dias",
+    description: "Clientes que já compraram, mas estão há mais de 60 dias sem uma compra válida. Público de reativação.",
+    conditions: [
+      { field: "total_pedidos", operator: "gte", value: 1 },
+      { field: "ultima_compra", operator: "older_than_days", value: 60 },
     ],
   },
 ];

@@ -76,8 +76,39 @@ function isValidMediaUrl(value: unknown): value is string {
   );
 }
 
-/** Resolve os tokens dinâmicos ({{NOME_CLIENTE}}, {{RASTREIO}}, ...) no momento do enfileiramento,
- *  congelando o conteúdo enviado — o worker não recalcula nada. */
+function formatPurchasedItems(items: any[]): string {
+  if (!items.length) return "—";
+  const visible = items.slice(0, 4).map((item) => {
+    const quantity = Math.max(1, Number(item.quantity ?? 1));
+    const title = String(item.title ?? "Produto").trim();
+    const variant = String(item.variant_title ?? "").trim();
+    return `${quantity}x ${title}${variant ? ` (${variant})` : ""}`;
+  });
+  const remaining = items.length - visible.length;
+  return remaining > 0 ? `${visible.join(", ")} + ${remaining} item(ns)` : visible.join(", ");
+}
+
+function firstDiscountCode(rawData: any): string {
+  const snake = rawData?.discount_codes?.[0];
+  if (typeof snake === "string") return snake;
+  if (snake?.code) return String(snake.code);
+
+  const camel = rawData?.discountCodes?.[0];
+  if (typeof camel === "string") return camel;
+  if (camel?.code) return String(camel.code);
+  return "—";
+}
+
+function shippingTitle(rawData: any): string {
+  return (
+    rawData?.shipping_lines?.[0]?.title ||
+    rawData?.shippingLine?.title ||
+    rawData?.shippingLines?.edges?.[0]?.node?.title ||
+    "—"
+  );
+}
+
+/** Resolve os tokens dinâmicos no momento do enfileiramento, congelando o conteúdo enviado. */
 async function resolveBodyParams(
   bodyParams: string[],
   recipient: { id: string; first_name?: string | null; checkout_url?: string | null },
@@ -96,17 +127,43 @@ async function resolveBodyParams(
   const order = lastOrder as any;
   const rawData = order?.raw_data as any;
 
+  let purchasedItems: any[] = [];
+  let fulfillment: any = null;
+  if (order?.id) {
+    const [{ data: itemRows }, { data: fulfillmentRow }] = await Promise.all([
+      supabaseAdmin
+        .from("shopify_order_items")
+        .select("title, variant_title, quantity")
+        .eq("order_id", order.id),
+      supabaseAdmin
+        .from("shopify_fulfillments")
+        .select("tracking_number, tracking_url, tracking_company, status, updated_at")
+        .eq("order_id", order.id)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    purchasedItems = itemRows ?? [];
+    fulfillment = fulfillmentRow;
+  }
+
+  const trackingNumber = fulfillment?.tracking_number || "—";
+  const trackingUrl = fulfillment?.tracking_url || "—";
+  const fulfillmentStatus = String(fulfillment?.status ?? order?.fulfillment_status ?? "").toLowerCase();
+  const isSent = Boolean(fulfillment?.tracking_number) || ["success", "fulfilled", "in_transit"].includes(fulfillmentStatus);
+
   const replacements: Record<string, string> = {
     "{{NOME_CLIENTE}}": recipient.first_name || "Cliente",
     "{{NUMERO_PEDIDO}}": order?.order_number || order?.name || "—",
     "{{VALOR_TOTAL}}": order?.total_price
       ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(order.total_price)
       : "—",
-    "{{ITENS_COMPRADOS}}": order?.line_items_summary || "—",
-    "{{CUPOM_DESCONTO}}": rawData?.discount_codes?.[0]?.code || "—",
-    "{{FRETE_ESCOLHIDO}}": rawData?.shipping_lines?.[0]?.title || "—",
-    "{{RASTREIO}}": order?.tracking_number || "—",
-    "{{STATUS_PEDIDO}}": order?.fulfillment_status === "fulfilled" ? "Enviado" : "Processando",
+    "{{ITENS_COMPRADOS}}": formatPurchasedItems(purchasedItems),
+    "{{CUPOM_DESCONTO}}": firstDiscountCode(rawData),
+    "{{FRETE_ESCOLHIDO}}": shippingTitle(rawData),
+    "{{RASTREIO}}": trackingNumber,
+    "{{LINK_RASTREIO}}": trackingUrl,
+    "{{STATUS_PEDIDO}}": isSent ? "Enviado" : "Processando",
     "{{LINK_CHECKOUT}}": recipient.checkout_url || "—",
   };
 
@@ -119,9 +176,18 @@ async function resolveBodyParams(
   });
 }
 
+function normalizeScheduledAt(value: string | undefined): { success: true; iso: string; future: boolean } | { success: false; error: string } {
+  if (!value) return { success: true, iso: new Date().toISOString(), future: false };
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return { success: false, error: "Data de agendamento inválida." };
+  const iso = date.toISOString();
+  return { success: true, iso, future: date.getTime() > Date.now() + 5_000 };
+}
+
 /**
  * Enfileira todos os destinatários de uma campanha. Não envia nada.
- * `restrictToCustomerIds` limita o lote (usado pelo motor de automação).
+ * `restrictToCustomerIds`, quando informado, é a fonte autoritativa do lote. Isso evita recalcular
+ * o segmento por outro motor depois que o CRM já resolveu exatamente quem deve receber.
  */
 export async function enqueueCampaign(
   campaignId: string,
@@ -146,14 +212,15 @@ export async function enqueueCampaign(
     return { success: false as const, error: "Credenciais do WhatsApp (Meta) não configuradas." };
   }
 
+  const schedule = normalizeScheduledAt(options?.scheduledAt);
+  if (!schedule.success) return { success: false as const, error: schedule.error };
+
   const campaign = campaignRow as any;
   const bodyParams: string[] = Array.isArray(campaign.body_params) ? campaign.body_params : [];
 
-  let ids = await getSegmentCustomerIds(campaign.segment_type as SegmentType, campaign.segment_id || undefined);
-  if (restrictToCustomerIds) {
-    const restrict = new Set(restrictToCustomerIds);
-    ids = ids.filter((id) => restrict.has(id));
-  }
+  const ids = restrictToCustomerIds
+    ? [...new Set(restrictToCustomerIds)]
+    : await getSegmentCustomerIds(campaign.segment_type as SegmentType, campaign.segment_id || undefined);
 
   const recipients = (await resolveSegmentRecipients(campaign.segment_type, ids)) as {
     id: string;
@@ -163,7 +230,7 @@ export async function enqueueCampaign(
     video_url?: string | null;
   }[];
 
-  const scheduledAt = options?.scheduledAt ?? new Date().toISOString();
+  const scheduledAt = schedule.iso;
   const rows: Record<string, unknown>[] = [];
   let skipped = 0;
 
@@ -205,10 +272,10 @@ export async function enqueueCampaign(
 
   await supabaseAdmin
     .from("whatsapp_campaigns")
-    .update({ status: "enviando", total_destinatarios: queued })
+    .update({ status: schedule.future ? "agendada" : "enviando", total_destinatarios: queued })
     .eq("id", campaignId);
 
-  return { success: true as const, campaignId, queued, skipped, total: recipients.length };
+  return { success: true as const, campaignId, queued, skipped, total: recipients.length, scheduledAt };
 }
 
 /** Cancela tudo que ainda não saiu de uma campanha. */
@@ -229,10 +296,10 @@ export async function refreshCampaignStatus(campaignId: string) {
   const supabaseAdmin = await admin();
   const { data } = await supabaseAdmin
     .from(QUEUE_TABLE)
-    .select("status, sent_at")
+    .select("status, sent_at, scheduled_at")
     .eq("campaign_id", campaignId);
 
-  const rows = (data ?? []) as { status: QueueStatus; sent_at: string | null }[];
+  const rows = (data ?? []) as { status: QueueStatus; sent_at: string | null; scheduled_at: string }[];
   if (rows.length === 0) return null;
 
   const count = (s: QueueStatus) => rows.filter((r) => r.status === s).length;
@@ -248,7 +315,19 @@ export async function refreshCampaignStatus(campaignId: string) {
     .sort()
     .pop();
 
-  const status = pending > 0 ? "enviando" : cancelled > 0 && sent === 0 ? "cancelada" : "finalizada";
+  const pendingRows = rows.filter((row) => ["queued", "retry_wait"].includes(row.status));
+  const stillScheduled =
+    sent === 0 &&
+    pending > 0 &&
+    pendingRows.length === pending &&
+    pendingRows.every((row) => new Date(row.scheduled_at).getTime() > Date.now());
+  const status = stillScheduled
+    ? "agendada"
+    : pending > 0
+      ? "enviando"
+      : cancelled > 0 && sent === 0
+        ? "cancelada"
+        : "finalizada";
 
   await supabaseAdmin
     .from("whatsapp_campaigns")
@@ -297,7 +376,6 @@ export async function processWhatsappQueueBatch(options?: {
     p_worker: workerId,
   });
   if (claimError) return { success: false as const, error: claimError.message };
-
 
   const batch = (claimed ?? []) as QueueRow[];
   if (batch.length === 0)
@@ -384,7 +462,6 @@ export async function processWhatsappQueueBatch(options?: {
         params: Array.isArray(item.body_params) ? item.body_params.length : 0,
       });
 
-
     const now = new Date().toISOString();
 
     if (result.ok) {
@@ -455,5 +532,4 @@ export async function processWhatsappQueueBatch(options?: {
     workerId,
     ...(useMock ? { provider: "mock" as const, skippedNonMock, mockLog } : {}),
   };
-
 }

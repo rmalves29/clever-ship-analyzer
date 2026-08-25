@@ -78,13 +78,18 @@ export const saveWhatsappMetaSettings = createServerFn({ method: "POST" })
     return { success: true as const };
   });
 
-/** Prévia do segmento: quantos clientes reais receberiam a mensagem agora. */
+/** Prévia do segmento: usa a mesma resolução do CRM que será congelada no enfileiramento. */
 export const previewSegment = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ segmentType: z.string(), segmentId: z.string().uuid().optional() }).parse(data))
   .handler(async ({ data }) => {
-    const { countSegmentRecipients } = await import("./whatsapp-meta.server");
-    return countSegmentRecipients(data.segmentType, data.segmentId);
+    const { resolveWhatsappSegmentAudience } = await import("./whatsapp-segment-resolver.server");
+    const audience = await resolveWhatsappSegmentAudience(data.segmentType, data.segmentId);
+    return {
+      clientes: audience.clientes,
+      comTelefone: audience.comTelefone,
+      destinatarios: audience.destinatarios,
+    };
   });
 
 const createCampaignSchema = z.object({
@@ -98,14 +103,30 @@ const createCampaignSchema = z.object({
   bodyParams: z.array(z.string()).max(10).default([]),
   requireApproval: z.boolean().default(false),
   sendAt: z.string().optional(),
+  campaignTag: z.string().max(120).optional(),
 });
 
-/** "Aplicar ação" no CRM: cria a campanha e envia na hora, ou manda pra fila de aprovação. */
+function validateSendAt(sendAt: string | undefined): { success: true; value?: string } | { success: false; error: string } {
+  if (!sendAt?.trim()) return { success: true };
+  const date = new Date(sendAt);
+  if (!Number.isFinite(date.getTime())) return { success: false, error: "Data de agendamento inválida." };
+  if (date.getTime() <= Date.now()) return { success: false, error: "O horário agendado precisa estar no futuro." };
+  return { success: true, value: date.toISOString() };
+}
+
+/** "Aplicar ação" no CRM: cria a campanha e apenas enfileira; o worker é o único ponto de envio real. */
 export const createAndSendCampaign = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => createCampaignSchema.parse(data))
   .handler(async ({ data }) => {
-    const { createCampaignRow, dispatchCampaign } = await import("./whatsapp-meta.server");
+    const schedule = validateSendAt(data.sendAt);
+    if (!schedule.success) return { success: false as const, error: schedule.error };
+
+    const [{ createCampaignRow }, { resolveWhatsappSegmentAudience }] = await Promise.all([
+      import("./whatsapp-meta.server"),
+      import("./whatsapp-segment-resolver.server"),
+    ]);
+    const audience = await resolveWhatsappSegmentAudience(data.segmentType, data.segmentId);
 
     const created = await createCampaignRow(
       {
@@ -118,8 +139,10 @@ export const createAndSendCampaign = createServerFn({ method: "POST" })
         bodyParams: data.bodyParams,
         couponCode: data.couponCode,
         origem: "crm",
+        campaignTag: data.campaignTag?.trim() || undefined,
+        totalDestinatariosOverride: audience.destinatarios,
       },
-      data.sendAt ? "agendada" : data.requireApproval ? "aguardando_aprovacao" : "enviando",
+      data.requireApproval ? "aguardando_aprovacao" : schedule.value ? "agendada" : "enviando",
     );
     if (!created.success) return created;
 
@@ -128,20 +151,22 @@ export const createAndSendCampaign = createServerFn({ method: "POST" })
         success: true as const,
         pendingApproval: true as const,
         campaignId: created.campaignId,
-        total: created.destinatarios,
+        total: audience.destinatarios,
+        queued: 0,
         sent: 0,
         failed: 0,
         sampleErrors: [] as string[],
       };
     }
 
-    const result = await dispatchCampaign(created.campaignId);
+    const { enqueueCampaign } = await import("./whatsapp-queue.server");
+    const result = await enqueueCampaign(created.campaignId, audience.ids, {
+      ...(schedule.value ? { scheduledAt: schedule.value } : {}),
+    });
     return { ...result, pendingApproval: false as const };
   });
 
-/** Aprova uma campanha pendente e dispara os envios. Se a campanha for um lote de automação
- *  (tem runs em `whatsapp_automation_runs` vinculados), restringe o disparo a esses clientes e
- *  avança os runs pra próxima etapa — etapas seguintes desse fluxo não pedem aprovação de novo. */
+/** Aprova uma campanha pendente e enfileira o público pelo mesmo motor usado na prévia. */
 export const approveCampaign = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ campaignId: z.string().uuid(), approvedBy: z.string().optional() }).parse(data))
@@ -152,7 +177,7 @@ export const approveCampaign = createServerFn({ method: "POST" })
 
     const { data: row } = await supabaseAdmin
       .from("whatsapp_campaigns")
-      .select("id, status")
+      .select("id, status, segment_type, segment_id")
       .eq("id", data.campaignId)
       .maybeSingle();
     if (!row) return { success: false as const, error: "Campanha não encontrada." };
@@ -172,7 +197,16 @@ export const approveCampaign = createServerFn({ method: "POST" })
       .eq("status", "pending_approval");
     const runCustomerIds = ((pendingRuns ?? []) as { customer_id: string }[]).map((r) => r.customer_id);
 
-    const result = await dispatchCampaign(data.campaignId, runCustomerIds.length > 0 ? runCustomerIds : undefined);
+    let resolvedIds = runCustomerIds;
+    if (resolvedIds.length === 0) {
+      const { resolveWhatsappSegmentCustomerIds } = await import("./whatsapp-segment-resolver.server");
+      resolvedIds = await resolveWhatsappSegmentCustomerIds(
+        String((row as any).segment_type ?? ""),
+        (row as any).segment_id || undefined,
+      );
+    }
+
+    const result = await dispatchCampaign(data.campaignId, resolvedIds);
     if (runCustomerIds.length > 0) await advanceRunsForApprovedCampaign(data.campaignId);
     return result;
   });
@@ -215,7 +249,6 @@ export const listMetaTemplates = createServerFn({ method: "GET" })
   const { listMetaTemplates: listTemplates } = await import("./whatsapp-meta.server");
   return listTemplates();
 });
-
 
 /** Detalhe de 1 campanha — lista de destinatários com status, pra tela de "ver campanha". */
 export const getCampaignDetail = createServerFn({ method: "POST" })

@@ -1,6 +1,8 @@
 /** Motor real das automações de WhatsApp: enrollment por segmento, sequência de etapas
  *  (esperar + enviar) e estado por cliente. */
 
+import { automationDeliveryAction } from "./whatsapp-automation-delivery-state";
+
 export type SendStep = {
   id: string;
   type: "send";
@@ -316,18 +318,36 @@ async function advanceRuns(runs: any[], steps: AutomationStep[], campaignId: str
           next_run_at: new Date(Date.now() + next.waitHours * 3_600_000).toISOString(),
           status: "active",
           campaign_id: campaignId ?? r.campaign_id,
+          last_error: null,
           updated_at: new Date().toISOString(),
         }
       : {
           status: "completed",
           completed_at: new Date().toISOString(),
+          next_run_at: null,
           campaign_id: campaignId ?? r.campaign_id,
+          last_error: null,
           updated_at: new Date().toISOString(),
         };
     await supabaseAdmin.from("whatsapp_automation_runs").update(patch as never).eq("id", r.id);
     count++;
   }
   return count;
+}
+
+async function markRunsWaitingSend(runIds: string[], campaignId: string): Promise<void> {
+  if (runIds.length === 0) return;
+  const supabaseAdmin = await admin();
+  const { error } = await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+    .update({
+      campaign_id: campaignId,
+      status: "waiting_send",
+      next_run_at: null,
+      last_error: null,
+      updated_at: new Date().toISOString(),
+    })
+    .in("id", runIds);
+  if (error) throw new Error(`Erro ao aguardar confirmação de envio: ${error.message}`);
 }
 
 async function processDueRuns(automation: any, steps: AutomationStep[]): Promise<number> {
@@ -381,12 +401,16 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
     );
     if (!created.success) continue;
 
-    await (supabaseAdmin.from("whatsapp_automation_runs") as any)
-      .update({ campaign_id: created.campaignId, updated_at: new Date().toISOString() })
-      .in("id", stepRuns.map((r) => r.id));
-
-    await dispatchCampaign(created.campaignId, customerIds);
-    processed += await advanceRuns(stepRuns, steps, created.campaignId);
+    const runIds = stepRuns.map((r) => String(r.id));
+    await markRunsWaitingSend(runIds, created.campaignId);
+    const dispatchResult = await dispatchCampaign(created.campaignId, customerIds);
+    if (!dispatchResult.success) {
+      await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+        .update({ status: "failed", last_error: dispatchResult.error ?? "Falha ao enfileirar mensagem", updated_at: new Date().toISOString() })
+        .in("id", runIds);
+      continue;
+    }
+    processed += stepRuns.length;
   }
   return processed;
 }
@@ -415,21 +439,73 @@ export async function runAutomationsTick(options?: { automationId?: string; forc
   return { automationsProcessed, runsProcessed };
 }
 
-export async function advanceRunsForApprovedCampaign(campaignId: string): Promise<number> {
+/** Aprovação libera o lote para a fila, mas não avança nenhuma etapa. */
+export async function markRunsWaitingForApprovedCampaign(campaignId: string): Promise<number> {
   const supabaseAdmin = await admin();
-  const { data: runs } = await supabaseAdmin
+  const { data: runs, error } = await supabaseAdmin
     .from("whatsapp_automation_runs")
-    .select("*")
+    .select("id")
     .eq("campaign_id", campaignId)
     .eq("status", "pending_approval");
-  const runList = (runs ?? []) as any[];
-  if (runList.length === 0) return 0;
+  if (error) throw new Error(`Erro ao preparar lote aprovado: ${error.message}`);
+  const ids = ((runs ?? []) as Array<{ id: string }>).map((run) => run.id);
+  await markRunsWaitingSend(ids, campaignId);
+  return ids.length;
+}
 
-  const automationId = runList[0].automation_id as string;
-  const { data: automation } = await supabaseAdmin.from("whatsapp_automations").select("*").eq("id", automationId).maybeSingle();
-  if (!automation) return 0;
+/** Chamado exclusivamente pelo worker da fila após o resultado real do provider. */
+export async function handleAutomationQueueResult(params: {
+  campaignId: string;
+  customerId: string;
+  outcome: "sent" | "retry" | "failed";
+  error?: string | null;
+}): Promise<"advanced" | "waiting" | "failed" | "ignored"> {
+  const supabaseAdmin = await admin();
+  const { data: run } = await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+    .select("*")
+    .eq("campaign_id", params.campaignId)
+    .eq("customer_id", params.customerId)
+    .eq("status", "waiting_send")
+    .maybeSingle();
+  if (!run) return "ignored";
+
+  const action = automationDeliveryAction(params.outcome);
+  if (action === "wait") {
+    if (params.error) {
+      await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+        .update({ last_error: params.error, updated_at: new Date().toISOString() })
+        .eq("id", run.id);
+    }
+    return "waiting";
+  }
+
+  if (action === "fail") {
+    await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+      .update({
+        status: "failed",
+        last_error: params.error || "Falha definitiva no envio do WhatsApp",
+        next_run_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", run.id);
+    return "failed";
+  }
+
+  const { data: automation } = await supabaseAdmin
+    .from("whatsapp_automations")
+    .select("steps")
+    .eq("id", run.automation_id)
+    .maybeSingle();
+  if (!automation) {
+    await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+      .update({ status: "failed", last_error: "Automação não encontrada após envio", updated_at: new Date().toISOString() })
+      .eq("id", run.id);
+    return "failed";
+  }
+
   const steps = parseSteps((automation as any).steps);
-  return advanceRuns(runList, steps, campaignId);
+  await advanceRuns([run], steps, params.campaignId);
+  return "advanced";
 }
 
 export async function failRunsForRejectedCampaign(campaignId: string, reason: string): Promise<void> {
@@ -452,7 +528,7 @@ export async function getAutomationRunMetrics(automationId: string) {
   const byStepActive: Record<string, number> = {};
   for (const r of rows) {
     byStatus[r.status] = (byStatus[r.status] ?? 0) + 1;
-    if (r.status === "active") byStepActive[r.current_step_id] = (byStepActive[r.current_step_id] ?? 0) + 1;
+    if (r.status === "active" || r.status === "waiting_send") byStepActive[r.current_step_id] = (byStepActive[r.current_step_id] ?? 0) + 1;
   }
   return { total: rows.length, byStatus, byStepActive };
 }
@@ -468,7 +544,7 @@ export async function getAllAutomationRunMetrics(): Promise<
     const entry = result[r.automation_id] ?? { total: 0, byStatus: {}, byStepActive: {} };
     entry.total++;
     entry.byStatus[r.status] = (entry.byStatus[r.status] ?? 0) + 1;
-    if (r.status === "active") entry.byStepActive[r.current_step_id] = (entry.byStepActive[r.current_step_id] ?? 0) + 1;
+    if (r.status === "active" || r.status === "waiting_send") entry.byStepActive[r.current_step_id] = (entry.byStepActive[r.current_step_id] ?? 0) + 1;
     result[r.automation_id] = entry;
   }
   return result;

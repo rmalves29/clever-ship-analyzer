@@ -1366,6 +1366,7 @@ export type Database = {
       }
       shopify_orders: {
         Row: {
+          cancelled_at: string | null
           city: string | null
           country: string | null
           created_at: string
@@ -1391,6 +1392,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          cancelled_at?: string | null
           city?: string | null
           country?: string | null
           created_at: string
@@ -1416,6 +1418,7 @@ export type Database = {
           updated_at: string
         }
         Update: {
+          cancelled_at?: string | null
           city?: string | null
           country?: string | null
           created_at?: string

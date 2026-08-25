@@ -78,7 +78,7 @@ export function resolveAutomationBodyParams(
   const replacements = buildAutomationTokenReplacements(context, recipient);
   return bodyParams.map((param) => {
     let text = param;
-    for (const [token, value] of Object.entries(replacements)) text = text.replaceAll(token, value);
+    for (const [token, value] of Object.entries(replacements)) text = text.split(token).join(value);
     return text;
   });
 }

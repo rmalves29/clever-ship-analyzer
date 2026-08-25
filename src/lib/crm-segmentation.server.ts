@@ -5,6 +5,7 @@ import {
 } from "./crm-segmentation-shared";
 import type { CRMAdvancedCustomerContext } from "./crm-product-segmentation";
 import { isRevenueValidOrder } from "./crm-rfm-shared";
+import { getShopifyProductTaxonomyByIds } from "./crm-product-taxonomy.server";
 
 const PAGE_SIZE = 1000;
 const ORDER_ID_BATCH = 200;
@@ -12,6 +13,9 @@ const ORDER_ID_BATCH = 200;
 type LoadedOrderItem = CRMOrderItemForSegmentation & {
   totalDiscount?: number | null;
 };
+
+export type CRMProductOption = { id: string; title: string; skus: string[] };
+export type CRMCollectionOption = { id: string; title: string };
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -38,7 +42,6 @@ async function loadOrders(): Promise<CRMOrderForSegmentation[]> {
   const db = await admin();
   const rows: CRMOrderForSegmentation[] = [];
   for (let page = 0; ; page++) {
-    // `cancelled_at` existe no banco, mas o snapshot local de tipos ainda não foi regenerado.
     const { data, error } = await (db.from("shopify_orders") as any)
       .select("id, customer_id, total_price, processed_at, created_at, financial_status, cancelled_at")
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
@@ -150,7 +153,7 @@ function startOfBusinessDay(now: Date): Date {
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(now);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
   return new Date(`${get("year")}-${get("month")}-${get("day")}T00:00:00-03:00`);
 }
 
@@ -179,11 +182,12 @@ async function loadShippedTodayValidOrderIds(orders: CRMOrderForSegmentation[], 
   return shipped;
 }
 
-export async function loadCRMProductFilterOptions(): Promise<Array<{ id: string; title: string; skus: string[] }>> {
-  const orders = await loadOrders();
-  const items = await loadValidOrderItems(orders);
-  const products = new Map<string, { id: string; title: string; skus: Set<string> }>();
+function productIdsFromItems(items: LoadedOrderItem[]): string[] {
+  return [...new Set(items.map((item) => String(item.productId ?? "").trim()).filter(Boolean))];
+}
 
+function buildProductOptions(items: LoadedOrderItem[]): CRMProductOption[] {
+  const products = new Map<string, { id: string; title: string; skus: Set<string> }>();
   for (const item of items) {
     const id = String(item.productId ?? "").trim();
     if (!id) continue;
@@ -192,14 +196,42 @@ export async function loadCRMProductFilterOptions(): Promise<Array<{ id: string;
       title: item.title?.trim() || `Produto ${id}`,
       skus: new Set<string>(),
     };
-    if ((!current.title || current.title.startsWith("Produto ")) && item.title?.trim()) current.title = item.title.trim();
+    if (current.title.startsWith("Produto ") && item.title?.trim()) current.title = item.title.trim();
     if (item.sku?.trim()) current.skus.add(item.sku.trim());
     products.set(id, current);
   }
-
   return [...products.values()]
     .map((product) => ({ ...product, skus: [...product.skus].sort((a, b) => a.localeCompare(b, "pt-BR")) }))
     .sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
+}
+
+export async function loadCRMProductFilterOptionsBundle(): Promise<{
+  products: CRMProductOption[];
+  productTypes: string[];
+  collections: CRMCollectionOption[];
+}> {
+  const orders = await loadOrders();
+  const items = await loadValidOrderItems(orders);
+  const products = buildProductOptions(items);
+  const taxonomy = await getShopifyProductTaxonomyByIds(productIdsFromItems(items));
+  const productTypes = new Set<string>();
+  const collections = new Map<string, CRMCollectionOption>();
+
+  for (const item of taxonomy.values()) {
+    if (item.productType?.trim()) productTypes.add(item.productType.trim());
+    for (const collection of item.collections) collections.set(collection.id, { id: collection.id, title: collection.title });
+  }
+
+  return {
+    products,
+    productTypes: [...productTypes].sort((a, b) => a.localeCompare(b, "pt-BR")),
+    collections: [...collections.values()].sort((a, b) => a.title.localeCompare(b.title, "pt-BR")),
+  };
+}
+
+/** Mantém compatibilidade com callers anteriores que só precisam dos produtos. */
+export async function loadCRMProductFilterOptions(): Promise<CRMProductOption[]> {
+  return (await loadCRMProductFilterOptionsBundle()).products;
 }
 
 export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMAdvancedCustomerContext[]> {
@@ -220,8 +252,23 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
     shippedTodayValidOrderIds,
   });
   const spendIndex = buildProductSpendIndex(orders, orderItems);
-  return baseContexts.map((context) => ({
-    ...context,
-    productSpentById: spendIndex.get(context.customer.id) ?? new Map<string, number>(),
-  }));
+  const taxonomy = await getShopifyProductTaxonomyByIds(productIdsFromItems(orderItems));
+
+  return baseContexts.map((context) => {
+    const purchasedProductTypes = new Set<string>();
+    const purchasedCollectionIds = new Set<string>();
+    for (const productId of context.purchasedProducts.keys()) {
+      const productTaxonomy = taxonomy.get(productId);
+      if (!productTaxonomy) continue;
+      if (productTaxonomy.productType?.trim()) purchasedProductTypes.add(productTaxonomy.productType.trim());
+      for (const collection of productTaxonomy.collections) purchasedCollectionIds.add(collection.id);
+    }
+
+    return {
+      ...context,
+      productSpentById: spendIndex.get(context.customer.id) ?? new Map<string, number>(),
+      purchasedProductTypes,
+      purchasedCollectionIds,
+    };
+  });
 }

@@ -23,6 +23,11 @@ export type AutomationEventContext = {
   } | null;
 };
 
+type AutomationRecipientPreview = {
+  firstName?: string | null | undefined;
+  checkoutUrl?: string | null | undefined;
+};
+
 export function buildAutomationContextKey(context: AutomationEventContext, customerId: string): string {
   if (context.order?.id) return `order:${context.order.id}`;
   if (context.checkout?.id) return `checkout:${context.checkout.id}`;
@@ -44,7 +49,7 @@ export function formatAutomationPurchasedItems(items: AutomationEventContext["it
 
 export function buildAutomationTokenReplacements(
   context: AutomationEventContext,
-  recipient: { firstName?: string | null; checkoutUrl?: string | null },
+  recipient: AutomationRecipientPreview,
 ): Record<string, string> {
   const order = context.order;
   const fulfillment = context.fulfillment;
@@ -73,7 +78,7 @@ export function buildAutomationTokenReplacements(
 export function resolveAutomationBodyParams(
   bodyParams: string[],
   context: AutomationEventContext,
-  recipient: { firstName?: string | null; checkoutUrl?: string | null },
+  recipient: AutomationRecipientPreview,
 ): string[] {
   const replacements = buildAutomationTokenReplacements(context, recipient);
   return bodyParams.map((param) => {

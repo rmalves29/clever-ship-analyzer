@@ -4,7 +4,7 @@ import { getCRMFilterField, validateCRMFilterCondition, validateSegmentRulesPayl
 
 describe("modelos prontos de segmentos", () => {
   it("mantém IDs únicos e modelos com nome e descrição", () => {
-    expect(CRM_SEGMENT_TEMPLATES.length).toBeGreaterThan(0);
+    expect(CRM_SEGMENT_TEMPLATES.length).toBe(16);
     expect(new Set(CRM_SEGMENT_TEMPLATES.map((template) => template.id)).size).toBe(CRM_SEGMENT_TEMPLATES.length);
     for (const template of CRM_SEGMENT_TEMPLATES) {
       expect(template.name.trim()).not.toBe("");
@@ -33,5 +33,21 @@ describe("modelos prontos de segmentos", () => {
         }
       }
     }
+  });
+
+  it("inclui os principais públicos comerciais para conversão, recompra, valor e fidelização", () => {
+    const ids = new Set(CRM_SEGMENT_TEMPLATES.map((template) => template.id));
+    [
+      "checkout-abandonado-ativo",
+      "segunda-compra-8-14",
+      "segunda-compra-15-30",
+      "frequencia-2-30d",
+      "alto-valor-30d",
+      "compra-unica-alto-valor",
+      "recorrente-alto-valor",
+      "vip-em-formacao",
+      "vip-leais",
+      "baixo-ticket-recente",
+    ].forEach((id) => expect(ids.has(id)).toBe(true));
   });
 });

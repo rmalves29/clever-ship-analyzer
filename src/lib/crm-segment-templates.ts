@@ -1,3 +1,5 @@
+import { CRM_FILTER_CATEGORIES, getCRMFilterField } from "./crm-filter-catalog";
+
 export type CRMSegmentTemplateCondition = {
   field: string;
   operator: string;
@@ -9,6 +11,21 @@ export type CRMSegmentTemplate = {
   name: string;
   description: string;
   conditions: CRMSegmentTemplateCondition[];
+};
+
+export type PersistedCRMSegmentRules = {
+  groups: Array<{
+    id: string;
+    type: "AND";
+    conditions: Array<{
+      id: string;
+      category: string;
+      field: string;
+      operator: string;
+      value: unknown;
+      label: string;
+    }>;
+  }>;
 };
 
 /**
@@ -145,3 +162,34 @@ export const CRM_SEGMENT_TEMPLATES: CRMSegmentTemplate[] = [
     ],
   },
 ];
+
+/**
+ * Converte um modelo comercial para exatamente o mesmo formato persistido pelo editor.
+ * Isso permite criar os modelos em lote no banco sem salvar regras incompletas que depois
+ * não poderiam ser editadas/removidas corretamente na interface.
+ */
+export function buildPersistedRulesFromTemplate(template: CRMSegmentTemplate): PersistedCRMSegmentRules {
+  const conditions = template.conditions.map((condition, index) => {
+    const field = getCRMFilterField(condition.field);
+    if (!field) throw new Error(`Filtro sem suporte no modelo ${template.name}: ${condition.field}`);
+    const category = CRM_FILTER_CATEGORIES.find((item) => item.fields.some((candidate) => candidate.id === field.id));
+    if (!category) throw new Error(`Categoria não encontrada para ${field.label}.`);
+
+    return {
+      id: `template-${template.id}-${index + 1}`,
+      category: category.id,
+      field: condition.field,
+      operator: condition.operator,
+      value: JSON.parse(JSON.stringify(condition.value)),
+      label: field.label,
+    };
+  });
+
+  return {
+    groups: [{
+      id: `template-${template.id}`,
+      type: "AND",
+      conditions,
+    }],
+  };
+}

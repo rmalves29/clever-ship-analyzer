@@ -34,6 +34,20 @@ const buyer: CRMAdvancedCustomerContext = {
   purchasedCollectionIds: new Set(["gid://shopify/Collection/100"]),
   productTypeLastPurchasedAt: new Map([["Brincos", "2026-08-20T12:00:00-03:00"]]),
   collectionLastPurchasedAt: new Map([["gid://shopify/Collection/100", "2026-08-20T12:00:00-03:00"]]),
+  validPurchaseHistory: [
+    { processedAt: "2026-08-20T12:00:00-03:00", totalPrice: 100 },
+    { processedAt: "2026-08-24T12:00:00-03:00", totalPrice: 200 },
+  ],
+  productTypeQuantityByValue: new Map([["Brincos", 2]]),
+  productTypeSpentByValue: new Map([["Brincos", 200]]),
+  collectionQuantityById: new Map([["gid://shopify/Collection/100", 2]]),
+  collectionSpentById: new Map([["gid://shopify/Collection/100", 200]]),
+  whatsappCampaignSentIds: new Set(["camp-1"]),
+  whatsappCampaignDeliveredIds: new Set(["camp-1"]),
+  whatsappCampaignReadIds: new Set(["camp-1"]),
+  whatsappCampaignFailedIds: new Set(["camp-2"]),
+  whatsappAutomationEnteredIds: new Set(["auto-1"]),
+  whatsappAutomationCompletedIds: new Set(["auto-1"]),
   abandonedCheckout: true,
   hadAbandonedCheckout: true,
   abandonedCheckoutRecovered: false,
@@ -54,6 +68,17 @@ const lead: CRMAdvancedCustomerContext = {
   purchasedCollectionIds: new Set(),
   productTypeLastPurchasedAt: new Map(),
   collectionLastPurchasedAt: new Map(),
+  validPurchaseHistory: [],
+  productTypeQuantityByValue: new Map(),
+  productTypeSpentByValue: new Map(),
+  collectionQuantityById: new Map(),
+  collectionSpentById: new Map(),
+  whatsappCampaignSentIds: new Set(),
+  whatsappCampaignDeliveredIds: new Set(),
+  whatsappCampaignReadIds: new Set(),
+  whatsappCampaignFailedIds: new Set(),
+  whatsappAutomationEnteredIds: new Set(),
+  whatsappAutomationCompletedIds: new Set(),
   abandonedCheckout: false,
   hadAbandonedCheckout: false,
   abandonedCheckoutRecovered: false,
@@ -66,6 +91,8 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
   { field: "estado", operator: "eq", value: "MG" },
   { field: "total_gasto", operator: "eq", value: 300 },
   { field: "total_pedidos", operator: "eq", value: 2 },
+  { field: "pedidos_periodo", operator: "gte", value: { days: 30, amount: 2 } },
+  { field: "gasto_periodo", operator: "gte", value: { days: 30, amount: 300 } },
   { field: "ultima_compra", operator: "on", value: "2026-08-24" },
   { field: "primeira_compra", operator: "on", value: "2026-08-20" },
   { field: "ticket_medio", operator: "eq", value: 150 },
@@ -80,20 +107,26 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
   { field: "produto", operator: "bought", value: "p-brinco" },
   { field: "categoria_produto", operator: "bought", value: "Brincos" },
   { field: "categoria_periodo", operator: "last_days", value: { taxonomyValue: "Brincos", days: 7 } },
+  { field: "categoria_quantidade", operator: "gte", value: { taxonomyValue: "Brincos", amount: 2 } },
+  { field: "categoria_valor_gasto", operator: "gte", value: { taxonomyValue: "Brincos", amount: 200 } },
   { field: "colecao_produto", operator: "bought", value: "gid://shopify/Collection/100" },
   { field: "colecao_periodo", operator: "last_days", value: { taxonomyValue: "gid://shopify/Collection/100", days: 7 } },
+  { field: "colecao_quantidade", operator: "gte", value: { taxonomyValue: "gid://shopify/Collection/100", amount: 2 } },
+  { field: "colecao_valor_gasto", operator: "gte", value: { taxonomyValue: "gid://shopify/Collection/100", amount: 200 } },
   { field: "produto_periodo", operator: "last_days", value: { productId: "p-brinco", days: 7 } },
   { field: "produto_quantidade", operator: "gte", value: { productId: "p-brinco", amount: 1 } },
   { field: "produto_valor_gasto", operator: "gte", value: { productId: "p-brinco", amount: 100 } },
   { field: "produto_sku", operator: "bought", value: { productId: "p-brinco", sku: "BR-LON" } },
+  { field: "campanha_whatsapp", operator: "read", value: "camp-1" },
+  { field: "automacao_whatsapp", operator: "completed", value: "auto-1" },
   { field: "customer_tag", operator: "contains", value: "VIP" },
   { field: "tags_custom", operator: "contains", value: "Teste" },
   { field: "rfm_segment", operator: "eq", value: "Nova compra" },
 ];
 
 describe("catálogo confiável de filtros do CRM", () => {
-  it("expõe somente os 27 filtros implementados no motor", () => {
-    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(27);
+  it("expõe somente os 35 filtros implementados no motor", () => {
+    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(35);
     expect(new Set(SUPPORTED_SEGMENT_FIELD_IDS)).toEqual(new Set(cases.map((item) => item.field)));
   });
 
@@ -113,6 +146,13 @@ describe("catálogo confiável de filtros do CRM", () => {
     expect(validateCRMFilterCondition({ field: "recorrencia", operator: "gte", value: 2 })).toContain("Operador inválido");
   });
 
+  it("valida quantidade de compras e gasto por período", () => {
+    expect(validateCRMFilterCondition({ field: "pedidos_periodo", operator: "gte", value: { days: 60, amount: 3 } })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "gasto_periodo", operator: "between", value: { days: 90, min: 200, max: 500 } })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "gasto_periodo", operator: "gte", value: { days: "", amount: 500 } })).toContain("Número de dias inválido");
+    expect(validateCRMFilterCondition({ field: "pedidos_periodo", operator: "between", value: { days: 30, min: 5, max: 2 } })).toContain("Faixa inválida");
+  });
+
   it("produto, categoria e coleção só aceitam Comprou/Não comprou", () => {
     expect(validateCRMFilterCondition({ field: "produto", operator: "bought", value: "p-brinco" })).toBeNull();
     expect(validateCRMFilterCondition({ field: "categoria_produto", operator: "not_bought", value: "Colares" })).toBeNull();
@@ -125,7 +165,13 @@ describe("catálogo confiável de filtros do CRM", () => {
     expect(validateCRMFilterCondition({ field: "categoria_periodo", operator: "last_days", value: { taxonomyValue: "Brincos", days: 30 } })).toBeNull();
     expect(validateCRMFilterCondition({ field: "colecao_periodo", operator: "between_days", value: { taxonomyValue: "gid://shopify/Collection/100", min: 8, max: 30 } })).toBeNull();
     expect(validateCRMFilterCondition({ field: "categoria_periodo", operator: "between_days", value: { taxonomyValue: "Brincos", min: 30, max: 8 } })).toContain("Intervalo de dias inválido");
-    expect(validateCRMFilterCondition({ field: "colecao_periodo", operator: "last_days", value: { taxonomyValue: "", days: 30 } })).toContain("Selecione uma categoria/coleção");
+  });
+
+  it("valida quantidade e valor por categoria/coleção", () => {
+    expect(validateCRMFilterCondition({ field: "categoria_quantidade", operator: "gte", value: { taxonomyValue: "Brincos", amount: 3 } })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "categoria_valor_gasto", operator: "between", value: { taxonomyValue: "Brincos", min: 100, max: 500 } })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "colecao_quantidade", operator: "gte", value: { taxonomyValue: "gid://shopify/Collection/100", amount: 2 } })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "colecao_valor_gasto", operator: "gte", value: { taxonomyValue: "", amount: 100 } })).toContain("Selecione uma categoria/coleção");
   });
 
   it("valida período, quantidade, valor e SKU do produto", () => {
@@ -134,6 +180,14 @@ describe("catálogo confiável de filtros do CRM", () => {
     expect(validateCRMFilterCondition({ field: "produto_quantidade", operator: "gte", value: { productId: "p-brinco", amount: 2 } })).toBeNull();
     expect(validateCRMFilterCondition({ field: "produto_valor_gasto", operator: "between", value: { productId: "p-brinco", min: 50, max: 200 } })).toBeNull();
     expect(validateCRMFilterCondition({ field: "produto_sku", operator: "bought", value: { productId: "p-brinco", sku: "BR-LON" } })).toBeNull();
+  });
+
+  it("valida comportamento de campanha e automação com operadores específicos", () => {
+    expect(validateCRMFilterCondition({ field: "campanha_whatsapp", operator: "sent", value: "camp-1" })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "campanha_whatsapp", operator: "read", value: "camp-1" })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "campanha_whatsapp", operator: "clicked", value: "camp-1" })).toContain("Operador inválido");
+    expect(validateCRMFilterCondition({ field: "automacao_whatsapp", operator: "completed", value: "auto-1" })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "automacao_whatsapp", operator: "entered", value: "" })).toContain("Selecione um valor");
   });
 
   it("aceita faixas numéricas válidas e rejeita invertidas", () => {
@@ -156,14 +210,15 @@ describe("catálogo confiável de filtros do CRM", () => {
     expect(result.errors).toHaveLength(3);
   });
 
-  it("validação server-side aceita cross-sell temporal por categoria e coleção", () => {
+  it("validação server-side aceita regras dos novos blocos", () => {
     expect(validateSegmentRulesPayload({ groups: [{ conditions: [
-      { field: "categoria_periodo", operator: "last_days", value: { taxonomyValue: "Brincos", days: 30 } },
-      { field: "colecao_produto", operator: "not_bought", value: "gid://shopify/Collection/200" },
+      { field: "pedidos_periodo", operator: "gte", value: { days: 60, amount: 3 } },
+      { field: "categoria_valor_gasto", operator: "gte", value: { taxonomyValue: "Brincos", amount: 300 } },
+      { field: "campanha_whatsapp", operator: "read", value: "camp-1" },
     ] }] })).toEqual({ valid: true, errors: [] });
   });
 
-  it("não expõe filtros ainda sem fonte de dados", () => {
+  it("não expõe aliases antigos ou filtros sem fonte confiável", () => {
     ["regiao", "bairro", "aniversario_mes", "idade", "signo", "order_tag", "recebeu_campanha", "clicou_campanha", "entrou_fluxo"]
       .forEach((field) => expect(SUPPORTED_SEGMENT_FIELD_IDS).not.toContain(field));
   });

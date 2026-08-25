@@ -14,9 +14,14 @@ import {
   duplicateMetaTemplate,
   updateMetaTemplate,
   deleteMetaTemplate,
-  createMetaTemplate,
   getRecentTemplateEvents,
 } from "@/lib/whatsapp-meta.functions";
+import { createMetaTemplateWithVariables } from "@/lib/whatsapp-template-create.functions";
+import {
+  buildBodyVariableExample,
+  renderTemplateVariablePreview,
+  validateTemplateVariables,
+} from "@/lib/whatsapp-template-variables";
 
 const LANGUAGES = [
   { value: "pt_BR", label: "Português (BR)" },
@@ -81,7 +86,7 @@ export function TemplatesTab() {
   const runDuplicate = useServerFn(duplicateMetaTemplate);
   const runUpdate = useServerFn(updateMetaTemplate);
   const runDelete = useServerFn(deleteMetaTemplate);
-  const runCreate = useServerFn(createMetaTemplate);
+  const runCreate = useServerFn(createMetaTemplateWithVariables);
   const runGetEvents = useServerFn(getRecentTemplateEvents);
 
   const [newOpen, setNewOpen] = useState(false);
@@ -92,7 +97,15 @@ export function TemplatesTab() {
   const [newBody, setNewBody] = useState("");
   const [newFooter, setNewFooter] = useState("");
   const [newButtons, setNewButtons] = useState<string[]>([]);
+  const [newVariableExamples, setNewVariableExamples] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
+
+  const newVariableValidation = useMemo(() => validateTemplateVariables(newBody), [newBody]);
+  const newVariableCount = newVariableValidation.indexes.length;
+  const variableExamplesReady =
+    newVariableValidation.valid &&
+    (newVariableCount === 0 ||
+      newVariableValidation.indexes.every((_, index) => Boolean(newVariableExamples[index]?.trim())));
 
   const resetNewForm = () => {
     setNewName("");
@@ -102,6 +115,7 @@ export function TemplatesTab() {
     setNewBody("");
     setNewFooter("");
     setNewButtons([]);
+    setNewVariableExamples([]);
   };
 
   const handleCreate = async () => {
@@ -109,9 +123,21 @@ export function TemplatesTab() {
       toast.error("O corpo da mensagem é obrigatório.");
       return;
     }
+
+    const bodyExample = buildBodyVariableExample(newBody.trim(), newVariableExamples);
+    if (!bodyExample.success) {
+      toast.error(bodyExample.error);
+      return;
+    }
+
     setCreating(true);
     try {
-      const components: any[] = [{ type: "BODY", text: newBody.trim() }];
+      const bodyComponent = {
+        type: "BODY" as const,
+        text: newBody.trim(),
+        ...(bodyExample.example ? { example: bodyExample.example } : {}),
+      };
+      const components: any[] = [bodyComponent];
       if (newHeader.trim()) components.unshift({ type: "HEADER", format: "TEXT", text: newHeader.trim() });
       if (newFooter.trim()) components.push({ type: "FOOTER", text: newFooter.trim() });
       const buttonTexts = newButtons.map((b) => b.trim()).filter(Boolean);
@@ -332,8 +358,7 @@ export function TemplatesTab() {
         <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
           <h2 className="text-lg font-semibold">Novo template</h2>
           <p className="text-sm text-muted-foreground">
-            Ao salvar, o template é enviado direto pra revisão da Meta. Some da fila "PENDING" assim que ela aprovar ou rejeitar
-            (a lista acima atualiza sozinha enquanto isso).
+            Ao salvar, o template é enviado direto pra revisão da Meta. Se usar variáveis, informe exemplos reais abaixo — eles servem apenas para a aprovação e não serão enviados aos clientes.
           </p>
 
           <div className="grid grid-cols-2 gap-3">
@@ -373,12 +398,42 @@ export function TemplatesTab() {
             <Input value={newHeader} onChange={(e) => setNewHeader(e.target.value)} placeholder="Título curto em negrito" maxLength={60} />
           </div>
 
-          <div>
+          <div className="space-y-2">
             <label className="text-xs font-medium text-muted-foreground">
-              Corpo — use {"{{1}}"}, {"{{2}}"}... pra variáveis (nome do cliente, cupom, etc.)
+              Corpo — use {"{{1}}"}, {"{{2}}"}... pra variáveis
             </label>
-            <Textarea value={newBody} onChange={(e) => setNewBody(e.target.value)} rows={4} placeholder="Oi {{1}}, vimos que..." maxLength={1024} />
+            <Textarea value={newBody} onChange={(e) => setNewBody(e.target.value)} rows={4} placeholder="Oi {{1}}, seu pedido {{2}} foi enviado!" maxLength={1024} />
+            {!newVariableValidation.valid && (
+              <p className="text-xs text-critical">{newVariableValidation.error}</p>
+            )}
           </div>
+
+          {newVariableValidation.valid && newVariableCount > 0 && (
+            <div className="rounded-xl border border-brand/20 bg-brand/5 p-4 space-y-3">
+              <div>
+                <p className="text-sm font-semibold">Exemplos das variáveis</p>
+                <p className="text-xs text-muted-foreground">
+                  A Meta usa estes valores somente para entender e aprovar o template. No disparo, cada cliente receberá os dados dinâmicos configurados na campanha ou automação.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {newVariableValidation.indexes.map((variableNumber, index) => (
+                  <div key={variableNumber} className="space-y-1">
+                    <label className="text-xs font-semibold">{`Variável {{${variableNumber}}}`}</label>
+                    <Input
+                      value={newVariableExamples[index] ?? ""}
+                      onChange={(e) => {
+                        const next = [...newVariableExamples];
+                        next[index] = e.target.value;
+                        setNewVariableExamples(next);
+                      }}
+                      placeholder={index === 0 ? "Ex: Maria" : index === 1 ? "Ex: #1548" : "Exemplo real"}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="text-xs font-medium text-muted-foreground">Rodapé (opcional)</label>
@@ -412,7 +467,7 @@ export function TemplatesTab() {
           {(newHeader || newBody || newFooter) && (
             <div className="rounded-xl bg-[#075E54] p-4 text-white">
               {newHeader && <p className="font-semibold">{newHeader}</p>}
-              <p className="mt-1 whitespace-pre-wrap text-sm">{newBody}</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm">{renderTemplateVariablePreview(newBody, newVariableExamples)}</p>
               {newFooter && <p className="mt-1 text-xs text-white/70">{newFooter}</p>}
               {newButtons.filter(Boolean).length > 0 && (
                 <div className="mt-2 space-y-1 border-t border-white/20 pt-2">
@@ -424,7 +479,11 @@ export function TemplatesTab() {
             </div>
           )}
 
-          <Button onClick={handleCreate} disabled={creating || !newName || !newBody} className="w-full">
+          <Button
+            onClick={handleCreate}
+            disabled={creating || !newName || !newBody || !variableExamplesReady}
+            className="w-full"
+          >
             {creating ? "Enviando pra Meta..." : "Enviar pra aprovação"}
           </Button>
         </DialogContent>

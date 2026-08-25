@@ -13,10 +13,21 @@ describe("whatsapp automation reentry", () => {
       decideAutomationReentry({
         mode: "once",
         contextKey: "order:2",
-        previousRuns: [{ enrolled_at: "2026-08-01T00:00:00.000Z", enrollment_key: "once" }],
+        previousRuns: [{ enrolled_at: "2026-08-01T00:00:00.000Z", enrollment_key: "once", status: "completed" }],
         now,
       }),
     ).toEqual({ eligible: false, reason: "already_enrolled" });
+  });
+
+  it("não cria duas jornadas simultâneas para o mesmo cliente", () => {
+    expect(
+      decideAutomationReentry({
+        mode: "per_order",
+        contextKey: "order:200",
+        previousRuns: [{ enrolled_at: "2026-08-20T00:00:00.000Z", context_key: "order:100", status: "waiting_send" }],
+        now,
+      }),
+    ).toEqual({ eligible: false, reason: "active_run" });
   });
 
   it("permite uma execução por pedido e bloqueia o mesmo pedido", () => {
@@ -28,7 +39,7 @@ describe("whatsapp automation reentry", () => {
       decideAutomationReentry({
         mode: "per_order",
         contextKey: "order:200",
-        previousRuns: [{ enrolled_at: "2026-08-20T00:00:00.000Z", context_key: "order:100" }],
+        previousRuns: [{ enrolled_at: "2026-08-20T00:00:00.000Z", context_key: "order:100", status: "completed" }],
         now,
       }),
     ).toEqual({ eligible: true, enrollmentKey: "order:200" });
@@ -36,7 +47,7 @@ describe("whatsapp automation reentry", () => {
       decideAutomationReentry({
         mode: "per_order",
         contextKey: "order:100",
-        previousRuns: [{ enrolled_at: "2026-08-20T00:00:00.000Z", enrollment_key: "order:100" }],
+        previousRuns: [{ enrolled_at: "2026-08-20T00:00:00.000Z", enrollment_key: "order:100", status: "completed" }],
         now,
       }),
     ).toEqual({ eligible: false, reason: "already_enrolled" });
@@ -59,7 +70,7 @@ describe("whatsapp automation reentry", () => {
         mode: "after_days",
         contextKey: "customer:1:x",
         reentryAfterDays: 30,
-        previousRuns: [{ enrolled_at: "2026-08-10T20:00:00.000Z" }],
+        previousRuns: [{ enrolled_at: "2026-08-10T20:00:00.000Z", status: "completed" }],
         now,
       }),
     ).toEqual({ eligible: false, reason: "cooldown" });
@@ -69,7 +80,7 @@ describe("whatsapp automation reentry", () => {
         mode: "after_days",
         contextKey: "customer:1:x",
         reentryAfterDays: 30,
-        previousRuns: [{ enrolled_at: "2026-07-20T20:00:00.000Z" }],
+        previousRuns: [{ enrolled_at: "2026-07-20T20:00:00.000Z", status: "completed" }],
         now,
       }),
     ).toEqual({ eligible: true, enrollmentKey: "after_days:2026-08-25" });

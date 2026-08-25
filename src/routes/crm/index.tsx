@@ -456,7 +456,13 @@ function CRMPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col">
-                              <span className="font-semibold text-foreground">{c.name}</span>
+                              <button
+                                type="button"
+                                className="w-fit text-left font-semibold text-foreground hover:text-brand hover:underline"
+                                onClick={() => navigate({ to: "/crm/cliente/$customerId", params: { customerId: c.id } })}
+                              >
+                                {c.name}
+                              </button>
                               <span className="flex items-center gap-1 text-xs text-muted-foreground">
                                 <Mail className="size-3" /> {c.email || "—"}
                               </span>
@@ -524,7 +530,9 @@ function CRMPage() {
                                 <DropdownMenuItem onClick={() => handleDeepSync(c.id.replace('email:', '').replace('id:', ''))}>
                                   <RefreshCw className="mr-2 size-4" /> Forçar Sincronia Shopify
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>Ver Detalhes</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => navigate({ to: "/crm/cliente/$customerId", params: { customerId: c.id } })}>
+                                  Ver Detalhes 360º
+                                </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>

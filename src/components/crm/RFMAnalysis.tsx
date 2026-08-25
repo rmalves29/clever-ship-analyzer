@@ -36,26 +36,49 @@ import { brl } from "@/lib/crm-mock";
 
 const segColor = (name: string) => RFM_SEGMENTS_CONFIG[name as RFMSegment]?.color ?? "#94a3b8";
 
+function errorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string") return error;
+  return "Falha desconhecida ao carregar os dados RFM.";
+}
+
 export function RFMAnalysis() {
   const queryClient = useQueryClient();
   const fetchStats = useServerFn(getRFMStats);
   const runCalculate = useServerFn(calculateRFMSegments);
 
-  const { data, isLoading } = useQuery({
+  const {
+    data,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ["rfm-stats"],
     queryFn: () => fetchStats(),
+    retry: 1,
   });
 
   const calculateMutation = useMutation({
     mutationFn: () => runCalculate(),
-    onSuccess: () => {
-      toast.success("Análise RFM recalculada com sucesso!");
-      queryClient.invalidateQueries({ queryKey: ["rfm-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["crm-customers"] });
-      queryClient.invalidateQueries({ queryKey: ["crm-stats"] });
+    onSuccess: async (result) => {
+      if (result.count > 0) {
+        toast.success(`RFM recalculado: ${result.count} cliente(s) atualizado(s) de ${result.evaluatedCustomers} analisados.`);
+      } else if (result.evaluatedCustomers > 0) {
+        toast.success(`RFM conferido: ${result.evaluatedCustomers} cliente(s) analisados e a classificação já estava atualizada.`);
+      } else {
+        toast.warning("O cálculo RFM foi executado, mas não encontrou clientes na base da Shopify.");
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["rfm-stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["crm-customers"] }),
+        queryClient.invalidateQueries({ queryKey: ["crm-stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["crm-segments"] }),
+      ]);
     },
-    onError: (err: any) => {
-      toast.error("Erro ao calcular RFM: " + err.message);
+    onError: (err: unknown) => {
+      toast.error("Erro ao calcular RFM: " + errorMessage(err));
     },
   });
 
@@ -65,6 +88,26 @@ export function RFMAnalysis() {
         <div className="flex flex-col items-center gap-4">
           <RefreshCw className="size-8 animate-spin text-brand" />
           <p className="text-sm text-muted-foreground">Processando análise RFM...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="surface-card mx-auto max-w-2xl border-l-4 border-l-destructive p-6">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
+          <div className="flex-1">
+            <h3 className="font-semibold">Não foi possível calcular a análise RFM</h3>
+            <p className="mt-1 text-sm text-muted-foreground">{errorMessage(error)}</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              A tela não vai mais esconder falhas como se fossem valores zerados. Corrija a origem indicada acima e tente novamente.
+            </p>
+            <Button variant="outline" className="mt-4 gap-2" onClick={() => refetch()} disabled={isFetching}>
+              <RefreshCw className={`size-4 ${isFetching ? "animate-spin" : ""}`} /> Tentar novamente
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -80,6 +123,9 @@ export function RFMAnalysis() {
     .sort((a, b) => b.clientes - a.clientes);
 
   const freqData = (data?.frequencia ?? []).filter((f) => f.faixa !== "0x");
+  const hasSourceCustomers = (data?.sourceCustomers ?? 0) > 0;
+  const hasSourceOrders = (data?.sourceOrders ?? 0) > 0;
+  const hasValidOrders = (data?.validOrders ?? 0) > 0;
 
   return (
     <div className="space-y-8 pb-12">
@@ -89,6 +135,9 @@ export function RFMAnalysis() {
           <p className="text-sm text-muted-foreground">
             Recência, Frequência e Valor — considerando apenas pedidos pagos (reembolsados, expirados,
             anulados e não pagos ficam de fora).
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Fonte lida: {new Intl.NumberFormat().format(data?.sourceCustomers ?? 0)} clientes · {new Intl.NumberFormat().format(data?.sourceOrders ?? 0)} pedidos importados · {new Intl.NumberFormat().format(data?.validOrders ?? 0)} pedidos válidos para RFM
           </p>
         </div>
         <Button
@@ -101,11 +150,30 @@ export function RFMAnalysis() {
           ) : (
             <Sparkles className="size-4" />
           )}
-          Recalcular Análise RFM
+          {calculateMutation.isPending ? "Recalculando..." : "Recalcular Análise RFM"}
         </Button>
       </div>
 
-      {/* Aviso de maturidade da base */}
+      {!hasSourceCustomers && (
+        <div className="surface-card flex items-start gap-3 border-l-4 border-l-destructive p-4">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
+          <div className="text-sm">
+            <p className="font-semibold">Nenhum cliente da Shopify disponível para o RFM</p>
+            <p className="text-muted-foreground">Sincronize a Shopify antes de recalcular. Sem clientes importados não existe base para classificar.</p>
+          </div>
+        </div>
+      )}
+
+      {hasSourceCustomers && hasSourceOrders && !hasValidOrders && (
+        <div className="surface-card flex items-start gap-3 border-l-4 border-l-amber-500 p-4">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-500" />
+          <div className="text-sm">
+            <p className="font-semibold">Há pedidos importados, mas nenhum pedido válido para o RFM</p>
+            <p className="text-muted-foreground">Confira os status financeiros sincronizados. O RFM considera PAID e PARTIALLY_PAID sem cancelamento.</p>
+          </div>
+        </div>
+      )}
+
       {!data?.classicMode && (
         <div className="surface-card flex items-start gap-3 border-l-4 border-l-amber-500 p-4">
           <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-500" />
@@ -121,41 +189,30 @@ export function RFMAnalysis() {
         </div>
       )}
 
-      {/* KPIs reais */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="surface-card p-5">
           <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-blue-500/10 p-2 text-blue-500">
-              <Users className="size-5" />
-            </div>
+            <div className="rounded-lg bg-blue-500/10 p-2 text-blue-500"><Users className="size-5" /></div>
             <div>
               <p className="text-xs font-medium uppercase text-muted-foreground">Base Total</p>
               <h3 className="text-2xl font-bold">{new Intl.NumberFormat().format(data?.totalClientes ?? 0)}</h3>
-              <p className="text-[11px] text-muted-foreground">
-                {new Intl.NumberFormat().format(data?.compradores ?? 0)} com compra paga
-              </p>
+              <p className="text-[11px] text-muted-foreground">{new Intl.NumberFormat().format(data?.compradores ?? 0)} com compra paga</p>
             </div>
           </div>
         </div>
         <div className="surface-card p-5">
           <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-emerald-500/10 p-2 text-emerald-500">
-              <ShoppingBag className="size-5" />
-            </div>
+            <div className="rounded-lg bg-emerald-500/10 p-2 text-emerald-500"><ShoppingBag className="size-5" /></div>
             <div>
               <p className="text-xs font-medium uppercase text-muted-foreground">Receita Válida</p>
               <h3 className="text-2xl font-bold">{brl(data?.totalReceita ?? 0)}</h3>
-              <p className="text-[11px] text-muted-foreground">
-                {new Intl.NumberFormat().format(data?.totalPedidos ?? 0)} pedidos pagos
-              </p>
+              <p className="text-[11px] text-muted-foreground">{new Intl.NumberFormat().format(data?.totalPedidos ?? 0)} pedidos pagos</p>
             </div>
           </div>
         </div>
         <div className="surface-card p-5">
           <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-brand/10 p-2 text-brand">
-              <TrendingUp className="size-5" />
-            </div>
+            <div className="rounded-lg bg-brand/10 p-2 text-brand"><TrendingUp className="size-5" /></div>
             <div>
               <p className="text-xs font-medium uppercase text-muted-foreground">AOV Real</p>
               <h3 className="text-2xl font-bold">{brl(data?.aovGeral ?? 0)}</h3>
@@ -164,21 +221,16 @@ export function RFMAnalysis() {
         </div>
         <div className="surface-card p-5">
           <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-amber-500/10 p-2 text-amber-500">
-              <AlertTriangle className="size-5" />
-            </div>
+            <div className="rounded-lg bg-amber-500/10 p-2 text-amber-500"><AlertTriangle className="size-5" /></div>
             <div>
               <p className="text-xs font-medium uppercase text-muted-foreground">Excluído do RFM</p>
               <h3 className="text-2xl font-bold">{brl(data?.receitaExcluida ?? 0)}</h3>
-              <p className="text-[11px] text-muted-foreground">
-                {data?.pedidosExcluidos ?? 0} pedidos não pagos/reembolsados
-              </p>
+              <p className="text-[11px] text-muted-foreground">{data?.pedidosExcluidos ?? 0} pedidos não pagos/reembolsados</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Distribuição */}
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="surface-card p-6">
           <h3 className="mb-6 text-lg font-bold">Clientes por Segmento</h3>
@@ -187,23 +239,10 @@ export function RFMAnalysis() {
               <BarChart data={chartData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} stroke="rgba(255,255,255,0.05)" />
                 <XAxis type="number" hide />
-                <YAxis
-                  dataKey="name"
-                  type="category"
-                  width={150}
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 12, fill: "currentColor", opacity: 0.7 }}
-                />
-                <Tooltip
-                  cursor={{ fill: "rgba(255,255,255,0.05)" }}
-                  contentStyle={{ backgroundColor: "white", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "8px", color: "#333" }}
-                  itemStyle={{ color: "#333" }}
-                />
+                <YAxis dataKey="name" type="category" width={150} axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "currentColor", opacity: 0.7 }} />
+                <Tooltip cursor={{ fill: "rgba(255,255,255,0.05)" }} contentStyle={{ backgroundColor: "white", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "8px", color: "#333" }} itemStyle={{ color: "#333" }} />
                 <Bar dataKey="clientes" radius={[0, 4, 4, 0]}>
-                  {chartData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
+                  {chartData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -218,11 +257,7 @@ export function RFMAnalysis() {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
                 <XAxis dataKey="faixa" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "currentColor", opacity: 0.7 }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "currentColor", opacity: 0.7 }} />
-                <Tooltip
-                  cursor={{ fill: "rgba(255,255,255,0.05)" }}
-                  contentStyle={{ backgroundColor: "white", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "8px", color: "#333" }}
-                  itemStyle={{ color: "#333" }}
-                />
+                <Tooltip cursor={{ fill: "rgba(255,255,255,0.05)" }} contentStyle={{ backgroundColor: "white", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "8px", color: "#333" }} itemStyle={{ color: "#333" }} />
                 <Bar dataKey="clientes" fill="#3b82f6" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -230,13 +265,10 @@ export function RFMAnalysis() {
         </div>
       </div>
 
-      {/* Tabela resumo */}
       <div className="surface-card overflow-hidden">
         <div className="border-b border-border p-6">
           <h3 className="text-lg font-bold">Resumo dos Segmentos</h3>
-          <p className="text-sm text-muted-foreground">
-            Métricas reais observadas. Sem projeção de LTV — {data?.ltvDisponivel ? "histórico suficiente" : "LTV indisponível por histórico insuficiente"}.
-          </p>
+          <p className="text-sm text-muted-foreground">Métricas reais observadas. Sem projeção de LTV — {data?.ltvDisponivel ? "histórico suficiente" : "LTV indisponível por histórico insuficiente"}.</p>
         </div>
         <div className="overflow-x-auto">
           <Table>
@@ -255,41 +287,25 @@ export function RFMAnalysis() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {summary.length === 0 ? (
+              {(data?.totalClientes ?? 0) === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="h-32 text-center text-muted-foreground">
-                    Nenhum dado RFM processado. Clique em "Recalcular Análise RFM" para começar.
-                  </TableCell>
+                  <TableCell colSpan={10} className="h-32 text-center text-muted-foreground">Nenhum cliente disponível para análise RFM.</TableCell>
                 </TableRow>
               ) : (
                 [...summary]
                   .sort((a, b) => b.receita - a.receita || b.clientes - a.clientes)
                   .map((s) => (
                     <TableRow key={s.name} className="group transition-colors hover:bg-muted/20">
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <div className="size-2 rounded-full" style={{ backgroundColor: segColor(s.name) }} />
-                          {s.name}
-                        </div>
-                      </TableCell>
+                      <TableCell className="font-medium"><div className="flex items-center gap-2"><div className="size-2 rounded-full" style={{ backgroundColor: segColor(s.name) }} />{s.name}</div></TableCell>
                       <TableCell className="text-right">{new Intl.NumberFormat().format(s.clientes)}</TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant="secondary" className="font-normal">{s.pctBase.toFixed(1)}%</Badge>
-                      </TableCell>
+                      <TableCell className="text-right"><Badge variant="secondary" className="font-normal">{s.pctBase.toFixed(1)}%</Badge></TableCell>
                       <TableCell className="text-right">{new Intl.NumberFormat().format(s.pedidos)}</TableCell>
                       <TableCell className="text-right">{s.frequenciaMedia.toFixed(2)}x</TableCell>
                       <TableCell className="text-right font-bold text-emerald-500">{brl(s.receita)}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted/50">
-                          <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${s.pctReceita}%` }} />
-                        </div>
-                        <span className="mt-1 block text-[10px] text-muted-foreground">{s.pctReceita.toFixed(1)}%</span>
-                      </TableCell>
+                      <TableCell className="text-right"><div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted/50"><div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${s.pctReceita}%` }} /></div><span className="mt-1 block text-[10px] text-muted-foreground">{s.pctReceita.toFixed(1)}%</span></TableCell>
                       <TableCell className="text-right">{brl(s.aov)}</TableCell>
                       <TableCell className="text-right text-blue-400">{brl(s.receitaPorCliente)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {s.tenureMedioDias === null ? "—" : `${Math.round(s.tenureMedioDias)}d`}
-                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">{s.tenureMedioDias === null ? "—" : `${Math.round(s.tenureMedioDias)}d`}</TableCell>
                     </TableRow>
                   ))
               )}
@@ -298,17 +314,11 @@ export function RFMAnalysis() {
         </div>
       </div>
 
-      {/* Dicionário dos segmentos ativos */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {activeSegments.map((name) => (
           <div key={name} className="surface-card border-l-4 p-5" style={{ borderLeftColor: RFM_SEGMENTS_CONFIG[name].color }}>
-            <h4 className="flex items-center justify-between font-bold">
-              {name}
-              <Info className="size-4 text-muted-foreground" />
-            </h4>
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              {RFM_SEGMENTS_CONFIG[name].description}
-            </p>
+            <h4 className="flex items-center justify-between font-bold">{name}<Info className="size-4 text-muted-foreground" /></h4>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{RFM_SEGMENTS_CONFIG[name].description}</p>
           </div>
         ))}
       </div>

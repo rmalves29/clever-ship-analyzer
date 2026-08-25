@@ -34,6 +34,8 @@ const context: CRMAdvancedCustomerContext = {
   productSpentById: new Map([["p-brinco", 320]]),
   purchasedProductTypes: new Set(["Brincos"]),
   purchasedCollectionIds: new Set(["gid://shopify/Collection/100"]),
+  productTypeLastPurchasedAt: new Map([["Brincos", "2026-08-20T12:00:00-03:00"]]),
+  collectionLastPurchasedAt: new Map([["gid://shopify/Collection/100", "2026-08-10T12:00:00-03:00"]]),
   abandonedCheckout: false,
   hadAbandonedCheckout: false,
   abandonedCheckoutRecovered: false,
@@ -80,10 +82,22 @@ describe("filtros avançados por produto", () => {
     expect(match("colecao_produto", "not_bought", "gid://shopify/Collection/200")).toBe(true);
   });
 
-  it("combina categoria comprada e coleção não comprada com E", () => {
+  it("filtra período da categoria pela última compra válida daquela categoria", () => {
+    expect(match("categoria_periodo", "last_days", { taxonomyValue: "brincos", days: 7 })).toBe(true);
+    expect(match("categoria_periodo", "last_days", { taxonomyValue: "Brincos", days: 2 })).toBe(false);
+    expect(match("categoria_periodo", "between_days", { taxonomyValue: "BRINCOS", min: 3, max: 7 })).toBe(true);
+  });
+
+  it("filtra período da coleção pelo ID estável", () => {
+    expect(match("colecao_periodo", "last_days", { taxonomyValue: "gid://shopify/Collection/100", days: 15 })).toBe(true);
+    expect(match("colecao_periodo", "last_days", { taxonomyValue: "gid://shopify/Collection/100", days: 10 })).toBe(false);
+    expect(match("colecao_periodo", "older_than_days", { taxonomyValue: "gid://shopify/Collection/100", days: 10 })).toBe(true);
+  });
+
+  it("combina categoria recente e coleção não comprada com E", () => {
     const rules = {
       groups: [{ conditions: [
-        { field: "categoria_produto", operator: "bought", value: "Brincos" },
+        { field: "categoria_periodo", operator: "last_days", value: { taxonomyValue: "Brincos", days: 30 } },
         { field: "colecao_produto", operator: "not_bought", value: "gid://shopify/Collection/200" },
       ] }],
     };

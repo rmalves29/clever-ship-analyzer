@@ -3,7 +3,7 @@ import {
   type CRMOrderForSegmentation,
   type CRMOrderItemForSegmentation,
 } from "./crm-segmentation-shared";
-import type { CRMAdvancedCustomerContext } from "./crm-product-segmentation";
+import type { CRMAdvancedCustomerContext, ValidPurchaseHistoryEntry } from "./crm-product-segmentation";
 import { isRevenueValidOrder } from "./crm-rfm-shared";
 import { getShopifyProductTaxonomyByIds, type ShopifyProductTaxonomy } from "./crm-product-taxonomy.server";
 
@@ -17,9 +17,25 @@ type LoadedOrderItem = CRMOrderItemForSegmentation & {
 export type CRMProductOption = { id: string; title: string; skus: string[] };
 export type CRMCollectionOption = { id: string; title: string };
 
-type TaxonomyDateIndex = {
-  productTypes: Map<string, Map<string, string>>;
-  collections: Map<string, Map<string, string>>;
+type CustomerStringMapIndex = Map<string, Map<string, string>>;
+type CustomerNumberMapIndex = Map<string, Map<string, number>>;
+
+type TaxonomyIndexes = {
+  productTypesLastPurchasedAt: CustomerStringMapIndex;
+  collectionsLastPurchasedAt: CustomerStringMapIndex;
+  productTypesQuantity: CustomerNumberMapIndex;
+  productTypesSpent: CustomerNumberMapIndex;
+  collectionsQuantity: CustomerNumberMapIndex;
+  collectionsSpent: CustomerNumberMapIndex;
+};
+
+type WhatsappBehaviorIndexes = {
+  campaignSent: Map<string, Set<string>>;
+  campaignDelivered: Map<string, Set<string>>;
+  campaignRead: Map<string, Set<string>>;
+  campaignFailed: Map<string, Set<string>>;
+  automationEntered: Map<string, Set<string>>;
+  automationCompleted: Map<string, Set<string>>;
 };
 
 async function admin() {
@@ -100,6 +116,14 @@ async function loadValidOrderItems(orders: CRMOrderForSegmentation[]): Promise<L
   return rows;
 }
 
+function lineNet(item: LoadedOrderItem): number {
+  const quantity = Number(item.quantity ?? 0);
+  const unitPrice = Number(item.price ?? 0);
+  const discount = Number(item.totalDiscount ?? 0);
+  if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice)) return 0;
+  return Math.max(0, unitPrice * quantity - (Number.isFinite(discount) ? discount : 0));
+}
+
 function buildProductSpendIndex(
   orders: CRMOrderForSegmentation[],
   items: LoadedOrderItem[],
@@ -115,16 +139,28 @@ function buildProductSpendIndex(
     const order = validOrders.get(item.orderId);
     const productId = String(item.productId ?? "").trim();
     if (!order || !productId) continue;
-    const quantity = Number(item.quantity ?? 0);
-    const unitPrice = Number(item.price ?? 0);
-    const discount = Number(item.totalDiscount ?? 0);
-    if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice)) continue;
-    const lineNet = Math.max(0, unitPrice * quantity - (Number.isFinite(discount) ? discount : 0));
+    const net = lineNet(item);
     const customerSpend = index.get(order.customerId) ?? new Map<string, number>();
-    customerSpend.set(productId, (customerSpend.get(productId) ?? 0) + lineNet);
+    customerSpend.set(productId, (customerSpend.get(productId) ?? 0) + net);
     index.set(order.customerId, customerSpend);
   }
 
+  return index;
+}
+
+function buildValidPurchaseHistoryIndex(
+  orders: CRMOrderForSegmentation[],
+): Map<string, ValidPurchaseHistoryEntry[]> {
+  const index = new Map<string, ValidPurchaseHistoryEntry[]>();
+  for (const order of orders) {
+    if (!order.customerId || !order.processedAt || !isRevenueValidOrder(order)) continue;
+    const list = index.get(order.customerId) ?? [];
+    list.push({ processedAt: order.processedAt, totalPrice: Number(order.totalPrice ?? 0) });
+    index.set(order.customerId, list);
+  }
+  for (const list of index.values()) {
+    list.sort((a, b) => new Date(a.processedAt).getTime() - new Date(b.processedAt).getTime());
+  }
   return index;
 }
 
@@ -133,18 +169,37 @@ function setLatestDate(index: Map<string, string>, key: string, date: string) {
   if (!current || new Date(date).getTime() > new Date(current).getTime()) index.set(key, date);
 }
 
-function buildTaxonomyDateIndex(
+function addNumber(index: Map<string, number>, key: string, amount: number) {
+  if (!Number.isFinite(amount)) return;
+  index.set(key, (index.get(key) ?? 0) + amount);
+}
+
+function getCustomerMap<T>(index: Map<string, Map<string, T>>, customerId: string): Map<string, T> {
+  const existing = index.get(customerId);
+  if (existing) return existing;
+  const created = new Map<string, T>();
+  index.set(customerId, created);
+  return created;
+}
+
+function buildTaxonomyIndexes(
   orders: CRMOrderForSegmentation[],
   items: LoadedOrderItem[],
   taxonomy: Map<string, ShopifyProductTaxonomy>,
-): TaxonomyDateIndex {
+): TaxonomyIndexes {
   const validOrders = new Map(
     orders
       .filter((order) => order.customerId && isRevenueValidOrder(order))
       .map((order) => [order.id, order] as const),
   );
-  const productTypes = new Map<string, Map<string, string>>();
-  const collections = new Map<string, Map<string, string>>();
+  const result: TaxonomyIndexes = {
+    productTypesLastPurchasedAt: new Map(),
+    collectionsLastPurchasedAt: new Map(),
+    productTypesQuantity: new Map(),
+    productTypesSpent: new Map(),
+    collectionsQuantity: new Map(),
+    collectionsSpent: new Map(),
+  };
 
   for (const item of items) {
     const order = validOrders.get(item.orderId);
@@ -153,22 +208,89 @@ function buildTaxonomyDateIndex(
     const productTaxonomy = taxonomy.get(productId);
     if (!productTaxonomy) continue;
 
+    const quantity = Math.max(0, Number(item.quantity ?? 0));
+    const net = lineNet(item);
+
     if (productTaxonomy.productType?.trim()) {
-      const customerTypes = productTypes.get(order.customerId) ?? new Map<string, string>();
-      setLatestDate(customerTypes, productTaxonomy.productType.trim(), order.processedAt);
-      productTypes.set(order.customerId, customerTypes);
+      const key = productTaxonomy.productType.trim();
+      setLatestDate(getCustomerMap(result.productTypesLastPurchasedAt, order.customerId), key, order.processedAt);
+      addNumber(getCustomerMap(result.productTypesQuantity, order.customerId), key, quantity);
+      addNumber(getCustomerMap(result.productTypesSpent, order.customerId), key, net);
     }
 
-    if (productTaxonomy.collections.length > 0) {
-      const customerCollections = collections.get(order.customerId) ?? new Map<string, string>();
-      for (const collection of productTaxonomy.collections) {
-        setLatestDate(customerCollections, collection.id, order.processedAt);
-      }
-      collections.set(order.customerId, customerCollections);
+    for (const collection of productTaxonomy.collections) {
+      setLatestDate(getCustomerMap(result.collectionsLastPurchasedAt, order.customerId), collection.id, order.processedAt);
+      addNumber(getCustomerMap(result.collectionsQuantity, order.customerId), collection.id, quantity);
+      addNumber(getCustomerMap(result.collectionsSpent, order.customerId), collection.id, net);
     }
   }
 
-  return { productTypes, collections };
+  return result;
+}
+
+function addToSetIndex(index: Map<string, Set<string>>, customerId: string, value: string) {
+  const set = index.get(customerId) ?? new Set<string>();
+  set.add(value);
+  index.set(customerId, set);
+}
+
+async function loadWhatsappBehaviorIndexes(): Promise<WhatsappBehaviorIndexes> {
+  const db = await admin();
+  const indexes: WhatsappBehaviorIndexes = {
+    campaignSent: new Map(),
+    campaignDelivered: new Map(),
+    campaignRead: new Map(),
+    campaignFailed: new Map(),
+    automationEntered: new Map(),
+    automationCompleted: new Map(),
+  };
+
+  for (let page = 0; ; page++) {
+    const { data, error } = await db
+      .from("whatsapp_campaign_recipients")
+      .select("campaign_id, customer_id, status, sent_at, delivered_at, read_at, error")
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (error) throw new Error(`Erro ao buscar comportamento de campanhas WhatsApp: ${error.message}`);
+    if (!data || data.length === 0) break;
+
+    for (const row of data as any[]) {
+      const customerId = String(row.customer_id ?? "").trim();
+      const campaignId = String(row.campaign_id ?? "").trim();
+      if (!customerId || !campaignId) continue;
+      const status = String(row.status ?? "").trim().toLowerCase();
+      const sent = Boolean(row.sent_at) || ["sent", "delivered", "read"].includes(status);
+      const delivered = Boolean(row.delivered_at) || ["delivered", "read"].includes(status);
+      const read = Boolean(row.read_at) || status === "read";
+      const failed = status === "failed" || Boolean(row.error);
+      if (sent) addToSetIndex(indexes.campaignSent, customerId, campaignId);
+      if (delivered) addToSetIndex(indexes.campaignDelivered, customerId, campaignId);
+      if (read) addToSetIndex(indexes.campaignRead, customerId, campaignId);
+      if (failed) addToSetIndex(indexes.campaignFailed, customerId, campaignId);
+    }
+    if (data.length < PAGE_SIZE) break;
+  }
+
+  for (let page = 0; ; page++) {
+    const { data, error } = await db
+      .from("whatsapp_automation_runs")
+      .select("automation_id, customer_id, status, completed_at")
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (error) throw new Error(`Erro ao buscar comportamento de automações WhatsApp: ${error.message}`);
+    if (!data || data.length === 0) break;
+
+    for (const row of data as any[]) {
+      const customerId = String(row.customer_id ?? "").trim();
+      const automationId = String(row.automation_id ?? "").trim();
+      if (!customerId || !automationId) continue;
+      addToSetIndex(indexes.automationEntered, customerId, automationId);
+      if (row.completed_at || String(row.status ?? "").trim().toLowerCase() === "completed") {
+        addToSetIndex(indexes.automationCompleted, customerId, automationId);
+      }
+    }
+    if (data.length < PAGE_SIZE) break;
+  }
+
+  return indexes;
 }
 
 async function loadLatestAbandonedCheckoutByCustomer(): Promise<Map<string, string>> {
@@ -185,9 +307,7 @@ async function loadLatestAbandonedCheckoutByCustomer(): Promise<Map<string, stri
       if (!row.customer_id || !row.created_at) continue;
       const customerId = String(row.customer_id);
       const current = latest.get(customerId);
-      if (!current || new Date(row.created_at).getTime() > new Date(current).getTime()) {
-        latest.set(customerId, row.created_at);
-      }
+      if (!current || new Date(row.created_at).getTime() > new Date(current).getTime()) latest.set(customerId, row.created_at);
     }
     if (data.length < PAGE_SIZE) break;
   }
@@ -277,16 +397,16 @@ export async function loadCRMProductFilterOptionsBundle(): Promise<{
   };
 }
 
-/** Mantém compatibilidade com callers anteriores que só precisam dos produtos. */
 export async function loadCRMProductFilterOptions(): Promise<CRMProductOption[]> {
   return (await loadCRMProductFilterOptionsBundle()).products;
 }
 
 export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMAdvancedCustomerContext[]> {
-  const [customers, orders, abandonedCheckoutAtByCustomer] = await Promise.all([
+  const [customers, orders, abandonedCheckoutAtByCustomer, whatsappBehavior] = await Promise.all([
     loadCustomers(),
     loadOrders(),
     loadLatestAbandonedCheckoutByCustomer(),
+    loadWhatsappBehaviorIndexes(),
   ]);
   const [shippedTodayValidOrderIds, orderItems] = await Promise.all([
     loadShippedTodayValidOrderIds(orders, now),
@@ -300,8 +420,9 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
     shippedTodayValidOrderIds,
   });
   const spendIndex = buildProductSpendIndex(orders, orderItems);
+  const purchaseHistoryIndex = buildValidPurchaseHistoryIndex(orders);
   const taxonomy = await getShopifyProductTaxonomyByIds(productIdsFromItems(orderItems));
-  const taxonomyDates = buildTaxonomyDateIndex(orders, orderItems, taxonomy);
+  const taxonomyIndexes = buildTaxonomyIndexes(orders, orderItems, taxonomy);
 
   return baseContexts.map((context) => {
     const purchasedProductTypes = new Set<string>();
@@ -313,13 +434,25 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
       for (const collection of productTaxonomy.collections) purchasedCollectionIds.add(collection.id);
     }
 
+    const customerId = context.customer.id;
     return {
       ...context,
-      productSpentById: spendIndex.get(context.customer.id) ?? new Map<string, number>(),
+      productSpentById: spendIndex.get(customerId) ?? new Map<string, number>(),
       purchasedProductTypes,
       purchasedCollectionIds,
-      productTypeLastPurchasedAt: taxonomyDates.productTypes.get(context.customer.id) ?? new Map<string, string>(),
-      collectionLastPurchasedAt: taxonomyDates.collections.get(context.customer.id) ?? new Map<string, string>(),
+      productTypeLastPurchasedAt: taxonomyIndexes.productTypesLastPurchasedAt.get(customerId) ?? new Map<string, string>(),
+      collectionLastPurchasedAt: taxonomyIndexes.collectionsLastPurchasedAt.get(customerId) ?? new Map<string, string>(),
+      validPurchaseHistory: purchaseHistoryIndex.get(customerId) ?? [],
+      productTypeQuantityByValue: taxonomyIndexes.productTypesQuantity.get(customerId) ?? new Map<string, number>(),
+      productTypeSpentByValue: taxonomyIndexes.productTypesSpent.get(customerId) ?? new Map<string, number>(),
+      collectionQuantityById: taxonomyIndexes.collectionsQuantity.get(customerId) ?? new Map<string, number>(),
+      collectionSpentById: taxonomyIndexes.collectionsSpent.get(customerId) ?? new Map<string, number>(),
+      whatsappCampaignSentIds: whatsappBehavior.campaignSent.get(customerId) ?? new Set<string>(),
+      whatsappCampaignDeliveredIds: whatsappBehavior.campaignDelivered.get(customerId) ?? new Set<string>(),
+      whatsappCampaignReadIds: whatsappBehavior.campaignRead.get(customerId) ?? new Set<string>(),
+      whatsappCampaignFailedIds: whatsappBehavior.campaignFailed.get(customerId) ?? new Set<string>(),
+      whatsappAutomationEnteredIds: whatsappBehavior.automationEntered.get(customerId) ?? new Set<string>(),
+      whatsappAutomationCompletedIds: whatsappBehavior.automationCompleted.get(customerId) ?? new Set<string>(),
     };
   });
 }

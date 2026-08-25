@@ -5,11 +5,15 @@ export type PreviousAutomationRun = {
   enrollment_key?: string | null;
   context_key?: string | null;
   enrolled_at: string;
+  status?: string | null;
 };
 
 export type ReentryDecision =
   | { eligible: true; enrollmentKey: string }
-  | { eligible: false; reason: "already_enrolled" | "missing_order" | "missing_checkout" | "cooldown" };
+  | {
+      eligible: false;
+      reason: "already_enrolled" | "missing_order" | "missing_checkout" | "cooldown" | "active_run";
+    };
 
 function utcDay(value: Date): string {
   return value.toISOString().slice(0, 10);
@@ -25,6 +29,10 @@ export function decideAutomationReentry(params: {
   const mode = params.mode ?? "once";
   const previousRuns = params.previousRuns ?? [];
   const now = params.now ?? new Date();
+
+  if (previousRuns.some((run) => ["pending_approval", "active", "waiting_send"].includes(String(run.status ?? "")))) {
+    return { eligible: false, reason: "active_run" };
+  }
 
   if (mode === "once") {
     if (previousRuns.length > 0) return { eligible: false, reason: "already_enrolled" };

@@ -330,6 +330,9 @@ export async function processWhatsappQueueBatch(options?: {
   const { isMockJob, sendTemplateMessageMock } = useMock
     ? await import("./whatsapp-mock-provider.server")
     : ({} as typeof import("./whatsapp-mock-provider.server"));
+  const automationQueueHandler = batch.some((item) => item.origem === "automacao")
+    ? (await import("./automations-engine.server")).handleAutomationQueueResult
+    : null;
 
   for (const item of batch) {
     if (useMock && !isMockJob(item.dedup_key)) {
@@ -363,6 +366,7 @@ export async function processWhatsappQueueBatch(options?: {
 
     if (useMock) mockLog.push({ jobId: item.id, ok: result.ok, to: item.phone, template: item.template_name, language: item.template_language, params: Array.isArray(item.body_params) ? item.body_params.length : 0 });
     const now = new Date().toISOString();
+    const canRetry = !result.ok && item.attempts < item.max_attempts;
 
     if (result.ok) {
       sent++;
@@ -371,7 +375,6 @@ export async function processWhatsappQueueBatch(options?: {
         .update({ status: "sent" satisfies QueueStatus, wa_message_id: result.waMessageId ?? null, sent_at: now, error: null, next_attempt_at: null, locked_by: null, locked_at: null })
         .eq("id", item.id);
     } else {
-      const canRetry = item.attempts < item.max_attempts;
       if (canRetry) retry++;
       else failed++;
       await supabaseAdmin
@@ -398,6 +401,15 @@ export async function processWhatsappQueueBatch(options?: {
         .maybeSingle();
       if (existing) await supabaseAdmin.from("whatsapp_campaign_recipients").update(recipientPatch).eq("id", (existing as { id: string }).id);
       else await supabaseAdmin.from("whatsapp_campaign_recipients").insert(recipientPatch);
+    }
+
+    if (automationQueueHandler && item.origem === "automacao" && item.campaign_id && item.customer_id) {
+      await automationQueueHandler({
+        campaignId: item.campaign_id,
+        customerId: item.customer_id,
+        outcome: result.ok ? "sent" : canRetry ? "retry" : "failed",
+        error: result.ok ? null : result.error,
+      });
     }
   }
 

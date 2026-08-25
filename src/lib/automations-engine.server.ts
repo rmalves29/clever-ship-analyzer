@@ -1,6 +1,5 @@
 /** Motor real das automações de WhatsApp: enrollment por segmento, sequência de etapas
- *  (esperar + enviar) e estado por cliente pra nunca reenviar duas vezes. Chamado tanto pelo
- *  endpoint de tick (src/server.ts, disparado pelo pg_cron) quanto por "Executar agora". */
+ *  (esperar + enviar) e estado por cliente. */
 
 export type SendStep = {
   id: string;
@@ -11,7 +10,6 @@ export type SendStep = {
   messageType: "marketing" | "utility";
   bodyParams: string[];
   couponCode: string | null;
-  /** Próxima etapa depois desse envio — null encerra o fluxo pro cliente. */
   nextStepId: string | null;
 };
 
@@ -38,7 +36,6 @@ async function admin() {
   return supabaseAdmin;
 }
 
-/** Segredo do endpoint de tick (src/server.ts) — comparado contra o header X-Automation-Secret. */
 export async function getAutomationTickSecret(): Promise<string | null> {
   const supabaseAdmin = await admin();
   const { data } = await supabaseAdmin.from("store_settings").select("automation_tick_secret").limit(1).maybeSingle();
@@ -92,9 +89,7 @@ function parseCondition(raw: unknown): DecisionCondition {
       value: String(c["value"] ?? ""),
     };
   }
-  if (c["kind"] === "tag") {
-    return { kind: "tag", value: String(c["value"] ?? "") };
-  }
+  if (c["kind"] === "tag") return { kind: "tag", value: String(c["value"] ?? "") };
   return { kind: "novo_pedido" };
 }
 
@@ -122,7 +117,7 @@ export function parseSteps(raw: unknown): AutomationStep[] {
         waitHours: Number(s.waitHours ?? 0),
         templateName,
         templateLanguage: String(s.templateLanguage ?? "pt_BR"),
-        messageType: (s.messageType === "utility" ? "utility" : "marketing") as "marketing" | "utility",
+        messageType: s.messageType === "utility" ? "utility" : "marketing",
         bodyParams: Array.isArray(s.bodyParams) ? (s.bodyParams as string[]) : [],
         couponCode: (s.couponCode ?? null) as string | null,
         nextStepId: s.nextStepId ? String(s.nextStepId) : null,
@@ -131,10 +126,10 @@ export function parseSteps(raw: unknown): AutomationStep[] {
     .filter((s): s is AutomationStep => s !== null);
 }
 
-/** Avalia uma condição de decisão pra um cliente específico. Exportada pra reuso no motor de
- *  fluxos conversacionais (conversational-flows.server.ts) — mesmas 6 condições fazem sentido
- *  lá também, o único ponto novo naquele motor é o gatilho (mensagem recebida, não segmento). */
-export async function evaluateDecision(condition: DecisionCondition, run: { customer_id: string; enrolled_at: string }): Promise<boolean> {
+export async function evaluateDecision(
+  condition: DecisionCondition,
+  run: { customer_id: string; enrolled_at: string },
+): Promise<boolean> {
   const supabaseAdmin = await admin();
 
   if (condition.kind === "novo_pedido") {
@@ -191,14 +186,11 @@ export async function evaluateDecision(condition: DecisionCondition, run: { cust
     return tags.includes(condition.value.trim().toLowerCase());
   }
 
-  // Segmentos customizados usam o mesmo motor do CRM que campanhas e prévias.
   const { resolveWhatsappSegmentCustomerIds } = await import("./whatsapp-segment-resolver.server");
   const ids = await resolveWhatsappSegmentCustomerIds(condition.segmentType, condition.segmentId);
   return ids.includes(run.customer_id);
 }
 
-/** A partir de um step id, resolve decisões em cadeia (instantâneas, sem espera) até cair num
- *  envio (retorna esse SendStep) ou no fim do fluxo (retorna null). */
 export async function resolveNextActiveStep(
   steps: AutomationStep[],
   startStepId: string | null,
@@ -217,18 +209,16 @@ export async function resolveNextActiveStep(
   return null;
 }
 
-/** Matricula clientes novos do segmento que ainda não têm run nessa automação. Devolve quantos entraram. */
 async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Promise<number> {
   const supabaseAdmin = await admin();
-  const [{ resolveSegmentRecipients, createCampaignRow }, { resolveWhatsappSegmentCustomerIds }] = await Promise.all([
-    import("./whatsapp-meta.server"),
-    import("./whatsapp-segment-resolver.server"),
-  ]);
+  const [{ resolveSegmentRecipients, createCampaignRow }, { resolveWhatsappSegmentCustomerIds }, { captureAutomationEventContext }] =
+    await Promise.all([
+      import("./whatsapp-meta.server"),
+      import("./whatsapp-segment-resolver.server"),
+      import("./whatsapp-automation-context.server"),
+    ]);
 
-  const ids: string[] = await resolveWhatsappSegmentCustomerIds(
-    automation.segment_type,
-    automation.segment_id || undefined,
-  );
+  const ids: string[] = await resolveWhatsappSegmentCustomerIds(automation.segment_type, automation.segment_id || undefined);
   if (ids.length === 0) return 0;
 
   const { data: existingRuns } = await supabaseAdmin
@@ -237,18 +227,21 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
     .eq("automation_id", automation.id)
     .in("customer_id", ids);
   const existingIds = new Set(((existingRuns ?? []) as { customer_id: string }[]).map((r) => r.customer_id));
-
   const newIds = ids.filter((id) => !existingIds.has(id));
   if (newIds.length === 0) return 0;
 
-  const recipients = (await resolveSegmentRecipients(automation.segment_type, newIds)) as {
-    id: string;
-    phone: string;
-  }[];
+  const recipients = (await resolveSegmentRecipients(automation.segment_type, newIds)) as Array<{ id: string; phone: string }>;
   if (recipients.length === 0) return 0;
 
   const firstStep = steps[0];
   if (!firstStep || firstStep.type !== "send") return 0;
+
+  const recipientsWithContext = await Promise.all(
+    recipients.map(async (recipient) => ({
+      ...recipient,
+      ...(await captureAutomationEventContext(recipient.id)),
+    })),
+  );
 
   if (automation.requer_aprovacao) {
     const created = await createCampaignRow(
@@ -263,13 +256,13 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
         couponCode: firstStep.couponCode ?? undefined,
         origem: "automacao",
         automationId: automation.id,
-        totalDestinatariosOverride: recipients.length,
+        totalDestinatariosOverride: recipientsWithContext.length,
       },
       "aguardando_aprovacao",
     );
     if (!created.success) return 0;
 
-    const rows = recipients.map((r) => ({
+    const rows = recipientsWithContext.map((r) => ({
       automation_id: automation.id,
       customer_id: r.id,
       phone: r.phone,
@@ -277,39 +270,46 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
       current_step_id: firstStep.id,
       next_run_at: null,
       campaign_id: created.campaignId,
+      event_context: r.context,
+      context_key: r.contextKey,
     }));
-    await supabaseAdmin
-      .from("whatsapp_automation_runs")
-      .upsert(rows as never, { onConflict: "automation_id,customer_id", ignoreDuplicates: true });
-    return recipients.length;
+    const { error } = await (supabaseAdmin.from("whatsapp_automation_runs") as any).upsert(rows, {
+      onConflict: "automation_id,customer_id",
+      ignoreDuplicates: true,
+    });
+    if (error) throw new Error(`Erro ao matricular automação: ${error.message}`);
+    return recipientsWithContext.length;
   }
 
   const nextRunAt = new Date(Date.now() + firstStep.waitHours * 3_600_000).toISOString();
-  const rows = recipients.map((r) => ({
+  const rows = recipientsWithContext.map((r) => ({
     automation_id: automation.id,
     customer_id: r.id,
     phone: r.phone,
     status: "active",
     current_step_id: firstStep.id,
     next_run_at: nextRunAt,
+    event_context: r.context,
+    context_key: r.contextKey,
   }));
-  await supabaseAdmin
-    .from("whatsapp_automation_runs")
-    .upsert(rows as never, { onConflict: "automation_id,customer_id", ignoreDuplicates: true });
-  return recipients.length;
+  const { error } = await (supabaseAdmin.from("whatsapp_automation_runs") as any).upsert(rows, {
+    onConflict: "automation_id,customer_id",
+    ignoreDuplicates: true,
+  });
+  if (error) throw new Error(`Erro ao matricular automação: ${error.message}`);
+  return recipientsWithContext.length;
 }
 
-/** Avança um lote de runs pra próxima etapa (ou marca completed se não houver mais). Reaproveitado
- *  tanto pelo processamento normal (Fase B) quanto pela aprovação manual de um lote pendente.
- *  Cada run resolve seu próprio caminho — decisões dependem do cliente, então dois runs na mesma
- *  etapa atual podem seguir pra etapas diferentes. */
 async function advanceRuns(runs: any[], steps: AutomationStep[], campaignId: string | null): Promise<number> {
   const supabaseAdmin = await admin();
   let count = 0;
   for (const r of runs) {
     const current = steps.find((s) => s.id === r.current_step_id);
     const startId = current?.type === "send" ? current.nextStepId : null;
-    const next = await resolveNextActiveStep(steps, startId, { customer_id: r.customer_id, enrolled_at: r.enrolled_at });
+    const next = await resolveNextActiveStep(steps, startId, {
+      customer_id: r.customer_id,
+      enrolled_at: r.enrolled_at,
+    });
     const patch = next
       ? {
           current_step_id: next.id,
@@ -324,16 +324,12 @@ async function advanceRuns(runs: any[], steps: AutomationStep[], campaignId: str
           campaign_id: campaignId ?? r.campaign_id,
           updated_at: new Date().toISOString(),
         };
-    await supabaseAdmin
-      .from("whatsapp_automation_runs")
-      .update(patch as never)
-      .eq("id", r.id);
+    await supabaseAdmin.from("whatsapp_automation_runs").update(patch as never).eq("id", r.id);
     count++;
   }
   return count;
 }
 
-/** Processa runs cuja espera já venceu: dispara a etapa atual e avança pra próxima. */
 async function processDueRuns(automation: any, steps: AutomationStep[]): Promise<number> {
   const supabaseAdmin = await admin();
   const { dispatchCampaign, createCampaignRow } = await import("./whatsapp-meta.server");
@@ -362,10 +358,7 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
       await supabaseAdmin
         .from("whatsapp_automation_runs")
         .update({ status: "failed", last_error: "Etapa não encontrada (automação editada)" } as never)
-        .in(
-          "id",
-          stepRuns.map((r) => r.id),
-        );
+        .in("id", stepRuns.map((r) => r.id));
       continue;
     }
 
@@ -388,17 +381,18 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
     );
     if (!created.success) continue;
 
+    await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+      .update({ campaign_id: created.campaignId, updated_at: new Date().toISOString() })
+      .in("id", stepRuns.map((r) => r.id));
+
     await dispatchCampaign(created.campaignId, customerIds);
     processed += await advanceRuns(stepRuns, steps, created.campaignId);
   }
   return processed;
 }
 
-/** Núcleo do motor: pra cada automação ativa, matricula clientes novos e processa quem já pode
- *  avançar de etapa. `automationId` roda só uma (usado por "Executar agora"); omitido, roda todas. */
 export async function runAutomationsTick(options?: { automationId?: string; force?: boolean }) {
   const supabaseAdmin = await admin();
-
   let query = supabaseAdmin.from("whatsapp_automations").select("*");
   if (options?.automationId) query = query.eq("id", options.automationId);
   const { data } = await query;
@@ -406,30 +400,21 @@ export async function runAutomationsTick(options?: { automationId?: string; forc
 
   let automationsProcessed = 0;
   let runsProcessed = 0;
-
   for (const a of automations) {
     if (!a.ativo && !options?.force) continue;
     const steps = parseSteps(a.steps);
     if (steps.length === 0) continue;
-
     automationsProcessed++;
     runsProcessed += await enrollNewCustomers(a, steps);
     runsProcessed += await processDueRuns(a, steps);
-
     await supabaseAdmin
       .from("whatsapp_automations")
-      .update({
-        last_run_at: new Date().toISOString(),
-        total_execucoes: (a.total_execucoes ?? 0) + 1,
-      } as never)
+      .update({ last_run_at: new Date().toISOString(), total_execucoes: (a.total_execucoes ?? 0) + 1 } as never)
       .eq("id", a.id);
   }
-
   return { automationsProcessed, runsProcessed };
 }
 
-/** Chamado por `approveCampaign` quando a campanha aprovada é um lote de automação pendente:
- *  avança esses runs pra próxima etapa (ou completed). Não faz nada se não houver runs vinculados. */
 export async function advanceRunsForApprovedCampaign(campaignId: string): Promise<number> {
   const supabaseAdmin = await admin();
   const { data: runs } = await supabaseAdmin
@@ -441,19 +426,12 @@ export async function advanceRunsForApprovedCampaign(campaignId: string): Promis
   if (runList.length === 0) return 0;
 
   const automationId = runList[0].automation_id as string;
-  const { data: automation } = await supabaseAdmin
-    .from("whatsapp_automations")
-    .select("*")
-    .eq("id", automationId)
-    .maybeSingle();
+  const { data: automation } = await supabaseAdmin.from("whatsapp_automations").select("*").eq("id", automationId).maybeSingle();
   if (!automation) return 0;
-
   const steps = parseSteps((automation as any).steps);
   return advanceRuns(runList, steps, campaignId);
 }
 
-/** Chamado por `rejectCampaign`: marca como `failed` os runs pendentes desse lote (não removidos —
- *  a trava UNIQUE(automation_id, customer_id) impede que esses clientes sejam matriculados de novo). */
 export async function failRunsForRejectedCampaign(campaignId: string, reason: string): Promise<void> {
   const supabaseAdmin = await admin();
   await supabaseAdmin
@@ -463,14 +441,12 @@ export async function failRunsForRejectedCampaign(campaignId: string, reason: st
     .eq("status", "pending_approval");
 }
 
-/** Contagem de runs por status/etapa — usado nos badges e no "ver funil" da UI. */
 export async function getAutomationRunMetrics(automationId: string) {
   const supabaseAdmin = await admin();
   const { data } = await supabaseAdmin
     .from("whatsapp_automation_runs")
     .select("status, current_step_id")
     .eq("automation_id", automationId);
-
   const rows = (data ?? []) as { status: string; current_step_id: string }[];
   const byStatus: Record<string, number> = {};
   const byStepActive: Record<string, number> = {};
@@ -481,14 +457,11 @@ export async function getAutomationRunMetrics(automationId: string) {
   return { total: rows.length, byStatus, byStepActive };
 }
 
-/** Mesmas métricas, mas de uma vez pra todas as automações — usado na listagem, pra não disparar
- *  uma query por card (evita hook-em-loop e faz uma leitura só). */
 export async function getAllAutomationRunMetrics(): Promise<
   Record<string, { total: number; byStatus: Record<string, number>; byStepActive: Record<string, number> }>
 > {
   const supabaseAdmin = await admin();
   const { data } = await supabaseAdmin.from("whatsapp_automation_runs").select("automation_id, status, current_step_id");
-
   const rows = (data ?? []) as { automation_id: string; status: string; current_step_id: string }[];
   const result: Record<string, { total: number; byStatus: Record<string, number>; byStepActive: Record<string, number> }> = {};
   for (const r of rows) {
@@ -501,9 +474,6 @@ export async function getAllAutomationRunMetrics(): Promise<
   return result;
 }
 
-/** Chamado pelo endpoint /api/automations/tick (src/server.ts, disparado pelo pg_cron). Roda o
- *  tick de todas as automações e grava uma linha em automation_tick_runs — como o pg_net que
- *  chama esse endpoint é assíncrono, essa tabela é o jeito real de confirmar que o motor rodou. */
 export async function runAutomationsTickWithLog() {
   const supabaseAdmin = await admin();
   const { data: logRow } = await supabaseAdmin

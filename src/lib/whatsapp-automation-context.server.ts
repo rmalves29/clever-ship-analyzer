@@ -52,8 +52,8 @@ export async function captureAutomationEventContext(customerId: string): Promise
       .maybeSingle(),
   ]);
 
-  let items: AutomationEventContext["items"] = [];
-  let fulfillment: AutomationEventContext["fulfillment"] = null;
+  let items: NonNullable<AutomationEventContext["items"]> = [];
+  let fulfillment: NonNullable<AutomationEventContext["fulfillment"]> | null = null;
   if (orderRow?.id) {
     const [{ data: itemRows }, { data: fulfillmentRow }] = await Promise.all([
       db

@@ -35,7 +35,7 @@ describe("whatsapp automation frozen context", () => {
   });
 
   it("usa checkout como chave quando não existe pedido", () => {
-    expect(buildAutomationContextKey({ capturedAt: context.capturedAt, checkout: context.checkout }, "customer-1")).toBe(
+    expect(buildAutomationContextKey({ capturedAt: context.capturedAt, checkout: context.checkout ?? null }, "customer-1")).toBe(
       "checkout:checkout-1",
     );
   });

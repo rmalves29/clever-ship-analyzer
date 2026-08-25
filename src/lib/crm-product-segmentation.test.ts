@@ -32,6 +32,8 @@ const context: CRMAdvancedCustomerContext = {
     }],
   ]),
   productSpentById: new Map([["p-brinco", 320]]),
+  purchasedProductTypes: new Set(["Brincos"]),
+  purchasedCollectionIds: new Set(["gid://shopify/Collection/100"]),
   abandonedCheckout: false,
   hadAbandonedCheckout: false,
   abandonedCheckoutRecovered: false,
@@ -66,6 +68,26 @@ describe("filtros avançados por produto", () => {
     expect(match("produto_sku", "bought", { productId: "p-brinco", sku: "br-lon-dou" })).toBe(true);
     expect(match("produto_sku", "not_bought", { productId: "p-brinco", sku: "BR-LON-ROS" })).toBe(true);
     expect(match("produto_sku", "bought", { productId: "p-brinco", sku: "BR-LON-ROS" })).toBe(false);
+  });
+
+  it("filtra categoria/tipo comprado ignorando acentos e caixa", () => {
+    expect(match("categoria_produto", "bought", "brincos")).toBe(true);
+    expect(match("categoria_produto", "not_bought", "Colares")).toBe(true);
+  });
+
+  it("filtra coleção comprada pelo ID estável da Shopify", () => {
+    expect(match("colecao_produto", "bought", "gid://shopify/Collection/100")).toBe(true);
+    expect(match("colecao_produto", "not_bought", "gid://shopify/Collection/200")).toBe(true);
+  });
+
+  it("combina categoria comprada e coleção não comprada com E", () => {
+    const rules = {
+      groups: [{ conditions: [
+        { field: "categoria_produto", operator: "bought", value: "Brincos" },
+        { field: "colecao_produto", operator: "not_bought", value: "gid://shopify/Collection/200" },
+      ] }],
+    };
+    expect(matchesAdvancedSegmentRules(context, rules, NOW)).toBe(true);
   });
 
   it("combina produto, período e ausência de SKU com E", () => {

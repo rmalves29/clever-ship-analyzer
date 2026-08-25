@@ -100,6 +100,32 @@ export const getCRMFilterOptions = createServerFn({ method: "GET" })
       if (data.length < PAGE_SIZE) break;
     }
 
+    const campaigns: Array<{ id: string; name: string }> = [];
+    for (let page = 0; ; page++) {
+      const { data, error } = await supabaseAdmin
+        .from("whatsapp_campaigns")
+        .select("id, nome")
+        .order("created_at", { ascending: false })
+        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      for (const row of data as any[]) campaigns.push({ id: String(row.id), name: String(row.nome ?? "Campanha") });
+      if (data.length < PAGE_SIZE) break;
+    }
+
+    const automations: Array<{ id: string; name: string }> = [];
+    for (let page = 0; ; page++) {
+      const { data, error } = await supabaseAdmin
+        .from("whatsapp_automations")
+        .select("id, nome")
+        .order("created_at", { ascending: false })
+        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      for (const row of data as any[]) automations.push({ id: String(row.id), name: String(row.nome ?? "Automação") });
+      if (data.length < PAGE_SIZE) break;
+    }
+
     const productOptions = await productOptionsPromise;
     const sortPt = (values: Set<string>) => [...values].sort((a, b) => a.localeCompare(b, "pt-BR"));
     return {
@@ -109,7 +135,27 @@ export const getCRMFilterOptions = createServerFn({ method: "GET" })
       products: productOptions.products,
       productTypes: productOptions.productTypes,
       collections: productOptions.collections,
+      campaigns,
+      automations,
     };
+  });
+
+export const previewSegmentAudience = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) => z.object({
+    regras: segmentRulesSchema,
+    sampleSize: z.number().int().min(0).max(10).default(5),
+  }).parse(data))
+  .handler(async ({ data }) => {
+    const { loadCRMSegmentationContext } = await import("./crm-segmentation.server");
+    const contexts = await loadCRMSegmentationContext();
+    const matched = contexts.filter((context) => matchesAdvancedSegmentRules(context, data.regras as SegmentRules));
+    const sample = matched.slice(0, data.sampleSize).map(({ customer }) => ({
+      id: customer.id,
+      name: [customer.first_name, customer.last_name].filter(Boolean).join(" ") || "Cliente sem nome",
+      email: customer.email ?? null,
+    }));
+    return { count: matched.length, totalContacts: contexts.length, sample };
   });
 
 export const getSegmentsList = createServerFn({ method: "GET" })

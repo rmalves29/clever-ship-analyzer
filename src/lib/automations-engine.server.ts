@@ -191,9 +191,9 @@ export async function evaluateDecision(condition: DecisionCondition, run: { cust
     return tags.includes(condition.value.trim().toLowerCase());
   }
 
-  // segmento
-  const { getSegmentCustomerIds } = await import("./whatsapp-meta.server");
-  const ids = await getSegmentCustomerIds(condition.segmentType, condition.segmentId);
+  // Segmentos customizados usam o mesmo motor do CRM que campanhas e prévias.
+  const { resolveWhatsappSegmentCustomerIds } = await import("./whatsapp-segment-resolver.server");
+  const ids = await resolveWhatsappSegmentCustomerIds(condition.segmentType, condition.segmentId);
   return ids.includes(run.customer_id);
 }
 
@@ -220,9 +220,15 @@ export async function resolveNextActiveStep(
 /** Matricula clientes novos do segmento que ainda não têm run nessa automação. Devolve quantos entraram. */
 async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Promise<number> {
   const supabaseAdmin = await admin();
-  const { getSegmentCustomerIds, resolveSegmentRecipients, createCampaignRow } = await import("./whatsapp-meta.server");
+  const [{ resolveSegmentRecipients, createCampaignRow }, { resolveWhatsappSegmentCustomerIds }] = await Promise.all([
+    import("./whatsapp-meta.server"),
+    import("./whatsapp-segment-resolver.server"),
+  ]);
 
-  const ids: string[] = await getSegmentCustomerIds(automation.segment_type, automation.segment_id || undefined);
+  const ids: string[] = await resolveWhatsappSegmentCustomerIds(
+    automation.segment_type,
+    automation.segment_id || undefined,
+  );
   if (ids.length === 0) return 0;
 
   const { data: existingRuns } = await supabaseAdmin
@@ -353,8 +359,6 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
   for (const [stepId, stepRuns] of byStep) {
     const step = steps.find((s) => s.id === stepId);
     if (!step || step.type !== "send") {
-      // Etapa não existe mais, ou virou uma decisão numa edição (não deveria — current_step_id só
-      // aponta pra send) — marca falha pra não travar o cliente pra sempre.
       await supabaseAdmin
         .from("whatsapp_automation_runs")
         .update({ status: "failed", last_error: "Etapa não encontrada (automação editada)" } as never)

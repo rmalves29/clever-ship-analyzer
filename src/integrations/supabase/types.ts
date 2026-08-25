@@ -267,6 +267,75 @@ export type Database = {
           },
         ]
       }
+      crm_repurchase_attributions: {
+        Row: {
+          attribution_evidence: string
+          attribution_reference: string
+          campaign_id: string
+          campaign_source: string
+          channel: string | null
+          conversion_window_days: number
+          converted_at: string
+          created_at: string
+          customer_id: string
+          evidence_payload: Json
+          id: string
+          order_id: string
+          revenue: number
+          sent_at: string
+          stage: string
+        }
+        Insert: {
+          attribution_evidence: string
+          attribution_reference: string
+          campaign_id: string
+          campaign_source: string
+          channel?: string | null
+          conversion_window_days: number
+          converted_at: string
+          created_at?: string
+          customer_id: string
+          evidence_payload?: Json
+          id?: string
+          order_id: string
+          revenue?: number
+          sent_at: string
+          stage: string
+        }
+        Update: {
+          attribution_evidence?: string
+          attribution_reference?: string
+          campaign_id?: string
+          campaign_source?: string
+          channel?: string | null
+          conversion_window_days?: number
+          converted_at?: string
+          created_at?: string
+          customer_id?: string
+          evidence_payload?: Json
+          id?: string
+          order_id?: string
+          revenue?: number
+          sent_at?: string
+          stage?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_repurchase_attributions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_repurchase_attributions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_segments: {
         Row: {
           atualizado_em: string
@@ -1297,6 +1366,7 @@ export type Database = {
       }
       shopify_orders: {
         Row: {
+          cancelled_at: string | null
           city: string | null
           country: string | null
           created_at: string
@@ -1322,6 +1392,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          cancelled_at?: string | null
           city?: string | null
           country?: string | null
           created_at: string
@@ -1347,6 +1418,7 @@ export type Database = {
           updated_at: string
         }
         Update: {
+          cancelled_at?: string | null
           city?: string | null
           country?: string | null
           created_at?: string

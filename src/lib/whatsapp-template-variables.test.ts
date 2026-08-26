@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  appendTemplateTokenAtIndex,
   buildBodyVariableExample,
   extractTemplateVariableIndexes,
   renderTemplateVariablePreview,
@@ -29,5 +30,16 @@ describe("whatsapp template variables", () => {
 
   it("renderiza a prévia com os exemplos sem alterar placeholders sem exemplo", () => {
     expect(renderTemplateVariablePreview("Oi {{1}}, pedido {{2}}", ["Maria", ""])).toBe("Oi Maria, pedido {{2}}");
+  });
+
+  it("insere token somente no índice que está sendo editado", () => {
+    expect(appendTemplateTokenAtIndex(["{{NOME_CLIENTE}}", "Pedido "], 1, "{{NUMERO_PEDIDO}}")).toEqual([
+      "{{NOME_CLIENTE}}",
+      "Pedido {{NUMERO_PEDIDO}}",
+    ]);
+  });
+
+  it("preenche índices intermediários quando necessário", () => {
+    expect(appendTemplateTokenAtIndex([], 2, "{{VALOR_TOTAL}}")).toEqual(["", "", "{{VALOR_TOTAL}}"]);
   });
 });

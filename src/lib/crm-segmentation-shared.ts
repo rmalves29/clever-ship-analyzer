@@ -281,8 +281,13 @@ function businessDateKey(date: Date): string {
   }).format(date);
 }
 
+function businessDateOrdinal(date: Date): number {
+  const [year, month, day] = businessDateKey(date).split("-").map(Number);
+  return Math.floor(Date.UTC(year!, month! - 1, day!) / DAY_MS);
+}
+
 function ageInDays(actual: Date, now: Date): number {
-  return Math.max(0, Math.floor((now.getTime() - actual.getTime()) / DAY_MS));
+  return Math.max(0, businessDateOrdinal(now) - businessDateOrdinal(actual));
 }
 
 function compareDate(actualIso: string | null, operator: string, expected: unknown, now: Date): boolean {

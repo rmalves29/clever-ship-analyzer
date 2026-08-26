@@ -1,30 +1,54 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { CheckCircle2, Send, ShieldCheck, Users, Calendar, ChevronLeft, ChevronRight, MessageSquare, Info } from "lucide-react";
+import {
+  Calendar,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  MessageSquare,
+  Send,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 import { toast } from "sonner";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { SegmentType } from "@/lib/crm-mock";
-import { createAndSendCampaign, listMetaTemplates, previewSegment } from "@/lib/whatsapp-meta.functions";
+import { maskWhatsappRecipientPhone, normalizeWhatsappAudienceSelection } from "@/lib/whatsapp-audience-selection";
+import { previewWhatsappAudience } from "@/lib/whatsapp-audience-preview.functions";
+import { createAndSendCampaign, listMetaTemplates } from "@/lib/whatsapp-meta.functions";
 
 export type SendDialogSeed = {
   nome: string;
-  segmentType: SegmentType;
+  segmentType: SegmentType | string;
   segmentId?: string;
   oferta: string;
 };
 
-type TemplateOption = { name: string; language: string; status: string; components: { type: string; text?: string }[] };
+type TemplateOption = {
+  name: string;
+  language: string;
+  status: string;
+  components: { type: string; text?: string }[];
+};
+
+type RecipientSample = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+};
 
 function countBodyVars(components: TemplateOption["components"]): number {
-  const body = components.find((c) => c.type === "BODY");
+  const body = components.find((component) => component.type === "BODY");
   if (!body?.text) return 0;
   const matches = body.text.match(/\{\{\d+\}\}/g);
   return matches ? new Set(matches).size : 0;
@@ -52,89 +76,123 @@ export function WhatsappSendDialog({
 }: {
   seed: SendDialogSeed | null;
   open: boolean;
-  onOpenChange: (v: boolean) => void;
+  onOpenChange: (value: boolean) => void;
   onDone?: () => void;
   segments?: { id: string; nome: string }[];
 }) {
-  const [step, setStep] = useState(1);
   const runCreateCampaign = useServerFn(createAndSendCampaign);
-  const runPreview = useServerFn(previewSegment);
+  const runPreview = useServerFn(previewWhatsappAudience);
 
+  const [step, setStep] = useState(1);
   const [nome, setNome] = useState("");
   const [templateName, setTemplateName] = useState("");
   const [messageType, setMessageType] = useState<"marketing" | "utility">("marketing");
   const [bodyParams, setBodyParams] = useState<string[]>([]);
   const [coupon, setCoupon] = useState("");
-  const [segmentType, setSegmentType] = useState<SegmentType>("sem_recompra");
-  const [segmentId, setSegmentId] = useState<string | undefined>(undefined);
+  const [segmentType, setSegmentType] = useState<string>("sem_recompra");
+  const [segmentId, setSegmentId] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [sendNow, setSendNow] = useState(true);
   const [scheduledAt, setScheduledAt] = useState("");
   const [campaignTag, setCampaignTag] = useState("");
 
   useEffect(() => {
-    if (seed && open) {
-      setNome(seed.nome);
-      setSegmentType(seed.segmentType);
-      setSegmentId(seed.segmentId);
-      setStep(1);
-      setSendNow(true);
-      setScheduledAt("");
-      setTemplateName("");
-      setBodyParams([]);
-      setCoupon("");
-      setCampaignTag("");
-    }
+    if (!seed || !open) return;
+    setNome(seed.nome);
+    setSegmentType(String(seed.segmentType || "sem_recompra"));
+    setSegmentId(seed.segmentId);
+    setStep(1);
+    setSendNow(true);
+    setScheduledAt("");
+    setTemplateName("");
+    setBodyParams([]);
+    setCoupon("");
+    setCampaignTag("");
   }, [seed, open]);
+
+  const audienceSelection = useMemo(() => {
+    try {
+      return normalizeWhatsappAudienceSelection(segmentType, segmentId);
+    } catch {
+      return null;
+    }
+  }, [segmentType, segmentId]);
+
+  const selectedSegmentName = useMemo(() => {
+    const id = audienceSelection?.segmentId;
+    if (id) return segments.find((segment) => segment.id === id)?.nome ?? "Segmento customizado";
+    if (audienceSelection?.segmentType === "sem_recompra") return "Sem Recompra (Padrão)";
+    return audienceSelection?.segmentType ?? "Público não definido";
+  }, [audienceSelection, segments]);
 
   const { data: templatesResult } = useQuery({
     queryKey: ["whatsapp-templates"],
     queryFn: () => listMetaTemplates(),
+    enabled: open,
   });
 
   const approved: TemplateOption[] = (templatesResult?.success ? templatesResult.templates : []).filter(
-    (t: { status: string }) => t.status === "APPROVED",
+    (template: { status: string }) => template.status === "APPROVED",
   );
-  const selectedTemplate = approved.find((t) => t.name === templateName);
+  const selectedTemplate = approved.find((template) => template.name === templateName);
   const bodyVarCount = selectedTemplate ? countBodyVars(selectedTemplate.components) : 0;
 
-  const { data: preview, isLoading: loadingPreview, isError: previewError } = useQuery({
-    queryKey: ["segment-preview", segmentType, segmentId, open, step],
-    queryFn: () => runPreview({ data: { segmentType, segmentId } }),
-    enabled: Boolean(open && step >= 2),
+  const {
+    data: preview,
+    isLoading: loadingPreview,
+    isError: previewError,
+    refetch: refetchPreview,
+  } = useQuery({
+    queryKey: ["segment-preview-detailed", audienceSelection?.segmentType, audienceSelection?.segmentId, open, step],
+    queryFn: () =>
+      runPreview({
+        data: {
+          segmentType: audienceSelection!.segmentType,
+          segmentId: audienceSelection!.segmentId,
+        },
+      }),
+    enabled: Boolean(open && step >= 2 && audienceSelection),
     retry: 1,
   });
 
+  const recipients = (preview?.recipientSamples ?? []) as RecipientSample[];
+  const hasRecipients = (preview?.destinatarios ?? 0) > 0;
+
   const submit = async (requireApproval: boolean) => {
+    if (!audienceSelection) {
+      toast.error("O público selecionado ficou inconsistente. Volte à etapa Público e selecione o segmento novamente.");
+      return;
+    }
+
     const sendAt = sendNow ? undefined : futureScheduleIso(scheduledAt);
     if (!sendNow && !sendAt) {
       toast.error("Escolha uma data e hora futura para o agendamento.");
       return;
     }
-    if (!requireApproval && (preview?.destinatarios ?? 0) === 0) {
-      toast.error("Esse público não possui destinatários válidos para enfileirar.");
+    if (!hasRecipients) {
+      toast.error("Esse público está com 0 destinatários válidos. O sistema não criará a campanha até o público ser identificado.");
       return;
     }
 
     setBusy(true);
     try {
-      const res = await runCreateCampaign({
+      const result = await runCreateCampaign({
         data: {
           nome: nome.trim() || "Campanha",
-          segmentType,
-          segmentId,
+          segmentType: audienceSelection.segmentType,
+          segmentId: audienceSelection.segmentId,
           messageType,
           templateName: templateName || undefined,
           couponCode: coupon.trim() || undefined,
-          bodyParams: selectedTemplate ? bodyParams.slice(0, bodyVarCount).map((p) => p.trim()) : [],
+          bodyParams: selectedTemplate ? bodyParams.slice(0, bodyVarCount).map((value) => value.trim()) : [],
           requireApproval,
           campaignTag: campaignTag.trim() || undefined,
           sendAt,
         },
       });
 
-      if (!res.success) {
-        toast.error(res.error || "Falha ao criar a campanha.");
+      if (!result.success) {
+        toast.error(result.error || "Falha ao criar a campanha.");
         return;
       }
 
@@ -147,137 +205,147 @@ export function WhatsappSendDialog({
       );
       onOpenChange(false);
       onDone?.();
-    } catch (err: any) {
-      toast.error("Erro: " + (err?.message ?? "falha"));
+    } catch (error: any) {
+      toast.error("Erro: " + (error?.message ?? "falha"));
     } finally {
       setBusy(false);
     }
   };
 
   const steps = ["Identificação", "Público", "Mensagem", "Agendamento", "Revisão"];
+  const reviewBlocked = loadingPreview || previewError || !audienceSelection || !hasRecipients;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl p-0 overflow-hidden border-none shadow-2xl">
-        <div className="flex h-[600px]">
-          <div className="w-64 bg-slate-900 p-8 flex flex-col gap-8">
-            <div className="flex items-center gap-3 text-white mb-4">
-              <div className="size-8 rounded-lg bg-brand flex items-center justify-center">
+      <DialogContent className="max-w-4xl overflow-hidden border-none p-0 shadow-2xl">
+        <div className="flex h-[650px]">
+          <div className="flex w-64 flex-col gap-8 bg-slate-900 p-8">
+            <div className="mb-4 flex items-center gap-3 text-white">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-brand">
                 <Send className="size-4" />
               </div>
               <span className="font-bold tracking-tight">WhatsApp API</span>
             </div>
 
             <div className="space-y-6">
-              {steps.map((s, i) => {
-                const stepNum = i + 1;
-                const isActive = stepNum === step;
-                const isCompleted = stepNum < step;
-
+              {steps.map((label, index) => {
+                const stepNumber = index + 1;
+                const active = stepNumber === step;
+                const completed = stepNumber < step;
                 return (
-                  <div key={s} className="flex items-center gap-3 group">
-                    <div className={`size-6 rounded-full flex items-center justify-center text-[10px] font-bold border transition-colors ${
-                      isActive ? "bg-brand border-brand text-white shadow-[0_0_15px_rgba(var(--brand-rgb),0.5)]" :
-                      isCompleted ? "bg-brand/20 border-brand/40 text-brand" :
-                      "border-slate-700 text-slate-500"
-                    }`}>
-                      {isCompleted ? <CheckCircle2 className="size-3" /> : stepNum}
+                  <div key={label} className="flex items-center gap-3">
+                    <div
+                      className={`flex size-6 items-center justify-center rounded-full border text-[10px] font-bold transition-colors ${
+                        active
+                          ? "border-brand bg-brand text-white"
+                          : completed
+                            ? "border-brand/40 bg-brand/20 text-brand"
+                            : "border-slate-700 text-slate-500"
+                      }`}
+                    >
+                      {completed ? <CheckCircle2 className="size-3" /> : stepNumber}
                     </div>
-                    <span className={`text-xs font-medium transition-colors ${
-                      isActive ? "text-white" : "text-slate-500"
-                    }`}>{s}</span>
+                    <span className={`text-xs font-medium ${active ? "text-white" : "text-slate-500"}`}>{label}</span>
                   </div>
                 );
               })}
             </div>
 
-            <div className="mt-auto">
-              <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-                <div className="flex items-center gap-2 mb-2">
-                  <ShieldCheck className="size-3 text-success" />
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Conta Oficial</span>
-                </div>
-                <p className="text-[11px] text-slate-500 leading-relaxed">
-                  A campanha usa a conta da Meta configurada no sistema. O envio real acontece somente pelo worker da fila.
-                </p>
+            <div className="mt-auto rounded-xl border border-slate-700/50 bg-slate-800/50 p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <ShieldCheck className="size-3 text-success" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Conta Oficial</span>
               </div>
+              <p className="text-[11px] leading-relaxed text-slate-500">
+                Confirmar apenas cria/enfileira. O envio real é processado pelo worker da fila.
+              </p>
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col bg-background">
-            <div className="p-8 flex-1 overflow-y-auto">
+          <div className="flex flex-1 flex-col bg-background">
+            <div className="flex-1 overflow-y-auto p-8">
               <div className="mb-8">
-                <h2 className="text-2xl font-bold tracking-tight">{steps[step-1]}</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {step === 1 && "Defina o nome da campanha e uma tag opcional para rastreamento."}
-                  {step === 2 && "Selecione o segmento do CRM. Esta prévia usa o mesmo público que será enfileirado."}
-                  {step === 3 && "Configure o template aprovado e os dados dinâmicos que cada cliente receberá."}
-                  {step === 4 && "Escolha envio imediato ou uma data e hora futura."}
-                  {step === 5 && "Confira público, conteúdo e agendamento antes de criar a campanha."}
+                <h2 className="text-2xl font-bold tracking-tight">{steps[step - 1]}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {step === 1 && "Defina o nome da campanha e uma tag opcional."}
+                  {step === 2 && "Selecione o segmento e confirme exatamente quem será considerado para o envio."}
+                  {step === 3 && "Configure o template aprovado e suas variáveis dinâmicas."}
+                  {step === 4 && "Escolha envio imediato ou uma data futura."}
+                  {step === 5 && "Revise o segmento e os clientes que receberão antes de confirmar."}
                 </p>
               </div>
 
               {step === 1 && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div className="space-y-6">
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">Nome da campanha</Label>
                     <Input
                       value={nome}
-                      onChange={(e) => setNome(e.target.value)}
+                      onChange={(event) => setNome(event.target.value)}
                       placeholder="Ex: Promoção de Inverno 2026"
-                      className="h-12 bg-muted/30 border-muted-foreground/20 focus:border-brand transition-all"
+                      className="h-12"
                     />
                   </div>
+
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">Conta de envio</Label>
-                    <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-xl border border-dashed border-muted-foreground/30">
-                      <div className="size-10 rounded-full bg-success/10 flex items-center justify-center">
+                    <div className="flex items-center gap-3 rounded-xl border border-dashed p-4">
+                      <div className="flex size-10 items-center justify-center rounded-full bg-success/10">
                         <MessageSquare className="size-5 text-success" />
                       </div>
                       <div>
                         <p className="text-sm font-bold">Conta Meta configurada</p>
-                        <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">API oficial do WhatsApp</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">API oficial do WhatsApp</p>
                       </div>
                     </div>
                   </div>
-                  <div className="space-y-2 pt-2 border-t border-border/50">
+
+                  <div className="space-y-2 border-t pt-4">
                     <Label className="text-sm font-semibold">Tag da campanha (opcional)</Label>
                     <Input
                       value={campaignTag}
-                      onChange={(e) => setCampaignTag(e.target.value)}
+                      onChange={(event) => setCampaignTag(event.target.value)}
                       placeholder="Ex: promo_inverno_2026"
-                      className="h-12 bg-muted/30 border-muted-foreground/20 focus:border-brand transition-all"
                     />
-                    <p className="text-[10px] text-muted-foreground leading-relaxed">
-                      A tag fica salva na campanha e pode ser usada para análise e segmentação posterior.
-                    </p>
                   </div>
                 </div>
               )}
 
               {step === 2 && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div className="space-y-6">
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">Selecione o segmento</Label>
-                    <Select value={segmentId || segmentType} onValueChange={(v) => {
-                      const custom = segments.some((segment) => segment.id === v);
-                      if (custom) {
-                        setSegmentId(v);
-                        setSegmentType("custom");
-                      } else {
-                        setSegmentType(v as SegmentType);
-                        setSegmentId(undefined);
-                      }
-                    }}>
-                      <SelectTrigger className="h-12 bg-muted/30 border-muted-foreground/20">
+                    <Select
+                      value={segmentId || segmentType}
+                      onValueChange={(value) => {
+                        const custom = segments.some((segment) => segment.id === value);
+                        if (custom) {
+                          setSegmentType("custom");
+                          setSegmentId(value);
+                        } else {
+                          setSegmentType(value);
+                          setSegmentId(undefined);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-12">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="sem_recompra">Sem Recompra (Padrão)</SelectItem>
-                        {segments.map((s) => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+                        {segments.map((segment) => (
+                          <SelectItem key={segment.id} value={segment.id}>{segment.nome}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-muted-foreground">Selecionado: <strong>{selectedSegmentName}</strong></p>
                   </div>
+
+                  {!audienceSelection && (
+                    <div className="rounded-xl border border-critical/30 bg-critical/5 p-4 text-sm text-critical">
+                      O identificador do segmento não chegou corretamente. Selecione o público novamente.
+                    </div>
+                  )}
 
                   {previewError && (
                     <div className="rounded-xl border border-critical/30 bg-critical/5 p-4 text-sm text-critical">
@@ -286,34 +354,59 @@ export function WhatsappSendDialog({
                   )}
 
                   <div className="grid grid-cols-3 gap-3">
-                    <Card className="bg-muted/30 border-muted-foreground/10 shadow-none">
+                    <Card className="shadow-none">
                       <CardContent className="p-4">
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">No segmento</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">No segmento</p>
                         <p className="text-xl font-bold">{loadingPreview ? "..." : (preview?.clientes ?? 0)}</p>
                       </CardContent>
                     </Card>
-                    <Card className="bg-muted/30 border-muted-foreground/10 shadow-none">
+                    <Card className="shadow-none">
                       <CardContent className="p-4">
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Com telefone</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Com telefone</p>
                         <p className="text-xl font-bold">{loadingPreview ? "..." : (preview?.comTelefone ?? 0)}</p>
                       </CardContent>
                     </Card>
-                    <Card className="bg-brand/5 border-brand/20 shadow-none">
+                    <Card className="border-brand/20 bg-brand/5 shadow-none">
                       <CardContent className="p-4">
                         <div className="flex items-center gap-2">
                           <Users className="size-4 text-brand" />
-                          <p className="text-[10px] font-bold text-brand uppercase tracking-wider">Destinatários</p>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-brand">Destinatários</p>
                         </div>
                         <p className="text-xl font-bold">{loadingPreview ? "..." : (preview?.destinatarios ?? 0)}</p>
                       </CardContent>
                     </Card>
                   </div>
 
-                  {(preview?.clientes ?? 0) > (preview?.destinatarios ?? 0) && (
-                    <div className="flex gap-2 rounded-xl border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-                      <Info className="size-4 shrink-0" />
+                  {recipients.length > 0 && (
+                    <div className="rounded-xl border bg-muted/20 p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold">Clientes identificados</p>
+                          <p className="text-xs text-muted-foreground">Amostra dos destinatários que o sistema encontrou.</p>
+                        </div>
+                        <Button type="button" variant="outline" size="sm" onClick={() => refetchPreview()}>
+                          Atualizar
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        {recipients.slice(0, 5).map((recipient) => (
+                          <div key={recipient.id} className="flex items-center justify-between gap-3 rounded-lg bg-background px-3 py-2 text-sm">
+                            <div className="min-w-0">
+                              <p className="truncate font-medium">{recipient.name}</p>
+                              <p className="truncate text-xs text-muted-foreground">{recipient.email || "Sem e-mail"}</p>
+                            </div>
+                            <span className="shrink-0 text-xs text-muted-foreground">{maskWhatsappRecipientPhone(recipient.phone)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {!loadingPreview && audienceSelection && !previewError && !hasRecipients && (
+                    <div className="flex gap-2 rounded-xl border border-warning/30 bg-warning/5 p-4 text-sm">
+                      <Info className="mt-0.5 size-4 shrink-0" />
                       <span>
-                        A diferença representa clientes sem telefone ou com número que não pode ser normalizado para envio.
+                        Nenhum destinatário foi identificado. O sistema não permitirá avançar para um envio real com público vazio.
                       </span>
                     </div>
                   )}
@@ -321,112 +414,98 @@ export function WhatsappSendDialog({
               )}
 
               {step === 3 && (
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-8 animate-in fade-in slide-in-from-right-4 duration-300 h-full">
-                  <div className="md:col-span-3 space-y-6">
+                <div className="grid grid-cols-1 gap-8 md:grid-cols-5">
+                  <div className="space-y-6 md:col-span-3">
                     <div className="space-y-4">
                       <Label className="text-sm font-semibold">Tipo de mensagem</Label>
                       <RadioGroup value="template" className="grid grid-cols-2 gap-4">
-                        <div className="flex items-center space-x-3 border rounded-xl p-4 border-brand bg-brand/5 ring-1 ring-brand/30">
-                          <RadioGroupItem value="template" id="t1" />
-                          <Label htmlFor="t1" className="cursor-pointer font-semibold text-sm">Template Oficial</Label>
+                        <div className="flex items-center space-x-3 rounded-xl border border-brand bg-brand/5 p-4">
+                          <RadioGroupItem value="template" id="template-official" />
+                          <Label htmlFor="template-official" className="cursor-pointer text-sm font-semibold">Template Oficial</Label>
                         </div>
-                        <div className="flex items-center space-x-3 border rounded-xl p-4 opacity-40 grayscale cursor-not-allowed">
-                          <RadioGroupItem value="comum" id="t2" disabled />
-                          <Label htmlFor="t2" className="cursor-not-allowed font-semibold text-sm">Msg Comum</Label>
+                        <div className="flex cursor-not-allowed items-center space-x-3 rounded-xl border p-4 opacity-40">
+                          <RadioGroupItem value="comum" id="message-common" disabled />
+                          <Label htmlFor="message-common" className="text-sm font-semibold">Msg Comum</Label>
                         </div>
                       </RadioGroup>
                     </div>
 
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-2">
-                          <Label className="text-sm font-semibold">Tipo</Label>
-                          <Select value={messageType} onValueChange={(value) => setMessageType(value as "marketing" | "utility")}>
-                            <SelectTrigger className="h-10 bg-muted/30"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="marketing">Marketing</SelectItem>
-                              <SelectItem value="utility">Utilidade</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-sm font-semibold">Template aprovado</Label>
-                          <Select value={templateName} onValueChange={(value) => { setTemplateName(value); setBodyParams([]); }}>
-                            <SelectTrigger className="h-10 bg-muted/30 border-muted-foreground/20">
-                              <SelectValue placeholder="Selecione" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {approved.map((t) => <SelectItem key={`${t.name}-${t.language}`} value={t.name}>{t.name}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold">Tipo</Label>
+                        <Select value={messageType} onValueChange={(value) => setMessageType(value as "marketing" | "utility")}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="marketing">Marketing</SelectItem>
+                            <SelectItem value="utility">Utilidade</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
-
-                      {selectedTemplate && bodyVarCount > 0 && (
-                        <div className="space-y-4 pt-2 border-t mt-4">
-                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Variáveis Dinâmicas</p>
-                          <div className="rounded-lg bg-blue-50/50 dark:bg-blue-900/10 p-3 mb-2">
-                            <p className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 mb-1">Tokens disponíveis</p>
-                            <p className="text-[9px] text-blue-500/80 leading-relaxed">
-                              Use: {"{{NOME_CLIENTE}}"}, {"{{NUMERO_PEDIDO}}"}, {"{{ITENS_COMPRADOS}}"}, {"{{VALOR_TOTAL}}"}, {"{{CUPOM_DESCONTO}}"}, {"{{FRETE_ESCOLHIDO}}"}, {"{{RASTREIO}}"}, {"{{LINK_RASTREIO}}"}, {"{{STATUS_PEDIDO}}"}, {"{{LINK_CHECKOUT}}"}
-                            </p>
-                          </div>
-                          {Array.from({ length: bodyVarCount }).map((_, i) => (
-                            <div key={i} className="space-y-1.5">
-                              <Label className="text-xs font-bold">{`Variável {{${i + 1}}}`}</Label>
-                              <Input
-                                placeholder={`Ex: {{NOME_CLIENTE}}`}
-                                value={bodyParams[i] ?? ""}
-                                onChange={(e) => {
-                                  const next = [...bodyParams];
-                                  next[i] = e.target.value;
-                                  setBodyParams(next);
-                                }}
-                                className="h-9 text-sm"
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold">Template aprovado</Label>
+                        <Select
+                          value={templateName}
+                          onValueChange={(value) => {
+                            setTemplateName(value);
+                            setBodyParams([]);
+                          }}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                          <SelectContent>
+                            {approved.map((template) => (
+                              <SelectItem key={`${template.name}-${template.language}`} value={template.name}>{template.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="md:col-span-2 flex flex-col items-center justify-start pt-4 relative">
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-4">Prévia do WhatsApp</p>
-                    {selectedTemplate?.components.some((c) => c.type === "HEADER") && (
-                      <div className="absolute top-10 right-4 z-10">
-                        <Badge variant="outline" className="bg-brand/10 text-[8px] border-brand/20">Template com Cabeçalho</Badge>
+                    {selectedTemplate && bodyVarCount > 0 && (
+                      <div className="space-y-4 border-t pt-4">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Variáveis dinâmicas</p>
+                        <div className="rounded-lg bg-blue-50/50 p-3 text-[10px] text-blue-600 dark:bg-blue-900/10 dark:text-blue-400">
+                          Use tokens como {"{{NOME_CLIENTE}}"}, {"{{NUMERO_PEDIDO}}"}, {"{{VALOR_TOTAL}}"}, {"{{ITENS_COMPRADOS}}"}, {"{{RASTREIO}}"} ou {"{{LINK_CHECKOUT}}"}.
+                        </div>
+                        {Array.from({ length: bodyVarCount }).map((_, index) => (
+                          <div key={index} className="space-y-1.5">
+                            <Label className="text-xs font-bold">{`Variável {{${index + 1}}}`}</Label>
+                            <Input
+                              value={bodyParams[index] ?? ""}
+                              placeholder="Ex: {{NOME_CLIENTE}}"
+                              onChange={(event) => {
+                                const next = [...bodyParams];
+                                next[index] = event.target.value;
+                                setBodyParams(next);
+                              }}
+                            />
+                          </div>
+                        ))}
                       </div>
                     )}
-                    <div className="relative w-[220px] h-[400px] bg-slate-900 rounded-[2.5rem] border-[6px] border-slate-800 shadow-xl overflow-hidden flex flex-col">
-                      <div className="h-10 bg-[#075e54] flex items-center px-4 gap-2">
-                        <div className="size-6 rounded-full bg-slate-400" />
-                        <span className="text-white text-[9px] font-bold">API Oficial</span>
-                      </div>
-                      <div className="flex-1 bg-[#e5ddd5] p-3 space-y-2">
-                        <div className="bg-[#dcf8c6] rounded-lg p-2 text-[10px] text-slate-800 shadow-sm relative">
-                          {selectedTemplate ? (
-                            <div className="whitespace-pre-wrap leading-tight">
-                              {selectedTemplate.components.find((c) => c.type === "BODY")?.text?.replace(/\{\{(\d+)\}\}/g, (_, n) => {
-                                const val = bodyParams[parseInt(n) - 1];
-                                return val ? `*${val}*` : `{{${n}}}`;
-                              })}
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 italic">Selecione um template...</span>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Prévia do WhatsApp</p>
+                    <div className="rounded-2xl border bg-muted/30 p-4">
+                      {selectedTemplate ? (
+                        <div className="whitespace-pre-wrap rounded-lg bg-background p-3 text-sm">
+                          {selectedTemplate.components.find((component) => component.type === "BODY")?.text?.replace(
+                            /\{\{(\d+)\}\}/g,
+                            (_, number) => bodyParams[Number(number) - 1] || `{{${number}}}`,
                           )}
-                          <div className="text-[7px] text-slate-400 text-right mt-1">14:30 ✓✓</div>
                         </div>
-                      </div>
+                      ) : (
+                        <p className="text-sm italic text-muted-foreground">Selecione um template...</p>
+                      )}
                     </div>
                   </div>
                 </div>
               )}
 
               {step === 4 && (
-                <div className="max-w-md mx-auto py-8 space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-                  <div className="text-center space-y-2">
-                    <div className="size-16 rounded-full bg-brand/10 flex items-center justify-center text-brand mx-auto mb-4">
+                <div className="mx-auto max-w-md space-y-8 py-8">
+                  <div className="text-center">
+                    <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-brand/10 text-brand">
                       <Calendar className="size-8" />
                     </div>
                     <h3 className="text-lg font-bold">Quando disparar?</h3>
@@ -434,79 +513,110 @@ export function WhatsappSendDialog({
 
                   <RadioGroup
                     value={sendNow ? "agora" : "agendar"}
-                    onValueChange={(v) => setSendNow(v === "agora")}
+                    onValueChange={(value) => setSendNow(value === "agora")}
                     className="grid gap-4"
                   >
-                    <div className={`flex items-center space-x-3 border rounded-xl p-5 cursor-pointer transition-all ${sendNow ? "border-brand bg-brand/5 ring-1 ring-brand/30" : "hover:bg-muted/50"}`}>
-                      <RadioGroupItem value="agora" id="r1" />
-                      <div className="flex-1 cursor-pointer">
-                        <Label htmlFor="r1" className="font-bold cursor-pointer">Enviar imediatamente</Label>
-                        <p className="text-xs text-muted-foreground mt-0.5">As mensagens entram na fila prontas para o worker.</p>
+                    <div className={`flex items-center space-x-3 rounded-xl border p-5 ${sendNow ? "border-brand bg-brand/5" : ""}`}>
+                      <RadioGroupItem value="agora" id="send-now" />
+                      <div>
+                        <Label htmlFor="send-now" className="cursor-pointer font-bold">Enviar imediatamente</Label>
+                        <p className="mt-0.5 text-xs text-muted-foreground">As mensagens entram na fila prontas para o worker.</p>
                       </div>
                     </div>
-                    <div className={`flex items-center space-x-3 border rounded-xl p-5 cursor-pointer transition-all ${!sendNow ? "border-brand bg-brand/5 ring-1 ring-brand/30" : "hover:bg-muted/50"}`}>
-                      <RadioGroupItem value="agendar" id="r2" />
-                      <div className="flex-1 cursor-pointer">
-                        <Label htmlFor="r2" className="font-bold cursor-pointer">Agendar horário</Label>
-                        <p className="text-xs text-muted-foreground mt-0.5">A fila só libera os itens quando chegar a data e hora escolhida.</p>
+                    <div className={`flex items-center space-x-3 rounded-xl border p-5 ${!sendNow ? "border-brand bg-brand/5" : ""}`}>
+                      <RadioGroupItem value="agendar" id="schedule-send" />
+                      <div>
+                        <Label htmlFor="schedule-send" className="cursor-pointer font-bold">Agendar horário</Label>
+                        <p className="mt-0.5 text-xs text-muted-foreground">A fila libera as mensagens na data selecionada.</p>
                       </div>
                     </div>
                   </RadioGroup>
 
                   {!sendNow && (
-                    <div className="animate-in zoom-in-95 duration-200 space-y-2">
+                    <div className="space-y-2">
                       <Input
                         type="datetime-local"
                         value={scheduledAt}
-                        onChange={(e) => setScheduledAt(e.target.value)}
+                        onChange={(event) => setScheduledAt(event.target.value)}
                         min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
-                        className="h-12 border-brand/30"
                       />
-                      {scheduledAt && !futureScheduleIso(scheduledAt) && (
-                        <p className="text-xs text-critical">Escolha um horário futuro.</p>
-                      )}
+                      {scheduledAt && !futureScheduleIso(scheduledAt) && <p className="text-xs text-critical">Escolha um horário futuro.</p>}
                     </div>
                   )}
                 </div>
               )}
 
               {step === 5 && (
-                <div className="max-w-2xl mx-auto py-4 space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-                  <div className="text-center space-y-2 mb-8">
-                    <div className="size-16 rounded-full bg-success/10 text-success flex items-center justify-center mx-auto mb-4">
+                <div className="mx-auto max-w-2xl space-y-6 py-4">
+                  <div className="text-center">
+                    <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-success/10 text-success">
                       <CheckCircle2 className="size-8" />
                     </div>
-                    <h3 className="text-xl font-bold">Tudo pronto!</h3>
-                    <p className="text-sm text-muted-foreground">Revise os detalhes abaixo. Confirmar cria/enfileira a campanha; não executa a API da Meta diretamente.</p>
+                    <h3 className="text-xl font-bold">Revisão final</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">Confira exatamente qual segmento e quais clientes serão usados.</p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-px bg-muted overflow-hidden rounded-2xl border">
-                    <div className="bg-background p-6 space-y-1">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Campanha</span>
+                  <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border bg-muted">
+                    <div className="space-y-1 bg-background p-5">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Campanha</span>
                       <p className="font-bold">{nome || "Sem nome"}</p>
                     </div>
-                    <div className="bg-background p-6 space-y-1">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Público</span>
+                    <div className="space-y-1 bg-background p-5">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Público</span>
                       <p className="font-bold">{preview?.destinatarios ?? 0} destinatários</p>
+                      <p className="text-xs text-muted-foreground">{selectedSegmentName}</p>
                       <p className="text-xs text-muted-foreground">{preview?.clientes ?? 0} no segmento · {preview?.comTelefone ?? 0} com telefone</p>
                     </div>
-                    <div className="bg-background p-6 space-y-1">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Conteúdo</span>
+                    <div className="space-y-1 bg-background p-5">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Conteúdo</span>
                       <p className="font-bold">{templateName || "Nenhum template"}</p>
                     </div>
-                    <div className="bg-background p-6 space-y-1">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Agendamento</span>
+                    <div className="space-y-1 bg-background p-5">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Agendamento</span>
                       <p className="font-bold text-brand">{sendNow ? "Imediato" : scheduledAt ? formatSchedule(scheduledAt) : "Não definido"}</p>
                     </div>
+                  </div>
+
+                  <div className="rounded-2xl border bg-background p-5">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">Quem irá receber</p>
+                        <p className="text-xs text-muted-foreground">Amostra identificada diretamente no CRM antes do enfileiramento.</p>
+                      </div>
+                      <Badge variant="outline">{preview?.destinatarios ?? 0} elegíveis</Badge>
+                    </div>
+
+                    {loadingPreview ? (
+                      <p className="text-sm text-muted-foreground">Calculando destinatários...</p>
+                    ) : recipients.length > 0 ? (
+                      <div className="space-y-2">
+                        {recipients.slice(0, 5).map((recipient) => (
+                          <div key={recipient.id} className="flex items-center justify-between gap-3 rounded-xl bg-muted/40 px-3 py-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">{recipient.name}</p>
+                              <p className="truncate text-xs text-muted-foreground">{recipient.email || "Sem e-mail"}</p>
+                            </div>
+                            <span className="shrink-0 text-xs text-muted-foreground">{maskWhatsappRecipientPhone(recipient.phone)}</span>
+                          </div>
+                        ))}
+                        {(preview?.destinatarios ?? 0) > recipients.slice(0, 5).length && (
+                          <p className="pt-1 text-xs text-muted-foreground">+ {(preview?.destinatarios ?? 0) - recipients.slice(0, 5).length} outros destinatários elegíveis.</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-critical/30 bg-critical/5 p-4 text-sm text-critical">
+                        Nenhum cliente foi identificado para este envio. Volte à etapa Público e selecione novamente o segmento.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="p-8 bg-muted/20 border-t flex justify-between items-center">
+            <div className="flex items-center justify-between border-t bg-muted/20 p-8">
               <Button
                 variant="ghost"
-                onClick={() => setStep((s) => Math.max(1, s - 1))}
+                onClick={() => setStep((current) => Math.max(1, current - 1))}
                 disabled={step === 1 || busy}
                 className="gap-2"
               >
@@ -518,24 +628,26 @@ export function WhatsappSendDialog({
                   <Button
                     variant="outline"
                     onClick={() => submit(true)}
-                    disabled={busy || previewError}
-                    className="border-warning/50 text-warning-foreground hover:bg-warning/10"
+                    disabled={busy || reviewBlocked}
                   >
                     Salvar para Aprovação
                   </Button>
                 )}
 
                 <Button
-                  onClick={() => step < 5 ? setStep((s) => s + 1) : submit(false)}
+                  onClick={() => (step < 5 ? setStep((current) => current + 1) : submit(false))}
                   disabled={
                     busy ||
                     previewError ||
+                    (step >= 2 && !audienceSelection) ||
                     (step === 1 && !nome.trim()) ||
+                    (step === 2 && (loadingPreview || !hasRecipients)) ||
                     (step === 3 && !templateName) ||
                     (step === 3 && bodyVarCount > 0 && bodyParams.slice(0, bodyVarCount).some((value) => !value?.trim())) ||
-                    (step === 4 && !sendNow && !futureScheduleIso(scheduledAt))
+                    (step === 4 && !sendNow && !futureScheduleIso(scheduledAt)) ||
+                    (step === 5 && reviewBlocked)
                   }
-                  className="min-w-[120px] gap-2 shadow-[0_0_20px_rgba(var(--brand-rgb),0.3)]"
+                  className="min-w-[120px] gap-2"
                 >
                   {busy ? "Processando..." : step === 5 ? "Confirmar Envio" : "Próximo"}
                   {step < 5 && <ChevronRight className="size-4" />}

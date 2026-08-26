@@ -1,5 +1,6 @@
 import type { SegmentRules } from "./crm-segmentation-shared";
 import { matchesAdvancedSegmentRules } from "./crm-product-segmentation";
+import { summarizeWhatsappPresendAudience } from "./whatsapp-presend-audit";
 
 export function isCustomSegmentId(value: string | null | undefined): value is string {
   return Boolean(
@@ -55,5 +56,49 @@ export async function resolveWhatsappSegmentAudience(segmentType: string, segmen
     clientes: ids.length,
     comTelefone: customers.length,
     destinatarios,
+  };
+}
+
+/**
+ * Auditoria pré-envio. Além de validar telefones, mostra duplicidades e opt-outs antes de criar
+ * a campanha. Para carrinho abandonado usa o mesmo resolver especial do enfileiramento.
+ */
+export async function resolveWhatsappSegmentAudit(
+  segmentType: string,
+  segmentId: string | undefined,
+  messageType: "marketing" | "utility",
+) {
+  const ids = await resolveWhatsappSegmentCustomerIds(segmentType, segmentId);
+  const { resolveSegmentRecipients, toE164 } = await import("./whatsapp-meta.server");
+  const recipients = (await resolveSegmentRecipients(segmentType, ids)) as Array<{ id: string; phone: string }>;
+
+  const rows = recipients.map((recipient) => {
+    const normalized = toE164(recipient.phone);
+    return {
+      customerId: String(recipient.id),
+      rawPhone: recipient.phone,
+      normalizedPhone: normalized && normalized.length >= 12 ? normalized : null,
+      suppressed: false,
+    };
+  });
+
+  if (messageType === "marketing") {
+    const { getSuppressedWhatsappPhones } = await import("./whatsapp-suppression.server");
+    const suppressed = await getSuppressedWhatsappPhones(
+      rows.map((row) => row.normalizedPhone).filter((phone): phone is string => Boolean(phone)),
+    );
+    for (const row of rows) row.suppressed = Boolean(row.normalizedPhone && suppressed.has(row.normalizedPhone));
+  }
+
+  const audit = summarizeWhatsappPresendAudience(rows, { totalSegment: ids.length, messageType });
+  return {
+    ids,
+    clientes: audit.totalSegment,
+    comTelefone: audit.withPhone,
+    destinatarios: audit.eligibleRecipients,
+    invalidPhone: audit.invalidPhone,
+    duplicatePhones: audit.duplicatePhones,
+    marketingOptOuts: audit.marketingOptOuts,
+    eligibleRecipients: audit.eligibleRecipients,
   };
 }

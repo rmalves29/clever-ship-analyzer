@@ -62,3 +62,12 @@ export function renderTemplateVariablePreview(text: string, examples: string[]):
     return value || token;
   });
 }
+
+/** Insere um token dinâmico exatamente no parâmetro que está sendo editado. */
+export function appendTemplateTokenAtIndex(params: string[], index: number, token: string): string[] {
+  const safeIndex = Math.max(0, Number.isInteger(index) ? index : 0);
+  const next = [...params];
+  while (next.length <= safeIndex) next.push("");
+  next[safeIndex] = `${next[safeIndex] ?? ""}${token}`;
+  return next;
+}

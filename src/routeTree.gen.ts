@@ -18,12 +18,14 @@ import { Route as FluxoEnvioRouteImport } from './routes/fluxo-envio'
 import { Route as InstagramRouteImport } from './routes/instagram'
 import { Route as CrmIndexRouteImport } from './routes/crm/index'
 import { Route as CrmContatosRouteImport } from './routes/crm/contatos'
+import { Route as CrmImportarTrayRouteImport } from './routes/crm/importar-tray'
 import { Route as CrmListasEstaticasRouteImport } from './routes/crm/listas-estaticas'
 import { Route as CrmLiveViewRouteImport } from './routes/crm/live-view'
 import { Route as CrmSegmentosRouteImport } from './routes/crm/segmentos'
 import { Route as FlowIndexRouteImport } from './routes/flow/index'
 import { Route as FlowIdRouteImport } from './routes/flow/$id'
 import { Route as PerformanceMetaAdsRouteImport } from './routes/performance/meta-ads'
+import { Route as CrmClienteCustomerIdRouteImport } from './routes/crm/cliente/$customerId'
 import { Route as CrmReguasPrimeiraSegundaRouteImport } from './routes/crm/reguas/primeira-segunda'
 
 const IndexRoute = IndexRouteImport.update({
@@ -71,6 +73,11 @@ const CrmContatosRoute = CrmContatosRouteImport.update({
   path: '/crm/contatos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CrmImportarTrayRoute = CrmImportarTrayRouteImport.update({
+  id: '/crm/importar-tray',
+  path: '/crm/importar-tray',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CrmListasEstaticasRoute = CrmListasEstaticasRouteImport.update({
   id: '/crm/listas-estaticas',
   path: '/crm/listas-estaticas',
@@ -101,6 +108,11 @@ const PerformanceMetaAdsRoute = PerformanceMetaAdsRouteImport.update({
   path: '/performance/meta-ads',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CrmClienteCustomerIdRoute = CrmClienteCustomerIdRouteImport.update({
+  id: '/crm/cliente/$customerId',
+  path: '/crm/cliente/$customerId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CrmReguasPrimeiraSegundaRoute =
   CrmReguasPrimeiraSegundaRouteImport.update({
     id: '/crm/reguas/primeira-segunda',
@@ -117,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/fluxo-envio': typeof FluxoEnvioRoute
   '/instagram': typeof InstagramRoute
   '/crm/contatos': typeof CrmContatosRoute
+  '/crm/importar-tray': typeof CrmImportarTrayRoute
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
   '/crm/live-view': typeof CrmLiveViewRoute
   '/crm/segmentos': typeof CrmSegmentosRoute
@@ -124,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/crm/': typeof CrmIndexRoute
   '/flow/': typeof FlowIndexRoute
+  '/crm/cliente/$customerId': typeof CrmClienteCustomerIdRoute
   '/crm/reguas/primeira-segunda': typeof CrmReguasPrimeiraSegundaRoute
 }
 export interface FileRoutesByTo {
@@ -135,6 +149,7 @@ export interface FileRoutesByTo {
   '/fluxo-envio': typeof FluxoEnvioRoute
   '/instagram': typeof InstagramRoute
   '/crm/contatos': typeof CrmContatosRoute
+  '/crm/importar-tray': typeof CrmImportarTrayRoute
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
   '/crm/live-view': typeof CrmLiveViewRoute
   '/crm/segmentos': typeof CrmSegmentosRoute
@@ -142,6 +157,7 @@ export interface FileRoutesByTo {
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/crm': typeof CrmIndexRoute
   '/flow': typeof FlowIndexRoute
+  '/crm/cliente/$customerId': typeof CrmClienteCustomerIdRoute
   '/crm/reguas/primeira-segunda': typeof CrmReguasPrimeiraSegundaRoute
 }
 export interface FileRoutesById {
@@ -154,6 +170,7 @@ export interface FileRoutesById {
   '/fluxo-envio': typeof FluxoEnvioRoute
   '/instagram': typeof InstagramRoute
   '/crm/contatos': typeof CrmContatosRoute
+  '/crm/importar-tray': typeof CrmImportarTrayRoute
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
   '/crm/live-view': typeof CrmLiveViewRoute
   '/crm/segmentos': typeof CrmSegmentosRoute
@@ -161,6 +178,7 @@ export interface FileRoutesById {
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/crm/': typeof CrmIndexRoute
   '/flow/': typeof FlowIndexRoute
+  '/crm/cliente/$customerId': typeof CrmClienteCustomerIdRoute
   '/crm/reguas/primeira-segunda': typeof CrmReguasPrimeiraSegundaRoute
 }
 export interface FileRouteTypes {
@@ -174,6 +192,7 @@ export interface FileRouteTypes {
     | '/fluxo-envio'
     | '/instagram'
     | '/crm/contatos'
+    | '/crm/importar-tray'
     | '/crm/listas-estaticas'
     | '/crm/live-view'
     | '/crm/segmentos'
@@ -181,6 +200,7 @@ export interface FileRouteTypes {
     | '/performance/meta-ads'
     | '/crm/'
     | '/flow/'
+    | '/crm/cliente/$customerId'
     | '/crm/reguas/primeira-segunda'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -192,6 +212,7 @@ export interface FileRouteTypes {
     | '/fluxo-envio'
     | '/instagram'
     | '/crm/contatos'
+    | '/crm/importar-tray'
     | '/crm/listas-estaticas'
     | '/crm/live-view'
     | '/crm/segmentos'
@@ -199,6 +220,7 @@ export interface FileRouteTypes {
     | '/performance/meta-ads'
     | '/crm'
     | '/flow'
+    | '/crm/cliente/$customerId'
     | '/crm/reguas/primeira-segunda'
   id:
     | '__root__'
@@ -210,6 +232,7 @@ export interface FileRouteTypes {
     | '/fluxo-envio'
     | '/instagram'
     | '/crm/contatos'
+    | '/crm/importar-tray'
     | '/crm/listas-estaticas'
     | '/crm/live-view'
     | '/crm/segmentos'
@@ -217,6 +240,7 @@ export interface FileRouteTypes {
     | '/performance/meta-ads'
     | '/crm/'
     | '/flow/'
+    | '/crm/cliente/$customerId'
     | '/crm/reguas/primeira-segunda'
   fileRoutesById: FileRoutesById
 }
@@ -229,6 +253,7 @@ export interface RootRouteChildren {
   FluxoEnvioRoute: typeof FluxoEnvioRoute
   InstagramRoute: typeof InstagramRoute
   CrmContatosRoute: typeof CrmContatosRoute
+  CrmImportarTrayRoute: typeof CrmImportarTrayRoute
   CrmListasEstaticasRoute: typeof CrmListasEstaticasRoute
   CrmLiveViewRoute: typeof CrmLiveViewRoute
   CrmSegmentosRoute: typeof CrmSegmentosRoute
@@ -236,6 +261,7 @@ export interface RootRouteChildren {
   PerformanceMetaAdsRoute: typeof PerformanceMetaAdsRoute
   CrmIndexRoute: typeof CrmIndexRoute
   FlowIndexRoute: typeof FlowIndexRoute
+  CrmClienteCustomerIdRoute: typeof CrmClienteCustomerIdRoute
   CrmReguasPrimeiraSegundaRoute: typeof CrmReguasPrimeiraSegundaRoute
 }
 
@@ -304,6 +330,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CrmContatosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/crm/importar-tray': {
+      id: '/crm/importar-tray'
+      path: '/crm/importar-tray'
+      fullPath: '/crm/importar-tray'
+      preLoaderRoute: typeof CrmImportarTrayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/crm/listas-estaticas': {
       id: '/crm/listas-estaticas'
       path: '/crm/listas-estaticas'
@@ -346,6 +379,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PerformanceMetaAdsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/crm/cliente/$customerId': {
+      id: '/crm/cliente/$customerId'
+      path: '/crm/cliente/$customerId'
+      fullPath: '/crm/cliente/$customerId'
+      preLoaderRoute: typeof CrmClienteCustomerIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/crm/reguas/primeira-segunda': {
       id: '/crm/reguas/primeira-segunda'
       path: '/crm/reguas/primeira-segunda'
@@ -365,6 +405,7 @@ const rootRouteChildren: RootRouteChildren = {
   FluxoEnvioRoute: FluxoEnvioRoute,
   InstagramRoute: InstagramRoute,
   CrmContatosRoute: CrmContatosRoute,
+  CrmImportarTrayRoute: CrmImportarTrayRoute,
   CrmListasEstaticasRoute: CrmListasEstaticasRoute,
   CrmLiveViewRoute: CrmLiveViewRoute,
   CrmSegmentosRoute: CrmSegmentosRoute,
@@ -372,6 +413,7 @@ const rootRouteChildren: RootRouteChildren = {
   PerformanceMetaAdsRoute: PerformanceMetaAdsRoute,
   CrmIndexRoute: CrmIndexRoute,
   FlowIndexRoute: FlowIndexRoute,
+  CrmClienteCustomerIdRoute: CrmClienteCustomerIdRoute,
   CrmReguasPrimeiraSegundaRoute: CrmReguasPrimeiraSegundaRoute,
 }
 export const routeTree = rootRouteImport

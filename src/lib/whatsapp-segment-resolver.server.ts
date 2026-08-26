@@ -2,6 +2,9 @@ import type { SegmentRules } from "./crm-segmentation-shared";
 import { matchesAdvancedSegmentRules } from "./crm-product-segmentation";
 import { summarizeWhatsappPresendAudience } from "./whatsapp-presend-audit";
 
+const CUSTOMER_BATCH_SIZE = 200;
+const RECIPIENT_SAMPLE_SIZE = 20;
+
 export function isCustomSegmentId(value: string | null | undefined): value is string {
   return Boolean(
     value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value),
@@ -29,12 +32,48 @@ async function resolveCustomSegmentCustomerIds(segmentId: string): Promise<strin
     .map((context) => context.customer.id);
 }
 
+async function loadAudienceCustomers(ids: string[]) {
+  if (ids.length === 0) return [] as Array<{
+    id: string;
+    phone: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+  }>;
+
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const rows: Array<{
+    id: string;
+    phone: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+  }> = [];
+
+  for (let start = 0; start < ids.length; start += CUSTOMER_BATCH_SIZE) {
+    const batch = ids.slice(start, start + CUSTOMER_BATCH_SIZE);
+    const { data, error } = await supabaseAdmin
+      .from("shopify_customers")
+      .select("id, phone, first_name, last_name, email")
+      .in("id", batch);
+
+    if (error) throw new Error(`Erro ao carregar destinatários do WhatsApp: ${error.message}`);
+    rows.push(...((data ?? []) as typeof rows));
+  }
+
+  return rows;
+}
+
 /**
  * Fonte única do público usado por campanhas e automações.
  * Segmentos customizados usam exatamente o mesmo motor do CRM; os segmentos legados continuam
  * delegando para o resolver histórico enquanto são migrados.
  */
 export async function resolveWhatsappSegmentCustomerIds(segmentType: string, segmentId?: string): Promise<string[]> {
+  if (segmentType === "custom" && !segmentId) {
+    throw new Error("O segmento customizado perdeu o identificador durante a seleção. Volte à etapa Público e selecione o segmento novamente.");
+  }
+
   const finalSegment = segmentId || segmentType;
   if (isCustomSegmentId(finalSegment)) return resolveCustomSegmentCustomerIds(finalSegment);
 
@@ -44,18 +83,25 @@ export async function resolveWhatsappSegmentCustomerIds(segmentType: string, seg
 
 export async function resolveWhatsappSegmentAudience(segmentType: string, segmentId?: string) {
   const ids = await resolveWhatsappSegmentCustomerIds(segmentType, segmentId);
-  const { getCustomersWithPhone, toE164 } = await import("./whatsapp-meta.server");
-  const customers = await getCustomersWithPhone(ids);
-  const destinatarios = customers.filter((customer) => {
+  const { toE164 } = await import("./whatsapp-meta.server");
+  const customers = await loadAudienceCustomers(ids);
+  const withPhone = customers.filter((customer) => Boolean(customer.phone));
+  const eligible = withPhone.filter((customer) => {
     const phone = toE164(customer.phone);
     return Boolean(phone && phone.length >= 12);
-  }).length;
+  });
 
   return {
     ids,
     clientes: ids.length,
-    comTelefone: customers.length,
-    destinatarios,
+    comTelefone: withPhone.length,
+    destinatarios: eligible.length,
+    recipientSamples: eligible.slice(0, RECIPIENT_SAMPLE_SIZE).map((customer) => ({
+      id: customer.id,
+      name: [customer.first_name, customer.last_name].filter(Boolean).join(" ") || "Cliente sem nome",
+      email: customer.email,
+      phone: toE164(customer.phone),
+    })),
   };
 }
 

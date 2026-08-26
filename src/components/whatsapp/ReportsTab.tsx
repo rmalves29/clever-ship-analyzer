@@ -1,10 +1,10 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { getCampaigns, getCampaignsFailureBreakdown } from "@/lib/whatsapp-meta.functions";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { getCampaigns, getCampaignsFailureBreakdown, listAutomations } from "@/lib/whatsapp-meta.functions";
 import { brl } from "@/lib/crm-mock";
-import { SEGMENT_LABEL } from "@/components/crm/AutomationDialog";
+import { AutomationReentryControl } from "@/components/whatsapp/AutomationReentryControl";
 
 function FunnelRow({ label, value, pct, tone }: { label: string; value: number; pct: number; tone: string }) {
   return (
@@ -24,6 +24,7 @@ function FunnelRow({ label, value, pct, tone }: { label: string; value: number; 
 
 export function ReportsTab() {
   const { data: campaigns } = useQuery({ queryKey: ["whatsapp-campaigns"], queryFn: () => getCampaigns() });
+  const { data: automations } = useQuery({ queryKey: ["whatsapp-automations"], queryFn: () => listAutomations() });
   const runFailures = useServerFn(getCampaignsFailureBreakdown);
   const { data: failures } = useQuery({ queryKey: ["whatsapp-failures"], queryFn: () => runFailures() });
 
@@ -116,6 +117,23 @@ export function ReportsTab() {
         ))}
       </div>
 
+      {(automations ?? []).length > 0 && (
+        <section className="surface-card p-5">
+          <h3 className="font-semibold">Reentrada das automações</h3>
+          <p className="text-sm text-muted-foreground">
+            Controle quando um cliente pode iniciar novamente cada jornada, sem criar execuções simultâneas.
+          </p>
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {(automations ?? []).map((automation) => (
+              <div key={automation.id} className="rounded-xl border border-border p-3">
+                <p className="mb-2 text-sm font-semibold">{automation.nome}</p>
+                <AutomationReentryControl automationId={automation.id} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="surface-card p-5">
           <h3 className="font-semibold">Funil consolidado</h3>
@@ -204,8 +222,8 @@ export function ReportsTab() {
         </section>
 
         <section className="surface-card p-5">
-          <h3 className="font-semibold">crie uma mensagem de teste na api do whatsapp, veja se está tudo ok, faça uma avaliação geral do sistema para ver se a integração do whatsapp api está funcionando.</h3>
-          <p className="text-sm text-muted-foreground">crie uma mensagem de teste na api do whatsapp, veja se está tudo ok, faça uma avaliação geral do sistema para ver se a integração do whatsapp api está funcionando.</p>
+          <h3 className="font-semibold">Principais falhas</h3>
+          <p className="text-sm text-muted-foreground">Motivos reais retornados pela Meta nos envios que falharam.</p>
           <div className="mt-4 space-y-3">
             {(!failures || failures.length === 0) && <p className="text-sm text-muted-foreground">Nenhuma falha registrada.</p>}
             {failures?.map((f) => (

@@ -1,6 +1,7 @@
 import type { SegmentRules } from "./crm-segmentation-shared";
 import { matchesAdvancedSegmentRules } from "./crm-product-segmentation";
 import { summarizeWhatsappPresendAudience } from "./whatsapp-presend-audit";
+import { parseWhatsappCampaignAudienceValue } from "./whatsapp-campaign-audience";
 
 const CUSTOMER_BATCH_SIZE = 200;
 const RECIPIENT_SAMPLE_SIZE = 20;
@@ -66,10 +67,17 @@ async function loadAudienceCustomers(ids: string[]) {
 
 /**
  * Fonte única do público usado por campanhas e automações.
- * Segmentos customizados usam exatamente o mesmo motor do CRM; os segmentos legados continuam
- * delegando para o resolver histórico enquanto são migrados.
+ * Segmentos customizados usam exatamente o mesmo motor do CRM; públicos de campanhas usam os
+ * clientes que efetivamente receberam aquela mensagem; os segmentos legados continuam delegando
+ * para o resolver histórico enquanto são migrados.
  */
 export async function resolveWhatsappSegmentCustomerIds(segmentType: string, segmentId?: string): Promise<string[]> {
+  const campaignId = parseWhatsappCampaignAudienceValue(segmentType);
+  if (campaignId) {
+    const { resolveWhatsappCampaignAudienceCustomerIds } = await import("./whatsapp-campaign-audience.server");
+    return resolveWhatsappCampaignAudienceCustomerIds(campaignId);
+  }
+
   if (segmentType === "custom" && !segmentId) {
     throw new Error("O segmento customizado perdeu o identificador durante a seleção. Volte à etapa Público e selecione o segmento novamente.");
   }

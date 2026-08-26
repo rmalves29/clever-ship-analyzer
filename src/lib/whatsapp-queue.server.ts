@@ -3,7 +3,6 @@
  * Nenhum ponto do sistema deve chamar a Meta diretamente para campanhas.
  */
 
-import type { SegmentType } from "./crm-mock";
 import { resolveAutomationBodyParams, type AutomationEventContext } from "./whatsapp-automation-context";
 
 export const QUEUE_STATUSES = ["queued", "sending", "retry_wait", "sent", "failed", "cancelled", "skipped"] as const;
@@ -164,7 +163,8 @@ export async function enqueueCampaign(
   options?: { scheduledAt?: string; priority?: number },
 ) {
   const supabaseAdmin = await admin();
-  const { loadSettings, getSegmentCustomerIds, resolveSegmentRecipients, toE164 } = await import("./whatsapp-meta.server");
+  const { loadSettings, resolveSegmentRecipients, toE164 } = await import("./whatsapp-meta.server");
+  const { resolveWhatsappSegmentCustomerIds } = await import("./whatsapp-segment-resolver.server");
 
   const { data: campaignRow } = await supabaseAdmin
     .from("whatsapp_campaigns")
@@ -185,7 +185,7 @@ export async function enqueueCampaign(
   const bodyParams: string[] = Array.isArray(campaign.body_params) ? campaign.body_params : [];
   const ids = restrictToCustomerIds
     ? [...new Set(restrictToCustomerIds)]
-    : await getSegmentCustomerIds(campaign.segment_type as SegmentType, campaign.segment_id || undefined);
+    : await resolveWhatsappSegmentCustomerIds(campaign.segment_type, campaign.segment_id || undefined);
   const recipients = (await resolveSegmentRecipients(campaign.segment_type, ids)) as Array<{
     id: string;
     phone: string;
@@ -293,14 +293,15 @@ export async function processWhatsappQueueBatch(options?: {
   provider?: "meta" | "mock";
 }) {
   const supabaseAdmin = await admin();
-  const { loadSettings, sendTemplateMessage } = await import("./whatsapp-meta.server");
+  const { loadSettings } = await import("./whatsapp-meta.server");
+  const { sendWhatsappTemplateMessage } = await import("./whatsapp-template-runtime.server");
   const limit = options?.limit ?? 20;
   const dryRun = options?.dryRun === true;
   const useMock = options?.provider === "mock";
   const workerId = options?.workerId ?? `${useMock ? "mock" : dryRun ? "dryrun" : "worker"}-${Math.random().toString(36).slice(2, 10)}`;
 
   const settings = await loadSettings();
-  if (!useMock && (!settings.accessToken || !settings.phoneNumberId)) {
+  if (!useMock && (!settings.accessToken || !settings.phoneNumberId || !settings.wabaId)) {
     return { success: false as const, error: "Credenciais do WhatsApp (Meta) não configuradas." };
   }
 
@@ -354,8 +355,9 @@ export async function processWhatsappQueueBatch(options?: {
           bodyParams: Array.isArray(item.body_params) ? item.body_params : [],
           dedupKey: item.dedup_key,
         })
-      : await sendTemplateMessage({
+      : await sendWhatsappTemplateMessage({
           accessToken: settings.accessToken ?? "",
+          wabaId: settings.wabaId ?? "",
           phoneNumberId: settings.phoneNumberId ?? "",
           to: item.phone,
           templateName: item.template_name,

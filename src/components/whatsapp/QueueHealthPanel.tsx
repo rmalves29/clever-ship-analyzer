@@ -26,6 +26,7 @@ type QueueCampaign = {
   id: string;
   nome: string;
   status: string;
+  paused: boolean;
   messageType: string;
   queue: {
     queued: number;
@@ -59,14 +60,14 @@ export function QueueHealthPanel() {
           toast.error(result.error);
           return;
         }
-        toast.success("Campanha pausada. Os jobs continuam preservados na fila.");
+        toast.success("Fila da campanha pausada. Os jobs continuam preservados.");
       } else if (action === "resume") {
         const result = await runResume({ data: { campaignId } });
         if (!result.success) {
           toast.error(result.error);
           return;
         }
-        toast.success("Campanha retomada.");
+        toast.success("Fila da campanha retomada.");
       } else {
         const result = await runRetry({ data: { campaignId } });
         if (!result.success) {
@@ -140,7 +141,10 @@ export function QueueHealthPanel() {
                       <p className="text-xs text-muted-foreground">{campaign.messageType === "utility" ? "Utilidade" : "Marketing"}</p>
                     </td>
                     <td className="px-3 py-2.5">
-                      <Badge variant="outline">{campaign.status || "—"}</Badge>
+                      <div className="flex flex-wrap gap-1.5">
+                        <Badge variant="outline">{campaign.status || "—"}</Badge>
+                        {campaign.paused && <Badge className="bg-warning-soft text-warning">Fila pausada</Badge>}
+                      </div>
                     </td>
                     <td className="px-3 py-2.5">{campaign.queue.queued}</td>
                     <td className="px-3 py-2.5">{campaign.queue.sending}</td>
@@ -149,7 +153,7 @@ export function QueueHealthPanel() {
                     <td className="px-3 py-2.5 font-semibold">{campaign.queue.failed}</td>
                     <td className="px-3 py-2.5">
                       <div className="flex justify-end gap-1.5">
-                        {campaign.status === "pausada" ? (
+                        {campaign.paused ? (
                           <Button size="sm" variant="outline" className="gap-1" disabled={busyId === campaign.id} onClick={() => mutate(campaign.id, "resume")}>
                             <Play className="size-3.5" /> Retomar
                           </Button>

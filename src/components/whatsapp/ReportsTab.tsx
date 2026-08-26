@@ -5,6 +5,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { getCampaigns, getCampaignsFailureBreakdown, listAutomations } from "@/lib/whatsapp-meta.functions";
 import { brl } from "@/lib/crm-mock";
 import { AutomationReentryControl } from "@/components/whatsapp/AutomationReentryControl";
+import { QueueHealthPanel } from "@/components/whatsapp/QueueHealthPanel";
 
 function FunnelRow({ label, value, pct, tone }: { label: string; value: number; pct: number; tone: string }) {
   return (
@@ -116,6 +117,8 @@ export function ReportsTab() {
           </div>
         ))}
       </div>
+
+      <QueueHealthPanel />
 
       {(automations ?? []).length > 0 && (
         <section className="surface-card p-5">

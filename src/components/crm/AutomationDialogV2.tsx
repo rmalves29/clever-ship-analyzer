@@ -65,7 +65,7 @@ const FULFILLMENT_STATUSES = ["FULFILLED", "UNFULFILLED", "IN_PROGRESS", "PARTIA
 type DecisionCondition =
   | { kind: "novo_pedido" }
   | { kind: "pedido_status"; field: "financial_status" | "fulfillment_status"; value: string }
-  | { kind: "segmento"; segmentType: string; segmentId?: string }
+  | { kind: "segmento"; segmentType: string; segmentId?: string | undefined }
   | { kind: "valor_pedido"; operator: "gt" | "gte" | "lt" | "lte"; value: number }
   | { kind: "localizacao"; field: "city" | "province"; value: string }
   | { kind: "tag"; value: string };
@@ -75,10 +75,10 @@ export type SendStepSeed = {
   type: "send";
   waitHours: number;
   templateName: string;
-  templateLanguage?: string;
+  templateLanguage?: string | undefined;
   messageType: "marketing" | "utility";
   bodyParams: string[];
-  couponCode?: string;
+  couponCode?: string | undefined;
   nextStepId: string | null;
 };
 
@@ -92,14 +92,14 @@ export type DecisionStepSeed = {
 
 export type AutomationStepSeed = SendStepSeed | DecisionStepSeed;
 export type AutomationSeed = {
-  id?: string;
+  id?: string | undefined;
   nome: string;
-  descricao?: string;
-  segmentType?: string;
-  segmentId?: string;
-  steps?: AutomationStepSeed[];
-  requerAprovacao?: boolean;
-  ativo?: boolean;
+  descricao?: string | undefined;
+  segmentType?: string | undefined;
+  segmentId?: string | undefined;
+  steps?: AutomationStepSeed[] | undefined;
+  requerAprovacao?: boolean | undefined;
+  ativo?: boolean | undefined;
 };
 
 type TemplateOption = {

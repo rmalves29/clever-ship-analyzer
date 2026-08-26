@@ -37,19 +37,28 @@ export function QueueHealthPanel() {
   const mutate = async (campaignId: string, action: "pause" | "resume" | "retry") => {
     setBusyId(campaignId);
     try {
-      const result =
-        action === "pause"
-          ? await runPause({ data: { campaignId } })
-          : action === "resume"
-            ? await runResume({ data: { campaignId } })
-            : await runRetry({ data: { campaignId } });
-      if (!result.success) {
-        toast.error(result.error);
-        return;
+      if (action === "pause") {
+        const result = await runPause({ data: { campaignId } });
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
+        toast.success("Campanha pausada. Os jobs continuam preservados na fila.");
+      } else if (action === "resume") {
+        const result = await runResume({ data: { campaignId } });
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
+        toast.success("Campanha retomada.");
+      } else {
+        const result = await runRetry({ data: { campaignId } });
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
+        toast.success(`${result.retried} falha(s) reenfileirada(s).`);
       }
-      if (action === "pause") toast.success("Campanha pausada. Os jobs continuam preservados na fila.");
-      else if (action === "resume") toast.success("Campanha retomada.");
-      else toast.success(`${result.retried} falha(s) reenfileirada(s).`);
       await refetch();
     } catch (error: any) {
       toast.error(error?.message ?? "Falha ao operar a fila do WhatsApp.");

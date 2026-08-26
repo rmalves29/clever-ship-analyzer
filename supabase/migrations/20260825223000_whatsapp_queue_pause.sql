@@ -1,4 +1,14 @@
--- Campanha pausada preserva os jobs na fila; o worker apenas deixa de reivindicá-los.
+-- A pausa operacional da fila é independente do status comercial da campanha.
+-- Assim não dependemos dos valores aceitos em whatsapp_campaigns.status e preservamos
+-- o estado real (enviando/finalizada/erro) enquanto o worker fica impedido de reivindicar jobs.
+alter table public.whatsapp_campaigns
+  add column if not exists queue_paused boolean not null default false;
+
+create index if not exists whatsapp_campaigns_queue_paused_idx
+  on public.whatsapp_campaigns (queue_paused)
+  where queue_paused = true;
+
+-- Campanha com queue_paused=true preserva os jobs; o worker apenas deixa de reivindicá-los.
 -- Mantém também a proteção de opt-out criada na migração anterior.
 create or replace function public.claim_whatsapp_message_queue(p_limit integer, p_worker text)
 returns setof public.whatsapp_message_queue
@@ -43,7 +53,7 @@ begin
         select 1
         from public.whatsapp_campaigns c
         where c.id = q.campaign_id
-          and c.status = 'pausada'
+          and c.queue_paused = true
       )
     order by q.priority asc, q.next_attempt_at asc nulls first, q.created_at asc
     limit greatest(coalesce(p_limit, 20), 0)

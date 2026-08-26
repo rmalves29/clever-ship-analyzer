@@ -22,6 +22,22 @@ const STATUS_CARDS = [
   ["skipped", "Ignoradas"],
 ] as const;
 
+type QueueCampaign = {
+  id: string;
+  nome: string;
+  status: string;
+  messageType: string;
+  queue: {
+    queued: number;
+    sending: number;
+    retry: number;
+    sent: number;
+    failed: number;
+    skipped: number;
+    cancelled: number;
+  };
+};
+
 export function QueueHealthPanel() {
   const runPause = useServerFn(pauseWhatsappCampaign);
   const runResume = useServerFn(resumeWhatsappCampaign);
@@ -117,7 +133,7 @@ export function QueueHealthPanel() {
                 </tr>
               </thead>
               <tbody>
-                {data.campaigns.map((campaign) => (
+                {data.campaigns.map((campaign: QueueCampaign) => (
                   <tr key={campaign.id} className="border-t border-border">
                     <td className="px-3 py-2.5">
                       <p className="font-medium">{campaign.nome}</p>

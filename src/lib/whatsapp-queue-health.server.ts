@@ -17,7 +17,7 @@ export async function getWhatsappQueueHealthSnapshot() {
       .limit(10000),
     db
       .from("whatsapp_campaigns")
-      .select("id, nome, status, message_type, created_at")
+      .select("id, nome, status, message_type, queue_paused, created_at")
       .order("created_at", { ascending: false })
       .limit(50),
   ]);
@@ -54,6 +54,7 @@ export async function getWhatsappQueueHealthSnapshot() {
       id: String(campaign.id),
       nome: String(campaign.nome ?? "Campanha"),
       status: String(campaign.status ?? ""),
+      paused: campaign.queue_paused === true,
       messageType: String(campaign.message_type ?? "marketing"),
       createdAt: campaign.created_at as string | null,
       queue: byCampaign.get(String(campaign.id)) ?? {
@@ -75,7 +76,7 @@ export async function pauseWhatsappCampaignQueue(campaignId: string) {
   if (!row) return { success: false as const, error: "Campanha não encontrada." };
   const { error } = await db
     .from("whatsapp_campaigns")
-    .update({ status: "pausada", updated_at: new Date().toISOString() })
+    .update({ queue_paused: true })
     .eq("id", campaignId);
   if (error) return { success: false as const, error: error.message };
   return { success: true as const };
@@ -83,13 +84,13 @@ export async function pauseWhatsappCampaignQueue(campaignId: string) {
 
 export async function resumeWhatsappCampaignQueue(campaignId: string) {
   const db = await admin();
-  const { data: row } = await db.from("whatsapp_campaigns").select("id, status").eq("id", campaignId).maybeSingle();
+  const { data: row } = await db.from("whatsapp_campaigns").select("id, queue_paused").eq("id", campaignId).maybeSingle();
   if (!row) return { success: false as const, error: "Campanha não encontrada." };
-  if (row.status !== "pausada") return { success: false as const, error: "A campanha não está pausada." };
+  if (row.queue_paused !== true) return { success: false as const, error: "A fila desta campanha não está pausada." };
 
   const { error } = await db
     .from("whatsapp_campaigns")
-    .update({ status: "enviando", updated_at: new Date().toISOString() })
+    .update({ queue_paused: false })
     .eq("id", campaignId);
   if (error) return { success: false as const, error: error.message };
 
@@ -117,7 +118,6 @@ export async function retryFailedWhatsappCampaignQueue(campaignId: string) {
     .select("id, status");
   if (error) return { success: false as const, error: error.message };
 
-  await db.from("whatsapp_campaigns").update({ status: "enviando", updated_at: now }).eq("id", campaignId);
   const { refreshCampaignStatus } = await import("./whatsapp-queue.server");
   await refreshCampaignStatus(campaignId);
   return { success: true as const, retried: (data ?? []).filter((row: any) => row.status === "retry_wait").length };

@@ -6,6 +6,7 @@ import { getCampaigns, getCampaignsFailureBreakdown, listAutomations } from "@/l
 import { brl } from "@/lib/crm-mock";
 import { AutomationReentryControl } from "@/components/whatsapp/AutomationReentryControl";
 import { QueueHealthPanel } from "@/components/whatsapp/QueueHealthPanel";
+import { PresendAuditPanel } from "@/components/whatsapp/PresendAuditPanel";
 
 function FunnelRow({ label, value, pct, tone }: { label: string; value: number; pct: number; tone: string }) {
   return (
@@ -118,6 +119,7 @@ export function ReportsTab() {
         ))}
       </div>
 
+      <PresendAuditPanel />
       <QueueHealthPanel />
 
       {(automations ?? []).length > 0 && (

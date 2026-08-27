@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Plus, Trash2, GitBranch, MessageCircle, Settings, Rocket } from "lucide-react";
+import { Plus, Trash2, GitBranch, MessageCircle, Settings, Rocket, X } from "lucide-react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -11,8 +11,12 @@ import {
   Handle,
   Position,
   useReactFlow,
+  BaseEdge,
+  EdgeLabelRenderer,
+  getSmoothStepPath,
   type Node,
   type Edge,
+  type EdgeProps,
   type Connection,
   type NodeChange,
   type NodeProps,
@@ -265,6 +269,46 @@ function DecisionNode({ data, selected }: NodeProps) {
     </div>
   );
 }
+
+/** Ligação com um "x" pra remover só essa conexão (sem apagar as etapas), padrão em qualquer
+ *  fluxo — assim dá pra reconectar a etapa a outra saída sem precisar recriar o card inteiro. */
+function DeletableEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style, markerEnd, data }: EdgeProps) {
+  const [edgePath, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+  const edgeData = data as { label?: string; labelClassName?: string; onDelete?: () => void } | undefined;
+
+  return (
+    <>
+      <BaseEdge id={id} path={edgePath} style={style} {...(markerEnd ? { markerEnd } : {})} />
+      <EdgeLabelRenderer>
+        <div
+          style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+          className="nodrag nopan pointer-events-auto absolute flex items-center gap-1"
+        >
+          {edgeData?.label && (
+            <span className={cn("rounded bg-background px-1.5 py-0.5 text-[10px] font-semibold shadow-sm", edgeData.labelClassName)}>
+              {edgeData.label}
+            </span>
+          )}
+          {edgeData?.onDelete && (
+            <button
+              type="button"
+              title="Remover esta ligação"
+              onClick={(e) => {
+                e.stopPropagation();
+                edgeData.onDelete!();
+              }}
+              className="flex size-4 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-colors hover:border-critical hover:text-critical"
+            >
+              <X className="size-2.5" />
+            </button>
+          )}
+        </div>
+      </EdgeLabelRenderer>
+    </>
+  );
+}
+
+const edgeTypes = { deletable: DeletableEdge };
 
 const nodeTypes = { trigger: TriggerNode, send: SendNode, decision: DecisionNode };
 const TRIGGER_ID = "__trigger__";
@@ -520,33 +564,52 @@ export function AutomationDialog({
     }
     for (const s of steps) {
       if (s.type === "send") {
-        if (s.nextStepId)
-          list.push({ id: `${s.id}-next`, source: s.id, sourceHandle: "out", target: s.nextStepId, targetHandle: "in" });
+        if (s.nextStepId) {
+          const edge: Edge = {
+            id: `${s.id}-next`,
+            type: "deletable",
+            source: s.id,
+            sourceHandle: "out",
+            target: s.nextStepId,
+            targetHandle: "in",
+            data: {},
+          };
+          edge.data!["onDelete"] = () => onEdgesDelete([edge]);
+          list.push(edge);
+        }
       } else {
-        if (s.yesStepId)
-          list.push({
+        if (s.yesStepId) {
+          const edge: Edge = {
             id: `${s.id}-yes`,
+            type: "deletable",
             source: s.id,
             sourceHandle: "yes",
             target: s.yesStepId,
             targetHandle: "in",
-            label: "Sim",
             style: { stroke: "var(--success)" },
-          });
-        if (s.noStepId)
-          list.push({
+            data: { label: "Sim", labelClassName: "text-success" },
+          };
+          edge.data!["onDelete"] = () => onEdgesDelete([edge]);
+          list.push(edge);
+        }
+        if (s.noStepId) {
+          const edge: Edge = {
             id: `${s.id}-no`,
+            type: "deletable",
             source: s.id,
             sourceHandle: "no",
             target: s.noStepId,
             targetHandle: "in",
-            label: "Não",
             style: { stroke: "var(--critical)" },
-          });
+            data: { label: "Não", labelClassName: "text-critical" },
+          };
+          edge.data!["onDelete"] = () => onEdgesDelete([edge]);
+          list.push(edge);
+        }
       }
     }
     return list;
-  }, [steps, rootStepId]);
+  }, [steps, rootStepId, onEdgesDelete]);
 
   /** Força o React Flow a remontar do zero sempre que a estrutura do grafo muda (nova etapa,
    *  nova conexão, remoção). Contorna um caso em que o sync incremental nodes/edges->store
@@ -698,6 +761,7 @@ export function AutomationDialog({
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
                 onNodesChange={onNodesChangeHandler}
                 onConnect={onConnect}
                 onNodesDelete={onNodesDelete}

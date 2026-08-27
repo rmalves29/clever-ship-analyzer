@@ -227,6 +227,7 @@ function CampanhasWhatsapp() {
 
         <Tabs value={tab} onValueChange={setTab} className="mt-8">
           <TabsList>
+            <TabsTrigger value="conversas">Conversas</TabsTrigger>
             <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
             <TabsTrigger value="aprovacoes">Aprovações {pendentes.length > 0 && `(${pendentes.length})`}</TabsTrigger>
             <TabsTrigger value="automacoes">Automações</TabsTrigger>

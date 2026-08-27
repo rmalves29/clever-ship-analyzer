@@ -598,6 +598,13 @@ export function AutomationDialog({
 
   const selectedStep = selectedNodeId && selectedNodeId !== TRIGGER_ID ? steps.find((s) => s.id === selectedNodeId) : undefined;
   const panelOpen = addPanelOpen || selectedNodeId !== null;
+  const missingTemplate = steps.some((s) => s.type === "send" && !s.templateName);
+  const canInstall = Boolean(segmentId) && !missingTemplate;
+  const installBlockedReason = !segmentId
+    ? "Escolha um segmento de Contatos → Segmentos como gatilho antes de instalar."
+    : missingTemplate
+      ? "Escolha um template pra cada etapa de envio antes de instalar."
+      : undefined;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -647,7 +654,7 @@ export function AutomationDialog({
           >
             <Plus className="size-3.5" /> Adicionar etapa
           </Button>
-          <Button disabled={busy} size="sm" onClick={save}>
+          <Button disabled={busy || !canInstall} title={installBlockedReason} size="sm" onClick={save}>
             {busy ? "Salvando..." : seed?.id ? "Salvar" : "Instalar automação"}
           </Button>
         </div>

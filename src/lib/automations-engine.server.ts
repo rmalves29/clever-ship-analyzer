@@ -414,7 +414,7 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
     if (!campaignId) {
       const created = await createCampaignRow(
         {
-          nome: `${automation.nome} — etapa ${stepId}`,
+          nome: automation.nome,
           segmentType: automation.segment_type,
           segmentId: automation.segment_id || undefined,
           messageType: step.messageType,

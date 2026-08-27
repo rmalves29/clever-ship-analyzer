@@ -25,6 +25,7 @@ import type { SegmentType } from "@/lib/crm-mock";
 import { maskWhatsappRecipientPhone, normalizeWhatsappAudienceSelection } from "@/lib/whatsapp-audience-selection";
 import { previewWhatsappAudience } from "@/lib/whatsapp-audience-preview.functions";
 import { createAndSendCampaign, listMetaTemplates } from "@/lib/whatsapp-meta.functions";
+import { extractTemplateBodyTokens, isNamedParameterToken } from "@/lib/whatsapp-template-body-tokens";
 
 export type SendDialogSeed = {
   nome: string;
@@ -48,11 +49,9 @@ type RecipientSample = {
   phone: string | null;
 };
 
-function countBodyVars(components: TemplateOption["components"]): number {
+function templateBodyTokens(components: TemplateOption["components"]): string[] {
   const body = components.find((component) => component.type === "BODY");
-  if (!body?.text) return 0;
-  const matches = body.text.match(/\{\{\d+\}\}/g);
-  return matches ? new Set(matches).size : 0;
+  return extractTemplateBodyTokens(body?.text);
 }
 
 function templateMessageType(category: string | null | undefined): "marketing" | "utility" {
@@ -148,7 +147,8 @@ export function WhatsappSendDialog({
   );
   const selectedTemplate = approved.find((template) => template.name === templateName);
   const messageType = templateMessageType(selectedTemplate?.category);
-  const bodyVarCount = selectedTemplate ? countBodyVars(selectedTemplate.components) : 0;
+  const bodyTokens = selectedTemplate ? templateBodyTokens(selectedTemplate.components) : [];
+  const bodyVarCount = bodyTokens.length;
 
   const {
     data: preview,
@@ -198,6 +198,7 @@ export function WhatsappSendDialog({
           templateName: templateName || undefined,
           couponCode: coupon.trim() || undefined,
           bodyParams: selectedTemplate ? bodyParams.slice(0, bodyVarCount).map((value) => value.trim()) : [],
+          bodyParamTokens: selectedTemplate ? bodyTokens : undefined,
           requireApproval,
           campaignTag: campaignTag.trim() || undefined,
           sendAt,
@@ -475,9 +476,11 @@ export function WhatsappSendDialog({
                         <div className="rounded-lg bg-blue-50/50 p-3 text-[10px] text-blue-600 dark:bg-blue-900/10 dark:text-blue-400">
                           Use tokens como {"{{NOME_CLIENTE}}"}, {"{{NUMERO_PEDIDO}}"}, {"{{VALOR_TOTAL}}"}, {"{{ITENS_COMPRADOS}}"}, {"{{RASTREIO}}"} ou {"{{LINK_CHECKOUT}}"}.
                         </div>
-                        {Array.from({ length: bodyVarCount }).map((_, index) => (
-                          <div key={index} className="space-y-1.5">
-                            <Label className="text-xs font-bold">{`Variável {{${index + 1}}}`}</Label>
+                        {bodyTokens.map((token, index) => (
+                          <div key={token} className="space-y-1.5">
+                            <Label className="text-xs font-bold">
+                              {isNamedParameterToken(token) ? `Variável {{${token}}}` : `Variável {{${index + 1}}}`}
+                            </Label>
                             <Input
                               value={bodyParams[index] ?? ""}
                               placeholder="Ex: {{NOME_CLIENTE}}"
@@ -504,8 +507,11 @@ export function WhatsappSendDialog({
                           </div>
                           <div className="whitespace-pre-wrap rounded-lg bg-background p-3 text-sm">
                             {selectedTemplate.components.find((component) => component.type === "BODY")?.text?.replace(
-                              /\{\{(\d+)\}\}/g,
-                              (_, number) => bodyParams[Number(number) - 1] || `{{${number}}}`,
+                              /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
+                              (full, token) => {
+                                const index = bodyTokens.indexOf(token);
+                                return index >= 0 ? bodyParams[index] || full : full;
+                              },
                             )}
                           </div>
                         </div>

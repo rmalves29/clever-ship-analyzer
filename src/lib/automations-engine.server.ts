@@ -12,6 +12,7 @@ export type SendStep = {
   templateLanguage: string;
   messageType: "marketing" | "utility";
   bodyParams: string[];
+  bodyParamTokens: string[];
   couponCode: string | null;
   nextStepId: string | null;
 };
@@ -53,6 +54,7 @@ type RawStep = {
   templateLanguage?: unknown;
   messageType?: unknown;
   bodyParams?: unknown;
+  bodyParamTokens?: unknown;
   couponCode?: unknown;
   nextStepId?: unknown;
   condition?: unknown;
@@ -122,6 +124,7 @@ export function parseSteps(raw: unknown): AutomationStep[] {
         templateLanguage: String(s.templateLanguage ?? "pt_BR"),
         messageType: s.messageType === "utility" ? "utility" : "marketing",
         bodyParams: Array.isArray(s.bodyParams) ? (s.bodyParams as string[]) : [],
+        bodyParamTokens: Array.isArray(s.bodyParamTokens) ? (s.bodyParamTokens as string[]) : [],
         couponCode: (s.couponCode ?? null) as string | null,
         nextStepId: s.nextStepId ? String(s.nextStepId) : null,
       };
@@ -272,6 +275,7 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
         templateName: firstStep.templateName,
         templateLanguage: firstStep.templateLanguage,
         bodyParams: firstStep.bodyParams,
+        bodyParamTokens: firstStep.bodyParamTokens,
         couponCode: firstStep.couponCode ?? undefined,
         origem: "automacao",
         automationId: automation.id,
@@ -411,6 +415,7 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
         templateName: step.templateName,
         templateLanguage: step.templateLanguage,
         bodyParams: step.bodyParams,
+        bodyParamTokens: step.bodyParamTokens,
         couponCode: step.couponCode ?? undefined,
         origem: "automacao",
         automationId: automation.id,

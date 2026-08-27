@@ -32,6 +32,7 @@ import { getSegmentsList } from "@/lib/crm-segmentation.functions";
 import { listMetaTemplates, saveAutomation } from "@/lib/whatsapp-meta.functions";
 import { previewWhatsappAudience } from "@/lib/whatsapp-audience-preview.functions";
 import { normalizeWhatsappAudienceSelection } from "@/lib/whatsapp-audience-selection";
+import { extractTemplateBodyTokens, isNamedParameterToken } from "@/lib/whatsapp-template-body-tokens";
 
 export const SEGMENT_LABEL: Record<string, string> = {
   ticket_alto: "Ticket alto",
@@ -128,12 +129,11 @@ function newDecisionStep(condition: DecisionCondition): DecisionStepSeed {
   return { id: newId(), type: "decision", condition, yesStepId: null, noStepId: null };
 }
 
-/** Conta quantas variáveis {{n}} o corpo do template pede, pra saber quantos campos renderizar. */
-function countTemplateVars(components: { type: string; text?: string }[] | undefined): number {
+/** Tokens de variável do BODY do template — posicionais ({{1}}, {{2}}) ou nomeados
+ *  ({{primeiro_nome}}), na ordem em que aparecem no texto. */
+function templateBodyTokens(components: { type: string; text?: string }[] | undefined): string[] {
   const body = components?.find((c) => c.type === "BODY");
-  if (!body?.text) return 0;
-  const matches = body.text.match(/\{\{\d+\}\}/g);
-  return matches ? new Set(matches).size : 0;
+  return extractTemplateBodyTokens(body?.text);
 }
 
 const FINANCIAL_STATUSES = ["PAID", "PENDING", "PARTIALLY_PAID", "REFUNDED", "PARTIALLY_REFUNDED", "VOIDED", "EXPIRED"];
@@ -182,6 +182,26 @@ function layoutSteps(steps: AutomationStepSeed[], rootStepId: string | null): Re
     }
   }
   return positions;
+}
+
+/** Etapas realmente alcançáveis a partir do gatilho — o motor de automação (automations-engine.server.ts)
+ *  só executa esse subgrafo, então validações de "falta preencher" não devem travar por causa de
+ *  etapas órfãs (desconectadas) que sobraram de uma edição anterior. */
+function reachableStepIds(steps: AutomationStepSeed[], rootStepId: string | null): Set<string> {
+  const byId = new Map(steps.map((s) => [s.id, s]));
+  const visited = new Set<string>();
+  function visit(id: string | null) {
+    if (!id || visited.has(id) || !byId.has(id)) return;
+    visited.add(id);
+    const step = byId.get(id)!;
+    if (step.type === "send") visit(step.nextStepId);
+    else {
+      visit(step.yesStepId);
+      visit(step.noStepId);
+    }
+  }
+  visit(rootStepId);
+  return visited;
 }
 
 function TriggerNode({ data, selected }: NodeProps) {
@@ -538,16 +558,18 @@ export function AutomationDialog({
       toast.error("Escolha um segmento de Contatos → Segmentos como gatilho.");
       return;
     }
-    if (steps.some((s) => s.type === "send" && !s.templateName)) {
-      toast.error("Escolha um template pra cada etapa de envio.");
-      return;
-    }
     const rootStep = steps.find((s) => s.id === rootStepId);
     if (!rootStep || rootStep.type !== "send") {
       toast.error("O gatilho precisa apontar pra uma etapa de Enviar WhatsApp.");
       return;
     }
-    const orderedSteps = [rootStep, ...steps.filter((s) => s.id !== rootStepId)];
+    const reachableIds = reachableStepIds(steps, rootStepId);
+    const liveSteps = steps.filter((s) => reachableIds.has(s.id));
+    if (liveSteps.some((s) => s.type === "send" && !s.templateName)) {
+      toast.error("Escolha um template pra cada etapa de envio.");
+      return;
+    }
+    const orderedSteps = [rootStep, ...liveSteps.filter((s) => s.id !== rootStepId)];
     setBusy(true);
     try {
       const res = await runSave({
@@ -557,27 +579,30 @@ export function AutomationDialog({
           descricao: descricao.trim() || undefined,
           segmentType: "custom",
           segmentId,
-          steps: orderedSteps.map((s) =>
-            s.type === "send"
-              ? {
-                  id: s.id,
-                  type: "send" as const,
-                  waitMinutes: s.waitMinutes,
-                  templateName: s.templateName,
-                  templateLanguage: s.templateLanguage,
-                  messageType: templateMessageType(approved.find((t: { name: string; category?: string }) => t.name === s.templateName)?.category),
-                  bodyParams: s.bodyParams,
-                  couponCode: s.couponCode?.trim() || undefined,
-                  nextStepId: s.nextStepId,
-                }
-              : {
-                  id: s.id,
-                  type: "decision" as const,
-                  condition: s.condition,
-                  yesStepId: s.yesStepId,
-                  noStepId: s.noStepId,
-                },
-          ),
+          steps: orderedSteps.map((s) => {
+            if (s.type !== "send") {
+              return {
+                id: s.id,
+                type: "decision" as const,
+                condition: s.condition,
+                yesStepId: s.yesStepId,
+                noStepId: s.noStepId,
+              };
+            }
+            const tmpl = approved.find((t: { name: string; category?: string; components?: { type: string; text?: string }[] }) => t.name === s.templateName);
+            return {
+              id: s.id,
+              type: "send" as const,
+              waitMinutes: s.waitMinutes,
+              templateName: s.templateName,
+              templateLanguage: s.templateLanguage,
+              messageType: templateMessageType(tmpl?.category),
+              bodyParams: s.bodyParams,
+              bodyParamTokens: templateBodyTokens(tmpl?.components),
+              couponCode: s.couponCode?.trim() || undefined,
+              nextStepId: s.nextStepId,
+            };
+          }),
           requerAprovacao,
           ativo,
         },
@@ -598,13 +623,18 @@ export function AutomationDialog({
 
   const selectedStep = selectedNodeId && selectedNodeId !== TRIGGER_ID ? steps.find((s) => s.id === selectedNodeId) : undefined;
   const panelOpen = addPanelOpen || selectedNodeId !== null;
-  const missingTemplate = steps.some((s) => s.type === "send" && !s.templateName);
-  const canInstall = Boolean(segmentId) && !missingTemplate;
+  const rootStepForValidation = steps.find((s) => s.id === rootStepId);
+  const reachable = reachableStepIds(steps, rootStepId);
+  const missingTemplate = steps.some((s) => reachable.has(s.id) && s.type === "send" && !s.templateName);
+  const rootNotSend = !rootStepForValidation || rootStepForValidation.type !== "send";
+  const canInstall = Boolean(segmentId) && !missingTemplate && !rootNotSend;
   const installBlockedReason = !segmentId
     ? "Escolha um segmento de Contatos → Segmentos como gatilho antes de instalar."
-    : missingTemplate
-      ? "Escolha um template pra cada etapa de envio antes de instalar."
-      : undefined;
+    : rootNotSend
+      ? "O gatilho precisa apontar pra uma etapa de Enviar WhatsApp antes de instalar."
+      : missingTemplate
+        ? "Escolha um template pra cada etapa de envio antes de instalar."
+        : undefined;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -856,7 +886,7 @@ function SendStepPanel({
   onDelete: () => void;
 }) {
   const template = approved.find((t) => t.name === step.templateName);
-  const varCount = countTemplateVars(template?.components);
+  const tokens = templateBodyTokens(template?.components);
 
   return (
     <>
@@ -902,20 +932,22 @@ function SendStepPanel({
         )}
       </div>
 
-      {varCount > 0 && (
+      {tokens.length > 0 && (
         <div className="space-y-1.5">
-          <Label className="text-xs">Variáveis do template ({varCount})</Label>
-          {Array.from({ length: varCount }).map((_, varIndex) => (
-            <Input
-              key={varIndex}
-              placeholder={`{{${varIndex + 1}}}`}
-              value={step.bodyParams[varIndex] ?? ""}
-              onChange={(e) => {
-                const next = [...step.bodyParams];
-                next[varIndex] = e.target.value;
-                onChange({ bodyParams: next });
-              }}
-            />
+          <Label className="text-xs">Variáveis do template ({tokens.length})</Label>
+          {tokens.map((token, varIndex) => (
+            <div key={token} className="space-y-1">
+              {isNamedParameterToken(token) && <p className="text-[10px] text-muted-foreground">{token}</p>}
+              <Input
+                placeholder={isNamedParameterToken(token) ? `{{${token}}}` : `{{${varIndex + 1}}}`}
+                value={step.bodyParams[varIndex] ?? ""}
+                onChange={(e) => {
+                  const next = [...step.bodyParams];
+                  next[varIndex] = e.target.value;
+                  onChange({ bodyParams: next });
+                }}
+              />
+            </div>
           ))}
           <div className="rounded-lg border border-dashed border-border p-2 space-y-1">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">

@@ -101,6 +101,7 @@ const createCampaignSchema = z.object({
   templateLanguage: z.string().optional(),
   couponCode: z.string().optional(),
   bodyParams: z.array(z.string()).max(10).default([]),
+  bodyParamTokens: z.array(z.string()).max(10).optional(),
   requireApproval: z.boolean().default(false),
   sendAt: z.string().optional(),
   campaignTag: z.string().max(120).optional(),
@@ -137,6 +138,7 @@ export const createAndSendCampaign = createServerFn({ method: "POST" })
         templateName: data.templateName,
         templateLanguage: data.templateLanguage,
         bodyParams: data.bodyParams,
+        bodyParamTokens: data.bodyParamTokens,
         couponCode: data.couponCode,
         origem: "crm",
         campaignTag: data.campaignTag?.trim() || undefined,
@@ -382,6 +384,7 @@ const sendStepSchema = z.object({
   templateLanguage: z.string().optional(),
   messageType: messageTypeSchema.default("marketing"),
   bodyParams: z.array(z.string()).max(10).default([]),
+  bodyParamTokens: z.array(z.string()).max(10).optional(),
   couponCode: z.string().optional(),
   nextStepId: z.string().nullable().default(null),
 });

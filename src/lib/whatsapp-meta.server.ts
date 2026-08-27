@@ -1,4 +1,5 @@
 import { GOALS, type SegmentType } from "./crm-mock";
+import { buildBodyParameters } from "./whatsapp-template-body-tokens";
 
 const DAY_MS = 86_400_000;
 const ATTRIBUTION_WINDOW_DAYS = 3;
@@ -385,15 +386,16 @@ export async function sendTemplateMessage(params: {
   templateName: string;
   templateLanguage: string;
   bodyParams: string[];
+  bodyParamTokens?: string[];
   mediaId?: string;
   mediaUrl?: string;
 }) {
   const components: any[] = [];
-  
+
   if (params.bodyParams.length) {
     components.push({
       type: "body",
-      parameters: params.bodyParams.map((text) => ({ type: "text", text })),
+      parameters: buildBodyParameters(params.bodyParams, params.bodyParamTokens),
     });
   }
 
@@ -492,6 +494,7 @@ export type NewCampaignInput = {
   templateName?: string | undefined;
   templateLanguage?: string | undefined;
   bodyParams: string[];
+  bodyParamTokens?: string[] | undefined;
   couponCode?: string | undefined;
   origem?: string | undefined;
   automationId?: string | undefined;
@@ -529,6 +532,7 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
       template_language: input.templateLanguage?.trim() || settings.templateLanguage,
       message_type: input.messageType,
       body_params: input.bodyParams,
+      body_param_tokens: input.bodyParamTokens ?? null,
       coupon_code: input.couponCode?.trim() || null,
       origem: input.origem ?? "crm",
       automation_id: input.automationId ?? null,
@@ -903,6 +907,7 @@ export type AutomationStepInput =
       templateLanguage?: string | undefined;
       messageType: MessageType;
       bodyParams: string[];
+      bodyParamTokens?: string[] | undefined;
       couponCode?: string | undefined;
       nextStepId: string | null;
     }
@@ -957,6 +962,7 @@ export async function upsertAutomation(input: AutomationInput) {
           templateLanguage: s.templateLanguage?.trim() || settings.templateLanguage,
           messageType: s.messageType,
           bodyParams: s.bodyParams,
+          bodyParamTokens: s.bodyParamTokens ?? [],
           couponCode: s.couponCode?.trim() || null,
           nextStepId: s.nextStepId,
         }

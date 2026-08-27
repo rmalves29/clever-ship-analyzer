@@ -23,6 +23,7 @@ export type QueueRow = {
   template_name: string;
   template_language: string;
   body_params: string[] | null;
+  body_param_tokens: string[] | null;
   header_media_url: string | null;
   status: QueueStatus;
   priority: number;
@@ -168,7 +169,7 @@ export async function enqueueCampaign(
 
   const { data: campaignRow } = await supabaseAdmin
     .from("whatsapp_campaigns")
-    .select("id, segment_type, segment_id, template_name, template_language, body_params, origem")
+    .select("id, segment_type, segment_id, template_name, template_language, body_params, body_param_tokens, origem")
     .eq("id", campaignId)
     .maybeSingle();
   if (!campaignRow) return { success: false as const, error: "Campanha não encontrada." };
@@ -183,6 +184,7 @@ export async function enqueueCampaign(
 
   const campaign = campaignRow as any;
   const bodyParams: string[] = Array.isArray(campaign.body_params) ? campaign.body_params : [];
+  const bodyParamTokens: string[] | null = Array.isArray(campaign.body_param_tokens) ? campaign.body_param_tokens : null;
   const ids = restrictToCustomerIds
     ? [...new Set(restrictToCustomerIds)]
     : await getSegmentCustomerIds(campaign.segment_type as SegmentType, campaign.segment_id || undefined);
@@ -217,6 +219,7 @@ export async function enqueueCampaign(
       template_name: campaign.template_name,
       template_language: campaign.template_language ?? settings.templateLanguage,
       body_params: await resolveBodyParams(bodyParams, recipient, frozenContexts.get(recipient.id)),
+      body_param_tokens: bodyParamTokens,
       header_media_url: isValidMediaUrl(recipient.video_url) ? recipient.video_url : null,
       status: "queued" satisfies QueueStatus,
       priority: options?.priority ?? 5,
@@ -361,6 +364,7 @@ export async function processWhatsappQueueBatch(options?: {
           templateName: item.template_name,
           templateLanguage: item.template_language || settings.templateLanguage,
           bodyParams: Array.isArray(item.body_params) ? item.body_params : [],
+          ...(Array.isArray(item.body_param_tokens) ? { bodyParamTokens: item.body_param_tokens } : {}),
           ...(item.header_media_url ? { mediaUrl: item.header_media_url } : {}),
         });
 

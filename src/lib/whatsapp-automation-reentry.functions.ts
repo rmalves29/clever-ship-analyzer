@@ -33,6 +33,7 @@ const sendStepSchema = z.object({
   templateLanguage: z.string().optional(),
   messageType: messageTypeSchema.default("marketing"),
   bodyParams: z.array(z.string()).max(10).default([]),
+  bodyParamTokens: z.array(z.string()).max(10).optional(),
   couponCode: z.string().optional(),
   nextStepId: z.string().nullable().default(null),
 });

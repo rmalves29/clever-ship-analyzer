@@ -19,6 +19,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { SEGMENT_TYPES, type SegmentType } from "@/lib/crm-mock";
+import { SEGMENT_TYPES } from "@/lib/crm-mock";
 import { getSegmentsList } from "@/lib/crm-segmentation.functions";
 import { listMetaTemplates, saveAutomation } from "@/lib/whatsapp-meta.functions";
 import { previewWhatsappAudience } from "@/lib/whatsapp-audience-preview.functions";
@@ -65,14 +66,27 @@ const DYNAMIC_VARS: { token: string; label: string }[] = [
 export type SendStepSeed = {
   id: string;
   type: "send";
-  waitHours: number;
+  waitMinutes: number;
   templateName: string;
   templateLanguage?: string | undefined;
-  messageType: "marketing" | "utility";
   bodyParams: string[];
   couponCode?: string | undefined;
   nextStepId: string | null;
 };
+
+/** A categoria (Marketing/Utilidade) vem sempre do template aprovado na Meta —
+ *  não é escolha manual, pra não divergir do que a Meta realmente vai cobrar/permitir. */
+function templateMessageType(category: string | null | undefined): "marketing" | "utility" {
+  return String(category ?? "").toUpperCase() === "UTILITY" ? "utility" : "marketing";
+}
+
+function templateCategoryLabel(category: string | null | undefined): string {
+  const normalized = String(category ?? "").toUpperCase();
+  if (normalized === "UTILITY") return "Utilidade";
+  if (normalized === "MARKETING") return "Marketing";
+  if (normalized === "AUTHENTICATION") return "Autenticação";
+  return category || "Categoria não informada";
+}
 
 export type DecisionStepSeed = {
   id: string;
@@ -103,9 +117,8 @@ function newSendStep(): SendStepSeed {
   return {
     id: newId(),
     type: "send",
-    waitHours: 0,
+    waitMinutes: 0,
     templateName: "",
-    messageType: "marketing",
     bodyParams: [],
     nextStepId: null,
   };
@@ -203,7 +216,7 @@ function SendNode({ data, selected }: NodeProps) {
         <MessageCircle className="size-3" /> Enviar WhatsApp
       </p>
       <p className="text-sm font-medium mt-1 truncate">{d.step.templateName || "Escolha um template"}</p>
-      <p className="text-xs text-muted-foreground mt-0.5">Espera {d.step.waitHours}h antes</p>
+      <p className="text-xs text-muted-foreground mt-0.5">Espera {d.step.waitMinutes}min antes</p>
       <Handle type="source" position={Position.Bottom} id="out" className="!bg-primary !size-2.5" />
     </div>
   );
@@ -266,7 +279,7 @@ export function AutomationDialog({
 
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
-  const [segmentType, setSegmentType] = useState<SegmentType>("sem_recompra");
+  const [segmentType, setSegmentType] = useState<string>("");
   const [segmentId, setSegmentId] = useState<string | undefined>(undefined);
   const [steps, setSteps] = useState<AutomationStepSeed[]>([newSendStep()]);
   const [rootStepId, setRootStepId] = useState<string>("");
@@ -281,7 +294,7 @@ export function AutomationDialog({
     if (!open) return;
     setNome(seed?.nome ?? "");
     setDescricao(seed?.descricao ?? "");
-    setSegmentType((seed?.segmentId ? "sem_recompra" : (seed?.segmentType as SegmentType)) ?? "sem_recompra");
+    setSegmentType(seed?.segmentId ? "" : (seed?.segmentType ?? ""));
     setSegmentId(seed?.segmentId ?? undefined);
     const initialSteps = seed?.steps?.length ? seed.steps : [newSendStep()];
     setSteps(initialSteps);
@@ -521,6 +534,10 @@ export function AutomationDialog({
   const graphKey = useMemo(() => edges.map((e) => e.id).join(",") + "|" + nodes.map((n) => n.id).join(","), [edges, nodes]);
 
   const save = async () => {
+    if (!segmentId) {
+      toast.error("Escolha um segmento de Contatos → Segmentos como gatilho.");
+      return;
+    }
     if (steps.some((s) => s.type === "send" && !s.templateName)) {
       toast.error("Escolha um template pra cada etapa de envio.");
       return;
@@ -538,17 +555,17 @@ export function AutomationDialog({
           id: seed?.id,
           nome: nome.trim() || "Automação",
           descricao: descricao.trim() || undefined,
-          segmentType: segmentId ? "custom" : segmentType,
+          segmentType: "custom",
           segmentId,
           steps: orderedSteps.map((s) =>
             s.type === "send"
               ? {
                   id: s.id,
                   type: "send" as const,
-                  waitHours: s.waitHours,
+                  waitMinutes: s.waitMinutes,
                   templateName: s.templateName,
                   templateLanguage: s.templateLanguage,
-                  messageType: s.messageType,
+                  messageType: templateMessageType(approved.find((t: { name: string; category?: string }) => t.name === s.templateName)?.category),
                   bodyParams: s.bodyParams,
                   couponCode: s.couponCode?.trim() || undefined,
                   nextStepId: s.nextStepId,
@@ -750,27 +767,16 @@ export function AutomationDialog({
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Gatilho: segmento (público que entra na automação)</Label>
-                    <Select
-                      value={segmentId || segmentType}
-                      onValueChange={(v) => {
-                        const isCustom = customSegments.some((s) => s.id === v);
-                        if (isCustom) {
-                          setSegmentId(v);
-                        } else {
-                          setSegmentType(v as SegmentType);
-                          setSegmentId(undefined);
-                        }
-                      }}
-                    >
+                    <Select value={segmentId ?? ""} onValueChange={(v) => setSegmentId(v)}>
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder="Selecione um segmento criado em Contatos → Segmentos" />
                       </SelectTrigger>
                       <SelectContent>
-                        {SEGMENT_TYPES.map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {SEGMENT_LABEL[s]}
-                          </SelectItem>
-                        ))}
+                        {customSegments.length === 0 && (
+                          <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                            Nenhum segmento em Contatos → Segmentos ainda.
+                          </div>
+                        )}
                         {customSegments.map((s) => (
                           <SelectItem key={s.id} value={s.id}>
                             {s.nome}
@@ -779,9 +785,11 @@ export function AutomationDialog({
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      {loadingTriggerAudience
-                        ? "Calculando quantos contatos entram nesse gatilho…"
-                        : `${triggerAudience?.destinatarios ?? 0} contato(s) vão receber esta automação agora`}
+                      {!segmentId
+                        ? "Crie e escolha um segmento em Contatos → Segmentos para definir o público."
+                        : loadingTriggerAudience
+                          ? "Calculando quantos contatos entram nesse gatilho…"
+                          : `${triggerAudience?.destinatarios ?? 0} contato(s) vão receber esta automação agora`}
                     </p>
                   </div>
                   <div className="flex items-center justify-between rounded-lg border border-border p-3">
@@ -836,7 +844,7 @@ function SendStepPanel({
 }: {
   step: SendStepSeed;
   isRoot: boolean;
-  approved: { name: string; language: string; components?: { type: string; text?: string }[] }[];
+  approved: { name: string; language: string; category?: string; components?: { type: string; text?: string }[] }[];
   onChange: (patch: Partial<SendStepSeed>) => void;
   onDelete: () => void;
 }) {
@@ -855,27 +863,14 @@ function SendStepPanel({
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-xs">{isRoot ? "Esperar antes de matricular (horas)" : "Esperar desde a etapa anterior (horas)"}</Label>
+        <Label className="text-xs">{isRoot ? "Esperar antes de matricular (minutos)" : "Esperar desde a etapa anterior (minutos)"}</Label>
         <Input
           type="number"
           min={0}
-          max={720}
-          value={step.waitHours}
-          onChange={(e) => onChange({ waitHours: Number(e.target.value) || 0 })}
+          max={43200}
+          value={step.waitMinutes}
+          onChange={(e) => onChange({ waitMinutes: Number(e.target.value) || 0 })}
         />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label className="text-xs">Tipo</Label>
-        <Select value={step.messageType} onValueChange={(v) => onChange({ messageType: v as "marketing" | "utility" })}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="marketing">Marketing</SelectItem>
-            <SelectItem value="utility">Utilidade</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       <div className="space-y-1.5">
@@ -887,11 +882,17 @@ function SendStepPanel({
           <SelectContent>
             {approved.map((t) => (
               <SelectItem key={`${t.name}-${t.language}`} value={t.name}>
-                {t.name} ({t.language})
+                {t.name} ({t.language}) · {templateCategoryLabel(t.category)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        {template && (
+          <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+            <Badge variant="outline">{templateCategoryLabel(template.category)}</Badge>
+            <span className="text-xs text-muted-foreground">Categoria definida na Meta para este template.</span>
+          </div>
+        )}
       </div>
 
       {varCount > 0 && (

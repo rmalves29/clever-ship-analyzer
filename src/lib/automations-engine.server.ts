@@ -7,7 +7,7 @@ import { decideAutomationReentry } from "./whatsapp-automation-reentry";
 export type SendStep = {
   id: string;
   type: "send";
-  waitHours: number;
+  waitMinutes: number;
   templateName: string;
   templateLanguage: string;
   messageType: "marketing" | "utility";
@@ -48,7 +48,7 @@ export async function getAutomationTickSecret(): Promise<string | null> {
 type RawStep = {
   id?: unknown;
   type?: unknown;
-  waitHours?: unknown;
+  waitMinutes?: unknown;
   templateName?: unknown;
   templateLanguage?: unknown;
   messageType?: unknown;
@@ -117,7 +117,7 @@ export function parseSteps(raw: unknown): AutomationStep[] {
       return {
         id,
         type: "send",
-        waitHours: Number(s.waitHours ?? 0),
+        waitMinutes: Number(s.waitMinutes ?? 0),
         templateName,
         templateLanguage: String(s.templateLanguage ?? "pt_BR"),
         messageType: s.messageType === "utility" ? "utility" : "marketing",
@@ -301,7 +301,7 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
     return eligibleRecipients.length;
   }
 
-  const nextRunAt = new Date(Date.now() + firstStep.waitHours * 3_600_000).toISOString();
+  const nextRunAt = new Date(Date.now() + firstStep.waitMinutes * 60_000).toISOString();
   const rows = eligibleRecipients.map((r) => ({
     automation_id: automation.id,
     customer_id: r.id,
@@ -334,7 +334,7 @@ async function advanceRuns(runs: any[], steps: AutomationStep[], campaignId: str
     const patch = next
       ? {
           current_step_id: next.id,
-          next_run_at: new Date(Date.now() + next.waitHours * 3_600_000).toISOString(),
+          next_run_at: new Date(Date.now() + next.waitMinutes * 60_000).toISOString(),
           status: "active",
           campaign_id: campaignId ?? r.campaign_id,
           last_error: null,

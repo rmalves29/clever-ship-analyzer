@@ -898,7 +898,7 @@ export type AutomationStepInput =
   | {
       id: string;
       type: "send";
-      waitHours: number;
+      waitMinutes: number;
       templateName: string;
       templateLanguage?: string | undefined;
       messageType: MessageType;
@@ -952,7 +952,7 @@ export async function upsertAutomation(input: AutomationInput) {
       ? {
           id: s.id,
           type: "send" as const,
-          waitHours: s.waitHours,
+          waitMinutes: s.waitMinutes,
           templateName: s.templateName.trim(),
           templateLanguage: s.templateLanguage?.trim() || settings.templateLanguage,
           messageType: s.messageType,

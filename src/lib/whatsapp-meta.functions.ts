@@ -377,7 +377,7 @@ const decisionConditionSchema = z.discriminatedUnion("kind", [
 const sendStepSchema = z.object({
   id: z.string().min(1),
   type: z.literal("send"),
-  waitHours: z.number().int().min(0).max(720),
+  waitMinutes: z.number().int().min(0).max(43200),
   templateName: z.string().min(1),
   templateLanguage: z.string().optional(),
   messageType: messageTypeSchema.default("marketing"),

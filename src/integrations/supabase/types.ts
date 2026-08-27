@@ -1988,6 +1988,95 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_inbox_messages: {
+        Row: {
+          body: string | null
+          created_at: string
+          direction: string
+          error: string | null
+          id: string
+          media_url: string | null
+          message_type: string
+          sent_at: string
+          status: string | null
+          thread_id: string
+          wa_message_id: string | null
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          direction: string
+          error?: string | null
+          id?: string
+          media_url?: string | null
+          message_type?: string
+          sent_at?: string
+          status?: string | null
+          thread_id: string
+          wa_message_id?: string | null
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          direction?: string
+          error?: string | null
+          id?: string
+          media_url?: string | null
+          message_type?: string
+          sent_at?: string
+          status?: string | null
+          thread_id?: string
+          wa_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_inbox_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_inbox_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_inbox_threads: {
+        Row: {
+          contact_name: string | null
+          created_at: string
+          customer_id: string | null
+          id: string
+          last_inbound_at: string | null
+          last_message_at: string
+          last_message_preview: string | null
+          phone: string
+          unread_count: number
+          updated_at: string
+        }
+        Insert: {
+          contact_name?: string | null
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          last_inbound_at?: string | null
+          last_message_at?: string
+          last_message_preview?: string | null
+          phone: string
+          unread_count?: number
+          updated_at?: string
+        }
+        Update: {
+          contact_name?: string | null
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          last_inbound_at?: string | null
+          last_message_at?: string
+          last_message_preview?: string | null
+          phone?: string
+          unread_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       whatsapp_message_queue: {
         Row: {
           attempts: number

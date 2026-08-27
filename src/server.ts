@@ -33,6 +33,7 @@ const ENVIO_CLEANUP_EVENTS_PATH = "/api/envio/cleanup-events";
 const AI_ROUTINES_TICK_PATH = "/api/ai-routines/tick";
 const AI_PLAYBOOK_TICK_PATH = "/api/ai-routines/playbook-tick";
 const WHATSAPP_QUEUE_TICK_PATH = "/api/whatsapp/queue-tick";
+const CRM_SYNC_TICK_PATH = "/api/crm/sync-tick";
 
 // Webhook da Meta é chamado diretamente por eles, fora do protocolo de RPC do
 // createServerFn — por isso é tratado aqui, antes do handler SSR do TanStack Start.
@@ -336,6 +337,23 @@ async function handleWhatsappQueueTick(request: Request): Promise<Response> {
 }
 
 
+// Sincronização periódica com a Shopify (clientes, pedidos, checkouts abandonados) — sem isso,
+// pedidos novos só entram no CRM quando alguém clica em "Sincronizar Shopify" manualmente, e
+// automações baseadas em "novo pedido" nunca enxergam o pedido a tempo. Mesmo padrão de segredo
+// compartilhado dos outros ticks acima.
+async function handleCrmSyncTick(request: Request): Promise<Response> {
+  if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+  if (!(await checkAutomationSecret(request))) return new Response("Forbidden", { status: 401 });
+  try {
+    const { runShopifySync } = await import("./lib/crm-sync.server");
+    const result = await runShopifySync(false);
+    return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json" } });
+  } catch (error) {
+    console.error("Falha ao sincronizar dados da Shopify:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}
+
 async function handleEnvioCleanupEvents(request: Request): Promise<Response> {
   if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
   if (!(await checkAutomationSecret(request))) return new Response("Forbidden", { status: 401 });
@@ -430,6 +448,9 @@ export default {
     }
     if (pathname === WHATSAPP_QUEUE_TICK_PATH) {
       return handleWhatsappQueueTick(request);
+    }
+    if (pathname === CRM_SYNC_TICK_PATH) {
+      return handleCrmSyncTick(request);
     }
     try {
       const handler = await getServerEntry();

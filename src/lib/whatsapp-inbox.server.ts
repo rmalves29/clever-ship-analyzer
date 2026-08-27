@@ -46,16 +46,17 @@ async function ensureThread(phone: string, contactName?: string | null) {
 
   const { data: customer } = await supabaseAdmin
     .from("shopify_customers")
-    .select("id, nome")
+    .select("id, first_name, last_name")
     .eq("phone", phone)
     .maybeSingle();
-  const c = customer as { id: string; nome: string | null } | null;
+  const c = customer as { id: string; first_name: string | null; last_name: string | null } | null;
+  const customerName = c ? [c.first_name, c.last_name].filter(Boolean).join(" ").trim() || null : null;
 
   const { data: created } = await supabaseAdmin
     .from("whatsapp_inbox_threads")
     .insert({
       phone,
-      contact_name: contactName ?? c?.nome ?? null,
+      contact_name: contactName ?? customerName,
       customer_id: c?.id ?? null,
     } as never)
     .select("id, customer_id, contact_name")
@@ -104,6 +105,53 @@ export async function recordInboundMessage(message: IncomingMessage, contactName
       ...(thread.contact_name ? {} : contactName ? { contact_name: contactName } : {}),
       updated_at: new Date().toISOString(),
     } as never)
+    .eq("id", thread.id);
+}
+
+function buildOutboundPreview(templateName: string, bodyParams: string[], bodyParamTokens: string[] | null | undefined): string {
+  if (bodyParams.length === 0) return `Template: ${templateName}`;
+  const parts = bodyParams.map((value, i) => {
+    const token = bodyParamTokens?.[i];
+    return token ? `${token}=${value}` : value;
+  });
+  return `Template: ${templateName} (${parts.join(", ")})`;
+}
+
+/** Espelha um envio de campanha/automação (fila de WhatsApp) na caixa de entrada, na mesma
+ *  thread do cliente — sem isso, mensagens de template ficavam invisíveis em "Conversas",
+ *  só apareciam na lista de Campanhas. Chamado pelo worker da fila após um envio confirmado. */
+export async function recordOutboundQueueMessage(params: {
+  phone: string;
+  templateName: string;
+  bodyParams: string[];
+  bodyParamTokens?: string[] | null;
+  waMessageId: string | null;
+}): Promise<void> {
+  const { toE164 } = await import("./whatsapp-meta.server");
+  const phone = toE164(params.phone);
+  if (!phone) return;
+
+  const supabaseAdmin = await admin();
+  const thread = await ensureThread(phone);
+  if (!thread) return;
+
+  const body = buildOutboundPreview(params.templateName, params.bodyParams, params.bodyParamTokens);
+  const now = new Date().toISOString();
+
+  const { error } = await supabaseAdmin.from("whatsapp_inbox_messages").insert({
+    thread_id: thread.id,
+    direction: "outbound",
+    body,
+    message_type: "template",
+    status: "sent",
+    wa_message_id: params.waMessageId,
+    sent_at: now,
+  } as never);
+  if (error) return;
+
+  await supabaseAdmin
+    .from("whatsapp_inbox_threads")
+    .update({ last_message_at: now, last_message_preview: body.slice(0, 160), updated_at: now } as never)
     .eq("id", thread.id);
 }
 

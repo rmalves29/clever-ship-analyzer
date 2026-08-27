@@ -378,6 +378,16 @@ export async function processWhatsappQueueBatch(options?: {
         .from(QUEUE_TABLE)
         .update({ status: "sent" satisfies QueueStatus, wa_message_id: result.waMessageId ?? null, sent_at: now, error: null, next_attempt_at: null, locked_by: null, locked_at: null })
         .eq("id", item.id);
+      if (!useMock) {
+        const { recordOutboundQueueMessage } = await import("./whatsapp-inbox.server");
+        await recordOutboundQueueMessage({
+          phone: item.phone,
+          templateName: item.template_name,
+          bodyParams: Array.isArray(item.body_params) ? item.body_params : [],
+          bodyParamTokens: item.body_param_tokens,
+          waMessageId: result.waMessageId ?? null,
+        }).catch((error) => console.error("Falha ao espelhar envio na caixa de entrada:", error));
+      }
     } else {
       if (canRetry) retry++;
       else failed++;

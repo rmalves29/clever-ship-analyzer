@@ -10,6 +10,37 @@ function normalizePhone(phone: string | null | undefined): string | null {
   return phone.startsWith("+") ? phone : `+${cleaned}`;
 }
 
+/** Resolve o id definitivo pra um upsert de shopify_customers. O sync sempre calcula um id
+ *  "ideal" a partir de e-mail/id numérico (`email:x` / `id:n`), mas isso não cobre uma lead que
+ *  já existe localmente só por telefone (ex.: capturada pelo pop-up do site, id `phone:+55...`,
+ *  sem e-mail ainda). Sem essa checagem, a mesma pessoa ganharia uma SEGUNDA ficha assim que
+ *  fizesse um pedido de verdade. Se já existe uma linha com esse telefone sob outro id, essa
+ *  linha existente é reaproveitada (dados novos são só atualizados nela) — nunca renomeia um id
+ *  já em uso, porque outras tabelas guardam esse id como texto solto, sem FK/cascade. */
+async function resolveCustomerRowId(
+  supabaseAdmin: (typeof import("@/integrations/supabase/client.server"))["supabaseAdmin"],
+  computedId: string,
+  phone: string | null,
+): Promise<string> {
+  const { data: existingById } = await supabaseAdmin
+    .from("shopify_customers")
+    .select("id")
+    .eq("id", computedId)
+    .maybeSingle();
+  if (existingById) return computedId;
+
+  if (phone) {
+    const { data: existingByPhone } = await supabaseAdmin
+      .from("shopify_customers")
+      .select("id")
+      .eq("phone", phone)
+      .maybeSingle();
+    if (existingByPhone?.id) return existingByPhone.id as string;
+  }
+
+  return computedId;
+}
+
 /** Puxa clientes, pedidos e checkouts abandonados da Shopify pra dentro do CRM.
  *  Chamado tanto pelo botão "Sincronizar Shopify" (crm-sync.functions.ts) quanto
  *  pelo tick periódico (src/server.ts) — é o único lugar com essa lógica. */
@@ -59,19 +90,21 @@ export async function runShopifySync(fullSync: boolean) {
         for (const edge of customersConnection.edges) {
           const customer = edge.node;
           const email = customer.email?.toLowerCase();
+          const customerPhone = normalizePhone(
+            customer.phone ||
+            customer.defaultAddress?.phone ||
+            customer.addresses?.find((a: any) => a.phone)?.phone
+          );
           // Use Shopify ID as primary if possible to avoid collisions, fall back to email
-          const customerId = email ? `email:${email}` : `id:${customer.id.split('/').pop()}`;
+          const rawCustomerId = email ? `email:${email}` : `id:${customer.id.split('/').pop()}`;
+          const customerId = await resolveCustomerRowId(supabaseAdmin, rawCustomerId, customerPhone);
 
           const { error: upsertError } = await supabaseAdmin.from("shopify_customers").upsert({
             id: customerId,
             email: customer.email || null,
             first_name: customer.firstName || null,
             last_name: customer.lastName || null,
-            phone: normalizePhone(
-              customer.phone ||
-              customer.defaultAddress?.phone ||
-              customer.addresses?.find((a: any) => a.phone)?.phone
-            ),
+            phone: customerPhone,
             city: customer.defaultAddress?.city || null,
             province: customer.defaultAddress?.province || null,
             country: customer.defaultAddress?.country || null,
@@ -117,9 +150,10 @@ export async function runShopifySync(fullSync: boolean) {
         const order = edge.node;
         const addr = order.shippingAddress;
         const email: string | null = order.email || order.customer?.email || null;
-        const customerId = email ? `email:${email.toLowerCase()}` : (order.customer?.id ? `id:${order.customer.id.split('/').pop()}` : null);
+        const rawCustomerId = email ? `email:${email.toLowerCase()}` : (order.customer?.id ? `id:${order.customer.id.split('/').pop()}` : null);
+        let customerId = rawCustomerId;
 
-        if (customerId) {
+        if (rawCustomerId) {
           const fullName =
             addr?.name || [addr?.firstName, addr?.lastName].filter(Boolean).join(" ") ||
             [order.customer?.firstName, order.customer?.lastName].filter(Boolean).join(" ") || null;
@@ -137,6 +171,7 @@ export async function runShopifySync(fullSync: boolean) {
             order.customer?.addresses?.find((a: any) => a.phone)?.phone ??
             order.phone
           );
+          customerId = await resolveCustomerRowId(supabaseAdmin, rawCustomerId, customerPhone);
 
           await supabaseAdmin.from("shopify_customers").upsert({
             id: customerId,
@@ -247,7 +282,7 @@ export async function runShopifySync(fullSync: boolean) {
           const email = checkoutEmail || customer?.email?.toLowerCase();
 
           if (email || customer?.id) {
-            const customerId = email ? `email:${email}` : `id:${customer.id.split('/').pop()}`;
+            const rawCustomerId = email ? `email:${email}` : `id:${customer.id.split('/').pop()}`;
 
             const customerPhone = normalizePhone(
               checkout.phone ??
@@ -256,6 +291,7 @@ export async function runShopifySync(fullSync: boolean) {
               customer?.defaultAddress?.phone ??
               customer?.addresses?.find((a: any) => a.phone)?.phone
             );
+            const customerId = await resolveCustomerRowId(supabaseAdmin, rawCustomerId, customerPhone);
 
             // Get existing tags to avoid overwriting
             const { data: existing } = await supabaseAdmin

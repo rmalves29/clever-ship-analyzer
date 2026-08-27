@@ -12,6 +12,7 @@ import {
   Workflow,
   Send,
   RefreshCw,
+  LayoutTemplate,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +29,8 @@ type NavItem = {
     | "/instagram"
     | "/eventos"
     | "/flow"
-    | "/fluxo-envio";
+    | "/fluxo-envio"
+    | "/popups";
   search?: Record<string, string>;
   icon: typeof LayoutDashboard;
 };
@@ -70,6 +72,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { label: "ManyChat", to: "/flow", icon: Workflow },
       { label: "Fluxo de Envio", to: "/fluxo-envio", icon: Send },
+      { label: "Pop-ups", to: "/popups", icon: LayoutTemplate },
     ],
   },
   {

@@ -59,6 +59,21 @@ async function loadCustomers() {
   return rows;
 }
 
+/** Telefone -> última visita ao site registrada pelo snippet do pop-up (popup_leads.last_visit_at)
+ *  — não é uma coluna de shopify_customers, então precisa ser mesclada depois de loadCustomers(). */
+async function loadPopupVisitByPhone(): Promise<Map<string, string>> {
+  const db = await admin();
+  const map = new Map<string, string>();
+  const { data, error } = await (db.from("popup_leads" as any) as any)
+    .select("phone, last_visit_at")
+    .not("last_visit_at", "is", null);
+  if (error) throw new Error(`Erro ao buscar visitas do pop-up: ${error.message}`);
+  for (const row of (data ?? []) as { phone: string; last_visit_at: string }[]) {
+    map.set(row.phone, row.last_visit_at);
+  }
+  return map;
+}
+
 async function loadOrders(): Promise<CRMOrderForSegmentation[]> {
   const db = await admin();
   const rows: CRMOrderForSegmentation[] = [];
@@ -402,12 +417,18 @@ export async function loadCRMProductFilterOptions(): Promise<CRMProductOption[]>
 }
 
 export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMAdvancedCustomerContext[]> {
-  const [customers, orders, abandonedCheckoutAtByCustomer, whatsappBehavior] = await Promise.all([
+  const [customers, orders, abandonedCheckoutAtByCustomer, whatsappBehavior, popupVisitByPhone] = await Promise.all([
     loadCustomers(),
     loadOrders(),
     loadLatestAbandonedCheckoutByCustomer(),
     loadWhatsappBehaviorIndexes(),
+    loadPopupVisitByPhone(),
   ]);
+  for (const customer of customers) {
+    if (customer.phone && popupVisitByPhone.has(customer.phone)) {
+      customer.last_visit_at = popupVisitByPhone.get(customer.phone);
+    }
+  }
   const [shippedTodayValidOrderIds, orderItems] = await Promise.all([
     loadShippedTodayValidOrderIds(orders, now),
     loadValidOrderItems(orders),

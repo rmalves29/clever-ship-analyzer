@@ -410,20 +410,29 @@ const DISCOUNT_CODE_BASIC_CREATE_MUTATION = `
 export type DiscountCodeBasicCreateInput = {
   title: string;
   code: string;
-  percentageFraction: number; // 0.05 a 0.10
+  /** Percentual (fração 0-1) OU valor fixo em dinheiro — exatamente um dos dois. */
+  percentageFraction?: number;
+  fixedAmount?: number; // valor fixo, na moeda da loja
   startsAt: string; // ISO
   endsAt: string; // ISO
+  /** Padrão false (mantém o comportamento já em produção pro cupom VIP de domingo). */
+  appliesOncePerCustomer?: boolean;
 };
 
-/** Cria um cupom de desconto percentual de verdade na Shopify — sem restrição técnica de
- *  cliente (regra de negócio é só copy, "exclusivo Grupo VIP" fica no texto da mensagem, não
- *  aqui), não combinável com desconto de produto em promoção nem com desconto progressivo
- *  (order discount), válido até `endsAt`. Nunca lança — devolve {success:false} pro caller
- *  decidir o fallback (não travar o lote inteiro por causa da Shopify). */
+/** Cria um cupom de desconto de verdade na Shopify (percentual ou valor fixo) — sem restrição
+ *  técnica de cliente por padrão (regra de negócio é só copy, "exclusivo Grupo VIP" fica no texto
+ *  da mensagem, não aqui), não combinável com desconto de produto em promoção nem com desconto
+ *  progressivo (order discount), válido até `endsAt`. Nunca lança — devolve {success:false} pro
+ *  caller decidir o fallback (não travar o lote inteiro por causa da Shopify). */
 export async function createShopifyDiscountCodeBasic(
   input: DiscountCodeBasicCreateInput,
 ): Promise<{ success: true; discountId: string } | { success: false; error: string }> {
   try {
+    const value =
+      input.fixedAmount != null
+        ? { discountAmount: { amount: input.fixedAmount, appliesOnEachItem: false } }
+        : { percentage: input.percentageFraction };
+
     const data = await shopifyGraphQL(DISCOUNT_CODE_BASIC_CREATE_MUTATION, {
       basicCodeDiscount: {
         title: input.title,
@@ -431,8 +440,8 @@ export async function createShopifyDiscountCodeBasic(
         startsAt: input.startsAt,
         endsAt: input.endsAt,
         customerSelection: { all: true },
-        customerGets: { value: { percentage: input.percentageFraction }, items: { all: true } },
-        appliesOncePerCustomer: false,
+        customerGets: { value, items: { all: true } },
+        appliesOncePerCustomer: input.appliesOncePerCustomer ?? false,
         combinesWith: { orderDiscounts: false, productDiscounts: false, shippingDiscounts: true },
       },
     });

@@ -34,6 +34,9 @@ const AI_ROUTINES_TICK_PATH = "/api/ai-routines/tick";
 const AI_PLAYBOOK_TICK_PATH = "/api/ai-routines/playbook-tick";
 const WHATSAPP_QUEUE_TICK_PATH = "/api/whatsapp/queue-tick";
 const CRM_SYNC_TICK_PATH = "/api/crm/sync-tick";
+const POPUP_CONFIG_PATH = "/api/popup/config";
+const POPUP_VISIT_PATH = "/api/popup/visit";
+const POPUP_CAPTURE_PATH = "/api/popup/capture";
 
 // Webhook da Meta é chamado diretamente por eles, fora do protocolo de RPC do
 // createServerFn — por isso é tratado aqui, antes do handler SSR do TanStack Start.
@@ -354,6 +357,104 @@ async function handleCrmSyncTick(request: Request): Promise<Response> {
   }
 }
 
+// O pop-up roda no domínio da loja (Shopify), fora deste app — chamadas via fetch() cross-origin
+// exigem CORS, ao contrário de todo o resto das rotas cruas (webhooks são server-to-server).
+// Só o domínio configurado em store_settings.shopify_store_domain pode chamar essas 3 rotas.
+async function getAllowedPopupOrigin(origin: string | null): Promise<string | null> {
+  if (!origin) return null;
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data } = await supabaseAdmin
+      .from("store_settings")
+      .select("shopify_store_domain")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const shopDomain = (data as { shopify_store_domain: string | null } | null)?.shopify_store_domain;
+    if (!shopDomain) return null;
+    const normalized = shopDomain.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+    const originHost = new URL(origin).host;
+    return originHost === normalized ? origin : null;
+  } catch {
+    return null;
+  }
+}
+
+function popupCorsHeaders(allowedOrigin: string | null): HeadersInit {
+  if (!allowedOrigin) return {};
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+}
+
+async function popupCorsPreflight(request: Request): Promise<Response> {
+  const allowed = await getAllowedPopupOrigin(request.headers.get("Origin"));
+  return new Response(null, { status: 204, headers: popupCorsHeaders(allowed) });
+}
+
+async function handlePopupConfig(request: Request): Promise<Response> {
+  if (request.method === "OPTIONS") return popupCorsPreflight(request);
+  if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
+  const allowed = await getAllowedPopupOrigin(request.headers.get("Origin"));
+  try {
+    const { getActivePopupConfig } = await import("./lib/popup.server");
+    const config = await getActivePopupConfig();
+    return new Response(JSON.stringify(config ?? {}), {
+      status: 200,
+      headers: { "content-type": "application/json", ...popupCorsHeaders(allowed) },
+    });
+  } catch (error) {
+    console.error("Falha ao buscar config do pop-up:", error);
+    return new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json", ...popupCorsHeaders(allowed) } });
+  }
+}
+
+async function handlePopupVisit(request: Request): Promise<Response> {
+  if (request.method === "OPTIONS") return popupCorsPreflight(request);
+  if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+  const allowed = await getAllowedPopupOrigin(request.headers.get("Origin"));
+  try {
+    const body = await request.json();
+    const { recordSiteVisit } = await import("./lib/popup.server");
+    await recordSiteVisit({ visitorToken: String(body?.visitorToken ?? ""), pageUrl: body?.pageUrl ? String(body.pageUrl) : null });
+  } catch (error) {
+    console.error("Falha ao registrar visita do pop-up:", error);
+  }
+  return new Response(JSON.stringify({ success: true }), {
+    status: 200,
+    headers: { "content-type": "application/json", ...popupCorsHeaders(allowed) },
+  });
+}
+
+async function handlePopupCapture(request: Request): Promise<Response> {
+  if (request.method === "OPTIONS") return popupCorsPreflight(request);
+  if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+  const allowed = await getAllowedPopupOrigin(request.headers.get("Origin"));
+  try {
+    const body = await request.json();
+    const { capturePopupLead } = await import("./lib/popup.server");
+    const result = await capturePopupLead({
+      phone: String(body?.phone ?? ""),
+      name: body?.name ? String(body.name) : null,
+      visitorToken: body?.visitorToken ? String(body.visitorToken) : null,
+      pageUrl: body?.pageUrl ? String(body.pageUrl) : null,
+      popupCampaignId: String(body?.popupCampaignId ?? ""),
+    });
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { "content-type": "application/json", ...popupCorsHeaders(allowed) },
+    });
+  } catch (error) {
+    console.error("Falha ao capturar lead do pop-up:", error);
+    return new Response(JSON.stringify({ success: false, error: "Erro interno." }), {
+      status: 500,
+      headers: { "content-type": "application/json", ...popupCorsHeaders(allowed) },
+    });
+  }
+}
+
 async function handleEnvioCleanupEvents(request: Request): Promise<Response> {
   if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
   if (!(await checkAutomationSecret(request))) return new Response("Forbidden", { status: 401 });
@@ -451,6 +552,15 @@ export default {
     }
     if (pathname === CRM_SYNC_TICK_PATH) {
       return handleCrmSyncTick(request);
+    }
+    if (pathname === POPUP_CONFIG_PATH) {
+      return handlePopupConfig(request);
+    }
+    if (pathname === POPUP_VISIT_PATH) {
+      return handlePopupVisit(request);
+    }
+    if (pathname === POPUP_CAPTURE_PATH) {
+      return handlePopupCapture(request);
     }
     try {
       const handler = await getServerEntry();

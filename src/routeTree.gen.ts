@@ -16,6 +16,7 @@ import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as EventosRouteImport } from './routes/eventos'
 import { Route as FluxoEnvioRouteImport } from './routes/fluxo-envio'
 import { Route as InstagramRouteImport } from './routes/instagram'
+import { Route as PopupsRouteImport } from './routes/popups'
 import { Route as CrmIndexRouteImport } from './routes/crm/index'
 import { Route as CrmContatosRouteImport } from './routes/crm/contatos'
 import { Route as CrmImportarTrayRouteImport } from './routes/crm/importar-tray'
@@ -61,6 +62,11 @@ const FluxoEnvioRoute = FluxoEnvioRouteImport.update({
 const InstagramRoute = InstagramRouteImport.update({
   id: '/instagram',
   path: '/instagram',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PopupsRoute = PopupsRouteImport.update({
+  id: '/popups',
+  path: '/popups',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CrmIndexRoute = CrmIndexRouteImport.update({
@@ -128,6 +134,7 @@ export interface FileRoutesByFullPath {
   '/eventos': typeof EventosRoute
   '/fluxo-envio': typeof FluxoEnvioRoute
   '/instagram': typeof InstagramRoute
+  '/popups': typeof PopupsRoute
   '/crm/contatos': typeof CrmContatosRoute
   '/crm/importar-tray': typeof CrmImportarTrayRoute
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
@@ -148,6 +155,7 @@ export interface FileRoutesByTo {
   '/eventos': typeof EventosRoute
   '/fluxo-envio': typeof FluxoEnvioRoute
   '/instagram': typeof InstagramRoute
+  '/popups': typeof PopupsRoute
   '/crm/contatos': typeof CrmContatosRoute
   '/crm/importar-tray': typeof CrmImportarTrayRoute
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
@@ -169,6 +177,7 @@ export interface FileRoutesById {
   '/eventos': typeof EventosRoute
   '/fluxo-envio': typeof FluxoEnvioRoute
   '/instagram': typeof InstagramRoute
+  '/popups': typeof PopupsRoute
   '/crm/contatos': typeof CrmContatosRoute
   '/crm/importar-tray': typeof CrmImportarTrayRoute
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
@@ -191,6 +200,7 @@ export interface FileRouteTypes {
     | '/eventos'
     | '/fluxo-envio'
     | '/instagram'
+    | '/popups'
     | '/crm/contatos'
     | '/crm/importar-tray'
     | '/crm/listas-estaticas'
@@ -211,6 +221,7 @@ export interface FileRouteTypes {
     | '/eventos'
     | '/fluxo-envio'
     | '/instagram'
+    | '/popups'
     | '/crm/contatos'
     | '/crm/importar-tray'
     | '/crm/listas-estaticas'
@@ -231,6 +242,7 @@ export interface FileRouteTypes {
     | '/eventos'
     | '/fluxo-envio'
     | '/instagram'
+    | '/popups'
     | '/crm/contatos'
     | '/crm/importar-tray'
     | '/crm/listas-estaticas'
@@ -252,6 +264,7 @@ export interface RootRouteChildren {
   EventosRoute: typeof EventosRoute
   FluxoEnvioRoute: typeof FluxoEnvioRoute
   InstagramRoute: typeof InstagramRoute
+  PopupsRoute: typeof PopupsRoute
   CrmContatosRoute: typeof CrmContatosRoute
   CrmImportarTrayRoute: typeof CrmImportarTrayRoute
   CrmListasEstaticasRoute: typeof CrmListasEstaticasRoute
@@ -314,6 +327,13 @@ declare module '@tanstack/react-router' {
       path: '/instagram'
       fullPath: '/instagram'
       preLoaderRoute: typeof InstagramRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/popups': {
+      id: '/popups'
+      path: '/popups'
+      fullPath: '/popups'
+      preLoaderRoute: typeof PopupsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/crm/': {
@@ -404,6 +424,7 @@ const rootRouteChildren: RootRouteChildren = {
   EventosRoute: EventosRoute,
   FluxoEnvioRoute: FluxoEnvioRoute,
   InstagramRoute: InstagramRoute,
+  PopupsRoute: PopupsRoute,
   CrmContatosRoute: CrmContatosRoute,
   CrmImportarTrayRoute: CrmImportarTrayRoute,
   CrmListasEstaticasRoute: CrmListasEstaticasRoute,

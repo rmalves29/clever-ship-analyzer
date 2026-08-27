@@ -33,6 +33,9 @@ export type CRMCustomerForSegmentation = {
   rfm_segment?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  /** Última visita ao site via snippet do pop-up (join por telefone com popup_leads,
+   *  feito por quem carrega os clientes — não é uma coluna de shopify_customers). */
+  last_visit_at?: string | null;
 };
 
 export type PurchaseMetrics = {
@@ -425,6 +428,7 @@ export function matchesSegmentCondition(context: CRMCustomerContext, condition: 
   if (field === "data_envio_hoje") return compareBoolean(context.shippedToday, operator, value);
   if (field === "checkout_abandonado") return compareBoolean(context.abandonedCheckout, operator, value);
   if (field === "acesso_sem_compra") return compareBoolean(metrics.validOrderCount === 0, operator, value);
+  if (field === "visitou_site") return compareDate(customer.last_visit_at ?? null, operator, value, now);
 
   return false;
 }

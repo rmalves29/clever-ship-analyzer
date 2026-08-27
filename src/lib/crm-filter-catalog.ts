@@ -102,6 +102,7 @@ export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
       { id: "data_envio_hoje", label: "Pedido Válido Enviado Hoje", kind: "boolean" },
       { id: "checkout_abandonado", label: "Checkout Abandonado Ativo", kind: "boolean", description: "Checkout mais recente sem uma compra válida posterior." },
       { id: "acesso_sem_compra", label: "Sem Compra Válida", kind: "boolean", description: "Cliente sem nenhuma compra válida." },
+      { id: "visitou_site", label: "Visitou o Site (Pop-up instalado)", kind: "date", description: "Última visita ao site registrada pelo snippet do pop-up. Só funciona pra quem já foi capturado alguma vez pelo pop-up." },
     ],
   },
   {

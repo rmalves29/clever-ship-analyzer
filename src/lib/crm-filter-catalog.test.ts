@@ -18,6 +18,7 @@ const buyer: CRMAdvancedCustomerContext = {
   customer: {
     id: "c1", first_name: "Ana", city: "Belo Horizonte", province: "MG",
     tags: ["VIP"], tags_custom: ["Teste"], rfm_segment: "Nova compra",
+    last_visit_at: "2026-08-24T10:00:00-03:00",
   },
   metrics: {
     customerId: "c1", validOrderCount: 2, totalSpent: 300, averageTicket: 150,
@@ -104,6 +105,7 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
   { field: "data_envio_hoje", operator: "eq", value: "sim" },
   { field: "checkout_abandonado", operator: "eq", value: "sim" },
   { field: "acesso_sem_compra", operator: "eq", value: "sim", context: lead },
+  { field: "visitou_site", operator: "on", value: "2026-08-24" },
   { field: "produto", operator: "bought", value: "p-brinco" },
   { field: "categoria_produto", operator: "bought", value: "Brincos" },
   { field: "categoria_periodo", operator: "last_days", value: { taxonomyValue: "Brincos", days: 7 } },
@@ -125,8 +127,8 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
 ];
 
 describe("catálogo confiável de filtros do CRM", () => {
-  it("expõe somente os 35 filtros implementados no motor", () => {
-    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(35);
+  it("expõe somente os 36 filtros implementados no motor", () => {
+    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(36);
     expect(new Set(SUPPORTED_SEGMENT_FIELD_IDS)).toEqual(new Set(cases.map((item) => item.field)));
   });
 

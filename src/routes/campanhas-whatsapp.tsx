@@ -236,6 +236,10 @@ function CampanhasWhatsapp() {
             <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
           </TabsList>
 
+          <TabsContent value="conversas">
+            <InboxTab />
+          </TabsContent>
+
           <TabsContent value="campanhas">
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap gap-2">

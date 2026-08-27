@@ -77,10 +77,18 @@ async function handleWhatsappWebhook(request: Request): Promise<Response> {
         }
       }
 
-      // Mensagens recebidas (cliente respondeu ou clicou num botão) — dispara fluxo conversacional.
-      const messages = changes.flatMap((c) => (c?.field === "messages" ? (c?.value?.messages ?? []) : []));
-      for (const m of messages) {
-        if (m?.from) {
+      // Mensagens recebidas (cliente respondeu ou clicou num botão) — grava na caixa de entrada
+      // e dispara fluxo conversacional.
+      const messageChanges = changes.filter((c) => c?.field === "messages");
+      const { recordInboundMessage } = await import("./lib/whatsapp-inbox.server");
+      for (const change of messageChanges) {
+        const contacts: any[] = change?.value?.contacts ?? [];
+        for (const m of change?.value?.messages ?? []) {
+          if (!m?.from) continue;
+          const contactName = contacts.find((c: any) => c?.wa_id === m.from)?.profile?.name ?? null;
+          await recordInboundMessage(m, contactName).catch((error) =>
+            console.error("Falha ao gravar mensagem recebida na caixa de entrada:", error),
+          );
           await matchIncomingMessage(m).catch((error) => console.error("Falha ao casar mensagem recebida com fluxo:", error));
         }
       }

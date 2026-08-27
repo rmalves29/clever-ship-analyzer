@@ -37,6 +37,7 @@ type TemplateOption = {
   name: string;
   language: string;
   status: string;
+  category: string;
   components: { type: string; text?: string }[];
 };
 
@@ -52,6 +53,18 @@ function countBodyVars(components: TemplateOption["components"]): number {
   if (!body?.text) return 0;
   const matches = body.text.match(/\{\{\d+\}\}/g);
   return matches ? new Set(matches).size : 0;
+}
+
+function templateMessageType(category: string | null | undefined): "marketing" | "utility" {
+  return String(category ?? "").toUpperCase() === "UTILITY" ? "utility" : "marketing";
+}
+
+function templateCategoryLabel(category: string | null | undefined): string {
+  const normalized = String(category ?? "").toUpperCase();
+  if (normalized === "UTILITY") return "Utilidade";
+  if (normalized === "MARKETING") return "Marketing";
+  if (normalized === "AUTHENTICATION") return "Autenticação";
+  return category || "Categoria não informada";
 }
 
 function futureScheduleIso(value: string): string | null {
@@ -86,7 +99,6 @@ export function WhatsappSendDialog({
   const [step, setStep] = useState(1);
   const [nome, setNome] = useState("");
   const [templateName, setTemplateName] = useState("");
-  const [messageType, setMessageType] = useState<"marketing" | "utility">("marketing");
   const [bodyParams, setBodyParams] = useState<string[]>([]);
   const [coupon, setCoupon] = useState("");
   const [segmentType, setSegmentType] = useState<string>("sem_recompra");
@@ -135,6 +147,7 @@ export function WhatsappSendDialog({
     (template: { status: string }) => template.status === "APPROVED",
   );
   const selectedTemplate = approved.find((template) => template.name === templateName);
+  const messageType = templateMessageType(selectedTemplate?.category);
   const bodyVarCount = selectedTemplate ? countBodyVars(selectedTemplate.components) : 0;
 
   const {
@@ -430,34 +443,30 @@ export function WhatsappSendDialog({
                       </RadioGroup>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-2">
-                        <Label className="text-sm font-semibold">Tipo</Label>
-                        <Select value={messageType} onValueChange={(value) => setMessageType(value as "marketing" | "utility")}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="marketing">Marketing</SelectItem>
-                            <SelectItem value="utility">Utilidade</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-sm font-semibold">Template aprovado</Label>
-                        <Select
-                          value={templateName}
-                          onValueChange={(value) => {
-                            setTemplateName(value);
-                            setBodyParams([]);
-                          }}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                          <SelectContent>
-                            {approved.map((template) => (
-                              <SelectItem key={`${template.name}-${template.language}`} value={template.name}>{template.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold">Template aprovado</Label>
+                      <Select
+                        value={templateName}
+                        onValueChange={(value) => {
+                          setTemplateName(value);
+                          setBodyParams([]);
+                        }}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                        <SelectContent>
+                          {approved.map((template) => (
+                            <SelectItem key={`${template.name}-${template.language}`} value={template.name}>
+                              {template.name} · {templateCategoryLabel(template.category)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {selectedTemplate && (
+                        <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                          <Badge variant="outline">{templateCategoryLabel(selectedTemplate.category)}</Badge>
+                          <span className="text-xs text-muted-foreground">Categoria definida na Meta para este template.</span>
+                        </div>
+                      )}
                     </div>
 
                     {selectedTemplate && bodyVarCount > 0 && (
@@ -488,11 +497,17 @@ export function WhatsappSendDialog({
                     <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Prévia do WhatsApp</p>
                     <div className="rounded-2xl border bg-muted/30 p-4">
                       {selectedTemplate ? (
-                        <div className="whitespace-pre-wrap rounded-lg bg-background p-3 text-sm">
-                          {selectedTemplate.components.find((component) => component.type === "BODY")?.text?.replace(
-                            /\{\{(\d+)\}\}/g,
-                            (_, number) => bodyParams[Number(number) - 1] || `{{${number}}}`,
-                          )}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{templateCategoryLabel(selectedTemplate.category)}</Badge>
+                            <span className="text-[10px] text-muted-foreground">classificação da Meta</span>
+                          </div>
+                          <div className="whitespace-pre-wrap rounded-lg bg-background p-3 text-sm">
+                            {selectedTemplate.components.find((component) => component.type === "BODY")?.text?.replace(
+                              /\{\{(\d+)\}\}/g,
+                              (_, number) => bodyParams[Number(number) - 1] || `{{${number}}}`,
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <p className="text-sm italic text-muted-foreground">Selecione um template...</p>
@@ -570,6 +585,7 @@ export function WhatsappSendDialog({
                     <div className="space-y-1 bg-background p-5">
                       <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Conteúdo</span>
                       <p className="font-bold">{templateName || "Nenhum template"}</p>
+                      {selectedTemplate && <p className="text-xs text-muted-foreground">{templateCategoryLabel(selectedTemplate.category)}</p>}
                     </div>
                     <div className="space-y-1 bg-background p-5">
                       <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Agendamento</span>

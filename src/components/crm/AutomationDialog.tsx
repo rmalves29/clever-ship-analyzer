@@ -29,6 +29,8 @@ import { cn } from "@/lib/utils";
 import { SEGMENT_TYPES, type SegmentType } from "@/lib/crm-mock";
 import { getSegmentsList } from "@/lib/crm-segmentation.functions";
 import { listMetaTemplates, saveAutomation } from "@/lib/whatsapp-meta.functions";
+import { previewWhatsappAudience } from "@/lib/whatsapp-audience-preview.functions";
+import { normalizeWhatsappAudienceSelection } from "@/lib/whatsapp-audience-selection";
 
 export const SEGMENT_LABEL: Record<string, string> = {
   ticket_alto: "Ticket alto",
@@ -260,6 +262,7 @@ export function AutomationDialog({
   onSaved?: () => void;
 }) {
   const runSave = useServerFn(saveAutomation);
+  const runAudiencePreview = useServerFn(previewWhatsappAudience);
 
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
@@ -305,6 +308,24 @@ export function AutomationDialog({
     enabled: open,
   });
   const customSegments = (segmentsResult ?? []) as { id: string; nome: string }[];
+
+  const triggerAudienceSelection = useMemo(() => {
+    try {
+      return normalizeWhatsappAudienceSelection(segmentType, segmentId);
+    } catch {
+      return null;
+    }
+  }, [segmentType, segmentId]);
+
+  const { data: triggerAudience, isLoading: loadingTriggerAudience } = useQuery({
+    queryKey: ["automation-trigger-audience", triggerAudienceSelection?.segmentType, triggerAudienceSelection?.segmentId, open],
+    queryFn: () =>
+      runAudiencePreview({
+        data: { segmentType: triggerAudienceSelection!.segmentType, segmentId: triggerAudienceSelection!.segmentId },
+      }),
+    enabled: Boolean(open && triggerAudienceSelection),
+    retry: 1,
+  });
 
   const segmentLabel = segmentId
     ? (customSegments.find((s) => s.id === segmentId)?.nome ?? "Segmento customizado")
@@ -757,6 +778,11 @@ export function AutomationDialog({
                         ))}
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {loadingTriggerAudience
+                        ? "Calculando quantos contatos entram nesse gatilho…"
+                        : `${triggerAudience?.destinatarios ?? 0} contato(s) vão receber esta automação agora`}
+                    </p>
                   </div>
                   <div className="flex items-center justify-between rounded-lg border border-border p-3">
                     <div>

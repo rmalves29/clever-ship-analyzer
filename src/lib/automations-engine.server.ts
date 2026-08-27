@@ -375,7 +375,7 @@ async function markRunsWaitingSend(runIds: string[], campaignId: string): Promis
 
 async function processDueRuns(automation: any, steps: AutomationStep[]): Promise<number> {
   const supabaseAdmin = await admin();
-  const { dispatchCampaign, createCampaignRow } = await import("./whatsapp-meta.server");
+  const { dispatchCampaign, createCampaignRow, findAutomationStepCampaignId } = await import("./whatsapp-meta.server");
 
   const { data: dueRuns } = await supabaseAdmin
     .from("whatsapp_automation_runs")
@@ -406,28 +406,37 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
     }
 
     const customerIds = stepRuns.map((r) => r.customer_id as string);
-    const created = await createCampaignRow(
-      {
-        nome: `${automation.nome} — etapa ${stepId}`,
-        segmentType: automation.segment_type,
-        segmentId: automation.segment_id || undefined,
-        messageType: step.messageType,
-        templateName: step.templateName,
-        templateLanguage: step.templateLanguage,
-        bodyParams: step.bodyParams,
-        bodyParamTokens: step.bodyParamTokens,
-        couponCode: step.couponCode ?? undefined,
-        origem: "automacao",
-        automationId: automation.id,
-        totalDestinatariosOverride: customerIds.length,
-      },
-      "enviando",
-    );
-    if (!created.success) continue;
+
+    // Reaproveita a campanha já existente pra essa etapa — disparos sucessivos do tick somam
+    // no mesmo registro em vez de criar uma campanha nova a cada execução (refreshCampaignStatus
+    // recalcula os totais reais a partir da fila, então não precisa somar totalDestinatarios aqui).
+    let campaignId = await findAutomationStepCampaignId(automation.id, stepId);
+    if (!campaignId) {
+      const created = await createCampaignRow(
+        {
+          nome: `${automation.nome} — etapa ${stepId}`,
+          segmentType: automation.segment_type,
+          segmentId: automation.segment_id || undefined,
+          messageType: step.messageType,
+          templateName: step.templateName,
+          templateLanguage: step.templateLanguage,
+          bodyParams: step.bodyParams,
+          bodyParamTokens: step.bodyParamTokens,
+          couponCode: step.couponCode ?? undefined,
+          origem: "automacao",
+          automationId: automation.id,
+          automationStepId: stepId,
+          totalDestinatariosOverride: customerIds.length,
+        },
+        "enviando",
+      );
+      if (!created.success) continue;
+      campaignId = created.campaignId;
+    }
 
     const runIds = stepRuns.map((r) => String(r.id));
-    await markRunsWaitingSend(runIds, created.campaignId);
-    const dispatchResult = await dispatchCampaign(created.campaignId, customerIds);
+    await markRunsWaitingSend(runIds, campaignId);
+    const dispatchResult = await dispatchCampaign(campaignId, customerIds);
     if (!dispatchResult.success) {
       await (supabaseAdmin.from("whatsapp_automation_runs") as any)
         .update({ status: "failed", last_error: dispatchResult.error ?? "Falha ao enfileirar mensagem", updated_at: new Date().toISOString() })

@@ -6,6 +6,19 @@
 import type { SegmentType } from "./crm-mock";
 import { resolveAutomationBodyParams, type AutomationEventContext } from "./whatsapp-automation-context";
 
+/** Substitui os tokens do corpo do template pelos valores reais enviados — pra registrar
+ *  na caixa de entrada o texto de verdade que o cliente recebeu, não um resumo técnico. */
+function renderTemplateBody(bodyText: string, bodyParams: string[], bodyParamTokens: string[] | null | undefined): string {
+  return bodyText.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, token: string) => {
+    if (bodyParamTokens && bodyParamTokens.length > 0) {
+      const idx = bodyParamTokens.indexOf(token);
+      return idx >= 0 && bodyParams[idx] !== undefined ? bodyParams[idx] : match;
+    }
+    const idx = Number(token) - 1;
+    return Number.isInteger(idx) && bodyParams[idx] !== undefined ? bodyParams[idx] : match;
+  });
+}
+
 export const QUEUE_STATUSES = ["queued", "sending", "retry_wait", "sent", "failed", "cancelled", "skipped"] as const;
 export type QueueStatus = (typeof QUEUE_STATUSES)[number];
 
@@ -337,6 +350,25 @@ export async function processWhatsappQueueBatch(options?: {
     ? (await import("./automations-engine.server")).handleAutomationQueueResult
     : null;
 
+  // Corpo real dos templates usados neste lote, buscado 1x (não por mensagem), só pra poder
+  // espelhar o texto de verdade na caixa de entrada em vez de um resumo técnico.
+  let templateBodyByKey: Map<string, string> | null = null;
+  if (!useMock) {
+    try {
+      const { listMetaTemplates } = await import("./whatsapp-meta.server");
+      const templatesResult = await listMetaTemplates();
+      if (templatesResult.success) {
+        templateBodyByKey = new Map();
+        for (const t of templatesResult.templates as { name: string; language: string; components: { type: string; text?: string }[] }[]) {
+          const body = t.components.find((c) => c.type === "BODY")?.text;
+          if (body) templateBodyByKey.set(`${t.name}:${t.language}`, body);
+        }
+      }
+    } catch (error) {
+      console.error("Falha ao buscar templates pra espelhar mensagem na caixa de entrada:", error);
+    }
+  }
+
   for (const item of batch) {
     if (useMock && !isMockJob(item.dedup_key)) {
       skippedNonMock++;
@@ -379,12 +411,15 @@ export async function processWhatsappQueueBatch(options?: {
         .update({ status: "sent" satisfies QueueStatus, wa_message_id: result.waMessageId ?? null, sent_at: now, error: null, next_attempt_at: null, locked_by: null, locked_at: null })
         .eq("id", item.id);
       if (!useMock) {
+        const bodyParams = Array.isArray(item.body_params) ? item.body_params : [];
+        const templateBody = templateBodyByKey?.get(`${item.template_name}:${item.template_language}`);
+        const renderedBody = templateBody
+          ? renderTemplateBody(templateBody, bodyParams, item.body_param_tokens)
+          : `Template: ${item.template_name}`;
         const { recordOutboundQueueMessage } = await import("./whatsapp-inbox.server");
         await recordOutboundQueueMessage({
           phone: item.phone,
-          templateName: item.template_name,
-          bodyParams: Array.isArray(item.body_params) ? item.body_params : [],
-          bodyParamTokens: item.body_param_tokens,
+          body: renderedBody,
           waMessageId: result.waMessageId ?? null,
         }).catch((error) => console.error("Falha ao espelhar envio na caixa de entrada:", error));
       }

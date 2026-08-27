@@ -498,6 +498,9 @@ export type NewCampaignInput = {
   couponCode?: string | undefined;
   origem?: string | undefined;
   automationId?: string | undefined;
+  /** Chave de reaproveitamento: disparos sucessivos da mesma etapa de automação somam
+   *  na mesma campanha em vez de criar uma nova a cada execução do tick. */
+  automationStepId?: string | undefined;
   campaignTag?: string | undefined;
   /** Usado por lotes de automação, onde o tamanho real do lote já é conhecido — evita recalcular o segmento inteiro. */
   totalDestinatariosOverride?: number | undefined;
@@ -536,6 +539,7 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
       coupon_code: input.couponCode?.trim() || null,
       origem: input.origem ?? "crm",
       automation_id: input.automationId ?? null,
+      automation_step_id: input.automationStepId ?? null,
       total_destinatarios: destinatarios,
       campaign_tag: input.campaignTag || null,
     } as any)
@@ -544,6 +548,21 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
 
   if (error || !campaign) return { success: false as const, error: error?.message ?? "Falha ao criar a campanha." };
   return { success: true as const, campaignId: (campaign as { id: string }).id, destinatarios };
+}
+
+/** Campanha já existente pra essa etapa de automação (a mais antiga, se houver mais de uma
+ *  de execuções antes desse reaproveitamento existir) — usada pra somar disparos sucessivos
+ *  do tick na mesma campanha em vez de criar uma nova a cada execução. */
+export async function findAutomationStepCampaignId(automationId: string, automationStepId: string): Promise<string | null> {
+  const supabaseAdmin = await admin();
+  const { data } = await (supabaseAdmin.from("whatsapp_campaigns") as any)
+    .select("id")
+    .eq("automation_id", automationId)
+    .eq("automation_step_id", automationStepId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return (data as { id: string } | null)?.id ?? null;
 }
 
 /** Resolve os destinatários reais de um segmento — inclui a lógica especial de Carrinho Abandonado

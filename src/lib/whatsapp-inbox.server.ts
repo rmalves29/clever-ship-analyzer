@@ -108,23 +108,13 @@ export async function recordInboundMessage(message: IncomingMessage, contactName
     .eq("id", thread.id);
 }
 
-function buildOutboundPreview(templateName: string, bodyParams: string[], bodyParamTokens: string[] | null | undefined): string {
-  if (bodyParams.length === 0) return `Template: ${templateName}`;
-  const parts = bodyParams.map((value, i) => {
-    const token = bodyParamTokens?.[i];
-    return token ? `${token}=${value}` : value;
-  });
-  return `Template: ${templateName} (${parts.join(", ")})`;
-}
-
 /** Espelha um envio de campanha/automação (fila de WhatsApp) na caixa de entrada, na mesma
  *  thread do cliente — sem isso, mensagens de template ficavam invisíveis em "Conversas",
- *  só apareciam na lista de Campanhas. Chamado pelo worker da fila após um envio confirmado. */
+ *  só apareciam na lista de Campanhas. Chamado pelo worker da fila após um envio confirmado,
+ *  já com o texto final (template renderizado com os valores reais). */
 export async function recordOutboundQueueMessage(params: {
   phone: string;
-  templateName: string;
-  bodyParams: string[];
-  bodyParamTokens?: string[] | null;
+  body: string;
   waMessageId: string | null;
 }): Promise<void> {
   const { toE164 } = await import("./whatsapp-meta.server");
@@ -135,7 +125,7 @@ export async function recordOutboundQueueMessage(params: {
   const thread = await ensureThread(phone);
   if (!thread) return;
 
-  const body = buildOutboundPreview(params.templateName, params.bodyParams, params.bodyParamTokens);
+  const body = params.body;
   const now = new Date().toISOString();
 
   const { error } = await supabaseAdmin.from("whatsapp_inbox_messages").insert({

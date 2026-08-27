@@ -27,8 +27,9 @@ import { CampaignDetailDialog } from "@/components/whatsapp/CampaignDetailDialog
 import { TemplatesTab } from "@/components/whatsapp/TemplatesTab";
 import { ConversationalFlowsTab } from "@/components/whatsapp/ConversationalFlowsTab";
 import { ReportsTab } from "@/components/whatsapp/ReportsTab";
+import { InboxTab } from "@/components/whatsapp/InboxTab";
 
-const VALID_TABS = ["campanhas", "aprovacoes", "automacoes", "fluxo-api", "templates", "relatorios"] as const;
+const VALID_TABS = ["conversas", "campanhas", "aprovacoes", "automacoes", "fluxo-api", "templates", "relatorios"] as const;
 
 export const Route = createFileRoute("/campanhas-whatsapp")({
   validateSearch: (search: Record<string, unknown>) => ({

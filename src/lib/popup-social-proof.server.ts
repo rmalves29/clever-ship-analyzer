@@ -182,7 +182,7 @@ export async function handleSocialProofDataRequest(request: Request): Promise<Re
   try {
     const settings = await loadSocialProofSettings();
     if (!settings.enabled) {
-      return new Response(JSON.stringify({ enabled: false, total: 0, sales: [], ...settings }), {
+      return new Response(JSON.stringify({ ...settings, enabled: false, total: 0, sales: [] }), {
         status: 200,
         headers: { ...(headers ?? {}), "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
       });
@@ -190,7 +190,6 @@ export async function handleSocialProofDataRequest(request: Request): Promise<Re
     const { date, sales } = await loadYesterdaySales();
     return new Response(
       JSON.stringify({
-        enabled: true,
         date,
         ...settings,
         total: sales.length,

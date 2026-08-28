@@ -270,16 +270,19 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
   if (eligibleRecipients.length === 0) return 0;
 
   if (automation.requer_aprovacao) {
-    // Unifica com a mesma campanha ainda aguardando aprovação dessa etapa, se existir — o lote
-    // novo entra na mesma revisão em vez de abrir outra (padrão igual ao envio direto, que soma
-    // tudo numa campanha só). Uma vez decidida (aprovada/rejeitada), não reabre: o próximo lote
-    // ganha campanha nova, porque só dá pra somar em algo que ainda não passou pela aprovação.
-    const pending = await findPendingApprovalCampaignId(automation.id, firstStep.id);
+    // Unifica SEMPRE com a mesma campanha dessa etapa, existindo ela em qualquer status — igual
+    // ao envio direto, que soma tudo numa campanha só. Se já tinha sido decidida (aprovada,
+    // rejeitada ou já enviada), o lote novo ainda não foi revisado, então a campanha volta pra
+    // "aguardando_aprovacao" pra alguém revisar de novo.
+    const existing = await findPendingApprovalCampaignId(automation.id, firstStep.id);
     let campaignId: string;
-    if (pending) {
-      campaignId = pending.id;
+    if (existing) {
+      campaignId = existing.id;
       const { error: bumpError } = await (supabaseAdmin.from("whatsapp_campaigns") as any)
-        .update({ total_destinatarios: pending.totalDestinatarios + eligibleRecipients.length })
+        .update({
+          total_destinatarios: existing.totalDestinatarios + eligibleRecipients.length,
+          status: "aguardando_aprovacao",
+        })
         .eq("id", campaignId);
       if (bumpError) throw new Error(`Erro ao atualizar campanha de aprovação: ${bumpError.message}`);
     } else {

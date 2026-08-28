@@ -142,6 +142,17 @@ export async function runShopifySync(fullSync: boolean) {
         ? `updated_at:>='${new Date(settings.last_sync_at).toISOString()}'`
         : null;
 
+    // Configuração do Cashback carregada uma única vez por sincronização — a reconciliação
+    // por pedido roda logo após o pedido e os itens serem persistidos, garantindo que o cupom
+    // já exista quando o próximo tick de automações montar o contexto congelado.
+    const { loadCashbackSettings, reconcileCashbackForOrder, reprocessPendingCashback } = await import(
+      "./cashback.server"
+    );
+    const cashbackSettings = await loadCashbackSettings();
+    let cashbackErrors = 0;
+
+
+
     while (hasNextPage) {
       const result: any = await shopifyGraphQL(ORDERS_QUERY, { cursor, query: orderSearchQuery });
       const ordersConnection = result.orders;

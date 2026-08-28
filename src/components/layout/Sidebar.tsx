@@ -30,10 +30,12 @@ type NavItem = {
     | "/eventos"
     | "/flow"
     | "/fluxo-envio"
-    | "/popups";
+    | "/popups"
+    | "/cashback";
   search?: Record<string, string>;
   icon: typeof LayoutDashboard;
 };
+
 
 const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {

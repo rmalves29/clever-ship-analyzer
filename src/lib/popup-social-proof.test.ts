@@ -89,7 +89,7 @@ describe("popup social proof", () => {
     expect(script).toContain("FALLBACK_MS = 10000");
     expect(script).toContain("Math.random()");
     expect(script).toContain('class="mmsp-buyer"');
-    expect(script).toContain("ontem");
+    expect(script).not.toContain("mmsp-time");
     expect(script).not.toContain(">agora<");
   });
 });

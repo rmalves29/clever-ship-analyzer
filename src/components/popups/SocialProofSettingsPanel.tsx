@@ -120,9 +120,8 @@ export function SocialProofSettingsPanel() {
             <div className="grid size-24 shrink-0 place-items-center overflow-hidden rounded bg-[#f6f1ef]"><ShoppingBag className="size-8 text-[#9b6f63]" /></div>
             <div className="min-w-0 pt-1 text-xs leading-tight">
               <p className="truncate font-semibold">Maria S. de Diamantina/MG</p>
-              <p className="mt-1 text-muted-foreground">comprou</p>
+              <p className="mt-1 text-[#dc2626]">comprou</p>
               <p className="mt-0.5 line-clamp-2 font-medium">Kit Ayla Azul Turquesa</p>
-              <p className="mt-2 text-[10px] text-muted-foreground">ontem</p>
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
+import { DEFAULT_SOCIAL_PROOF_SETTINGS } from "./popup-social-proof";
 
 export const listPopupCampaigns = createServerFn({ method: "GET" })
   .middleware([requireAppAuth])
@@ -130,4 +131,67 @@ export const getPopupInstallInfo = createServerFn({ method: "GET" })
       script: renderPopupLoaderScript(),
       lastVisitAt: (lastVisit as { created_at: string } | null)?.created_at ?? null,
     };
+  });
+
+const socialProofSettingsSchema = z.object({
+  enabled: z.boolean(),
+  delayAfterCaptureSeconds: z.number().int().min(1).max(300),
+  intervalSeconds: z.number().int().min(10).max(3600),
+  visibleSeconds: z.number().int().min(2).max(30),
+  position: z.enum(["top-left", "top-right", "bottom-left", "bottom-right"]),
+}).superRefine((value, ctx) => {
+  if (value.visibleSeconds >= value.intervalSeconds) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["visibleSeconds"],
+      message: "O tempo visível deve ser menor que o intervalo entre avisos.",
+    });
+  }
+});
+
+function socialProofRowToSettings(row: any) {
+  if (!row) return DEFAULT_SOCIAL_PROOF_SETTINGS;
+  return {
+    enabled: row.enabled === true,
+    delayAfterCaptureSeconds: Number(row.delay_after_capture_seconds),
+    intervalSeconds: Number(row.interval_seconds),
+    visibleSeconds: Number(row.visible_seconds),
+    position: row.position as "top-left" | "top-right" | "bottom-left" | "bottom-right",
+  };
+}
+
+export const getSocialProofSettings = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth])
+  .handler(async () => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await (supabaseAdmin.from("popup_social_proof_settings" as any) as any)
+      .select("enabled, delay_after_capture_seconds, interval_seconds, visible_seconds, position")
+      .eq("id", 1)
+      .maybeSingle();
+    if (error) throw error;
+    return socialProofRowToSettings(data);
+  });
+
+export const saveSocialProofSettings = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) => socialProofSettingsSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await (supabaseAdmin.from("popup_social_proof_settings" as any) as any).upsert({
+      id: 1,
+      enabled: data.enabled,
+      delay_after_capture_seconds: data.delayAfterCaptureSeconds,
+      interval_seconds: data.intervalSeconds,
+      visible_seconds: data.visibleSeconds,
+      position: data.position,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "id" });
+    if (error) throw error;
+    return socialProofRowToSettings({
+      enabled: data.enabled,
+      delay_after_capture_seconds: data.delayAfterCaptureSeconds,
+      interval_seconds: data.intervalSeconds,
+      visible_seconds: data.visibleSeconds,
+      position: data.position,
+    });
   });

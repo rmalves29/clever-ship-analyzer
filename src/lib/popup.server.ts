@@ -308,6 +308,7 @@ export function renderPopupLoaderJs(): string {
 
   fetch(API + "/api/popup/config").then(function (r) { return r.json(); }).then(function (cfg) {
     if (!cfg || !cfg.id) return;
+    try { window.dispatchEvent(new CustomEvent("mm:capture-popup-scheduled")); } catch (e) {}
     var shown = false;
     function show() {
       if (shown) return;
@@ -347,9 +348,11 @@ export function renderPopupLoaderJs(): string {
     box.appendChild(close);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
+    try { window.dispatchEvent(new CustomEvent("mm:capture-popup-shown")); } catch (e) {}
 
     function closePopup() {
       overlay.remove();
+      try { window.dispatchEvent(new CustomEvent("mm:capture-popup-closed")); } catch (e) {}
       var days = cfg.reshow_mode === "once_ever" ? 3650 : (cfg.reshow_after_days || 7);
       try { localStorage.setItem(STORAGE_HIDE_UNTIL, String(Date.now() + days * 86400000)); } catch (e) {}
     }

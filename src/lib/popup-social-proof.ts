@@ -2,9 +2,27 @@ const DAY_MS = 86_400_000;
 const SAO_PAULO_UTC_OFFSET_HOURS = 3;
 
 export const SOCIAL_PROOF_DELAY_AFTER_CAPTURE_MS = 10_000;
-export const SOCIAL_PROOF_INTERVAL_MS = 30_000;
-export const SOCIAL_PROOF_VISIBLE_MS = 9_000;
-export const SOCIAL_PROOF_FALLBACK_DELAY_MS = 20_000;
+export const SOCIAL_PROOF_INTERVAL_MS = 50_000;
+export const SOCIAL_PROOF_VISIBLE_MS = 3_000;
+export const SOCIAL_PROOF_FALLBACK_DELAY_MS = 10_000;
+
+export const DEFAULT_SOCIAL_PROOF_SETTINGS = {
+  enabled: true,
+  delayAfterCaptureSeconds: SOCIAL_PROOF_DELAY_AFTER_CAPTURE_MS / 1000,
+  intervalSeconds: SOCIAL_PROOF_INTERVAL_MS / 1000,
+  visibleSeconds: SOCIAL_PROOF_VISIBLE_MS / 1000,
+  position: "top-left" as const,
+};
+
+export type SocialProofPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
+export type SocialProofSettings = {
+  enabled: boolean;
+  delayAfterCaptureSeconds: number;
+  intervalSeconds: number;
+  visibleSeconds: number;
+  position: SocialProofPosition;
+};
 
 export type SocialProofLineItem = {
   title?: string | null;
@@ -23,9 +41,10 @@ export type SocialProofOrder = {
   cancelledAt?: string | null;
   displayFinancialStatus?: string | null;
   test?: boolean | null;
-  customer?: { firstName?: string | null } | null;
+  customer?: { firstName?: string | null; lastName?: string | null } | null;
   shippingAddress?: {
     firstName?: string | null;
+    lastName?: string | null;
     city?: string | null;
     provinceCode?: string | null;
   } | null;
@@ -33,7 +52,7 @@ export type SocialProofOrder = {
 };
 
 export type PublicSocialProofSale = {
-  firstName: string;
+  customerName: string;
   city: string | null;
   state: string | null;
   productTitle: string;
@@ -89,6 +108,18 @@ export function publicFirstName(value: string | null | undefined): string | null
   return first.charAt(0).toLocaleUpperCase("pt-BR") + first.slice(1).toLocaleLowerCase("pt-BR");
 }
 
+/** Publica o primeiro nome e apenas a inicial do sobrenome para reduzir a exposição de dados. */
+export function publicCustomerName(
+  firstName: string | null | undefined,
+  lastName: string | null | undefined,
+): string | null {
+  const first = publicFirstName(firstName);
+  if (!first) return null;
+  const cleanLast = cleanText(lastName);
+  const initial = cleanLast.match(/[\p{L}\p{N}]/u)?.[0];
+  return initial ? `${first} ${initial.toLocaleUpperCase("pt-BR")}.` : first;
+}
+
 function lineItemImage(item: SocialProofLineItem | undefined): string | null {
   return cleanText(item?.image?.url) || cleanText(item?.product?.featuredMedia?.preview?.image?.url) || null;
 }
@@ -98,8 +129,11 @@ export function sanitizeSocialProofOrder(order: SocialProofOrder): PublicSocialP
   if (status !== "PAID" && status !== "PARTIALLY_PAID") return null;
   if (order.cancelledAt || order.test) return null;
 
-  const firstName = publicFirstName(order.shippingAddress?.firstName || order.customer?.firstName);
-  if (!firstName) return null;
+  const customerName = publicCustomerName(
+    order.shippingAddress?.firstName || order.customer?.firstName,
+    order.shippingAddress?.lastName || order.customer?.lastName,
+  );
+  if (!customerName) return null;
 
   const items = (order.lineItems?.nodes ?? []).filter((item) => cleanText(item?.title));
   if (!items.length) return null;
@@ -112,7 +146,7 @@ export function sanitizeSocialProofOrder(order: SocialProofOrder): PublicSocialP
 
   const itemCount = items.reduce((sum, item) => sum + Math.max(1, Number(item.quantity ?? 1) || 1), 0);
   return {
-    firstName,
+    customerName,
     city: cleanText(order.shippingAddress?.city) || null,
     state: cleanText(order.shippingAddress?.provinceCode) || null,
     productTitle,

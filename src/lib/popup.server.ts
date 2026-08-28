@@ -139,6 +139,20 @@ async function issueCouponIfNeeded(campaign: PopupCampaign): Promise<string | nu
   return code;
 }
 
+/** Roleta: o benefício de verdade sai do prêmio sorteado (peso configurado por segmento), não
+ *  mais do cupom único da campanha — cada segmento pode ter seu próprio código já existente na
+ *  Shopify. Pop-ups sem roleta continuam usando o cupom único/fixo da campanha, como antes. */
+async function resolveCouponForCapture(campaign: PopupCampaign): Promise<{ couponCode: string | null; prizeLabel: string | null }> {
+  const design = campaign.design_config;
+  if (design?.interaction === "wheel" && design.wheelPrizes?.length) {
+    const { pickWeightedWheelPrize } = await import("./popup-designer");
+    const prize = pickWeightedWheelPrize(design.wheelPrizes);
+    if (!prize) return { couponCode: null, prizeLabel: null };
+    return { couponCode: prize.type === "coupon" && prize.couponCode ? prize.couponCode : null, prizeLabel: prize.label };
+  }
+  return { couponCode: await issueCouponIfNeeded(campaign), prizeLabel: null };
+}
+
 async function sendWelcomeMessage(params: { campaign: PopupCampaign; phone: string; name: string | null; couponCode: string | null }): Promise<void> {
   const { campaign, phone, name, couponCode } = params;
   if (!campaign.template_name || !campaign.template_language) return;
@@ -198,7 +212,7 @@ export async function capturePopupLead(params: {
   visitorToken: string | null;
   pageUrl: string | null;
   popupCampaignId: string;
-}): Promise<{ success: boolean; couponCode?: string | null; error?: string }> {
+}): Promise<{ success: boolean; couponCode?: string | null; prizeLabel?: string | null; error?: string }> {
   const { toE164 } = await import("./whatsapp-meta.server");
   const phone = toE164(params.phone);
   if (!phone) return { success: false, error: "Telefone inválido." };
@@ -225,7 +239,7 @@ export async function capturePopupLead(params: {
   }
 
   const customerRowId = await upsertPopupCustomer(phone, params.name);
-  const couponCode = await issueCouponIfNeeded(campaign);
+  const { couponCode, prizeLabel } = await resolveCouponForCapture(campaign);
   const now = new Date().toISOString();
 
   await (supabaseAdmin.from("popup_leads" as any) as any).upsert(
@@ -247,7 +261,7 @@ export async function capturePopupLead(params: {
     console.error("popup.server: falha ao enviar mensagem de boas-vindas:", error);
   });
 
-  return { success: true, couponCode };
+  return { success: true, couponCode, prizeLabel };
 }
 
 /** Snippet auto-contido pra colar 1x no theme.liquid — sem dependências externas, CSS isolado. */
@@ -361,16 +375,17 @@ export function renderPopupLoaderScript(): string {
     }
 
     function wheelBlock() {
-      var prizes = Array.isArray(d.wheelPrizes) && d.wheelPrizes.length >= 2 ? d.wheelPrizes.slice(0, 6) : ["10% OFF", "15% OFF", "20% OFF", "SURPRESA"];
-      var palette = ["#f1b93b", "#183b56", "#f0f3f4", "#cf7b53", "#8fb9a8", "#edd7ad"];
+      var defaultPrizes = [{ label: "10% OFF" }, { label: "15% OFF" }, { label: "20% OFF" }, { label: "SURPRESA" }];
+      var prizes = Array.isArray(d.wheelPrizes) && d.wheelPrizes.length >= 2 ? d.wheelPrizes.slice(0, 8) : defaultPrizes;
+      var palette = ["#f1b93b", "#183b56", "#f0f3f4", "#cf7b53", "#8fb9a8", "#edd7ad", "#d7ff52", "#ef9cad"];
       var step = 360 / prizes.length;
-      var gradient = prizes.map(function (_, i) { return palette[i % palette.length] + " " + (i * step) + "deg " + ((i + 1) * step) + "deg"; }).join(",");
+      var gradient = prizes.map(function (p, i) { return (p.color || palette[i % palette.length]) + " " + (i * step) + "deg " + ((i + 1) * step) + "deg"; }).join(",");
       var labels = prizes.map(function (p, i) {
         var angle = i * step + step / 2;
         var rad = (angle - 90) * Math.PI / 180;
         var x = 50 + Math.cos(rad) * 34;
         var y = 50 + Math.sin(rad) * 34;
-        return '<span style="position:absolute;left:' + x + '%;top:' + y + '%;transform:translate(-50%,-50%) rotate(' + angle + 'deg);max-width:62px;text-align:center;font-size:9px;font-weight:900;line-height:1.05;color:#111827;">' + esc(p) + '</span>';
+        return '<span style="position:absolute;left:' + x + '%;top:' + y + '%;transform:translate(-50%,-50%) rotate(' + angle + 'deg);max-width:62px;text-align:center;font-size:9px;font-weight:900;line-height:1.05;color:#111827;">' + esc(p.label) + '</span>';
       }).join("");
       return '<div style="display:flex;align-items:center;justify-content:center;padding:28px 18px;min-height:300px;"><div id="mm_pu_wheel" style="position:relative;width:min(250px,72vw);aspect-ratio:1;border-radius:50%;border:10px solid #fff;box-shadow:0 14px 35px rgba(0,0,0,.18);background:conic-gradient(' + gradient + ');transition:transform .9s cubic-bezier(.2,.8,.2,1);"><div style="position:absolute;left:50%;top:50%;width:54px;height:54px;transform:translate(-50%,-50%);border-radius:50%;border:4px solid #fff;background:#101828;"></div>' + labels + '</div></div>';
     }

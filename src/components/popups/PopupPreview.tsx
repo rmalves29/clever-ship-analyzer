@@ -14,11 +14,11 @@ type PreviewCampaign = {
 };
 
 function Wheel({ design }: { design: PopupDesignConfig }) {
-  const prizes = design.wheelPrizes.slice(0, 6);
-  const palette = ["#f1b93b", "#183b56", "#f0f3f4", "#cf7b53", "#8fb9a8", "#edd7ad"];
+  const prizes = design.wheelPrizes.slice(0, 8);
+  const palette = ["#f1b93b", "#183b56", "#f0f3f4", "#cf7b53", "#8fb9a8", "#edd7ad", "#d7ff52", "#ef9cad"];
   const step = 360 / prizes.length;
   const gradient = prizes
-    .map((_, index) => `${palette[index % palette.length]} ${index * step}deg ${(index + 1) * step}deg`)
+    .map((prize, index) => `${prize.color || palette[index % palette.length]} ${index * step}deg ${(index + 1) * step}deg`)
     .join(", ");
 
   return (
@@ -33,11 +33,11 @@ function Wheel({ design }: { design: PopupDesignConfig }) {
         const y = 50 + Math.sin(((angle - 90) * Math.PI) / 180) * radius;
         return (
           <span
-            key={`${prize}-${index}`}
+            key={`${prize.label}-${index}`}
             className="absolute max-w-[64px] text-center text-[9px] font-black uppercase leading-tight text-slate-900"
             style={{ left: `${x}%`, top: `${y}%`, transform: `translate(-50%, -50%) rotate(${angle}deg)` }}
           >
-            {prize}
+            {prize.label}
           </span>
         );
       })}
@@ -169,14 +169,16 @@ export function PopupPreview({
         backgroundColor: design.backgroundColor,
       }}
     >
-      <button
-        type="button"
-        tabIndex={-1}
-        className="absolute right-3 top-3 z-20 flex size-8 items-center justify-center rounded-full bg-white/90 text-slate-600 shadow"
-        aria-label="Fechar prévia"
-      >
-        <X className="size-4" />
-      </button>
+      {!compact && (
+        <button
+          type="button"
+          tabIndex={-1}
+          className="absolute right-3 top-3 z-20 flex size-8 items-center justify-center rounded-full bg-white/90 text-slate-600 shadow"
+          aria-label="Fechar prévia"
+        >
+          <X className="size-4" />
+        </button>
+      )}
       {visual}
     </div>
   );

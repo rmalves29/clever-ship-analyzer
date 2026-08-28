@@ -3,6 +3,21 @@ export type PopupLayout = "centered" | "split";
 export type PopupImagePosition = "none" | "left" | "right" | "top";
 export type PopupJourney = "single" | "progressive";
 export type PopupInteraction = "form" | "wheel";
+export type WheelPrizeType = "coupon" | "no_prize";
+
+export type WheelPrize = {
+  label: string;
+  color: string;
+  type: WheelPrizeType;
+  /** Código já existente na Shopify — digitado manualmente, igual ao cupom fixo do pop-up. */
+  couponCode: string;
+  /** Peso do sorteio, em pontos — não precisa somar 100 (o sorteio normaliza pelo total). */
+  probability: number;
+};
+
+/** Paleta padrão reaproveitada na roleta (editor, prévia e snippet do site) pra manter as
+ *  cores consistentes quando um prêmio novo é adicionado sem cor escolhida ainda. */
+export const WHEEL_PALETTE = ["#f1b93b", "#183b56", "#f0f3f4", "#cf7b53", "#8fb9a8", "#edd7ad", "#d7ff52", "#ef9cad"];
 
 export type PopupDesignConfig = {
   templateKey: PopupTemplateKey;
@@ -25,7 +40,7 @@ export type PopupDesignConfig = {
   resultButtonText: string;
   journey: PopupJourney;
   interaction: PopupInteraction;
-  wheelPrizes: string[];
+  wheelPrizes: WheelPrize[];
 };
 
 export type PopupTemplatePreset = {
@@ -65,7 +80,12 @@ const DEFAULT_DESIGN: PopupDesignConfig = {
   resultButtonText: "COPIAR CUPOM",
   journey: "single",
   interaction: "form",
-  wheelPrizes: ["10% OFF", "15% OFF", "20% OFF", "SURPRESA"],
+  wheelPrizes: [
+    { label: "10% OFF", color: WHEEL_PALETTE[0]!, type: "coupon", couponCode: "", probability: 25 },
+    { label: "15% OFF", color: WHEEL_PALETTE[1]!, type: "coupon", couponCode: "", probability: 25 },
+    { label: "20% OFF", color: WHEEL_PALETTE[2]!, type: "coupon", couponCode: "", probability: 25 },
+    { label: "SURPRESA", color: WHEEL_PALETTE[3]!, type: "coupon", couponCode: "", probability: 25 },
+  ],
 };
 
 export const POPUP_TEMPLATE_PRESETS: PopupTemplatePreset[] = [
@@ -185,7 +205,7 @@ export const POPUP_TEMPLATE_PRESETS: PopupTemplatePreset[] = [
       interaction: "wheel",
       width: 700,
       badgeText: "TENTE A SORTE",
-      wheelPrizes: ["10% OFF", "15% OFF", "20% OFF", "SURPRESA"],
+      wheelPrizes: DEFAULT_DESIGN.wheelPrizes,
       resultHeadline: "Você desbloqueou um benefício!",
       resultBody: "Seu cupom foi gerado e está pronto para usar.",
     },
@@ -205,6 +225,49 @@ function validHex(value: unknown, fallback: string): string {
   return /^#[0-9a-f]{6}$/i.test(text) ? text : fallback;
 }
 
+/** Aceita tanto o formato antigo (string solta, ex.: "10% OFF") quanto o novo (objeto completo
+ *  com cor/tipo/cupom/probabilidade) — pop-ups salvos antes dessa mudança continuam funcionando. */
+function normalizeWheelPrize(raw: unknown, index: number): WheelPrize | null {
+  const fallbackColor = WHEEL_PALETTE[index % WHEEL_PALETTE.length]!;
+
+  if (typeof raw === "string") {
+    const label = raw.trim().slice(0, 40);
+    if (!label) return null;
+    return { label, color: fallbackColor, type: "coupon", couponCode: "", probability: 25 };
+  }
+
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  // Sem early-return por label vazio: isso roda a cada tecla digitada no editor (patchDesign
+  // re-normaliza o design inteiro), então descartar a linha por um instante de label vazio
+  // faria a lista inteira "saltar" de volta pro preset se sobrasse menos de 2 prêmios válidos.
+  const label = String(r["label"] ?? "").slice(0, 40);
+  const type: WheelPrizeType = r["type"] === "no_prize" ? "no_prize" : "coupon";
+
+  return {
+    label,
+    color: validHex(r["color"], fallbackColor),
+    type,
+    couponCode: type === "coupon" ? String(r["couponCode"] ?? "").trim().slice(0, 40).toUpperCase() : "",
+    probability: clamp(Number(r["probability"]) || 0, 0, 100),
+  };
+}
+
+/** Sorteia um prêmio da roleta respeitando o peso configurado em cada um (não precisa somar
+ *  100 — é normalizado pelo total). Se todos os pesos forem 0, cai pra sorteio uniforme. */
+export function pickWeightedWheelPrize(prizes: WheelPrize[]): WheelPrize | null {
+  if (!prizes.length) return null;
+  const total = prizes.reduce((sum, prize) => sum + Math.max(0, prize.probability), 0);
+  if (total <= 0) return prizes[Math.floor(Math.random() * prizes.length)]!;
+
+  let roll = Math.random() * total;
+  for (const prize of prizes) {
+    roll -= Math.max(0, prize.probability);
+    if (roll <= 0) return prize;
+  }
+  return prizes[prizes.length - 1]!;
+}
+
 export function normalizePopupDesignConfig(value: unknown): PopupDesignConfig {
   const raw = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
   const templateKey = ["essential", "skincare", "drop", "whatsapp_steps", "wheel", "custom"].includes(String(raw["templateKey"]))
@@ -213,7 +276,10 @@ export function normalizePopupDesignConfig(value: unknown): PopupDesignConfig {
   const preset = templateKey === "custom" ? DEFAULT_DESIGN : getPopupTemplatePreset(templateKey).design;
 
   const wheelPrizes = Array.isArray(raw["wheelPrizes"])
-    ? raw["wheelPrizes"].map((item) => String(item).trim()).filter(Boolean).slice(0, 8)
+    ? raw["wheelPrizes"]
+        .map((item, index) => normalizeWheelPrize(item, index))
+        .filter((prize): prize is WheelPrize => prize !== null)
+        .slice(0, 8)
     : preset.wheelPrizes;
 
   return {

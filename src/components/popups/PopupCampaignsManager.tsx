@@ -42,6 +42,7 @@ import {
   type PopupTemplateKey,
 } from "@/lib/popup-designer";
 import { PopupPreview, type PopupPreviewStage } from "./PopupPreview";
+import { WheelPrizesDialog } from "./WheelPrizesDialog";
 
 type FormState = {
   id?: string;
@@ -213,6 +214,7 @@ export function PopupCampaignsManager() {
   const [viewport, setViewport] = useState<"desktop" | "mobile">("desktop");
   const [previewStage, setPreviewStage] = useState<PopupPreviewStage>("capture");
   const [sideTab, setSideTab] = useState<"elements" | "rules">("elements");
+  const [wheelDialogOpen, setWheelDialogOpen] = useState(false);
 
   const patch = (p: Partial<FormState>) => setForm((current) => ({ ...current, ...p }));
   const patchDesign = (p: Partial<PopupDesignConfig>) => setForm((current) => ({
@@ -384,14 +386,11 @@ export function PopupCampaignsManager() {
                         <SelectContent><SelectItem value="form">Formulário clássico</SelectItem><SelectItem value="wheel">Roleta</SelectItem></SelectContent>
                       </Select>
                       {form.design_config.interaction === "wheel" && (
-                        <div className="space-y-1 pt-2">
-                          <Label className="text-[10px]">Rótulos da roleta</Label>
-                          {form.design_config.wheelPrizes.slice(0, 4).map((prize, index) => (
-                            <Input key={index} className="h-8" value={prize} onChange={(e) => {
-                              const next = [...form.design_config.wheelPrizes]; next[index] = e.target.value; patchDesign({ wheelPrizes: next });
-                            }} />
-                          ))}
-                          <p className="text-[10px] text-muted-foreground">O benefício entregue continua sendo o cupom configurado da campanha.</p>
+                        <div className="space-y-2 pt-2">
+                          <Button size="sm" variant="outline" className="w-full" onClick={() => setWheelDialogOpen(true)}>
+                            Configurar prêmios da roleta ({form.design_config.wheelPrizes.length})
+                          </Button>
+                          <p className="text-[10px] text-muted-foreground">Cada prêmio pode ter cor, cupom e probabilidade próprios — o sorteio é feito no servidor.</p>
                         </div>
                       )}
                     </div>
@@ -512,6 +511,13 @@ export function PopupCampaignsManager() {
             </aside>
           </div>
         </div>
+
+        <WheelPrizesDialog
+          open={wheelDialogOpen}
+          onOpenChange={setWheelDialogOpen}
+          prizes={form.design_config.wheelPrizes}
+          onChange={(wheelPrizes) => patchDesign({ wheelPrizes })}
+        />
       </div>
     );
   }

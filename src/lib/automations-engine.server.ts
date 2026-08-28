@@ -271,18 +271,19 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
 
   if (automation.requer_aprovacao) {
     // Unifica SEMPRE com a mesma campanha dessa etapa, existindo ela em qualquer status — igual
-    // ao envio direto, que soma tudo numa campanha só. Se já tinha sido decidida (aprovada,
-    // rejeitada ou já enviada), o lote novo ainda não foi revisado, então a campanha volta pra
-    // "aguardando_aprovacao" pra alguém revisar de novo.
+    // ao envio direto, que soma tudo numa campanha só. A visibilidade de "precisa de aprovação"
+    // não depende desse status agregado (aprovarCampaign/rejeitarCampaign checam runs
+    // "pending_approval" diretamente) — só reescrevemos o status aqui quando a campanha ainda não
+    // teve nenhum envio real, pra manter a UI simples no caso comum sem arriscar sobrescrever um
+    // status que reflete envio de verdade (refreshCampaignStatus é quem manda a partir daí).
     const existing = await findPendingApprovalCampaignId(automation.id, firstStep.id);
     let campaignId: string;
     if (existing) {
       campaignId = existing.id;
+      const updates: Record<string, unknown> = { total_destinatarios: existing.totalDestinatarios + eligibleRecipients.length };
+      if (existing.enviadas === 0) updates["status"] = "aguardando_aprovacao";
       const { error: bumpError } = await (supabaseAdmin.from("whatsapp_campaigns") as any)
-        .update({
-          total_destinatarios: existing.totalDestinatarios + eligibleRecipients.length,
-          status: "aguardando_aprovacao",
-        })
+        .update(updates)
         .eq("id", campaignId);
       if (bumpError) throw new Error(`Erro ao atualizar campanha de aprovação: ${bumpError.message}`);
     } else {

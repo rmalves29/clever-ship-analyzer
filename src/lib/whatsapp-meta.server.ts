@@ -566,20 +566,28 @@ export async function findAutomationStepCampaignId(automationId: string, automat
 }
 
 /** Só pra automações com aprovação: acha a campanha dessa etapa (se já existir, seja qual for o
- *  status) pra unificar SEMPRE num único registro, igual ao envio direto. Se a campanha já tinha
- *  sido decidida (aprovada/rejeitada/enviada), o lote novo, ainda não revisado, precisa fazer ela
- *  voltar pra "aguardando_aprovacao" — quem chama decide isso a partir do status retornado aqui. */
-export async function findPendingApprovalCampaignId(automationId: string, automationStepId: string): Promise<{ id: string; totalDestinatarios: number; status: string } | null> {
+ *  status) pra unificar SEMPRE num único registro, igual ao envio direto. A visibilidade de
+ *  "precisa de aprovação" não depende do status agregado dessa campanha (que reflete o envio já
+ *  feito e pode ser reescrito a qualquer momento por refreshCampaignStatus) — depende só de existir
+ *  run com status "pending_approval" pra ela (ver aprovações em whatsapp-meta.functions.ts). Por
+ *  isso só reescrevemos o status de volta pra "aguardando_aprovacao" quando a campanha ainda não
+ *  tem nenhum envio real (enviadas=0): nesse caso é seguro, e mantém a UI simples pro caso comum. */
+export async function findPendingApprovalCampaignId(automationId: string, automationStepId: string): Promise<{ id: string; totalDestinatarios: number; status: string; enviadas: number } | null> {
   const supabaseAdmin = await admin();
   const { data } = await (supabaseAdmin.from("whatsapp_campaigns") as any)
-    .select("id, total_destinatarios, status")
+    .select("id, total_destinatarios, status, enviadas")
     .eq("automation_id", automationId)
     .eq("automation_step_id", automationStepId)
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
   if (!data) return null;
-  return { id: data.id as string, totalDestinatarios: Number(data.total_destinatarios ?? 0), status: data.status as string };
+  return {
+    id: data.id as string,
+    totalDestinatarios: Number(data.total_destinatarios ?? 0),
+    status: data.status as string,
+    enviadas: Number(data.enviadas ?? 0),
+  };
 }
 
 /** Resolve os destinatários reais de um segmento — inclui a lógica especial de Carrinho Abandonado
@@ -821,6 +829,21 @@ export async function listCampaignsWithMetrics() {
 
   if (campaignList.length === 0) return [];
 
+  // Runs de automação ainda não revisados — é isso, e não o status agregado da campanha (que pode
+  // já refletir um lote anterior aprovado/enviado), que decide se ela precisa aparecer em Aprovações.
+  const { data: pendingRunRows } = await supabaseAdmin
+    .from("whatsapp_automation_runs")
+    .select("campaign_id")
+    .eq("status", "pending_approval")
+    .in(
+      "campaign_id",
+      campaignList.map((c) => c.id),
+    );
+  const pendingApprovalByCampaign = new Map<string, number>();
+  for (const row of (pendingRunRows ?? []) as { campaign_id: string }[]) {
+    pendingApprovalByCampaign.set(row.campaign_id, (pendingApprovalByCampaign.get(row.campaign_id) ?? 0) + 1);
+  }
+
   const { data: recipients } = await supabaseAdmin
     .from("whatsapp_campaign_recipients")
     .select("campaign_id, phone, status, sent_at")
@@ -912,6 +935,7 @@ export async function listCampaignsWithMetrics() {
       enviadas: c.enviadas,
       falhas: c.falhas,
       totalDestinatarios: c.total_destinatarios ?? 0,
+      pendingApprovalRuns: pendingApprovalByCampaign.get(c.id) ?? 0,
       entregues,
       lidas,
       vendas,

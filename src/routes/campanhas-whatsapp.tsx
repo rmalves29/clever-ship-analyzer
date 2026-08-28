@@ -117,7 +117,10 @@ function CampanhasWhatsapp() {
   });
 
   const list = campanhas ?? [];
-  const pendentes = list.filter((c) => c.status === "aguardando_aprovacao");
+  // Uma campanha reaproveitada por automação pode já ter status "enviando"/"finalizada" de um
+  // lote anterior mesmo tendo gente nova esperando revisão agora — por isso a aba de Aprovações
+  // não confia só no status agregado, ela também olha se existe run pendente de aprovação.
+  const pendentes = list.filter((c) => c.status === "aguardando_aprovacao" || c.pendingApprovalRuns > 0);
 
   const STATUS_FILTERS = [
     { value: "todas", label: "Todas" },
@@ -336,7 +339,8 @@ function CampanhasWhatsapp() {
                     <p className="font-semibold">{c.nome}</p>
                     <p className="text-sm text-muted-foreground">
                       {SEGMENT_LABEL[c.segmentType] ?? c.segmentType} · template {c.templateName} ·{" "}
-                      {c.totalDestinatarios} destinatários
+                      {c.pendingApprovalRuns > 0 ? c.pendingApprovalRuns : c.totalDestinatarios} destinatários
+                      {c.pendingApprovalRuns > 0 && c.pendingApprovalRuns < c.totalDestinatarios && " novos"}
                     </p>
                     {c.bodyParams.length > 0 && (
                       <p className="mt-2 rounded-lg bg-muted px-3 py-2 text-sm">“{c.bodyParams.join(" | ")}”</p>

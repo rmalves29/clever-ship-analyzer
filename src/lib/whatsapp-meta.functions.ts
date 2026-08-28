@@ -183,14 +183,6 @@ export const approveCampaign = createServerFn({ method: "POST" })
       .eq("id", data.campaignId)
       .maybeSingle();
     if (!row) return { success: false as const, error: "Campanha não encontrada." };
-    if ((row as { status: string }).status !== "aguardando_aprovacao") {
-      return { success: false as const, error: "Essa campanha não está aguardando aprovação." };
-    }
-
-    await supabaseAdmin
-      .from("whatsapp_campaigns")
-      .update({ approved_at: new Date().toISOString(), approved_by: data.approvedBy ?? "painel" } as never)
-      .eq("id", data.campaignId);
 
     const { data: pendingRuns } = await supabaseAdmin
       .from("whatsapp_automation_runs")
@@ -198,6 +190,19 @@ export const approveCampaign = createServerFn({ method: "POST" })
       .eq("campaign_id", data.campaignId)
       .eq("status", "pending_approval");
     const runCustomerIds = ((pendingRuns ?? []) as { customer_id: string }[]).map((r) => r.customer_id);
+
+    // Uma campanha de automação reaproveitada pode já estar "enviando"/"finalizada" por causa de
+    // um lote anterior (refreshCampaignStatus manda nesse status a partir da fila) mesmo tendo
+    // gente nova esperando aprovação agora — por isso runs pendentes bastam pra liberar aprovar,
+    // independente do status agregado da campanha.
+    if ((row as { status: string }).status !== "aguardando_aprovacao" && runCustomerIds.length === 0) {
+      return { success: false as const, error: "Essa campanha não está aguardando aprovação." };
+    }
+
+    await supabaseAdmin
+      .from("whatsapp_campaigns")
+      .update({ approved_at: new Date().toISOString(), approved_by: data.approvedBy ?? "painel" } as never)
+      .eq("id", data.campaignId);
 
     let resolvedIds = runCustomerIds;
     if (resolvedIds.length === 0) {
@@ -222,16 +227,39 @@ export const rejectCampaign = createServerFn({ method: "POST" })
     const { failRunsForRejectedCampaign } = await import("./automations-engine.server");
     const reason = data.reason?.trim() || "rejeitado";
 
-    const { error } = await supabaseAdmin
+    const { data: row } = await supabaseAdmin
       .from("whatsapp_campaigns")
-      .update({
-        status: "rejeitada",
-        rejected_at: new Date().toISOString(),
-        reject_reason: reason,
-      } as never)
+      .select("id, status")
       .eq("id", data.campaignId)
-      .eq("status", "aguardando_aprovacao");
-    if (error) return { success: false as const, error: error.message };
+      .maybeSingle();
+    if (!row) return { success: false as const, error: "Campanha não encontrada." };
+
+    const { data: pendingRuns } = await supabaseAdmin
+      .from("whatsapp_automation_runs")
+      .select("id")
+      .eq("campaign_id", data.campaignId)
+      .eq("status", "pending_approval");
+    const hasPendingRuns = (pendingRuns ?? []).length > 0;
+    const isAwaitingApproval = (row as { status: string }).status === "aguardando_aprovacao";
+    if (!isAwaitingApproval && !hasPendingRuns) {
+      return { success: false as const, error: "Essa campanha não está aguardando aprovação." };
+    }
+
+    // Só reescreve o status agregado da campanha pra "rejeitada" quando ela ainda não tem envio
+    // real — numa campanha reaproveitada que já enviou antes, sobrescrever aqui corromperia o
+    // status real (refreshCampaignStatus continua sendo a fonte da verdade nesse caso).
+    if (isAwaitingApproval) {
+      const { error } = await supabaseAdmin
+        .from("whatsapp_campaigns")
+        .update({
+          status: "rejeitada",
+          rejected_at: new Date().toISOString(),
+          reject_reason: reason,
+        } as never)
+        .eq("id", data.campaignId)
+        .eq("status", "aguardando_aprovacao");
+      if (error) return { success: false as const, error: error.message };
+    }
 
     await failRunsForRejectedCampaign(data.campaignId, reason);
     return { success: true as const };

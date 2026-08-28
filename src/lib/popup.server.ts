@@ -264,10 +264,13 @@ export async function capturePopupLead(params: {
   return { success: true, couponCode, prizeLabel };
 }
 
-/** Snippet auto-contido pra colar 1x no theme.liquid — sem dependências externas, CSS isolado. */
-export function renderPopupLoaderScript(): string {
-  return `<script>
-(function () {
+/** JS puro servido em GET /api/popup/loader.js — carregado via <script src> no theme.liquid.
+ *  Fica fora do arquivo do tema de propósito: qualquer mudança aqui (nova interação, campo de
+ *  design etc.) já vale pro site na hora, sem precisar duplicar/republicar o tema de novo (isso
+ *  já mordeu — um <script> colado por valor no tema ficava congelado na versão de quando foi
+ *  colado, e passou a rodar sem roleta/cores mesmo depois dessas features existirem). */
+export function renderPopupLoaderJs(): string {
+  return `(function () {
   var API = "${APP_URL}";
   var STORAGE_CAPTURED = "mm_popup_captured";
   var STORAGE_HIDE_UNTIL = "mm_popup_hide_until";
@@ -492,5 +495,11 @@ export function renderPopupLoaderScript(): string {
     render(firstStage);
   }
 })();
-</script>`;
+`;
+}
+
+/** Snippet pra colar 1x no theme.liquid — só referencia a URL do loader, nunca precisa ser
+ *  re-colado quando o pop-up evoluir (ver comentário em renderPopupLoaderJs). */
+export function renderPopupLoaderScript(): string {
+  return `<script src="${APP_URL}/api/popup/loader.js" async></script>`;
 }

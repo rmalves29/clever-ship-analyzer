@@ -34,6 +34,7 @@ const AI_ROUTINES_TICK_PATH = "/api/ai-routines/tick";
 const AI_PLAYBOOK_TICK_PATH = "/api/ai-routines/playbook-tick";
 const WHATSAPP_QUEUE_TICK_PATH = "/api/whatsapp/queue-tick";
 const CRM_SYNC_TICK_PATH = "/api/crm/sync-tick";
+const POPUP_LOADER_JS_PATH = "/api/popup/loader.js";
 const POPUP_CONFIG_PATH = "/api/popup/config";
 const POPUP_VISIT_PATH = "/api/popup/visit";
 const POPUP_CAPTURE_PATH = "/api/popup/capture";
@@ -402,6 +403,25 @@ async function popupCorsPreflight(request: Request): Promise<Response> {
   return new Response(null, { status: 204, headers: popupCorsHeaders(allowed) });
 }
 
+// Servido como <script src>, não fetch() — carregamento de script cross-origin não passa por
+// CORS (diferente das 3 rotas abaixo), então não precisa checar Origin aqui.
+async function handlePopupLoaderJs(request: Request): Promise<Response> {
+  if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
+  try {
+    const { renderPopupLoaderJs } = await import("./lib/popup.server");
+    return new Response(renderPopupLoaderJs(), {
+      status: 200,
+      headers: {
+        "content-type": "application/javascript; charset=utf-8",
+        "cache-control": "public, max-age=300",
+      },
+    });
+  } catch (error) {
+    console.error("Falha ao servir o loader do pop-up:", error);
+    return new Response("", { status: 500, headers: { "content-type": "application/javascript; charset=utf-8" } });
+  }
+}
+
 async function handlePopupConfig(request: Request): Promise<Response> {
   if (request.method === "OPTIONS") return popupCorsPreflight(request);
   if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
@@ -560,6 +580,9 @@ export default {
     }
     if (pathname === CRM_SYNC_TICK_PATH) {
       return handleCrmSyncTick(request);
+    }
+    if (pathname === POPUP_LOADER_JS_PATH) {
+      return handlePopupLoaderJs(request);
     }
     if (pathname === POPUP_CONFIG_PATH) {
       return handlePopupConfig(request);

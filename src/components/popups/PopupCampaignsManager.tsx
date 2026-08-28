@@ -23,6 +23,7 @@ import {
   Plus,
   RotateCcw,
   Save,
+  ShoppingBag,
   Smartphone,
   Sparkles,
   Timer,
@@ -124,11 +125,13 @@ function TemplateGallery({
   selected,
   onSelect,
   onUse,
+  onOpenSocialProof,
   onBack,
 }: {
   selected: PopupTemplateKey;
   onSelect: (key: PopupTemplateKey) => void;
   onUse: () => void;
+  onOpenSocialProof: () => void;
   onBack: () => void;
 }) {
   const selectedPreset = getPopupTemplatePreset(selected);
@@ -171,6 +174,31 @@ function TemplateGallery({
             </button>
           );
         })}
+        <button
+          type="button"
+          onClick={onOpenSocialProof}
+          className="overflow-hidden rounded-2xl border bg-card text-left transition-all hover:border-primary/50 hover:shadow-md"
+        >
+          <div className="flex min-h-[230px] items-center justify-center overflow-hidden bg-[linear-gradient(45deg,#f4f4f5_25%,transparent_25%),linear-gradient(-45deg,#f4f4f5_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#f4f4f5_75%),linear-gradient(-45deg,transparent_75%,#f4f4f5_75%)] bg-[length:20px_20px] bg-[position:0_0,0_10px,10px_-10px,-10px_0px] p-4">
+            <div className="relative flex w-full max-w-[310px] gap-3 rounded-lg border bg-white p-2.5 pr-8 shadow-xl">
+              <span className="absolute right-2 top-1 text-xl text-muted-foreground">×</span>
+              <div className="grid size-20 shrink-0 place-items-center rounded bg-[#f6f1ef]"><ShoppingBag className="size-7 text-[#9b6f63]" /></div>
+              <div className="min-w-0 pt-1 text-xs leading-tight">
+                <p className="truncate font-semibold">Maria S. de Diamantina/MG</p>
+                <p className="mt-1 text-muted-foreground">comprou</p>
+                <p className="mt-0.5 line-clamp-2 font-medium">Kit Ayla Azul Turquesa</p>
+                <p className="mt-2 text-[10px] text-muted-foreground">ontem</p>
+              </div>
+            </div>
+          </div>
+          <div className="space-y-2 border-t p-4">
+            <div className="flex items-start justify-between gap-2">
+              <p className="font-semibold">Compras recentes</p>
+              <Badge variant="outline" className="text-[10px]">Prova social</Badge>
+            </div>
+            <p className="min-h-10 text-xs leading-relaxed text-muted-foreground">Pedidos pagos de ontem, exibidos aleatoriamente após fechar o pop-up principal.</p>
+          </div>
+        </button>
       </div>
 
       <div className="sticky bottom-0 flex items-center justify-between border-t bg-background/95 px-5 py-3 backdrop-blur">
@@ -196,7 +224,7 @@ function ColorInput({ label, value, onChange }: { label: string; value: string; 
   );
 }
 
-export function PopupCampaignsManager() {
+export function PopupCampaignsManager({ onOpenSocialProof }: { onOpenSocialProof?: () => void } = {}) {
   const qc = useQueryClient();
   const list = useServerFn(listPopupCampaigns);
   const save = useServerFn(savePopupCampaign);
@@ -290,7 +318,7 @@ export function PopupCampaignsManager() {
   };
 
   if (mode === "templates") {
-    return <div className="py-4"><TemplateGallery selected={selectedPreset} onSelect={setSelectedPreset} onUse={startTemplate} onBack={() => setMode("list")} /></div>;
+    return <div className="py-4"><TemplateGallery selected={selectedPreset} onSelect={setSelectedPreset} onUse={startTemplate} onOpenSocialProof={() => onOpenSocialProof?.()} onBack={() => setMode("list")} /></div>;
   }
 
   if (mode === "editor") {

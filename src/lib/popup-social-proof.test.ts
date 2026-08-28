@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   SOCIAL_PROOF_DELAY_AFTER_CAPTURE_MS,
   SOCIAL_PROOF_INTERVAL_MS,
+  SOCIAL_PROOF_VISIBLE_MS,
   getPreviousDayRangeSaoPaulo,
+  publicCustomerName,
   publicFirstName,
   sanitizeSocialProofOrder,
 } from "./popup-social-proof";
@@ -23,13 +25,18 @@ describe("popup social proof", () => {
     expect(publicFirstName("  Bárbara  Cristina ")).toBe("Bárbara");
   });
 
+  it("abrevia o sobrenome antes de publicar", () => {
+    expect(publicCustomerName("MARIA CAROLINA", "DA SILVA")).toBe("Maria D.");
+    expect(publicCustomerName("Bárbara", null)).toBe("Bárbara");
+  });
+
   it("aceita somente venda paga e remove dados privados do payload", () => {
     const sale = sanitizeSocialProofOrder({
       createdAt: "2026-08-26T17:35:05Z",
       displayFinancialStatus: "PAID",
       test: false,
-      customer: { firstName: "MARIA CAROLINA" },
-      shippingAddress: { firstName: "MARIA CAROLINA", city: "Diamantina", provinceCode: "MG" },
+      customer: { firstName: "MARIA CAROLINA", lastName: "DA SILVA" },
+      shippingAddress: { firstName: "MARIA CAROLINA", lastName: "DA SILVA", city: "Diamantina", provinceCode: "MG" },
       lineItems: {
         nodes: [
           {
@@ -44,7 +51,7 @@ describe("popup social proof", () => {
     });
 
     expect(sale).toEqual({
-      firstName: "Maria",
+      customerName: "Maria D.",
       city: "Diamantina",
       state: "MG",
       productTitle: "Kit Ayla Azul Turquesa",
@@ -69,13 +76,15 @@ describe("popup social proof", () => {
     expect(sanitizeSocialProofOrder({ ...base, displayFinancialStatus: "PAID", test: true })).toBeNull();
   });
 
-  it("usa 10 segundos apos captacao e reveza a cada 30 segundos", () => {
+  it("usa 10 segundos apos fechar a captacao e reveza a cada 50 segundos", () => {
     expect(SOCIAL_PROOF_DELAY_AFTER_CAPTURE_MS).toBe(10_000);
-    expect(SOCIAL_PROOF_INTERVAL_MS).toBe(30_000);
+    expect(SOCIAL_PROOF_INTERVAL_MS).toBe(50_000);
+    expect(SOCIAL_PROOF_VISIBLE_MS).toBe(3_000);
     const script = renderSocialProofLoaderScript();
-    expect(script).toContain('window.addEventListener("mm:capture-popup-shown"');
-    expect(script).toContain("AFTER_CAPTURE_MS = 10000");
-    expect(script).toContain("INTERVAL_MS = 30000");
+    expect(script).toContain('window.addEventListener("mm:capture-popup-closed"');
+    expect(script).toContain("afterCaptureMs = 10000");
+    expect(script).toContain("intervalMs = 50000");
+    expect(script).toContain("Math.random()");
     expect(script).toContain('class="mmsp-buyer"');
     expect(script).toContain("ontem");
     expect(script).not.toContain(">agora<");

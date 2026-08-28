@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutTemplate, Users, Code2 } from "lucide-react";
+import { LayoutTemplate, Users, Code2, ShoppingBag } from "lucide-react";
 import { PopupCampaignsManager } from "@/components/popups/PopupCampaignsManager";
 import { PopupLeadsTable } from "@/components/popups/PopupLeadsTable";
 import { PopupInstallPanel } from "@/components/popups/PopupInstallPanel";
+import { SocialProofSettingsPanel } from "@/components/popups/SocialProofSettingsPanel";
 
-const VALID_TABS = ["popups", "leads", "instalacao"] as const;
+const VALID_TABS = ["popups", "compras-recentes", "leads", "instalacao"] as const;
 
 export const Route = createFileRoute("/popups")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -37,6 +38,9 @@ function Popups() {
           <TabsTrigger value="popups" className="gap-1">
             <LayoutTemplate className="size-4" /> Pop-ups
           </TabsTrigger>
+          <TabsTrigger value="compras-recentes" className="gap-1">
+            <ShoppingBag className="size-4" /> Compras recentes
+          </TabsTrigger>
           <TabsTrigger value="leads" className="gap-1">
             <Users className="size-4" /> Leads Capturadas
           </TabsTrigger>
@@ -45,7 +49,8 @@ function Popups() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="popups"><PopupCampaignsManager /></TabsContent>
+        <TabsContent value="popups"><PopupCampaignsManager onOpenSocialProof={() => setTab("compras-recentes")} /></TabsContent>
+        <TabsContent value="compras-recentes"><SocialProofSettingsPanel /></TabsContent>
         <TabsContent value="leads"><PopupLeadsTable /></TabsContent>
         <TabsContent value="instalacao"><PopupInstallPanel /></TabsContent>
       </Tabs>

@@ -34,7 +34,7 @@ function Wheel({ design }: { design: PopupDesignConfig }) {
         return (
           <span
             key={`${prize}-${index}`}
-            className="absolute max-w-[64px] -translate-x-1/2 -translate-y-1/2 text-center text-[9px] font-black uppercase leading-tight text-slate-900"
+            className="absolute max-w-[64px] text-center text-[9px] font-black uppercase leading-tight text-slate-900"
             style={{ left: `${x}%`, top: `${y}%`, transform: `translate(-50%, -50%) rotate(${angle}deg)` }}
           >
             {prize}
@@ -87,7 +87,7 @@ function CaptureContent({ campaign, design, stage }: { campaign: PreviewCampaign
       </div>
       {progressive && (
         <p className="mt-2 text-[10px]" style={{ color: design.mutedColor }}>
-          {stage === "name" ? "Etapa 1 de 3" : stage === "phone" ? "Etapa 2 de 3" : "Jornada progressiva"}
+          {stage === "name" ? "Etapa 1" : stage === "phone" ? "Etapa 2" : "Jornada progressiva"}
         </p>
       )}
     </div>
@@ -130,11 +130,12 @@ export function PopupPreview({
   compact?: boolean;
 }) {
   const isMobile = viewport === "mobile";
-  const split = design.layout === "split" && !isMobile && design.interaction !== "wheel" ? true : design.interaction === "wheel" && !isMobile;
+  const split = !isMobile && design.layout === "split" && design.imagePosition !== "top";
   const showImage = Boolean(campaign.image_url) && design.imagePosition !== "none" && stage !== "result" && design.interaction !== "wheel";
-  const imageFirst = design.imagePosition === "left" || design.imagePosition === "top";
+  const imageFirst = design.imagePosition === "left";
   const maxWidth = compact ? Math.min(design.width, 520) : design.width;
-  const stageForProgressive = stage === "capture" && design.journey === "progressive" ? "name" : stage;
+  const firstProgressiveStage: PopupPreviewStage = campaign.collect_name ? "name" : "phone";
+  const stageForProgressive = stage === "capture" && design.journey === "progressive" ? firstProgressiveStage : stage;
 
   const visual = stage === "result" ? (
     <ResultContent campaign={campaign} design={design} />
@@ -144,14 +145,14 @@ export function PopupPreview({
       <CaptureContent campaign={campaign} design={design} stage={stageForProgressive} />
     </div>
   ) : split ? (
-    <div className={`grid h-full grid-cols-2 ${design.imagePosition === "left" ? "" : "direction-rtl"}`}>
+    <div className="grid h-full grid-cols-2">
       {imageFirst && showImage && <img src={campaign.image_url} alt="" className="h-full min-h-[330px] w-full object-cover" />}
       <CaptureContent campaign={campaign} design={design} stage={stageForProgressive} />
       {!imageFirst && showImage && <img src={campaign.image_url} alt="" className="h-full min-h-[330px] w-full object-cover" />}
     </div>
   ) : (
     <div>
-      {showImage && design.imagePosition === "top" && <img src={campaign.image_url} alt="" className="h-40 w-full object-cover" />}
+      {showImage && <img src={campaign.image_url} alt="" className="h-40 w-full object-cover" />}
       <CaptureContent campaign={campaign} design={design} stage={stageForProgressive} />
     </div>
   );

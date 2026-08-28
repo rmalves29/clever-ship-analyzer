@@ -21,7 +21,17 @@ export type AutomationEventContext = {
     totalPrice?: number | null;
     createdAt?: string | null;
   } | null;
+  /** Cupom de cashback do PEDIDO deste contexto — congelado para que a automação
+   *  envie exatamente o cupom daquela compra, e não o cupom mais recente do cliente. */
+  cashback?: {
+    code: string;
+    amount: number;
+    minimumPurchase: number;
+    startsAt: string;
+    endsAt: string;
+  } | null;
 };
+
 
 type AutomationRecipientPreview = {
   firstName?: string | null | undefined;

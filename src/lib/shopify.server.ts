@@ -457,3 +457,83 @@ export async function createShopifyDiscountCodeBasic(
     return { success: false, error: error instanceof Error ? error.message : "Falha ao criar cupom na Shopify." };
   }
 }
+
+const DISCOUNT_CODE_DELETE_MUTATION = `
+  mutation discountCodeDelete($id: ID!) {
+    discountCodeDelete(id: $id) {
+      deletedCodeDiscountId
+      userErrors { field message code }
+    }
+  }
+`;
+
+export type CashbackDiscountInput = {
+  title: string;
+  code: string;
+  /** Valor fixo em dinheiro do cashback. */
+  amount: number;
+  /** Subtotal mínimo exigido para usar o cupom. */
+  minimumSubtotal: number;
+  startsAt: string; // ISO — libera 3 dias após a compra
+  endsAt: string; // ISO
+  /** GID do cliente Shopify que ganhou o cashback (restrição real do cupom). */
+  customerGid: string;
+};
+
+/** Cria o cupom de cashback na Shopify: valor fixo, restrito ao cliente do pedido,
+ *  com subtotal mínimo, uso único e uma vez por cliente. Nunca lança — devolve
+ *  {success:false} para o caller registrar o erro sem derrubar a sincronização. */
+export async function createShopifyCashbackDiscount(
+  input: CashbackDiscountInput,
+): Promise<{ success: true; discountId: string } | { success: false; error: string }> {
+  try {
+    const data = await shopifyGraphQL(DISCOUNT_CODE_BASIC_CREATE_MUTATION, {
+      basicCodeDiscount: {
+        title: input.title,
+        code: input.code,
+        startsAt: input.startsAt,
+        endsAt: input.endsAt,
+        usageLimit: 1,
+        appliesOncePerCustomer: true,
+        customerSelection: { customers: { add: [input.customerGid] } },
+        minimumRequirement: { subtotal: { greaterThanOrEqualToSubtotal: input.minimumSubtotal } },
+        customerGets: {
+          value: { discountAmount: { amount: input.amount, appliesOnEachItem: false } },
+          items: { all: true },
+        },
+        combinesWith: { orderDiscounts: false, productDiscounts: false, shippingDiscounts: true },
+      },
+    });
+    const result = data?.discountCodeBasicCreate;
+    const userErrors = result?.userErrors ?? [];
+    if (userErrors.length > 0) {
+      return { success: false, error: userErrors.map((e: any) => e.message).join("; ") };
+    }
+    const discountId = result?.codeDiscountNode?.id;
+    if (!discountId) return { success: false, error: "Shopify não retornou o ID do cupom criado." };
+    return { success: true, discountId };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao criar cupom na Shopify." };
+  }
+}
+
+/** Remove um cupom de desconto da Shopify (usado quando o pedido é cancelado).
+ *  Um cupom que já não existe mais é tratado como sucesso — o objetivo é a ausência dele. */
+export async function deleteShopifyDiscountCode(
+  discountId: string,
+): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    const data = await shopifyGraphQL(DISCOUNT_CODE_DELETE_MUTATION, { id: discountId });
+    const userErrors = data?.discountCodeDelete?.userErrors ?? [];
+    if (userErrors.length > 0) {
+      const message = userErrors.map((e: any) => e.message).join("; ");
+      if (/not found|does not exist|inexistente/i.test(message)) return { success: true };
+      return { success: false, error: message };
+    }
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha ao remover cupom na Shopify.";
+    if (/not found|does not exist/i.test(message)) return { success: true };
+    return { success: false, error: message };
+  }
+}

@@ -137,6 +137,19 @@ async function resolveBodyParams(
     fulfillment = fulfillmentRow;
   }
 
+  // Cashback do último pedido (campanha avulsa, sem contexto congelado).
+  let cashback: Awaited<ReturnType<typeof import("./cashback.server")["loadCashbackForOrder"]>> = null;
+  if (order?.id) {
+    try {
+      const { loadCashbackForOrder } = await import("./cashback.server");
+      cashback = await loadCashbackForOrder(String(order.id));
+    } catch (error) {
+      console.error("Falha ao resolver cashback para tokens da campanha:", error);
+    }
+  }
+  const brl = (value: number) =>
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
+
   const trackingNumber = fulfillment?.tracking_number || "—";
   const trackingUrl = fulfillment?.tracking_url || "—";
   const fulfillmentStatus = String(fulfillment?.status ?? order?.fulfillment_status ?? "").toLowerCase();
@@ -154,6 +167,12 @@ async function resolveBodyParams(
     "{{LINK_RASTREIO}}": trackingUrl,
     "{{STATUS_PEDIDO}}": isSent ? "Enviado" : "Processando",
     "{{LINK_CHECKOUT}}": recipient.checkout_url || "—",
+    "{{CUPOM_CASHBACK}}": cashback?.code || "—",
+    "{{VALOR_CASHBACK}}": cashback ? brl(cashback.amount) : "—",
+    "{{COMPRA_MINIMA_CASHBACK}}": cashback ? brl(cashback.minimumPurchase) : "—",
+    "{{VALIDADE_CASHBACK}}": cashback?.endsAt
+      ? new Date(cashback.endsAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
+      : "—",
   };
 
   return bodyParams.map((param) => {

@@ -142,6 +142,17 @@ export async function runShopifySync(fullSync: boolean) {
         ? `updated_at:>='${new Date(settings.last_sync_at).toISOString()}'`
         : null;
 
+    // Configuração do Cashback carregada uma única vez por sincronização — a reconciliação
+    // por pedido roda logo após o pedido e os itens serem persistidos, garantindo que o cupom
+    // já exista quando o próximo tick de automações montar o contexto congelado.
+    const { loadCashbackSettings, reconcileCashbackForOrder, reprocessPendingCashback } = await import(
+      "./cashback.server"
+    );
+    const cashbackSettings = await loadCashbackSettings();
+    let cashbackErrors = 0;
+
+
+
     while (hasNextPage) {
       const result: any = await shopifyGraphQL(ORDERS_QUERY, { cursor, query: orderSearchQuery });
       const ordersConnection = result.orders;
@@ -245,6 +256,31 @@ export async function runShopifySync(fullSync: boolean) {
           });
         }
 
+        // Cashback: nunca pode derrubar o sync inteiro — falha vira estado no banco.
+        try {
+          await reconcileCashbackForOrder(
+            {
+              id: order.id,
+              orderNumber: order.name ?? null,
+              customerRowId: customerId,
+              customerName:
+                addr?.name ||
+                [order.customer?.firstName, order.customer?.lastName].filter(Boolean).join(" ") ||
+                null,
+              customerGid: order.customer?.id ?? null,
+              financialStatus: order.displayFinancialStatus ?? null,
+              cancelledAt: order.cancelledAt ?? null,
+              totalPrice: parseFloat(order.totalPriceSet?.presentmentMoney?.amount ?? "0"),
+              currencyCode: order.currencyCode ?? "BRL",
+              purchasedAt: order.processedAt ?? order.createdAt ?? null,
+            },
+            cashbackSettings,
+          );
+        } catch (cashbackError) {
+          cashbackErrors++;
+          console.error(`Cashback falhou para o pedido ${order.id}:`, cashbackError);
+        }
+
         lastUpdatedAt = order.updatedAt;
         totalImported++;
       }
@@ -254,6 +290,17 @@ export async function runShopifySync(fullSync: boolean) {
 
       if (totalImported > 5000) break;
     }
+
+    // Reprocessa cupons que falharam ou cancelamentos pendentes de sincronizações anteriores.
+    try {
+      await reprocessPendingCashback();
+    } catch (cashbackError) {
+      cashbackErrors++;
+      console.error("Reprocessamento de cashback falhou:", cashbackError);
+    }
+    if (cashbackErrors > 0) console.warn(`Sincronização concluída com ${cashbackErrors} erro(s) de cashback.`);
+
+
 
     // 3. Sync Abandoned Checkouts
     cursor = null;

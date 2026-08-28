@@ -82,6 +82,17 @@ export async function captureAutomationEventContext(customerId: string): Promise
     }
   }
 
+  // Cupom de cashback do pedido — congelado junto com o restante do contexto.
+  let cashback: AutomationEventContext["cashback"] = null;
+  if (orderRow?.id) {
+    try {
+      const { loadCashbackForOrder } = await import("./cashback.server");
+      cashback = await loadCashbackForOrder(String(orderRow.id));
+    } catch (error) {
+      console.error("Falha ao carregar cashback para o contexto da automação:", error);
+    }
+  }
+
   const rawData = orderRow?.raw_data ?? null;
   const context: AutomationEventContext = {
     capturedAt,
@@ -106,6 +117,7 @@ export async function captureAutomationEventContext(customerId: string): Promise
           createdAt: checkoutRow.created_at ?? null,
         }
       : null,
+    cashback,
   };
 
   return { context, contextKey: buildAutomationContextKey(context, customerId) };

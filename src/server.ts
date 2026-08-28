@@ -408,8 +408,11 @@ async function popupCorsPreflight(request: Request): Promise<Response> {
 async function handlePopupLoaderJs(request: Request): Promise<Response> {
   if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
   try {
-    const { renderPopupLoaderJs } = await import("./lib/popup.server");
-    return new Response(renderPopupLoaderJs(), {
+    const [{ renderPopupLoaderJs }, { renderSocialProofLoaderScript }] = await Promise.all([
+      import("./lib/popup.server"),
+      import("./lib/popup-social-proof.server"),
+    ]);
+    return new Response(`${renderPopupLoaderJs()}\n${renderSocialProofLoaderScript()}`, {
       status: 200,
       headers: {
         "content-type": "application/javascript; charset=utf-8",

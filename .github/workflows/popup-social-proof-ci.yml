@@ -1,0 +1,30 @@
+name: Popup Social Proof CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-social-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Social proof tests
+        run: bunx vitest run src/lib/popup-social-proof.test.ts
+      - name: Build
+        run: bun run build
+      - name: Typecheck
+        run: bunx tsc --noEmit

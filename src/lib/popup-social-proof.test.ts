@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   SOCIAL_PROOF_DELAY_AFTER_CAPTURE_MS,
+  SOCIAL_PROOF_FALLBACK_DELAY_MS,
   SOCIAL_PROOF_INTERVAL_MS,
   SOCIAL_PROOF_VISIBLE_MS,
   getPreviousDayRangeSaoPaulo,
@@ -80,10 +81,12 @@ describe("popup social proof", () => {
     expect(SOCIAL_PROOF_DELAY_AFTER_CAPTURE_MS).toBe(10_000);
     expect(SOCIAL_PROOF_INTERVAL_MS).toBe(50_000);
     expect(SOCIAL_PROOF_VISIBLE_MS).toBe(3_000);
+    expect(SOCIAL_PROOF_FALLBACK_DELAY_MS).toBe(10_000);
     const script = renderSocialProofLoaderScript();
     expect(script).toContain('window.addEventListener("mm:capture-popup-closed"');
     expect(script).toContain("afterCaptureMs = 10000");
     expect(script).toContain("intervalMs = 50000");
+    expect(script).toContain("FALLBACK_MS = 10000");
     expect(script).toContain("Math.random()");
     expect(script).toContain('class="mmsp-buyer"');
     expect(script).toContain("ontem");

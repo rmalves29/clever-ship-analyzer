@@ -13,6 +13,7 @@ import {
   Send,
   RefreshCw,
   LayoutTemplate,
+  Coins,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,10 +31,12 @@ type NavItem = {
     | "/eventos"
     | "/flow"
     | "/fluxo-envio"
-    | "/popups";
+    | "/popups"
+    | "/cashback";
   search?: Record<string, string>;
   icon: typeof LayoutDashboard;
 };
+
 
 const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
@@ -74,6 +77,10 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { label: "Fluxo de Envio", to: "/fluxo-envio", icon: Send },
       { label: "Pop-ups", to: "/popups", icon: LayoutTemplate },
     ],
+  },
+  {
+    label: "Ferramentas",
+    items: [{ label: "Cashback", to: "/cashback", icon: Coins }],
   },
   {
     label: "Sistema",

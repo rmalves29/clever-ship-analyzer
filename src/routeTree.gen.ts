@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CampanhasWhatsappRouteImport } from './routes/campanhas-whatsapp'
+import { Route as CashbackRouteImport } from './routes/cashback'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as EventosRouteImport } from './routes/eventos'
 import { Route as FluxoEnvioRouteImport } from './routes/fluxo-envio'
@@ -42,6 +43,11 @@ const AuthRoute = AuthRouteImport.update({
 const CampanhasWhatsappRoute = CampanhasWhatsappRouteImport.update({
   id: '/campanhas-whatsapp',
   path: '/campanhas-whatsapp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CashbackRoute = CashbackRouteImport.update({
+  id: '/cashback',
+  path: '/cashback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
@@ -130,6 +136,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
+  '/cashback': typeof CashbackRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/eventos': typeof EventosRoute
   '/fluxo-envio': typeof FluxoEnvioRoute
@@ -151,6 +158,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
+  '/cashback': typeof CashbackRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/eventos': typeof EventosRoute
   '/fluxo-envio': typeof FluxoEnvioRoute
@@ -173,6 +181,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
+  '/cashback': typeof CashbackRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/eventos': typeof EventosRoute
   '/fluxo-envio': typeof FluxoEnvioRoute
@@ -196,6 +205,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/campanhas-whatsapp'
+    | '/cashback'
     | '/configuracoes'
     | '/eventos'
     | '/fluxo-envio'
@@ -217,6 +227,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/campanhas-whatsapp'
+    | '/cashback'
     | '/configuracoes'
     | '/eventos'
     | '/fluxo-envio'
@@ -238,6 +249,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/campanhas-whatsapp'
+    | '/cashback'
     | '/configuracoes'
     | '/eventos'
     | '/fluxo-envio'
@@ -260,6 +272,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
   CampanhasWhatsappRoute: typeof CampanhasWhatsappRoute
+  CashbackRoute: typeof CashbackRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   EventosRoute: typeof EventosRoute
   FluxoEnvioRoute: typeof FluxoEnvioRoute
@@ -299,6 +312,13 @@ declare module '@tanstack/react-router' {
       path: '/campanhas-whatsapp'
       fullPath: '/campanhas-whatsapp'
       preLoaderRoute: typeof CampanhasWhatsappRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cashback': {
+      id: '/cashback'
+      path: '/cashback'
+      fullPath: '/cashback'
+      preLoaderRoute: typeof CashbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/configuracoes': {
@@ -420,6 +440,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
   CampanhasWhatsappRoute: CampanhasWhatsappRoute,
+  CashbackRoute: CashbackRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
   EventosRoute: EventosRoute,
   FluxoEnvioRoute: FluxoEnvioRoute,

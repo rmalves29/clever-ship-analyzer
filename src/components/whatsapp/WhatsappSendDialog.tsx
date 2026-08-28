@@ -474,7 +474,7 @@ export function WhatsappSendDialog({
                       <div className="space-y-4 border-t pt-4">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Variáveis dinâmicas</p>
                         <div className="rounded-lg bg-blue-50/50 p-3 text-[10px] text-blue-600 dark:bg-blue-900/10 dark:text-blue-400">
-                          Use tokens como {"{{NOME_CLIENTE}}"}, {"{{NUMERO_PEDIDO}}"}, {"{{VALOR_TOTAL}}"}, {"{{ITENS_COMPRADOS}}"}, {"{{RASTREIO}}"} ou {"{{LINK_CHECKOUT}}"}.
+                          Use tokens como {"{{NOME_CLIENTE}}"}, {"{{NUMERO_PEDIDO}}"}, {"{{VALOR_TOTAL}}"}, {"{{ITENS_COMPRADOS}}"}, {"{{RASTREIO}}"}, {"{{LINK_CHECKOUT}}"}, {"{{CUPOM_CASHBACK}}"}, {"{{VALOR_CASHBACK}}"}, {"{{COMPRA_MINIMA_CASHBACK}}"} ou {"{{VALIDADE_CASHBACK}}"}.
                         </div>
                         {bodyTokens.map((token, index) => (
                           <div key={token} className="space-y-1.5">

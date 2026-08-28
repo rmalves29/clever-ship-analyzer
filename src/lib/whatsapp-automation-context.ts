@@ -21,7 +21,17 @@ export type AutomationEventContext = {
     totalPrice?: number | null;
     createdAt?: string | null;
   } | null;
+  /** Cupom de cashback do PEDIDO deste contexto — congelado para que a automação
+   *  envie exatamente o cupom daquela compra, e não o cupom mais recente do cliente. */
+  cashback?: {
+    code: string;
+    amount: number;
+    minimumPurchase: number;
+    startsAt: string;
+    endsAt: string;
+  } | null;
 };
+
 
 type AutomationRecipientPreview = {
   firstName?: string | null | undefined;
@@ -59,12 +69,17 @@ export function buildAutomationTokenReplacements(
   const isSent = Boolean(fulfillment?.trackingNumber) || ["success", "fulfilled", "in_transit"].includes(fulfillmentStatus);
   const checkoutUrl = context.checkout?.checkoutUrl || recipient.checkoutUrl || "—";
 
+  const cashback = context.cashback ?? null;
+  const brl = (value: number) =>
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
+  const validity = cashback?.endsAt
+    ? new Date(cashback.endsAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
+    : "—";
+
   return {
     "{{NOME_CLIENTE}}": recipient.firstName || "Cliente",
     "{{NUMERO_PEDIDO}}": order?.orderNumber || "—",
-    "{{VALOR_TOTAL}}": order
-      ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(order.totalPrice || 0))
-      : "—",
+    "{{VALOR_TOTAL}}": order ? brl(Number(order.totalPrice || 0)) : "—",
     "{{ITENS_COMPRADOS}}": formatAutomationPurchasedItems(context.items),
     "{{CUPOM_DESCONTO}}": order?.discountCode || "—",
     "{{FRETE_ESCOLHIDO}}": order?.shippingTitle || "—",
@@ -72,8 +87,13 @@ export function buildAutomationTokenReplacements(
     "{{LINK_RASTREIO}}": trackingUrl,
     "{{STATUS_PEDIDO}}": isSent ? "Enviado" : "Processando",
     "{{LINK_CHECKOUT}}": checkoutUrl,
+    "{{CUPOM_CASHBACK}}": cashback?.code || "—",
+    "{{VALOR_CASHBACK}}": cashback ? brl(cashback.amount) : "—",
+    "{{COMPRA_MINIMA_CASHBACK}}": cashback ? brl(cashback.minimumPurchase) : "—",
+    "{{VALIDADE_CASHBACK}}": validity,
   };
 }
+
 
 export function resolveAutomationBodyParams(
   bodyParams: string[],

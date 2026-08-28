@@ -1,3 +1,5 @@
+import { normalizePopupDesignConfig, type PopupDesignConfig } from "./popup-designer";
+
 /** Pop-up de captura de WhatsApp no site (menu Automações > Pop-ups). Config e leads ficam em
  *  popup_campaigns/popup_leads/site_visits (ver migração add_popup_capture). O snippet colado no
  *  theme.liquid chama os endpoints públicos em src/server.ts, que usam as funções deste arquivo. */
@@ -31,12 +33,13 @@ export type PopupCampaign = {
   template_name: string | null;
   template_language: string | null;
   template_var_mapping: Record<string, string>;
+  design_config: PopupDesignConfig;
   created_at: string;
   updated_at: string;
 };
 
 const PUBLIC_CONFIG_FIELDS =
-  "id, name, collect_name, headline, body_text, button_text, image_url, trigger_time_seconds, trigger_exit_intent, reshow_mode, reshow_after_days";
+  "id, name, collect_name, headline, body_text, button_text, image_url, trigger_time_seconds, trigger_exit_intent, reshow_mode, reshow_after_days, design_config";
 
 /** Config pública pro snippet renderizar o pop-up — nunca inclui dados de cupom/template. */
 export async function getActivePopupConfig(): Promise<Record<string, unknown> | null> {
@@ -44,10 +47,11 @@ export async function getActivePopupConfig(): Promise<Record<string, unknown> | 
   const { data } = await (supabaseAdmin.from("popup_campaigns" as any) as any)
     .select(PUBLIC_CONFIG_FIELDS)
     .eq("is_active", true)
-    .order("created_at", { ascending: true })
+    .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return data ?? null;
+  if (!data) return null;
+  return { ...data, design_config: normalizePopupDesignConfig((data as any).design_config) };
 }
 
 export async function recordSiteVisit(params: { visitorToken: string; pageUrl: string | null }): Promise<void> {
@@ -251,6 +255,18 @@ export function renderPopupLoaderScript(): string {
   return `<script>
 (function () {
   var API = "${APP_URL}";
+  var STORAGE_CAPTURED = "mm_popup_captured";
+  var STORAGE_HIDE_UNTIL = "mm_popup_hide_until";
+
+  function esc(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
   function getVisitorToken() {
     try {
       var t = localStorage.getItem("mm_visitor_token");
@@ -258,17 +274,20 @@ export function renderPopupLoaderScript(): string {
       return t;
     } catch (e) { return null; }
   }
+
   var token = getVisitorToken();
   if (token) {
     fetch(API + "/api/popup/visit", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ visitorToken: token, pageUrl: location.href }),
+      body: JSON.stringify({ visitorToken: token, pageUrl: location.href })
     }).catch(function () {});
   }
 
-  if (localStorage.getItem("mm_popup_captured") === "1") return;
-  var hideUntil = Number(localStorage.getItem("mm_popup_hide_until") || 0);
-  if (Date.now() < hideUntil) return;
+  try {
+    if (localStorage.getItem(STORAGE_CAPTURED) === "1") return;
+    var hideUntil = Number(localStorage.getItem(STORAGE_HIDE_UNTIL) || 0);
+    if (Date.now() < hideUntil) return;
+  } catch (e) {}
 
   fetch(API + "/api/popup/config").then(function (r) { return r.json(); }).then(function (cfg) {
     if (!cfg || !cfg.id) return;
@@ -278,54 +297,184 @@ export function renderPopupLoaderScript(): string {
       shown = true;
       renderPopup(cfg, token);
     }
-    if (cfg.trigger_time_seconds) setTimeout(show, cfg.trigger_time_seconds * 1000);
+    if (typeof cfg.trigger_time_seconds === "number") setTimeout(show, Math.max(0, cfg.trigger_time_seconds) * 1000);
     if (cfg.trigger_exit_intent) {
       document.addEventListener("mouseout", function (e) { if (!e.relatedTarget && e.clientY < 10) show(); });
     }
+    if (typeof cfg.trigger_time_seconds !== "number" && !cfg.trigger_exit_intent) show();
   }).catch(function () {});
 
   function renderPopup(cfg, visitorToken) {
+    var d = cfg.design_config || {};
+    var state = { name: "", phone: "", coupon: null, busy: false };
+    var isMobile = window.innerWidth < 640;
+    var progressive = d.journey === "progressive";
+    var wheel = d.interaction === "wheel";
+    var firstStage = progressive ? (cfg.collect_name ? "name" : "phone") : "capture";
+
     var overlay = document.createElement("div");
-    overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999999;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.style.cssText = "position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;padding:18px;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:rgba(0,0,0," + (Number(d.overlayOpacity) || .52) + ");";
+
     var box = document.createElement("div");
-    box.style.cssText = "background:#fff;border-radius:12px;max-width:360px;width:90%;padding:28px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.2);position:relative;";
+    var width = Math.min(Number(d.width) || 430, window.innerWidth - 28);
+    box.style.cssText = "position:relative;overflow:hidden;width:" + width + "px;max-width:100%;max-height:92vh;overflow-y:auto;background:" + (d.backgroundColor || "#fffdf9") + ";color:" + (d.textColor || "#111827") + ";border-radius:" + (Number(d.borderRadius) || 24) + "px;border:1px solid " + (d.accentColor || "#d7ff52") + ";box-shadow:0 25px 80px rgba(0,0,0,.28);";
+
     var close = document.createElement("button");
-    close.textContent = "\\u00d7";
-    close.style.cssText = "position:absolute;top:8px;right:12px;border:none;background:none;font-size:22px;cursor:pointer;color:#999;";
-    close.onclick = function () {
-      overlay.remove();
-      var mode = cfg.reshow_mode === "once_ever" ? 365 : (cfg.reshow_after_days || 7);
-      try { localStorage.setItem("mm_popup_hide_until", String(Date.now() + mode * 86400000)); } catch (e) {}
-    };
-    var html = '<h2 style="margin:0 0 8px;font-size:20px;">' + cfg.headline + '</h2>' +
-      '<p style="margin:0 0 16px;color:#555;font-size:14px;">' + cfg.body_text + '</p>' +
-      (cfg.collect_name ? '<input id="mm_pu_name" placeholder="Seu nome" style="width:100%;padding:10px;margin-bottom:8px;border:1px solid #ddd;border-radius:8px;box-sizing:border-box;">' : '') +
-      '<input id="mm_pu_phone" placeholder="Seu WhatsApp" style="width:100%;padding:10px;margin-bottom:12px;border:1px solid #ddd;border-radius:8px;box-sizing:border-box;">' +
-      '<button id="mm_pu_submit" style="width:100%;padding:12px;background:#d6336c;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;">' + cfg.button_text + '</button>' +
-      '<div id="mm_pu_msg" style="margin-top:10px;font-size:13px;color:#555;"></div>';
-    box.innerHTML = html;
+    close.type = "button";
+    close.setAttribute("aria-label", "Fechar");
+    close.textContent = "×";
+    close.style.cssText = "position:absolute;z-index:20;top:12px;right:12px;width:34px;height:34px;border:none;border-radius:999px;background:rgba(255,255,255,.92);box-shadow:0 2px 12px rgba(0,0,0,.12);font-size:22px;line-height:32px;cursor:pointer;color:#475467;";
+    close.onclick = closePopup;
     box.appendChild(close);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
 
-    document.getElementById("mm_pu_submit").onclick = function () {
-      var phone = document.getElementById("mm_pu_phone").value.trim();
-      var nameEl = document.getElementById("mm_pu_name");
-      var name = nameEl ? nameEl.value.trim() : null;
-      if (!phone) return;
-      fetch(API + "/api/popup/capture", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: phone, name: name, visitorToken: visitorToken, pageUrl: location.href, popupCampaignId: cfg.id }),
-      }).then(function (r) { return r.json(); }).then(function (res) {
-        if (res.success) {
-          try { localStorage.setItem("mm_popup_captured", "1"); } catch (e) {}
-          document.getElementById("mm_pu_msg").textContent = res.couponCode
-            ? "Cadastro feito! Seu cupom: " + res.couponCode
-            : "Cadastro feito! Você vai receber uma mensagem no WhatsApp.";
-          setTimeout(function () { overlay.remove(); }, 4000);
+    function closePopup() {
+      overlay.remove();
+      var days = cfg.reshow_mode === "once_ever" ? 3650 : (cfg.reshow_after_days || 7);
+      try { localStorage.setItem(STORAGE_HIDE_UNTIL, String(Date.now() + days * 86400000)); } catch (e) {}
+    }
+
+    function field(id, placeholder, value) {
+      return '<input id="' + id + '" value="' + esc(value || "") + '" placeholder="' + esc(placeholder) + '" style="width:100%;height:46px;padding:0 14px;margin:0 0 9px;border:1px solid #d0d5dd;border-radius:10px;background:#fff;box-sizing:border-box;font-size:14px;outline:none;">';
+    }
+
+    function mainButton(text, id) {
+      return '<button id="' + (id || "mm_pu_submit") + '" type="button" style="width:100%;min-height:46px;padding:11px 16px;border:none;border-radius:10px;background:' + (d.buttonColor || "#111827") + ';color:' + (d.buttonTextColor || "#fff") + ';font-size:12px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;box-shadow:0 5px 14px rgba(0,0,0,.12);">' + esc(text) + '</button>';
+    }
+
+    function contentShell(inner) {
+      return '<div style="display:flex;min-height:320px;flex-direction:column;justify-content:center;padding:' + (isMobile ? "30px 24px" : "38px 42px") + ';box-sizing:border-box;text-align:center;">' + inner + '</div>';
+    }
+
+    function headingBlock() {
+      var badge = d.badgeText ? '<div style="display:inline-block;margin:0 auto 12px;padding:5px 10px;border:1px solid rgba(17,24,39,.15);border-radius:999px;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;">' + esc(d.badgeText) + '</div>' : '';
+      return badge + '<h2 style="margin:0;font-size:' + (isMobile ? "24px" : "29px") + ';line-height:1.05;font-weight:900;letter-spacing:-.035em;color:' + (d.textColor || "#111827") + ';">' + esc(cfg.headline) + '</h2>' +
+        '<p style="margin:12px auto 20px;max-width:420px;font-size:14px;line-height:1.55;color:' + (d.mutedColor || "#667085") + ';">' + esc(cfg.body_text) + '</p>';
+    }
+
+    function imageBlock() {
+      if (!cfg.image_url || d.imagePosition === "none" || wheel) return "";
+      return '<div style="min-height:260px;background-image:url(&quot;' + esc(cfg.image_url) + '&quot;);background-size:cover;background-position:center;"></div>';
+    }
+
+    function wheelBlock() {
+      var prizes = Array.isArray(d.wheelPrizes) && d.wheelPrizes.length >= 2 ? d.wheelPrizes.slice(0, 6) : ["10% OFF", "15% OFF", "20% OFF", "SURPRESA"];
+      var palette = ["#f1b93b", "#183b56", "#f0f3f4", "#cf7b53", "#8fb9a8", "#edd7ad"];
+      var step = 360 / prizes.length;
+      var gradient = prizes.map(function (_, i) { return palette[i % palette.length] + " " + (i * step) + "deg " + ((i + 1) * step) + "deg"; }).join(",");
+      var labels = prizes.map(function (p, i) {
+        var angle = i * step + step / 2;
+        var rad = (angle - 90) * Math.PI / 180;
+        var x = 50 + Math.cos(rad) * 34;
+        var y = 50 + Math.sin(rad) * 34;
+        return '<span style="position:absolute;left:' + x + '%;top:' + y + '%;transform:translate(-50%,-50%) rotate(' + angle + 'deg);max-width:62px;text-align:center;font-size:9px;font-weight:900;line-height:1.05;color:#111827;">' + esc(p) + '</span>';
+      }).join("");
+      return '<div style="display:flex;align-items:center;justify-content:center;padding:28px 18px;min-height:300px;"><div id="mm_pu_wheel" style="position:relative;width:min(250px,72vw);aspect-ratio:1;border-radius:50%;border:10px solid #fff;box-shadow:0 14px 35px rgba(0,0,0,.18);background:conic-gradient(' + gradient + ');transition:transform .9s cubic-bezier(.2,.8,.2,1);"><div style="position:absolute;left:50%;top:50%;width:54px;height:54px;transform:translate(-50%,-50%);border-radius:50%;border:4px solid #fff;background:#101828;"></div>' + labels + '</div></div>';
+    }
+
+    function buildCapture(stage) {
+      var inputs = "";
+      if (!progressive || stage === "capture") {
+        if (cfg.collect_name) inputs += field("mm_pu_name", d.namePlaceholder || "Como podemos te chamar?", state.name);
+        inputs += field("mm_pu_phone", d.inputPlaceholder || "Seu melhor WhatsApp", state.phone);
+      } else if (stage === "name") {
+        inputs = field("mm_pu_name", d.namePlaceholder || "Como podemos te chamar?", state.name);
+      } else {
+        inputs = field("mm_pu_phone", d.inputPlaceholder || "Seu melhor WhatsApp", state.phone);
+      }
+      var buttonText = progressive && stage === "name" ? "CONTINUAR" : cfg.button_text;
+      return contentShell(headingBlock() + inputs + mainButton(buttonText) + '<div id="mm_pu_msg" style="min-height:16px;margin-top:9px;font-size:12px;color:' + (d.mutedColor || "#667085") + ';"></div>');
+    }
+
+    function render(stage) {
+      var main = "";
+      if (stage === "result") {
+        main = buildResult();
+      } else if (wheel) {
+        var capture = buildCapture(stage);
+        main = !isMobile ? '<div style="display:grid;grid-template-columns:.9fr 1.1fr;min-height:360px;">' + wheelBlock() + capture + '</div>' : wheelBlock() + capture;
+      } else {
+        var captureHtml = buildCapture(stage);
+        var image = imageBlock();
+        var split = !isMobile && d.layout === "split" && d.imagePosition !== "top" && image;
+        if (split && d.imagePosition === "left") main = '<div style="display:grid;grid-template-columns:1fr 1fr;">' + image + captureHtml + '</div>';
+        else if (split && d.imagePosition === "right") main = '<div style="display:grid;grid-template-columns:1fr 1fr;">' + captureHtml + image + '</div>';
+        else main = (image && d.imagePosition === "top" ? image : "") + captureHtml;
+      }
+      Array.prototype.slice.call(box.children).forEach(function (child) { if (child !== close) child.remove(); });
+      var holder = document.createElement("div");
+      holder.innerHTML = main;
+      box.insertBefore(holder, close);
+      bind(stage);
+    }
+
+    function bind(stage) {
+      var btn = document.getElementById("mm_pu_submit");
+      if (!btn) return;
+      btn.onclick = function () {
+        if (state.busy) return;
+        var nameEl = document.getElementById("mm_pu_name");
+        var phoneEl = document.getElementById("mm_pu_phone");
+        if (nameEl) state.name = nameEl.value.trim();
+        if (phoneEl) state.phone = phoneEl.value.trim();
+        if (progressive && stage === "name") {
+          if (!state.name) return showMessage("Informe seu nome para continuar.");
+          return render("phone");
         }
-      }).catch(function () {});
-    };
+        if (!state.phone) return showMessage("Informe seu WhatsApp para continuar.");
+        submitLead();
+      };
+    }
+
+    function showMessage(message) {
+      var el = document.getElementById("mm_pu_msg");
+      if (el) el.textContent = message;
+    }
+
+    function submitLead() {
+      state.busy = true;
+      showMessage(wheel ? "Girando e liberando seu benefício..." : "Liberando seu benefício...");
+      var wheelEl = document.getElementById("mm_pu_wheel");
+      if (wheelEl) wheelEl.style.transform = "rotate(1080deg)";
+      var wait = wheelEl ? 900 : 0;
+      setTimeout(function () {
+        fetch(API + "/api/popup/capture", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: state.phone, name: state.name || null, visitorToken: visitorToken, pageUrl: location.href, popupCampaignId: cfg.id })
+        }).then(function (r) { return r.json(); }).then(function (res) {
+          state.busy = false;
+          if (!res.success) return showMessage(res.error || "Não foi possível concluir. Confira seu WhatsApp.");
+          state.coupon = res.couponCode || null;
+          try { localStorage.setItem(STORAGE_CAPTURED, "1"); } catch (e) {}
+          render("result");
+        }).catch(function () {
+          state.busy = false;
+          showMessage("Não foi possível concluir agora. Tente novamente.");
+        });
+      }, wait);
+    }
+
+    function buildResult() {
+      var coupon = state.coupon ? '<div style="margin:20px 0 10px;padding:14px 18px;border:2px dashed ' + (d.accentColor || "#d7ff52") + ';border-radius:12px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:.15em;color:' + (d.mutedColor || "#667085") + ';">Seu cupom</div><div id="mm_pu_coupon" style="margin-top:4px;font-size:21px;font-weight:900;letter-spacing:.08em;color:' + (d.textColor || "#111827") + ';">' + esc(state.coupon) + '</div></div>' : '';
+      return contentShell('<div style="display:flex;width:48px;height:48px;margin:0 auto 14px;align-items:center;justify-content:center;border-radius:50%;background:' + (d.accentColor || "#d7ff52") + '55;font-size:22px;">✦</div><h2 style="margin:0;font-size:26px;line-height:1.08;font-weight:900;color:' + (d.textColor || "#111827") + ';">' + esc(d.resultHeadline || "Seu benefício está liberado!") + '</h2><p style="margin:12px auto 0;max-width:390px;font-size:14px;line-height:1.55;color:' + (d.mutedColor || "#667085") + ';">' + esc(d.resultBody || "Aproveite seu benefício na sua compra.") + '</p>' + coupon + mainButton(d.resultButtonText || (state.coupon ? "COPIAR CUPOM" : "CONTINUAR"), "mm_pu_result_btn"));
+    }
+
+    function bindResult() {
+      var btn = document.getElementById("mm_pu_result_btn");
+      if (!btn) return;
+      btn.onclick = function () {
+        if (state.coupon && navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(state.coupon).then(function () { btn.textContent = "CUPOM COPIADO ✓"; }).catch(function () { closePopup(); });
+        } else closePopup();
+      };
+    }
+
+    var originalRender = render;
+    render = function (stage) { originalRender(stage); if (stage === "result") bindResult(); };
+    render(firstStage);
   }
 })();
 </script>`;

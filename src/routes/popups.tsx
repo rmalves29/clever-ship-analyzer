@@ -14,7 +14,7 @@ export const Route = createFileRoute("/popups")({
   head: () => ({
     meta: [
       { title: "Pop-ups | CRM Insights" },
-      { name: "description", content: "Pop-up de captura de WhatsApp no site, leads capturadas e instalação do snippet." },
+      { name: "description", content: "Construtor visual de pop-ups para captura de WhatsApp, benefícios e leads do site." },
     ],
   }),
   component: Popups,
@@ -26,10 +26,10 @@ function Popups() {
   const setTab = (value: string) => navigate({ to: "/popups", search: { tab: value } });
 
   return (
-    <div className="mx-auto max-w-[1400px] px-4 py-8 md:px-8">
+    <div className="mx-auto max-w-[1600px] px-4 py-8 md:px-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight">Pop-ups</h1>
-        <p className="text-sm text-muted-foreground">Captura de WhatsApp no site, leads capturadas e instalação do snippet.</p>
+        <p className="text-sm text-muted-foreground">Crie experiências visuais, capture WhatsApp, entregue cupons e acompanhe as leads do site.</p>
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>

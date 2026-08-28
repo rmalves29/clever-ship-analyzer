@@ -207,38 +207,38 @@ function validHex(value: unknown, fallback: string): string {
 
 export function normalizePopupDesignConfig(value: unknown): PopupDesignConfig {
   const raw = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-  const templateKey = ["essential", "skincare", "drop", "whatsapp_steps", "wheel", "custom"].includes(String(raw.templateKey))
-    ? (String(raw.templateKey) as PopupTemplateKey)
+  const templateKey = ["essential", "skincare", "drop", "whatsapp_steps", "wheel", "custom"].includes(String(raw["templateKey"]))
+    ? (String(raw["templateKey"]) as PopupTemplateKey)
     : DEFAULT_DESIGN.templateKey;
   const preset = templateKey === "custom" ? DEFAULT_DESIGN : getPopupTemplatePreset(templateKey).design;
 
-  const wheelPrizes = Array.isArray(raw.wheelPrizes)
-    ? raw.wheelPrizes.map((item) => String(item).trim()).filter(Boolean).slice(0, 8)
+  const wheelPrizes = Array.isArray(raw["wheelPrizes"])
+    ? raw["wheelPrizes"].map((item) => String(item).trim()).filter(Boolean).slice(0, 8)
     : preset.wheelPrizes;
 
   return {
     templateKey,
-    layout: raw.layout === "split" ? "split" : raw.layout === "centered" ? "centered" : preset.layout,
-    imagePosition: ["none", "left", "right", "top"].includes(String(raw.imagePosition))
-      ? (String(raw.imagePosition) as PopupImagePosition)
+    layout: raw["layout"] === "split" ? "split" : raw["layout"] === "centered" ? "centered" : preset.layout,
+    imagePosition: ["none", "left", "right", "top"].includes(String(raw["imagePosition"]))
+      ? (String(raw["imagePosition"]) as PopupImagePosition)
       : preset.imagePosition,
-    backgroundColor: validHex(raw.backgroundColor, preset.backgroundColor),
-    accentColor: validHex(raw.accentColor, preset.accentColor),
-    textColor: validHex(raw.textColor, preset.textColor),
-    mutedColor: validHex(raw.mutedColor, preset.mutedColor),
-    buttonColor: validHex(raw.buttonColor, preset.buttonColor),
-    buttonTextColor: validHex(raw.buttonTextColor, preset.buttonTextColor),
-    width: clamp(Number(raw.width ?? preset.width) || preset.width, 320, 820),
-    borderRadius: clamp(Number(raw.borderRadius ?? preset.borderRadius) || preset.borderRadius, 0, 48),
-    overlayOpacity: clamp(Number(raw.overlayOpacity ?? preset.overlayOpacity) || preset.overlayOpacity, 0.15, 0.85),
-    badgeText: String(raw.badgeText ?? preset.badgeText).slice(0, 80),
-    inputPlaceholder: String(raw.inputPlaceholder ?? preset.inputPlaceholder).slice(0, 100),
-    namePlaceholder: String(raw.namePlaceholder ?? preset.namePlaceholder).slice(0, 100),
-    resultHeadline: String(raw.resultHeadline ?? preset.resultHeadline).slice(0, 180),
-    resultBody: String(raw.resultBody ?? preset.resultBody).slice(0, 300),
-    resultButtonText: String(raw.resultButtonText ?? preset.resultButtonText).slice(0, 80),
-    journey: raw.journey === "progressive" ? "progressive" : raw.journey === "single" ? "single" : preset.journey,
-    interaction: raw.interaction === "wheel" ? "wheel" : raw.interaction === "form" ? "form" : preset.interaction,
+    backgroundColor: validHex(raw["backgroundColor"], preset.backgroundColor),
+    accentColor: validHex(raw["accentColor"], preset.accentColor),
+    textColor: validHex(raw["textColor"], preset.textColor),
+    mutedColor: validHex(raw["mutedColor"], preset.mutedColor),
+    buttonColor: validHex(raw["buttonColor"], preset.buttonColor),
+    buttonTextColor: validHex(raw["buttonTextColor"], preset.buttonTextColor),
+    width: clamp(Number(raw["width"] ?? preset.width) || preset.width, 320, 820),
+    borderRadius: clamp(Number(raw["borderRadius"] ?? preset.borderRadius) || preset.borderRadius, 0, 48),
+    overlayOpacity: clamp(Number(raw["overlayOpacity"] ?? preset.overlayOpacity) || preset.overlayOpacity, 0.15, 0.85),
+    badgeText: String(raw["badgeText"] ?? preset.badgeText).slice(0, 80),
+    inputPlaceholder: String(raw["inputPlaceholder"] ?? preset.inputPlaceholder).slice(0, 100),
+    namePlaceholder: String(raw["namePlaceholder"] ?? preset.namePlaceholder).slice(0, 100),
+    resultHeadline: String(raw["resultHeadline"] ?? preset.resultHeadline).slice(0, 180),
+    resultBody: String(raw["resultBody"] ?? preset.resultBody).slice(0, 300),
+    resultButtonText: String(raw["resultButtonText"] ?? preset.resultButtonText).slice(0, 80),
+    journey: raw["journey"] === "progressive" ? "progressive" : raw["journey"] === "single" ? "single" : preset.journey,
+    interaction: raw["interaction"] === "wheel" ? "wheel" : raw["interaction"] === "form" ? "form" : preset.interaction,
     wheelPrizes: wheelPrizes.length >= 2 ? wheelPrizes : preset.wheelPrizes,
   };
 }

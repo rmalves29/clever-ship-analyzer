@@ -388,7 +388,7 @@ export function PopupCampaignsManager() {
                       {form.design_config.interaction === "wheel" && (
                         <div className="space-y-2 pt-2">
                           <Button size="sm" variant="outline" className="w-full" onClick={() => setWheelDialogOpen(true)}>
-                            Configurar prêmios da roleta ({form.design_config.wheelPrizes.length})
+                            Configurar cores e prêmios da roleta ({form.design_config.wheelPrizes.length})
                           </Button>
                           <p className="text-[10px] text-muted-foreground">Cada prêmio pode ter cor, cupom e probabilidade próprios — o sorteio é feito no servidor.</p>
                         </div>
@@ -462,6 +462,11 @@ export function PopupCampaignsManager() {
                     <ColorInput label="Cor de destaque" value={form.design_config.accentColor} onChange={(value) => patchDesign({ accentColor: value })} />
                     <ColorInput label="Cor do texto" value={form.design_config.textColor} onChange={(value) => patchDesign({ textColor: value })} />
                     <ColorInput label="Cor do botão" value={form.design_config.buttonColor} onChange={(value) => patchDesign({ buttonColor: value })} />
+                    {form.design_config.interaction === "wheel" && (
+                      <Button size="sm" variant="outline" onClick={() => setWheelDialogOpen(true)}>
+                        Cores e prêmios da roleta ({form.design_config.wheelPrizes.length})
+                      </Button>
+                    )}
                   </div>
                 </details>
 

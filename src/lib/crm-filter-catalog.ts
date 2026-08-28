@@ -68,8 +68,7 @@ export const CRM_STATUS_FILTER_VALUES = [
 ] as const;
 
 export const CRM_FULFILLMENT_STATUS_FILTER_VALUES = [
-  "fulfilled", "unfulfilled", "in_progress", "partially_fulfilled",
-  "on_hold", "scheduled", "pending_fulfillment", "restocked", "open",
+  "fulfilled", "in_transit", "out_for_delivery", "delivered", "attempted_delivery", "canceled",
 ] as const;
 
 export const CRM_PROFILE_FILTER_VALUES = [
@@ -103,7 +102,7 @@ export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
       { id: "ticket_medio", label: "Ticket Médio de Compras Válidas", kind: "number", description: "Permite valor mínimo, máximo ou faixa." },
       { id: "recorrencia", label: "Cliente Recorrente (2+ Compras Válidas)", kind: "boolean", description: "Sim quando o cliente possui duas ou mais compras válidas." },
       { id: "status_pagamento", label: "Status do Pagamento", kind: "status", description: "Cancelado considera também cancelled_at." },
-      { id: "status_entrega", label: "Status da Entrega", kind: "fulfillment_status", description: "Status de envio/fulfillment de qualquer pedido do cliente na Shopify." },
+      { id: "status_entrega", label: "Status da Entrega", kind: "fulfillment_status", description: "Status de rastreio do envio (Correios/transportadora) de qualquer pedido do cliente na Shopify. Pedidos antigos importados da Tray não têm esse dado." },
       { id: "perfil", label: "Perfil do Cliente", kind: "profile" },
       { id: "data_pedido_hoje", label: "Compra Válida Realizada Hoje", kind: "boolean" },
       { id: "data_pedido_24h", label: "Compra Válida nas Últimas 24h", kind: "boolean", description: "Janela móvel de 24 horas." },

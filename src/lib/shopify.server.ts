@@ -177,6 +177,7 @@ export const ORDERS_QUERY = `
           fulfillments(first: 10) {
             id
             status
+            displayStatus
             createdAt
             updatedAt
             trackingInfo(first: 1) { company number url }

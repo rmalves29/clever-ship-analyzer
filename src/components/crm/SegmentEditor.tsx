@@ -568,15 +568,12 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
     if (field.kind === "fulfillment_status") return <Select value={String(condition.value || "")} onValueChange={setValue}>
       <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar status de entrega..." /></SelectTrigger>
       <SelectContent>
-        <SelectItem value="fulfilled">Atendido</SelectItem>
-        <SelectItem value="unfulfilled">Não Atendido</SelectItem>
-        <SelectItem value="in_progress">Em Andamento</SelectItem>
-        <SelectItem value="partially_fulfilled">Parcialmente Atendido</SelectItem>
-        <SelectItem value="on_hold">Em Espera</SelectItem>
-        <SelectItem value="scheduled">Agendado</SelectItem>
-        <SelectItem value="pending_fulfillment">Pendente</SelectItem>
-        <SelectItem value="restocked">Reestocado</SelectItem>
-        <SelectItem value="open">Aberto</SelectItem>
+        <SelectItem value="fulfilled">Rastreamento Adicionado</SelectItem>
+        <SelectItem value="in_transit">Em Trânsito</SelectItem>
+        <SelectItem value="out_for_delivery">Saiu para Entrega</SelectItem>
+        <SelectItem value="attempted_delivery">Tentativa de Entrega</SelectItem>
+        <SelectItem value="delivered">Entregue</SelectItem>
+        <SelectItem value="canceled">Cancelado</SelectItem>
       </SelectContent>
     </Select>;
 

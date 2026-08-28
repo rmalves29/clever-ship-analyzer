@@ -1542,6 +1542,7 @@ export type Database = {
       shopify_fulfillments: {
         Row: {
           created_at: string | null
+          display_status: string | null
           id: string
           order_id: string | null
           raw_data: Json | null
@@ -1553,6 +1554,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          display_status?: string | null
           id: string
           order_id?: string | null
           raw_data?: Json | null
@@ -1564,6 +1566,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          display_status?: string | null
           id?: string
           order_id?: string | null
           raw_data?: Json | null

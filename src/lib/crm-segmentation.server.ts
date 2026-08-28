@@ -74,12 +74,37 @@ async function loadPopupVisitByPhone(): Promise<Map<string, string>> {
   return map;
 }
 
+/** Order_id -> status de entrega (rastreio) mais recente, lido de shopify_fulfillments.display_status.
+ *  Pedidos importados da Tray não têm esse dado (fulfillment sem raw_data da Shopify). */
+async function loadDeliveryStatusByOrderId(): Promise<Map<string, string>> {
+  const db = await admin();
+  const map = new Map<string, { status: string; updatedAt: string }>();
+  for (let page = 0; ; page++) {
+    const { data, error } = await (db.from("shopify_fulfillments") as any)
+      .select("order_id, display_status, updated_at")
+      .not("display_status", "is", null)
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (error) throw new Error(`Erro ao buscar status de entrega: ${error.message}`);
+    if (!data || data.length === 0) break;
+    for (const row of data as any[]) {
+      if (!row.order_id) continue;
+      const current = map.get(row.order_id);
+      if (!current || new Date(row.updated_at).getTime() > new Date(current.updatedAt).getTime()) {
+        map.set(row.order_id, { status: row.display_status, updatedAt: row.updated_at });
+      }
+    }
+    if (data.length < PAGE_SIZE) break;
+  }
+  return new Map([...map].map(([orderId, value]) => [orderId, value.status]));
+}
+
 async function loadOrders(): Promise<CRMOrderForSegmentation[]> {
   const db = await admin();
+  const deliveryStatusByOrderId = await loadDeliveryStatusByOrderId();
   const rows: CRMOrderForSegmentation[] = [];
   for (let page = 0; ; page++) {
     const { data, error } = await (db.from("shopify_orders") as any)
-      .select("id, customer_id, total_price, processed_at, created_at, financial_status, cancelled_at, fulfillment_status")
+      .select("id, customer_id, total_price, processed_at, created_at, financial_status, cancelled_at")
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
     if (error) throw new Error(`Erro ao buscar pedidos do CRM: ${error.message}`);
     if (!data || data.length === 0) break;
@@ -92,7 +117,7 @@ async function loadOrders(): Promise<CRMOrderForSegmentation[]> {
         processedAt: String(row.processed_at ?? row.created_at ?? ""),
         financialStatus: row.financial_status,
         cancelledAt: row.cancelled_at,
-        fulfillmentStatus: row.fulfillment_status,
+        fulfillmentStatus: deliveryStatusByOrderId.get(String(row.id)) ?? null,
       });
     }
     if (data.length < PAGE_SIZE) break;

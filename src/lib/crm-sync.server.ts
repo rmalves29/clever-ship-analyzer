@@ -247,6 +247,7 @@ export async function runShopifySync(fullSync: boolean) {
             id: f.id,
             order_id: order.id,
             status: f.status,
+            display_status: f.displayStatus ?? null,
             created_at: f.createdAt,
             updated_at: f.updatedAt,
             tracking_company: f.trackingInfo?.[0]?.company ?? null,

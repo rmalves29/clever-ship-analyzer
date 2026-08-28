@@ -431,11 +431,14 @@ async function handlePopupConfig(request: Request): Promise<Response> {
     const config = await getActivePopupConfig();
     return new Response(JSON.stringify(config ?? {}), {
       status: 200,
-      headers: { "content-type": "application/json", ...popupCorsHeaders(allowed) },
+      headers: { "content-type": "application/json", "cache-control": "no-store", ...popupCorsHeaders(allowed) },
     });
   } catch (error) {
     console.error("Falha ao buscar config do pop-up:", error);
-    return new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json", ...popupCorsHeaders(allowed) } });
+    return new Response(JSON.stringify({}), {
+      status: 200,
+      headers: { "content-type": "application/json", "cache-control": "no-store", ...popupCorsHeaders(allowed) },
+    });
   }
 }
 

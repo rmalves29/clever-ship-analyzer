@@ -202,6 +202,108 @@ export type Database = {
         }
         Relationships: []
       }
+      cashback_coupons: {
+        Row: {
+          cancelled_at: string | null
+          cashback_amount: number
+          code: string
+          created_at: string
+          currency_code: string
+          customer_name: string | null
+          customer_row_id: string | null
+          ends_at: string
+          id: number
+          last_error: string | null
+          minimum_purchase: number
+          order_number: string | null
+          order_total: number
+          percentage: number
+          shopify_customer_gid: string | null
+          shopify_discount_id: string | null
+          shopify_order_id: string
+          starts_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          cashback_amount: number
+          code: string
+          created_at?: string
+          currency_code?: string
+          customer_name?: string | null
+          customer_row_id?: string | null
+          ends_at: string
+          id?: never
+          last_error?: string | null
+          minimum_purchase: number
+          order_number?: string | null
+          order_total?: number
+          percentage: number
+          shopify_customer_gid?: string | null
+          shopify_discount_id?: string | null
+          shopify_order_id: string
+          starts_at: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          cashback_amount?: number
+          code?: string
+          created_at?: string
+          currency_code?: string
+          customer_name?: string | null
+          customer_row_id?: string | null
+          ends_at?: string
+          id?: never
+          last_error?: string | null
+          minimum_purchase?: number
+          order_number?: string | null
+          order_total?: number
+          percentage?: number
+          shopify_customer_gid?: string | null
+          shopify_discount_id?: string | null
+          shopify_order_id?: string
+          starts_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cashback_settings: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          enabled_at: string | null
+          expiration_days: number
+          id: number
+          minimum_purchase_multiplier: number
+          percentage: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          enabled_at?: string | null
+          expiration_days?: number
+          id?: number
+          minimum_purchase_multiplier?: number
+          percentage?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          enabled_at?: string | null
+          expiration_days?: number
+          id?: number
+          minimum_purchase_multiplier?: number
+          percentage?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       crm_events: {
         Row: {
           canais: string[]

@@ -359,22 +359,30 @@ async function handleCrmSyncTick(request: Request): Promise<Response> {
 
 // O pop-up roda no domínio da loja (Shopify), fora deste app — chamadas via fetch() cross-origin
 // exigem CORS, ao contrário de todo o resto das rotas cruas (webhooks são server-to-server).
-// Só o domínio configurado em store_settings.shopify_store_domain pode chamar essas 3 rotas.
+// `shopify_store_domain` é o domínio administrativo (*.myshopify.com, usado pra autenticar na
+// Admin API) — quase nunca é o domínio que o visitante vê no navegador. Por isso também aceita
+// `storefront_domain` (o domínio público de verdade, ex.: maniadmulher.com), comparando sem
+// "www." dos dois lados pra não travar por causa desse prefixo.
+function normalizeDomainHost(value: string): string {
+  return value.replace(/^https?:\/\//i, "").replace(/\/+$/, "").replace(/^www\./i, "").toLowerCase();
+}
+
 async function getAllowedPopupOrigin(origin: string | null): Promise<string | null> {
   if (!origin) return null;
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data } = await supabaseAdmin
-      .from("store_settings")
-      .select("shopify_store_domain")
+    const { data } = await (supabaseAdmin.from("store_settings") as any)
+      .select("shopify_store_domain, storefront_domain")
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
-    const shopDomain = (data as { shopify_store_domain: string | null } | null)?.shopify_store_domain;
-    if (!shopDomain) return null;
-    const normalized = shopDomain.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
-    const originHost = new URL(origin).host;
-    return originHost === normalized ? origin : null;
+    const row = data as { shopify_store_domain: string | null; storefront_domain: string | null } | null;
+    const candidates = [row?.shopify_store_domain, row?.storefront_domain]
+      .filter((value): value is string => Boolean(value))
+      .map(normalizeDomainHost);
+    if (!candidates.length) return null;
+    const originHost = normalizeDomainHost(new URL(origin).host);
+    return candidates.includes(originHost) ? origin : null;
   } catch {
     return null;
   }

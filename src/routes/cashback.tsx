@@ -276,7 +276,10 @@ function CashbackPage() {
           <CardTitle className="flex items-center gap-2 text-base">
             <Ticket className="size-4" /> Cupons gerados
           </CardTitle>
-          <CardDescription>Use o token {"{{CUPOM_CASHBACK}}"} nas campanhas e automações de WhatsApp.</CardDescription>
+          <CardDescription>
+            Use os tokens {"{{CUPOM_CASHBACK}}"}, {"{{VALOR_CASHBACK}}"}, {"{{COMPRA_MINIMA_CASHBACK}}"} e{" "}
+            {"{{VALIDADE_CASHBACK}}"} nas campanhas e automações de WhatsApp.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {couponsQuery.isLoading ? (

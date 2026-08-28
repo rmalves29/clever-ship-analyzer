@@ -110,7 +110,7 @@ async function getAllowedStoreHosts(): Promise<Set<string>> {
     if (configured) hosts.add(configured);
 
     const primary = await shopifyGraphQL(`query PopupPrimaryDomain { shop { primaryDomain { host } } }`);
-    const primaryHost = normalizeHost(primary?.data?.shop?.primaryDomain?.host);
+    const primaryHost = normalizeHost(primary?.shop?.primaryDomain?.host);
     if (primaryHost) {
       hosts.add(primaryHost);
       if (primaryHost.startsWith("www.")) hosts.add(primaryHost.slice(4));
@@ -161,7 +161,7 @@ async function loadYesterdaySales() {
 
   for (let pages = 0; pages < 10; pages++) {
     const result: any = await shopifyGraphQL(SOCIAL_PROOF_ORDERS_QUERY, { query, after });
-    const connection = result?.data?.orders;
+    const connection = result?.orders;
     const nodes = Array.isArray(connection?.nodes) ? connection.nodes : [];
     orders.push(...nodes);
     if (!connection?.pageInfo?.hasNextPage || !connection?.pageInfo?.endCursor) break;

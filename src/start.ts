@@ -2,6 +2,20 @@ import { createStart, createCsrfMiddleware, createMiddleware } from "@tanstack/r
 
 import { renderErrorPage } from "./lib/error-page";
 import { attachSupabaseAuth } from "@/integrations/supabase/auth-attacher";
+import {
+  handleSocialProofDataRequest,
+  handleSocialProofLoaderRequest,
+} from "./lib/popup-social-proof.server";
+
+const SOCIAL_PROOF_DATA_PATH = "/api/popup/social-proof";
+const SOCIAL_PROOF_LOADER_PATH = "/api/popup/social-proof-loader.js";
+
+const publicSocialProofMiddleware = createMiddleware().server(async ({ request, next }) => {
+  const pathname = new URL(request.url).pathname;
+  if (pathname === SOCIAL_PROOF_DATA_PATH) return handleSocialProofDataRequest(request);
+  if (pathname === SOCIAL_PROOF_LOADER_PATH) return handleSocialProofLoaderRequest(request);
+  return next();
+});
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
   try {
@@ -27,5 +41,5 @@ const csrfMiddleware = createCsrfMiddleware({
 
 export const startInstance = createStart(() => ({
   functionMiddleware: [attachSupabaseAuth],
-  requestMiddleware: [errorMiddleware, csrfMiddleware],
+  requestMiddleware: [publicSocialProofMiddleware, errorMiddleware, csrfMiddleware],
 }));

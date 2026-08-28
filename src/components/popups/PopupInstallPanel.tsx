@@ -7,7 +7,7 @@ import { getPopupInstallInfo } from "@/lib/popup.functions";
 
 export function PopupInstallPanel() {
   const get = useServerFn(getPopupInstallInfo);
-  const { data, refetch } = useQuery({ queryKey: ["popup-install-info"], queryFn: () => get() });
+  const { data, refetch, isFetching } = useQuery({ queryKey: ["popup-install-info"], queryFn: () => get() });
 
   const lastVisit = data?.lastVisitAt ? new Date(data.lastVisitAt) : null;
   const minutesAgo = lastVisit ? Math.round((Date.now() - lastVisit.getTime()) / 60000) : null;
@@ -27,8 +27,17 @@ export function PopupInstallPanel() {
             <code>&lt;/body&gt;</code>) e abra o site pra confirmar aqui.
           </p>
         )}
-        <Button size="sm" variant="outline" onClick={() => refetch()}>
-          Verificar novamente
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={isFetching}
+          onClick={async () => {
+            const result = await refetch();
+            const visitAt = result.data?.lastVisitAt;
+            toast.success(visitAt ? `Verificado: última visita em ${new Date(visitAt).toLocaleString("pt-BR")}.` : "Verificado: ainda nenhuma visita registrada.");
+          }}
+        >
+          {isFetching ? "Verificando..." : "Verificar novamente"}
         </Button>
       </div>
 

@@ -20,6 +20,7 @@ const context: CRMAdvancedCustomerContext = {
     rawFinancialStatuses: new Set(["PAID"]),
     validFinancialStatuses: new Set(["PAID"]),
     cancelledOrderCount: 0,
+    rawFulfillmentStatuses: new Set(["FULFILLED"]),
   },
   purchasedProducts: new Map([
     ["p-brinco", {

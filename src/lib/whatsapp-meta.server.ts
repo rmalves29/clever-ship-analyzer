@@ -565,6 +565,26 @@ export async function findAutomationStepCampaignId(automationId: string, automat
   return (data as { id: string } | null)?.id ?? null;
 }
 
+/** Só pra automações com aprovação: acha uma campanha da etapa que ainda está "aguardando
+ *  aprovação" — um lote novo entra nela (soma no mesmo pedido de aprovação) em vez de abrir um
+ *  outro. Depois que o lote é aprovado ou rejeitado, a decisão já foi tomada: não reabre a
+ *  campanha antiga (rejeitada = decisão encerrada; enviando/finalizada = passou do ponto de
+ *  revisão, um lote novo não pode entrar sem passar pela aprovação também), então o próximo lote
+ *  cria uma campanha nova pra ser revisado por si só. */
+export async function findPendingApprovalCampaignId(automationId: string, automationStepId: string): Promise<{ id: string; totalDestinatarios: number } | null> {
+  const supabaseAdmin = await admin();
+  const { data } = await (supabaseAdmin.from("whatsapp_campaigns") as any)
+    .select("id, total_destinatarios")
+    .eq("automation_id", automationId)
+    .eq("automation_step_id", automationStepId)
+    .eq("status", "aguardando_aprovacao")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return null;
+  return { id: data.id as string, totalDestinatarios: Number(data.total_destinatarios ?? 0) };
+}
+
 /** Resolve os destinatários reais de um segmento — inclui a lógica especial de Carrinho Abandonado
  *  (que puxa de `shopify_abandoned_checkouts`, não de `shopify_customers`). Reaproveitado por
  *  `dispatchCampaign` e pelo motor de automação (`automations-engine.server.ts`). */

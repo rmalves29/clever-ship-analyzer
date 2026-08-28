@@ -25,6 +25,7 @@ const buyer: CRMAdvancedCustomerContext = {
     firstOrderAt: "2026-08-20T12:00:00-03:00", lastOrderAt: "2026-08-24T12:00:00-03:00",
     validOrderIds: new Set(["o1", "o2"]), rawFinancialStatuses: new Set(["PAID", "REFUNDED"]),
     validFinancialStatuses: new Set(["PAID"]), cancelledOrderCount: 1,
+    rawFulfillmentStatuses: new Set(["FULFILLED"]),
   },
   purchasedProducts: new Map([["p-brinco", {
     productId: "p-brinco", title: "Brinco Londres", skus: new Set(["BR-LON"]),
@@ -62,6 +63,7 @@ const lead: CRMAdvancedCustomerContext = {
     customerId: "c2", validOrderCount: 0, totalSpent: 0, averageTicket: 0,
     firstOrderAt: null, lastOrderAt: null, validOrderIds: new Set(), rawFinancialStatuses: new Set(),
     validFinancialStatuses: new Set(), cancelledOrderCount: 0,
+    rawFulfillmentStatuses: new Set(),
   },
   purchasedProducts: new Map(),
   productSpentById: new Map(),
@@ -99,6 +101,7 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
   { field: "ticket_medio", operator: "eq", value: 150 },
   { field: "recorrencia", operator: "eq", value: "sim" },
   { field: "status_pagamento", operator: "eq", value: "paid" },
+  { field: "status_entrega", operator: "eq", value: "fulfilled" },
   { field: "perfil", operator: "eq", value: "carrinho" },
   { field: "data_pedido_hoje", operator: "eq", value: "sim" },
   { field: "data_pedido_24h", operator: "eq", value: "sim" },
@@ -127,8 +130,8 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
 ];
 
 describe("catálogo confiável de filtros do CRM", () => {
-  it("expõe somente os 36 filtros implementados no motor", () => {
-    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(36);
+  it("expõe somente os 37 filtros implementados no motor", () => {
+    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(37);
     expect(new Set(SUPPORTED_SEGMENT_FIELD_IDS)).toEqual(new Set(cases.map((item) => item.field)));
   });
 

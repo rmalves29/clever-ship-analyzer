@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getCampaigns, getCampaignsFailureBreakdown, listAutomations } from "@/lib/whatsapp-meta.functions";
-import { brl } from "@/lib/crm-mock";
+import { brl, brlCents } from "@/lib/crm-mock";
 import { AutomationReentryControl } from "@/components/whatsapp/AutomationReentryControl";
 import { QueueHealthPanel } from "@/components/whatsapp/QueueHealthPanel";
 import { PresendAuditPanel } from "@/components/whatsapp/PresendAuditPanel";
@@ -99,7 +99,7 @@ export function ReportsTab() {
         <div className="surface-card bg-foreground p-5 text-background">
           <p className="text-xs text-background/70">ROAS estimado</p>
           <p className="mt-2 text-3xl font-bold">{roas !== null ? `${roas.toFixed(1)}x` : "—"}</p>
-          <p className="mt-1 text-xs text-background/70">{brl(totals.custo)} de custo estimado</p>
+          <p className="mt-1 text-xs text-background/70">{brlCents(totals.custo)} de custo estimado</p>
         </div>
       </div>
 

@@ -6,6 +6,7 @@ export type CRMFilterKind =
   | "date"
   | "boolean"
   | "status"
+  | "fulfillment_status"
   | "profile"
   | "rfm"
   | "product"
@@ -43,6 +44,7 @@ export const CRM_FILTER_OPERATORS: Record<CRMFilterKind, readonly string[]> = {
   date: ["before", "after", "last_days", "older_than_days", "between_days", "on", "eq"],
   boolean: ["eq", "neq"],
   status: ["eq", "neq"],
+  fulfillment_status: ["eq", "neq"],
   profile: ["eq", "neq"],
   rfm: ["eq", "neq", "in", "not_in"],
   product: ["bought", "not_bought"],
@@ -63,6 +65,11 @@ export const CRM_FILTER_OPERATORS: Record<CRMFilterKind, readonly string[]> = {
 export const CRM_STATUS_FILTER_VALUES = [
   "paid", "partially_paid", "pending", "authorized", "refunded", "partially_refunded",
   "voided", "expired", "unpaid", "cancelled", "canceled",
+] as const;
+
+export const CRM_FULFILLMENT_STATUS_FILTER_VALUES = [
+  "fulfilled", "unfulfilled", "in_progress", "partially_fulfilled",
+  "on_hold", "scheduled", "pending_fulfillment", "restocked", "open",
 ] as const;
 
 export const CRM_PROFILE_FILTER_VALUES = [
@@ -96,6 +103,7 @@ export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
       { id: "ticket_medio", label: "Ticket Médio de Compras Válidas", kind: "number", description: "Permite valor mínimo, máximo ou faixa." },
       { id: "recorrencia", label: "Cliente Recorrente (2+ Compras Válidas)", kind: "boolean", description: "Sim quando o cliente possui duas ou mais compras válidas." },
       { id: "status_pagamento", label: "Status do Pagamento", kind: "status", description: "Cancelado considera também cancelled_at." },
+      { id: "status_entrega", label: "Status da Entrega", kind: "fulfillment_status", description: "Status de envio/fulfillment de qualquer pedido do cliente na Shopify." },
       { id: "perfil", label: "Perfil do Cliente", kind: "profile" },
       { id: "data_pedido_hoje", label: "Compra Válida Realizada Hoje", kind: "boolean" },
       { id: "data_pedido_24h", label: "Compra Válida nas Últimas 24h", kind: "boolean", description: "Janela móvel de 24 horas." },
@@ -299,6 +307,9 @@ export function validateCRMFilterCondition(condition: unknown): string | null {
   }
   if (field.kind === "status") {
     return (CRM_STATUS_FILTER_VALUES as readonly string[]).includes(String(value ?? "").trim().toLowerCase()) ? null : `Status inválido para ${field.label}.`;
+  }
+  if (field.kind === "fulfillment_status") {
+    return (CRM_FULFILLMENT_STATUS_FILTER_VALUES as readonly string[]).includes(String(value ?? "").trim().toLowerCase()) ? null : `Status de entrega inválido para ${field.label}.`;
   }
   if (field.kind === "profile") {
     return (CRM_PROFILE_FILTER_VALUES as readonly string[]).includes(String(value ?? "").trim().toLowerCase()) ? null : `Perfil inválido para ${field.label}.`;

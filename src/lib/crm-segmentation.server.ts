@@ -79,7 +79,7 @@ async function loadOrders(): Promise<CRMOrderForSegmentation[]> {
   const rows: CRMOrderForSegmentation[] = [];
   for (let page = 0; ; page++) {
     const { data, error } = await (db.from("shopify_orders") as any)
-      .select("id, customer_id, total_price, processed_at, created_at, financial_status, cancelled_at")
+      .select("id, customer_id, total_price, processed_at, created_at, financial_status, cancelled_at, fulfillment_status")
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
     if (error) throw new Error(`Erro ao buscar pedidos do CRM: ${error.message}`);
     if (!data || data.length === 0) break;
@@ -92,6 +92,7 @@ async function loadOrders(): Promise<CRMOrderForSegmentation[]> {
         processedAt: String(row.processed_at ?? row.created_at ?? ""),
         financialStatus: row.financial_status,
         cancelledAt: row.cancelled_at,
+        fulfillmentStatus: row.fulfillment_status,
       });
     }
     if (data.length < PAGE_SIZE) break;

@@ -217,7 +217,11 @@ export async function resolveNextActiveStep(
 
 async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Promise<number> {
   const supabaseAdmin = await admin();
-  const [{ resolveSegmentRecipients, createCampaignRow }, { resolveWhatsappSegmentCustomerIds }, { captureAutomationEventContext }] =
+  const [
+    { resolveSegmentRecipients, createCampaignRow, findPendingApprovalCampaignId },
+    { resolveWhatsappSegmentCustomerIds },
+    { captureAutomationEventContext },
+  ] =
     await Promise.all([
       import("./whatsapp-meta.server"),
       import("./whatsapp-segment-resolver.server"),
@@ -266,24 +270,40 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
   if (eligibleRecipients.length === 0) return 0;
 
   if (automation.requer_aprovacao) {
-    const created = await createCampaignRow(
-      {
-        nome: `${automation.nome} — novo lote`,
-        segmentType: automation.segment_type,
-        segmentId: automation.segment_id || undefined,
-        messageType: firstStep.messageType,
-        templateName: firstStep.templateName,
-        templateLanguage: firstStep.templateLanguage,
-        bodyParams: firstStep.bodyParams,
-        bodyParamTokens: firstStep.bodyParamTokens,
-        couponCode: firstStep.couponCode ?? undefined,
-        origem: "automacao",
-        automationId: automation.id,
-        totalDestinatariosOverride: eligibleRecipients.length,
-      },
-      "aguardando_aprovacao",
-    );
-    if (!created.success) return 0;
+    // Unifica com a mesma campanha ainda aguardando aprovação dessa etapa, se existir — o lote
+    // novo entra na mesma revisão em vez de abrir outra (padrão igual ao envio direto, que soma
+    // tudo numa campanha só). Uma vez decidida (aprovada/rejeitada), não reabre: o próximo lote
+    // ganha campanha nova, porque só dá pra somar em algo que ainda não passou pela aprovação.
+    const pending = await findPendingApprovalCampaignId(automation.id, firstStep.id);
+    let campaignId: string;
+    if (pending) {
+      campaignId = pending.id;
+      const { error: bumpError } = await (supabaseAdmin.from("whatsapp_campaigns") as any)
+        .update({ total_destinatarios: pending.totalDestinatarios + eligibleRecipients.length })
+        .eq("id", campaignId);
+      if (bumpError) throw new Error(`Erro ao atualizar campanha de aprovação: ${bumpError.message}`);
+    } else {
+      const created = await createCampaignRow(
+        {
+          nome: automation.nome,
+          segmentType: automation.segment_type,
+          segmentId: automation.segment_id || undefined,
+          messageType: firstStep.messageType,
+          templateName: firstStep.templateName,
+          templateLanguage: firstStep.templateLanguage,
+          bodyParams: firstStep.bodyParams,
+          bodyParamTokens: firstStep.bodyParamTokens,
+          couponCode: firstStep.couponCode ?? undefined,
+          origem: "automacao",
+          automationId: automation.id,
+          automationStepId: firstStep.id,
+          totalDestinatariosOverride: eligibleRecipients.length,
+        },
+        "aguardando_aprovacao",
+      );
+      if (!created.success) return 0;
+      campaignId = created.campaignId;
+    }
 
     const rows = eligibleRecipients.map((r) => ({
       automation_id: automation.id,
@@ -292,7 +312,7 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
       status: "pending_approval",
       current_step_id: firstStep.id,
       next_run_at: null,
-      campaign_id: created.campaignId,
+      campaign_id: campaignId,
       event_context: r.context,
       context_key: r.contextKey,
       enrollment_key: r.enrollmentKey,

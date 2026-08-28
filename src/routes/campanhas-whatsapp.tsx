@@ -20,7 +20,7 @@ import {
   runAutomationNow,
   toggleAutomation,
 } from "@/lib/whatsapp-meta.functions";
-import { brl } from "@/lib/crm-mock";
+import { brl, brlCents } from "@/lib/crm-mock";
 import { AutomationDialog, SEGMENT_LABEL, type AutomationSeed } from "@/components/crm/AutomationDialog";
 import { WhatsappSendDialog, type SendDialogSeed } from "@/components/whatsapp/WhatsappSendDialog";
 import { CampaignDetailDialog } from "@/components/whatsapp/CampaignDetailDialog";
@@ -222,7 +222,7 @@ function CampanhasWhatsapp() {
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Envios" value={String(totalEnviadas)} hint="Mensagens enviadas no total" />
           <StatCard label="Receita" value={brl(totalReceita)} hint="Valor de pedidos atribuídos" />
-          <StatCard label="Custo estimado" value={brl(totalCusto)} hint="Enviadas × custo configurado por tipo" />
+          <StatCard label="Custo estimado" value={brlCents(totalCusto)} hint="Enviadas × custo configurado por tipo" />
           <StatCard label="ROAS estimado" value={roas !== null ? `${roas.toFixed(1)}x` : "—"} hint="Receita ÷ custo" dark />
         </div>
 
@@ -310,7 +310,7 @@ function CampanhasWhatsapp() {
                       <td className="px-4 py-3">{c.lidas}</td>
                       <td className="px-4 py-3">{c.vendas}</td>
                       <td className="px-4 py-3 font-semibold">{brl(c.receita)}</td>
-                      <td className="px-4 py-3">{brl(c.custo)}</td>
+                      <td className="px-4 py-3">{brlCents(c.custo)}</td>
                       <td className="px-4 py-3 text-right">
                         <Button variant="ghost" size="icon" className="size-8" onClick={() => setDetailId(c.id)}>
                           <Eye className="size-4" />

@@ -7,6 +7,7 @@ export type CRMOrderForSegmentation = {
   processedAt: string;
   financialStatus?: string | null;
   cancelledAt?: string | null;
+  fulfillmentStatus?: string | null;
 };
 
 export type CRMOrderItemForSegmentation = {
@@ -49,6 +50,7 @@ export type PurchaseMetrics = {
   rawFinancialStatuses: Set<string>;
   validFinancialStatuses: Set<string>;
   cancelledOrderCount: number;
+  rawFulfillmentStatuses: Set<string>;
 };
 
 export type ProductPurchaseSummary = {
@@ -94,6 +96,7 @@ const EMPTY_METRICS = (customerId: string): PurchaseMetrics => ({
   rawFinancialStatuses: new Set<string>(),
   validFinancialStatuses: new Set<string>(),
   cancelledOrderCount: 0,
+  rawFulfillmentStatuses: new Set<string>(),
 });
 
 function normalizeStatus(status: unknown): string {
@@ -127,6 +130,8 @@ export function buildPurchaseMetricsIndex(orders: CRMOrderForSegmentation[]): Ma
     const status = normalizeStatus(order.financialStatus);
     if (status) metrics.rawFinancialStatuses.add(status);
     if (order.cancelledAt || status === "CANCELLED" || status === "CANCELED") metrics.cancelledOrderCount += 1;
+    const fulfillmentStatus = normalizeStatus(order.fulfillmentStatus);
+    if (fulfillmentStatus) metrics.rawFulfillmentStatuses.add(fulfillmentStatus);
 
     if (isRevenueValidOrder(order)) {
       const date = new Date(order.processedAt);
@@ -361,6 +366,12 @@ function paymentStatusMatches(context: CRMCustomerContext, targetRaw: unknown): 
     : context.metrics.rawFinancialStatuses.has(target);
 }
 
+function fulfillmentStatusMatches(context: CRMCustomerContext, targetRaw: unknown): boolean {
+  const target = normalizeStatus(targetRaw);
+  if (!target) return false;
+  return context.metrics.rawFulfillmentStatuses.has(target);
+}
+
 function isBooleanToken(value: unknown): boolean {
   return ["sim", "nao", "true", "false", "1", "0", "yes", "no"].includes(String(value ?? "").trim().toLowerCase());
 }
@@ -411,6 +422,11 @@ export function matchesSegmentCondition(context: CRMCustomerContext, condition: 
 
   if (field === "status_pagamento") {
     const matches = paymentStatusMatches(context, value);
+    return operator === "neq" ? !matches : matches;
+  }
+
+  if (field === "status_entrega") {
+    const matches = fulfillmentStatusMatches(context, value);
     return operator === "neq" ? !matches : matches;
   }
 

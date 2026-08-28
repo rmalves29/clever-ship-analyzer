@@ -179,7 +179,7 @@ function operatorsForField(field: CRMFilterField) {
   if (field.kind === "product" || field.kind === "product_sku" || field.kind === "product_taxonomy") return OPERATORS.bought;
   if (field.kind === "campaign_behavior") return OPERATORS.campaign;
   if (field.kind === "automation_behavior") return OPERATORS.automation;
-  if (["boolean", "status", "profile"].includes(field.kind)) return OPERATORS.exact;
+  if (["boolean", "status", "fulfillment_status", "profile"].includes(field.kind)) return OPERATORS.exact;
   return OPERATORS.string;
 }
 
@@ -562,6 +562,21 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
         <SelectItem value="expired">Expirado</SelectItem>
         <SelectItem value="unpaid">Não Pago</SelectItem>
         <SelectItem value="cancelled">Cancelado</SelectItem>
+      </SelectContent>
+    </Select>;
+
+    if (field.kind === "fulfillment_status") return <Select value={String(condition.value || "")} onValueChange={setValue}>
+      <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar status de entrega..." /></SelectTrigger>
+      <SelectContent>
+        <SelectItem value="fulfilled">Atendido</SelectItem>
+        <SelectItem value="unfulfilled">Não Atendido</SelectItem>
+        <SelectItem value="in_progress">Em Andamento</SelectItem>
+        <SelectItem value="partially_fulfilled">Parcialmente Atendido</SelectItem>
+        <SelectItem value="on_hold">Em Espera</SelectItem>
+        <SelectItem value="scheduled">Agendado</SelectItem>
+        <SelectItem value="pending_fulfillment">Pendente</SelectItem>
+        <SelectItem value="restocked">Reestocado</SelectItem>
+        <SelectItem value="open">Aberto</SelectItem>
       </SelectContent>
     </Select>;
 

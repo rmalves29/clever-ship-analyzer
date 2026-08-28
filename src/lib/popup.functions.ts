@@ -23,7 +23,7 @@ const popupCampaignSchema = z.object({
   body_text: z.string().min(1),
   button_text: z.string().min(1),
   image_url: z.string().url().nullable().optional(),
-  trigger_time_seconds: z.number().int().positive().nullable(),
+  trigger_time_seconds: z.number().int().nonnegative().nullable(),
   trigger_exit_intent: z.boolean(),
   reshow_mode: z.enum(["once_ever", "after_days"]),
   reshow_after_days: z.number().int().positive().nullable(),
@@ -36,15 +36,32 @@ const popupCampaignSchema = z.object({
   template_name: z.string().nullable().optional(),
   template_language: z.string().nullable().optional(),
   template_var_mapping: z.record(z.string(), z.string()).optional(),
+  design_config: z.unknown().optional(),
 });
+
+async function deactivateOtherPopups(supabaseAdmin: any, keepId?: string) {
+  let query = supabaseAdmin.from("popup_campaigns" as any).update({ is_active: false, updated_at: new Date().toISOString() }).eq("is_active", true);
+  if (keepId) query = query.neq("id", keepId);
+  const { error } = await query;
+  if (error) throw error;
+}
 
 export const savePopupCampaign = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => popupCampaignSchema.parse(data))
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { id, ...rest } = data;
-    const payload = { ...rest, updated_at: new Date().toISOString() };
+    const [{ supabaseAdmin }, { normalizePopupDesignConfig }] = await Promise.all([
+      import("@/integrations/supabase/client.server"),
+      import("./popup-designer"),
+    ]);
+    const { id, design_config, ...rest } = data;
+    const payload = {
+      ...rest,
+      design_config: normalizePopupDesignConfig(design_config),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (data.is_active) await deactivateOtherPopups(supabaseAdmin, id);
 
     if (id) {
       const { error } = await (supabaseAdmin.from("popup_campaigns" as any) as any).update(payload).eq("id", id);
@@ -64,6 +81,7 @@ export const togglePopupCampaign = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.object({ id: z.string().uuid(), is_active: z.boolean() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    if (data.is_active) await deactivateOtherPopups(supabaseAdmin, data.id);
     const { error } = await (supabaseAdmin.from("popup_campaigns" as any) as any)
       .update({ is_active: data.is_active, updated_at: new Date().toISOString() })
       .eq("id", data.id);

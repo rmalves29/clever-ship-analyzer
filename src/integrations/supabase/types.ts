@@ -1181,6 +1181,170 @@ export type Database = {
         }
         Relationships: []
       }
+      popup_campaigns: {
+        Row: {
+          body_text: string
+          button_text: string
+          collect_name: boolean
+          coupon_mode: string
+          created_at: string
+          design_config: Json
+          discount_expires_days: number | null
+          discount_type: string | null
+          discount_value: number | null
+          fixed_coupon_code: string | null
+          headline: string
+          id: string
+          image_url: string | null
+          is_active: boolean
+          name: string
+          reshow_after_days: number | null
+          reshow_mode: string
+          template_id: string | null
+          template_language: string | null
+          template_name: string | null
+          template_var_mapping: Json
+          trigger_exit_intent: boolean
+          trigger_time_seconds: number | null
+          updated_at: string
+        }
+        Insert: {
+          body_text?: string
+          button_text?: string
+          collect_name?: boolean
+          coupon_mode?: string
+          created_at?: string
+          design_config?: Json
+          discount_expires_days?: number | null
+          discount_type?: string | null
+          discount_value?: number | null
+          fixed_coupon_code?: string | null
+          headline?: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          name: string
+          reshow_after_days?: number | null
+          reshow_mode?: string
+          template_id?: string | null
+          template_language?: string | null
+          template_name?: string | null
+          template_var_mapping?: Json
+          trigger_exit_intent?: boolean
+          trigger_time_seconds?: number | null
+          updated_at?: string
+        }
+        Update: {
+          body_text?: string
+          button_text?: string
+          collect_name?: boolean
+          coupon_mode?: string
+          created_at?: string
+          design_config?: Json
+          discount_expires_days?: number | null
+          discount_type?: string | null
+          discount_value?: number | null
+          fixed_coupon_code?: string | null
+          headline?: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          name?: string
+          reshow_after_days?: number | null
+          reshow_mode?: string
+          template_id?: string | null
+          template_language?: string | null
+          template_name?: string | null
+          template_var_mapping?: Json
+          trigger_exit_intent?: boolean
+          trigger_time_seconds?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      popup_leads: {
+        Row: {
+          coupon_code: string | null
+          created_at: string
+          customer_row_id: string | null
+          first_captured_at: string
+          id: string
+          last_captured_at: string
+          last_visit_at: string | null
+          name: string | null
+          phone: string
+          popup_campaign_id: string | null
+          updated_at: string
+          visitor_token: string | null
+        }
+        Insert: {
+          coupon_code?: string | null
+          created_at?: string
+          customer_row_id?: string | null
+          first_captured_at?: string
+          id?: string
+          last_captured_at?: string
+          last_visit_at?: string | null
+          name?: string | null
+          phone: string
+          popup_campaign_id?: string | null
+          updated_at?: string
+          visitor_token?: string | null
+        }
+        Update: {
+          coupon_code?: string | null
+          created_at?: string
+          customer_row_id?: string | null
+          first_captured_at?: string
+          id?: string
+          last_captured_at?: string
+          last_visit_at?: string | null
+          name?: string | null
+          phone?: string
+          popup_campaign_id?: string | null
+          updated_at?: string
+          visitor_token?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "popup_leads_popup_campaign_id_fkey"
+            columns: ["popup_campaign_id"]
+            isOneToOne: false
+            referencedRelation: "popup_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      popup_social_proof_settings: {
+        Row: {
+          delay_after_capture_seconds: number
+          enabled: boolean
+          id: number
+          interval_seconds: number
+          position: string
+          updated_at: string
+          visible_seconds: number
+        }
+        Insert: {
+          delay_after_capture_seconds?: number
+          enabled?: boolean
+          id?: number
+          interval_seconds?: number
+          position?: string
+          updated_at?: string
+          visible_seconds?: number
+        }
+        Update: {
+          delay_after_capture_seconds?: number
+          enabled?: boolean
+          id?: number
+          interval_seconds?: number
+          position?: string
+          updated_at?: string
+          visible_seconds?: number
+        }
+        Relationships: []
+      }
       shopify_abandoned_checkouts: {
         Row: {
           checkout_url: string | null
@@ -1453,6 +1617,27 @@ export type Database = {
           },
         ]
       }
+      site_visits: {
+        Row: {
+          created_at: string
+          id: string
+          page_url: string | null
+          visitor_token: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          page_url?: string | null
+          visitor_token: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          page_url?: string | null
+          visitor_token?: string
+        }
+        Relationships: []
+      }
       store_settings: {
         Row: {
           ai_marketing_playbook: string | null
@@ -1491,6 +1676,7 @@ export type Database = {
           shopify_client_id: string | null
           shopify_client_secret: string | null
           shopify_store_domain: string
+          storefront_domain: string | null
           sync_status: string | null
           total_orders_imported: number | null
           uazapi_admin_token: string | null
@@ -1549,6 +1735,7 @@ export type Database = {
           shopify_client_id?: string | null
           shopify_client_secret?: string | null
           shopify_store_domain: string
+          storefront_domain?: string | null
           sync_status?: string | null
           total_orders_imported?: number | null
           uazapi_admin_token?: string | null
@@ -1607,6 +1794,7 @@ export type Database = {
           shopify_client_id?: string | null
           shopify_client_secret?: string | null
           shopify_store_domain?: string
+          storefront_domain?: string | null
           sync_status?: string | null
           total_orders_imported?: number | null
           uazapi_admin_token?: string | null
@@ -1635,10 +1823,13 @@ export type Database = {
           automation_id: string
           campaign_id: string | null
           completed_at: string | null
+          context_key: string | null
           created_at: string
           current_step_id: string
           customer_id: string
           enrolled_at: string
+          enrollment_key: string
+          event_context: Json
           id: string
           last_error: string | null
           next_run_at: string | null
@@ -1650,10 +1841,13 @@ export type Database = {
           automation_id: string
           campaign_id?: string | null
           completed_at?: string | null
+          context_key?: string | null
           created_at?: string
           current_step_id: string
           customer_id: string
           enrolled_at?: string
+          enrollment_key?: string
+          event_context?: Json
           id?: string
           last_error?: string | null
           next_run_at?: string | null
@@ -1665,10 +1859,13 @@ export type Database = {
           automation_id?: string
           campaign_id?: string | null
           completed_at?: string | null
+          context_key?: string | null
           created_at?: string
           current_step_id?: string
           customer_id?: string
           enrolled_at?: string
+          enrollment_key?: string
+          event_context?: Json
           id?: string
           last_error?: string | null
           next_run_at?: string | null
@@ -1709,6 +1906,8 @@ export type Database = {
           last_run_at: string | null
           nome: string
           origem: string
+          reentry_after_days: number | null
+          reentry_mode: string
           requer_aprovacao: boolean
           segment_id: string | null
           segment_type: string
@@ -1724,6 +1923,8 @@ export type Database = {
           last_run_at?: string | null
           nome: string
           origem?: string
+          reentry_after_days?: number | null
+          reentry_mode?: string
           requer_aprovacao?: boolean
           segment_id?: string | null
           segment_type: string
@@ -1739,6 +1940,8 @@ export type Database = {
           last_run_at?: string | null
           nome?: string
           origem?: string
+          reentry_after_days?: number | null
+          reentry_mode?: string
           requer_aprovacao?: boolean
           segment_id?: string | null
           segment_type?: string
@@ -1808,6 +2011,8 @@ export type Database = {
           approved_at: string | null
           approved_by: string | null
           automation_id: string | null
+          automation_step_id: string | null
+          body_param_tokens: Json | null
           body_params: Json
           campaign_tag: string | null
           coupon_code: string | null
@@ -1832,6 +2037,8 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           automation_id?: string | null
+          automation_step_id?: string | null
+          body_param_tokens?: Json | null
           body_params?: Json
           campaign_tag?: string | null
           coupon_code?: string | null
@@ -1856,6 +2063,8 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           automation_id?: string | null
+          automation_step_id?: string | null
+          body_param_tokens?: Json | null
           body_params?: Json
           campaign_tag?: string | null
           coupon_code?: string | null
@@ -2080,6 +2289,7 @@ export type Database = {
       whatsapp_message_queue: {
         Row: {
           attempts: number
+          body_param_tokens: Json | null
           body_params: Json
           campaign_id: string | null
           created_at: string
@@ -2105,6 +2315,7 @@ export type Database = {
         }
         Insert: {
           attempts?: number
+          body_param_tokens?: Json | null
           body_params?: Json
           campaign_id?: string | null
           created_at?: string
@@ -2130,6 +2341,7 @@ export type Database = {
         }
         Update: {
           attempts?: number
+          body_param_tokens?: Json | null
           body_params?: Json
           campaign_id?: string | null
           created_at?: string
@@ -2212,6 +2424,7 @@ export type Database = {
         Args: { p_limit: number; p_worker: string }
         Returns: {
           attempts: number
+          body_param_tokens: Json | null
           body_params: Json
           campaign_id: string | null
           created_at: string

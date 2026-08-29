@@ -888,8 +888,31 @@ export async function listCampaignsWithMetrics() {
   }
 
   // ---------- Atribuição de vendas: cupom (exato) tem prioridade; senão, telefone + janela de dias ----------
+  // Cupom fixo por campanha (recompra, aniversário etc.) — um código só, configurado na campanha.
   const couponToCampaign = new Map<string, string>();
   for (const c of campaignList) if (c.coupon_code) couponToCampaign.set(c.coupon_code.toUpperCase(), c.id);
+
+  // Cupons dinâmicos (cashback: 1 código único por pedido, não dá pra configurar 1 código fixo na
+  // campanha) — o código exato já fica congelado no contexto do run que mandou aquela mensagem,
+  // então liga o código diretamente à campanha que o enviou, sem depender de janela de dias (o
+  // cashback só libera pra uso 3 dias depois da compra e vale por até 30, bem além da janela
+  // usada no fallback por telefone abaixo). O contexto congelado inclui o cashback do pedido em
+  // QUALQUER automação disparada por aquele pedido (é um dado geral do evento, não específico da
+  // automação) — então só conta quando a campanha realmente usa {{CUPOM_CASHBACK}} na mensagem,
+  // senão uma automação que nem menciona cashback (ex.: confirmação de compra) roubaria o crédito.
+  const cashbackCampaignIds = new Set(
+    campaignList.filter((c) => Array.isArray(c.body_params) && c.body_params.includes("{{CUPOM_CASHBACK}}")).map((c) => c.id),
+  );
+  const { data: cashbackRunRows } = await supabaseAdmin
+    .from("whatsapp_automation_runs")
+    .select("campaign_id, event_context")
+    .not("campaign_id", "is", null)
+    .not("event_context->cashback->>code", "is", null);
+  for (const row of (cashbackRunRows ?? []) as { campaign_id: string; event_context: any }[]) {
+    if (!cashbackCampaignIds.has(row.campaign_id)) continue;
+    const code = String(row.event_context?.cashback?.code ?? "").trim();
+    if (code) couponToCampaign.set(code.toUpperCase(), row.campaign_id);
+  }
 
   const { data: orders } = await supabaseAdmin
     .from("shopify_orders")

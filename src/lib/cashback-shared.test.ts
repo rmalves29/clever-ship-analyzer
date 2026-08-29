@@ -62,11 +62,23 @@ describe("datas e limites", () => {
     expect(a.minimumPurchase).toBe(75);
   });
 
-  it("gera código estável por pedido", () => {
-    const code = buildCashbackCode("gid://shopify/Order/6123456789");
-    expect(code).toBe(buildCashbackCode("gid://shopify/Order/6123456789"));
-    expect(code).not.toBe(buildCashbackCode("gid://shopify/Order/6123456780"));
-    expect(code.startsWith("CASHBACK")).toBe(true);
+  it("gera código estável e legível por pedido: nº do pedido + dia/mês + primeiro nome", () => {
+    const order = { orderNumber: "#1292", purchasedAt: "2026-08-29T01:50:00.000Z", customerName: "Rafael Alves" };
+    const code = buildCashbackCode(order);
+    expect(code).toBe(buildCashbackCode(order));
+    expect(code).toBe("1292-2808-RAFAEL");
+  });
+
+  it("muda o código quando o pedido, a data ou o nome mudam", () => {
+    const base = { orderNumber: "#1292", purchasedAt: "2026-08-29T01:50:00.000Z", customerName: "Rafael Alves" };
+    expect(buildCashbackCode(base)).not.toBe(buildCashbackCode({ ...base, orderNumber: "#1293" }));
+    expect(buildCashbackCode(base)).not.toBe(buildCashbackCode({ ...base, purchasedAt: "2026-08-30T01:50:00.000Z" }));
+    expect(buildCashbackCode(base)).not.toBe(buildCashbackCode({ ...base, customerName: "Ana Souza" }));
+  });
+
+  it("usa 'CLIENTE' quando não há nome", () => {
+    const code = buildCashbackCode({ orderNumber: "#1", purchasedAt: "2026-08-29T01:50:00.000Z", customerName: null });
+    expect(code).toBe("1-2808-CLIENTE");
   });
 });
 

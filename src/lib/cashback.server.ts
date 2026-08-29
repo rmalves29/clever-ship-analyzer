@@ -139,7 +139,7 @@ export async function reconcileCashbackForOrder(
   const purchasedAt = order.purchasedAt as string;
   const calc = calculateCashback(order.totalPrice, purchasedAt, config);
   if (calc.cashbackAmount <= 0) return { action: "skipped", reason: "Cashback calculado é zero." };
-  const code = buildCashbackCode(order.id);
+  const code = buildCashbackCode({ orderNumber: order.orderNumber, purchasedAt, customerName: order.customerName });
 
   const payload = {
     shopify_order_id: order.id,

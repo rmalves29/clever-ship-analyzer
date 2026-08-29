@@ -88,15 +88,40 @@ export function calculateCashback(
   return { cashbackAmount, minimumPurchase, startsAt, endsAt };
 }
 
-/** Código estável por pedido: repetir a sincronização gera exatamente o mesmo código,
+function purchaseDayMonth(purchasedAt: string | Date): string {
+  const date = purchasedAt instanceof Date ? purchasedAt : new Date(purchasedAt);
+  const safeDate = Number.isFinite(date.getTime()) ? date : new Date();
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+  }).formatToParts(safeDate);
+  const day = parts.find((p) => p.type === "day")?.value ?? "00";
+  const month = parts.find((p) => p.type === "month")?.value ?? "00";
+  return `${day}${month}`;
+}
+
+function firstNameToken(customerName: string | null | undefined): string {
+  const first = String(customerName ?? "").trim().split(/\s+/)[0] ?? "";
+  const cleaned = first
+    .normalize("NFD")
+    .replace(/[^A-Za-z]/g, "")
+    .toUpperCase();
+  return cleaned || "CLIENTE";
+}
+
+/** Código legível por pedido: nº do pedido + dia/mês da compra (fuso de São Paulo) + primeiro
+ *  nome da cliente. Determinístico — repetir a sincronização gera exatamente o mesmo código,
  *  o que soma com o unique de shopify_order_id para garantir idempotência. */
-export function buildCashbackCode(shopifyOrderId: string): string {
-  const digits = String(shopifyOrderId).replace(/\D/g, "");
-  const numeric = digits.slice(-12);
-  const base = numeric ? BigInt(numeric).toString(36).toUpperCase() : "0";
-  let checksum = 0;
-  for (const char of String(shopifyOrderId)) checksum = (checksum * 31 + char.charCodeAt(0)) % 1296;
-  return `CASHBACK${base}${checksum.toString(36).toUpperCase().padStart(2, "0")}`;
+export function buildCashbackCode(order: {
+  orderNumber: string | null | undefined;
+  purchasedAt: string | Date;
+  customerName?: string | null | undefined;
+}): string {
+  const orderNumber = String(order.orderNumber ?? "").replace(/[^0-9A-Za-z]/g, "").toUpperCase() || "0";
+  const dayMonth = purchaseDayMonth(order.purchasedAt);
+  const name = firstNameToken(order.customerName);
+  return `${orderNumber}-${dayMonth}-${name}`;
 }
 
 export type EligibilityOrder = {

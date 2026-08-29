@@ -37,6 +37,9 @@ export type CRMCustomerForSegmentation = {
   /** Última visita ao site via snippet do pop-up (join por telefone com popup_leads,
    *  feito por quem carrega os clientes — não é uma coluna de shopify_customers). */
   last_visit_at?: string | null;
+  /** Tem cupom de cashback pendente ou ativo agora (join com cashback_coupons via pedido,
+   *  feito por quem carrega os clientes — não é uma coluna de shopify_customers). */
+  has_active_cashback?: boolean;
 };
 
 export type PurchaseMetrics = {
@@ -445,6 +448,7 @@ export function matchesSegmentCondition(context: CRMCustomerContext, condition: 
   if (field === "checkout_abandonado") return compareBoolean(context.abandonedCheckout, operator, value);
   if (field === "acesso_sem_compra") return compareBoolean(metrics.validOrderCount === 0, operator, value);
   if (field === "visitou_site") return compareDate(customer.last_visit_at ?? null, operator, value, now);
+  if (field === "cashback_disponivel") return compareBoolean(Boolean(customer.has_active_cashback), operator, value);
 
   return false;
 }

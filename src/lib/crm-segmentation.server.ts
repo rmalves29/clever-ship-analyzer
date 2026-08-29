@@ -59,6 +59,30 @@ async function loadCustomers() {
   return rows;
 }
 
+/** customer_id -> tem cupom de cashback pendente/ativo agora (join cashback_coupons -> shopify_orders
+ *  pelo pedido) — não é uma coluna de shopify_customers, então precisa ser mesclada depois de loadCustomers(). */
+async function loadActiveCashbackCustomerIds(): Promise<Set<string>> {
+  const db = await admin();
+  const { data, error } = await (db.from("cashback_coupons") as any)
+    .select("shopify_order_id, status, ends_at")
+    .not("status", "in", "(cancelled,cancel_pending,failed)")
+    .gt("ends_at", new Date().toISOString());
+  if (error) throw new Error(`Erro ao buscar cupons de cashback: ${error.message}`);
+  const orderIds = [...new Set((data ?? []).map((row: any) => String(row.shopify_order_id)))];
+  const result = new Set<string>();
+  if (orderIds.length === 0) return result;
+  for (let i = 0; i < orderIds.length; i += ORDER_ID_BATCH) {
+    const batch = orderIds.slice(i, i + ORDER_ID_BATCH);
+    const { data: orderRows, error: orderError } = await (db.from("shopify_orders") as any)
+      .select("customer_id")
+      .in("id", batch)
+      .not("customer_id", "is", null);
+    if (orderError) throw new Error(`Erro ao buscar pedidos do cashback: ${orderError.message}`);
+    for (const row of (orderRows ?? []) as { customer_id: string }[]) result.add(String(row.customer_id));
+  }
+  return result;
+}
+
 /** Telefone -> última visita ao site registrada pelo snippet do pop-up (popup_leads.last_visit_at)
  *  — não é uma coluna de shopify_customers, então precisa ser mesclada depois de loadCustomers(). */
 async function loadPopupVisitByPhone(): Promise<Map<string, string>> {
@@ -443,17 +467,19 @@ export async function loadCRMProductFilterOptions(): Promise<CRMProductOption[]>
 }
 
 export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMAdvancedCustomerContext[]> {
-  const [customers, orders, abandonedCheckoutAtByCustomer, whatsappBehavior, popupVisitByPhone] = await Promise.all([
+  const [customers, orders, abandonedCheckoutAtByCustomer, whatsappBehavior, popupVisitByPhone, activeCashbackCustomerIds] = await Promise.all([
     loadCustomers(),
     loadOrders(),
     loadLatestAbandonedCheckoutByCustomer(),
     loadWhatsappBehaviorIndexes(),
     loadPopupVisitByPhone(),
+    loadActiveCashbackCustomerIds(),
   ]);
   for (const customer of customers) {
     if (customer.phone && popupVisitByPhone.has(customer.phone)) {
       customer.last_visit_at = popupVisitByPhone.get(customer.phone);
     }
+    customer.has_active_cashback = activeCashbackCustomerIds.has(customer.id);
   }
   const [shippedTodayValidOrderIds, orderItems] = await Promise.all([
     loadShippedTodayValidOrderIds(orders, now),

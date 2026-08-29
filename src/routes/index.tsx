@@ -23,6 +23,7 @@ import {
 
 import { getShopifyDashboardData } from "@/lib/shopify-dashboard.functions";
 import { syncShopifyData } from "@/lib/crm-sync.functions";
+import { getStoreSettings } from "@/lib/store-settings.functions";
 import { getLatestAiAnalysis, generateAiAnalysis } from "@/lib/ai-analysis.functions";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -59,6 +60,12 @@ function Index() {
   const getShopifyData = useServerFn(getShopifyDashboardData);
   const runAiAnalysis = useServerFn(generateAiAnalysis);
   const getAiAnalysis = useServerFn(getLatestAiAnalysis);
+  const getSettings = useServerFn(getStoreSettings);
+
+  const { data: storeSettings } = useQuery({
+    queryKey: ["store-settings"],
+    queryFn: () => getSettings(),
+  });
 
   const { data: shopifyData, isLoading: isShopifyLoading } = useQuery({
     queryKey: ["shopify-dashboard", period, range?.from, range?.to],
@@ -332,6 +339,11 @@ function Index() {
                 </Link>
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              {storeSettings?.lastSyncAt
+                ? `Última sincronização: ${new Date(storeSettings.lastSyncAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}`
+                : "Ainda não sincronizado"}
+            </p>
           </div>
         </header>
 

@@ -565,6 +565,34 @@ export async function findAutomationStepCampaignId(automationId: string, automat
   return (data as { id: string } | null)?.id ?? null;
 }
 
+/** Uma campanha reaproveitada guarda uma cópia congelada da mensagem (template, variáveis, tipo)
+ *  tirada em algum disparo passado — se a automação for editada depois (nova variável, outro
+ *  template), a campanha reaproveitada nunca saberia disso sozinha e continuaria mandando a
+ *  versão antiga pra sempre. Chamado sempre que uma campanha é reaproveitada, pros dois
+ *  reaproveitamentos (direto e com aprovação) ficarem sempre com a config atual da etapa. */
+export async function syncCampaignMessageConfig(
+  campaignId: string,
+  step: {
+    messageType: "marketing" | "utility";
+    templateName?: string | null;
+    templateLanguage?: string | null;
+    bodyParams: string[];
+    bodyParamTokens?: string[] | null;
+    couponCode?: string | null;
+  },
+): Promise<void> {
+  const supabaseAdmin = await admin();
+  const updates: Record<string, unknown> = {
+    message_type: step.messageType,
+    body_params: step.bodyParams,
+    body_param_tokens: step.bodyParamTokens ?? null,
+    coupon_code: step.couponCode?.trim() || null,
+  };
+  if (step.templateName?.trim()) updates["template_name"] = step.templateName.trim();
+  if (step.templateLanguage?.trim()) updates["template_language"] = step.templateLanguage.trim();
+  await (supabaseAdmin.from("whatsapp_campaigns") as any).update(updates).eq("id", campaignId);
+}
+
 /** Só pra automações com aprovação: acha a campanha dessa etapa (se já existir, seja qual for o
  *  status) pra unificar SEMPRE num único registro, igual ao envio direto. A visibilidade de
  *  "precisa de aprovação" não depende do status agregado dessa campanha (que reflete o envio já

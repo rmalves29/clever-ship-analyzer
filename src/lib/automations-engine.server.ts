@@ -218,7 +218,7 @@ export async function resolveNextActiveStep(
 async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Promise<number> {
   const supabaseAdmin = await admin();
   const [
-    { resolveSegmentRecipients, createCampaignRow, findPendingApprovalCampaignId },
+    { resolveSegmentRecipients, createCampaignRow, findPendingApprovalCampaignId, syncCampaignMessageConfig },
     { resolveWhatsappSegmentCustomerIds },
     { captureAutomationEventContext },
   ] =
@@ -286,6 +286,7 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
         .update(updates)
         .eq("id", campaignId);
       if (bumpError) throw new Error(`Erro ao atualizar campanha de aprovação: ${bumpError.message}`);
+      await syncCampaignMessageConfig(campaignId, firstStep);
     } else {
       const created = await createCampaignRow(
         {
@@ -399,7 +400,7 @@ async function markRunsWaitingSend(runIds: string[], campaignId: string): Promis
 
 async function processDueRuns(automation: any, steps: AutomationStep[]): Promise<number> {
   const supabaseAdmin = await admin();
-  const { dispatchCampaign, createCampaignRow, findAutomationStepCampaignId } = await import("./whatsapp-meta.server");
+  const { dispatchCampaign, createCampaignRow, findAutomationStepCampaignId, syncCampaignMessageConfig } = await import("./whatsapp-meta.server");
 
   const { data: dueRuns } = await supabaseAdmin
     .from("whatsapp_automation_runs")
@@ -456,6 +457,8 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
       );
       if (!created.success) continue;
       campaignId = created.campaignId;
+    } else {
+      await syncCampaignMessageConfig(campaignId, step);
     }
 
     const runIds = stepRuns.map((r) => String(r.id));

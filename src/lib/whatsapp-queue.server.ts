@@ -243,6 +243,14 @@ export async function enqueueCampaign(
       skipped++;
       continue;
     }
+    // Campanhas de automação reaproveitam a mesma campaignId pra sempre (histórico unificado),
+    // então dedup só por campanha+telefone faria um pedido novo ser silenciosamente descartado
+    // (onConflict ignoreDuplicates) por já existir uma linha antiga do MESMO telefone nessa
+    // campanha, de um pedido anterior. Incluindo o pedido/checkout no dedup, cada evento novo
+    // ganha sua própria linha — a proteção contra duplicidade continua valendo por evento.
+    const context = frozenContexts.get(recipient.id);
+    const eventId = context?.order?.id ?? context?.checkout?.id ?? null;
+    const dedupKey = eventId ? `campaign:${campaignId}:${to}:${eventId}` : `campaign:${campaignId}:${to}`;
     rows.push({
       campaign_id: campaignId,
       customer_id: recipient.id ?? null,
@@ -250,7 +258,7 @@ export async function enqueueCampaign(
       origem: campaign.origem ?? "crm",
       template_name: campaign.template_name,
       template_language: campaign.template_language ?? settings.templateLanguage,
-      body_params: await resolveBodyParams(bodyParams, recipient, frozenContexts.get(recipient.id)),
+      body_params: await resolveBodyParams(bodyParams, recipient, context),
       body_param_tokens: bodyParamTokens,
       header_media_url: isValidMediaUrl(recipient.video_url) ? recipient.video_url : null,
       status: "queued" satisfies QueueStatus,
@@ -260,7 +268,7 @@ export async function enqueueCampaign(
       max_attempts: DEFAULT_MAX_ATTEMPTS,
       next_attempt_at: scheduledAt,
       error: null,
-      dedup_key: `campaign:${campaignId}:${to}`,
+      dedup_key: dedupKey,
     });
   }
 

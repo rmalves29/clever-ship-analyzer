@@ -88,17 +88,14 @@ export function calculateCashback(
   return { cashbackAmount, minimumPurchase, startsAt, endsAt };
 }
 
-function purchaseDayMonth(purchasedAt: string | Date): string {
+function purchaseDay(purchasedAt: string | Date): string {
   const date = purchasedAt instanceof Date ? purchasedAt : new Date(purchasedAt);
   const safeDate = Number.isFinite(date.getTime()) ? date : new Date();
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",
     day: "2-digit",
-    month: "2-digit",
   }).formatToParts(safeDate);
-  const day = parts.find((p) => p.type === "day")?.value ?? "00";
-  const month = parts.find((p) => p.type === "month")?.value ?? "00";
-  return `${day}${month}`;
+  return parts.find((p) => p.type === "day")?.value ?? "00";
 }
 
 function firstNameToken(customerName: string | null | undefined): string {
@@ -110,7 +107,7 @@ function firstNameToken(customerName: string | null | undefined): string {
   return cleaned || "CLIENTE";
 }
 
-/** Código legível por pedido: nº do pedido + dia/mês da compra (fuso de São Paulo) + primeiro
+/** Código legível por pedido: nº do pedido + dia da compra (fuso de São Paulo) + primeiro
  *  nome da cliente. Determinístico — repetir a sincronização gera exatamente o mesmo código,
  *  o que soma com o unique de shopify_order_id para garantir idempotência. */
 export function buildCashbackCode(order: {
@@ -119,9 +116,9 @@ export function buildCashbackCode(order: {
   customerName?: string | null | undefined;
 }): string {
   const orderNumber = String(order.orderNumber ?? "").replace(/[^0-9A-Za-z]/g, "").toUpperCase() || "0";
-  const dayMonth = purchaseDayMonth(order.purchasedAt);
+  const day = purchaseDay(order.purchasedAt);
   const name = firstNameToken(order.customerName);
-  return `${orderNumber}-${dayMonth}-${name}`;
+  return `${orderNumber}-${day}-${name}`;
 }
 
 export type EligibilityOrder = {

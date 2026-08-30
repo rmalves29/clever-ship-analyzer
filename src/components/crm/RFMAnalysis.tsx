@@ -36,6 +36,22 @@ import { brl } from "@/lib/crm-mock";
 
 const segColor = (name: string) => RFM_SEGMENTS_CONFIG[name as RFMSegment]?.color ?? "#94a3b8";
 
+const RFM_SEGMENT_ORDER: RFMSegment[] = [
+  "Campeões",
+  "Leais",
+  "Potencialmente Leais",
+  "Novos",
+  "Precisa de atenção",
+  "Quase hibernando",
+  "Em risco",
+  "Hibernando",
+  "Não pode perder",
+  "Perdidos",
+  "Sem compra",
+];
+
+const segmentOrder = (segment: RFMSegment) => RFM_SEGMENT_ORDER.indexOf(segment);
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === "string") return error;
@@ -114,11 +130,11 @@ export function RFMAnalysis() {
   }
 
   const summary = data?.summary ?? [];
-  const activeSegments = Object.keys(RFM_SEGMENTS_CONFIG) as RFMSegment[];
+  const activeSegments = RFM_SEGMENT_ORDER;
 
   const chartData = summary
     .map((s) => ({ name: s.name, clientes: s.clientes, receita: s.receita, color: segColor(s.name) }))
-    .sort((a, b) => b.clientes - a.clientes);
+    .sort((a, b) => segmentOrder(a.name) - segmentOrder(b.name));
 
   const freqData = (data?.frequencia ?? []).filter((f) => f.faixa !== "0x");
   const hasSourceCustomers = (data?.sourceCustomers ?? 0) > 0;
@@ -288,7 +304,7 @@ export function RFMAnalysis() {
                 </TableRow>
               ) : (
                 [...summary]
-                  .sort((a, b) => b.receita - a.receita || b.clientes - a.clientes)
+                  .sort((a, b) => segmentOrder(a.name) - segmentOrder(b.name))
                   .map((s) => (
                     <TableRow key={s.name} className="group transition-colors hover:bg-muted/20">
                       <TableCell className="font-medium"><div className="flex items-center gap-2"><div className="size-2 rounded-full" style={{ backgroundColor: segColor(s.name) }} />{s.name}</div></TableCell>

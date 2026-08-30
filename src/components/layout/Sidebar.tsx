@@ -32,11 +32,11 @@ type NavItem = {
     | "/flow"
     | "/fluxo-envio"
     | "/popups"
-    | "/cashback";
+    | "/cashback"
+    | "/ga4";
   search?: Record<string, string>;
   icon: typeof LayoutDashboard;
 };
-
 
 const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
@@ -44,19 +44,58 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { label: "Dashboard", to: "/", icon: LayoutDashboard },
       { label: "Live View", to: "/crm/live-view", icon: BarChart3 },
-      { label: "Contatos", to: "/crm", search: { tab: "contatos" }, icon: Sparkles },
-      { label: "Segmentos", to: "/crm", search: { tab: "segmentos" }, icon: Sparkles },
-      { label: "Listas Estáticas", to: "/crm", search: { tab: "listas" }, icon: Sparkles },
-      { label: "Análise RFM", to: "/crm", search: { tab: "rfm" }, icon: BarChart3 },
-      { label: "Régua de Recompra", to: "/crm/reguas/primeira-segunda", icon: RefreshCw },
+      {
+        label: "Contatos",
+        to: "/crm",
+        search: { tab: "contatos" },
+        icon: Sparkles,
+      },
+      {
+        label: "Segmentos",
+        to: "/crm",
+        search: { tab: "segmentos" },
+        icon: Sparkles,
+      },
+      {
+        label: "Listas Estáticas",
+        to: "/crm",
+        search: { tab: "listas" },
+        icon: Sparkles,
+      },
+      {
+        label: "Análise RFM",
+        to: "/crm",
+        search: { tab: "rfm" },
+        icon: BarChart3,
+      },
+      {
+        label: "Régua de Recompra",
+        to: "/crm/reguas/primeira-segunda",
+        icon: RefreshCw,
+      },
     ],
   },
   {
     label: "WhatsApp API",
     items: [
-      { label: "Campanhas", to: "/campanhas-whatsapp", search: { tab: "campanhas" }, icon: Megaphone },
-      { label: "Templates", to: "/campanhas-whatsapp", search: { tab: "templates" }, icon: FileText },
-      { label: "Relatórios", to: "/campanhas-whatsapp", search: { tab: "relatorios" }, icon: BarChart3 },
+      {
+        label: "Campanhas",
+        to: "/campanhas-whatsapp",
+        search: { tab: "campanhas" },
+        icon: Megaphone,
+      },
+      {
+        label: "Templates",
+        to: "/campanhas-whatsapp",
+        search: { tab: "templates" },
+        icon: FileText,
+      },
+      {
+        label: "Relatórios",
+        to: "/campanhas-whatsapp",
+        search: { tab: "relatorios" },
+        icon: BarChart3,
+      },
     ],
   },
   {
@@ -80,7 +119,10 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
   {
     label: "Ferramentas",
-    items: [{ label: "Cashback", to: "/cashback", icon: Coins }],
+    items: [
+      { label: "Cashback", to: "/cashback", icon: Coins },
+      { label: "Google Analytics", to: "/ga4", icon: BarChart3 },
+    ],
   },
   {
     label: "Sistema",
@@ -90,7 +132,10 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
 
 export function Sidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const search = useRouterState({ select: (s) => s.location.search }) as Record<string, string | undefined>;
+  const search = useRouterState({ select: (s) => s.location.search }) as Record<
+    string,
+    string | undefined
+  >;
 
   return (
     <aside className="hidden min-h-screen w-60 shrink-0 flex-col border-r border-border bg-card md:flex">
@@ -103,10 +148,14 @@ export function Sidebar() {
       <nav className="flex-1 space-y-6 px-3 pb-6">
         {NAV_GROUPS.map((group) => (
           <div key={group.label}>
-            <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{group.label}</p>
+            <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {group.label}
+            </p>
             <div className="mt-2 space-y-0.5">
               {group.items.map((item) => {
-                const active = pathname === item.to && (!item.search || search["tab"] === item.search["tab"]);
+                const active =
+                  pathname === item.to &&
+                  (!item.search || search["tab"] === item.search["tab"]);
                 const Icon = item.icon;
                 return (
                   <Link
@@ -115,7 +164,9 @@ export function Sidebar() {
                     {...(item.search ? { search: item.search } : {})}
                     className={cn(
                       "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
-                      active ? "bg-brand-soft text-brand" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      active
+                        ? "bg-brand-soft text-brand"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
                     <Icon className="size-4" />

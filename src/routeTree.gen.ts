@@ -16,6 +16,7 @@ import { Route as CashbackRouteImport } from './routes/cashback'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as EventosRouteImport } from './routes/eventos'
 import { Route as FluxoEnvioRouteImport } from './routes/fluxo-envio'
+import { Route as Ga4RouteImport } from './routes/ga4'
 import { Route as InstagramRouteImport } from './routes/instagram'
 import { Route as PopupsRouteImport } from './routes/popups'
 import { Route as CrmIndexRouteImport } from './routes/crm/index'
@@ -63,6 +64,11 @@ const EventosRoute = EventosRouteImport.update({
 const FluxoEnvioRoute = FluxoEnvioRouteImport.update({
   id: '/fluxo-envio',
   path: '/fluxo-envio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Ga4Route = Ga4RouteImport.update({
+  id: '/ga4',
+  path: '/ga4',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InstagramRoute = InstagramRouteImport.update({
@@ -140,6 +146,7 @@ export interface FileRoutesByFullPath {
   '/configuracoes': typeof ConfiguracoesRoute
   '/eventos': typeof EventosRoute
   '/fluxo-envio': typeof FluxoEnvioRoute
+  '/ga4': typeof Ga4Route
   '/instagram': typeof InstagramRoute
   '/popups': typeof PopupsRoute
   '/crm/contatos': typeof CrmContatosRoute
@@ -162,6 +169,7 @@ export interface FileRoutesByTo {
   '/configuracoes': typeof ConfiguracoesRoute
   '/eventos': typeof EventosRoute
   '/fluxo-envio': typeof FluxoEnvioRoute
+  '/ga4': typeof Ga4Route
   '/instagram': typeof InstagramRoute
   '/popups': typeof PopupsRoute
   '/crm/contatos': typeof CrmContatosRoute
@@ -185,6 +193,7 @@ export interface FileRoutesById {
   '/configuracoes': typeof ConfiguracoesRoute
   '/eventos': typeof EventosRoute
   '/fluxo-envio': typeof FluxoEnvioRoute
+  '/ga4': typeof Ga4Route
   '/instagram': typeof InstagramRoute
   '/popups': typeof PopupsRoute
   '/crm/contatos': typeof CrmContatosRoute
@@ -209,6 +218,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/eventos'
     | '/fluxo-envio'
+    | '/ga4'
     | '/instagram'
     | '/popups'
     | '/crm/contatos'
@@ -231,6 +241,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/eventos'
     | '/fluxo-envio'
+    | '/ga4'
     | '/instagram'
     | '/popups'
     | '/crm/contatos'
@@ -253,6 +264,7 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/eventos'
     | '/fluxo-envio'
+    | '/ga4'
     | '/instagram'
     | '/popups'
     | '/crm/contatos'
@@ -276,6 +288,7 @@ export interface RootRouteChildren {
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   EventosRoute: typeof EventosRoute
   FluxoEnvioRoute: typeof FluxoEnvioRoute
+  Ga4Route: typeof Ga4Route
   InstagramRoute: typeof InstagramRoute
   PopupsRoute: typeof PopupsRoute
   CrmContatosRoute: typeof CrmContatosRoute
@@ -340,6 +353,13 @@ declare module '@tanstack/react-router' {
       path: '/fluxo-envio'
       fullPath: '/fluxo-envio'
       preLoaderRoute: typeof FluxoEnvioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ga4': {
+      id: '/ga4'
+      path: '/ga4'
+      fullPath: '/ga4'
+      preLoaderRoute: typeof Ga4RouteImport
       parentRoute: typeof rootRouteImport
     }
     '/instagram': {
@@ -444,6 +464,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConfiguracoesRoute: ConfiguracoesRoute,
   EventosRoute: EventosRoute,
   FluxoEnvioRoute: FluxoEnvioRoute,
+  Ga4Route: Ga4Route,
   InstagramRoute: InstagramRoute,
   PopupsRoute: PopupsRoute,
   CrmContatosRoute: CrmContatosRoute,

@@ -41,6 +41,84 @@ async function resolveCustomerRowId(
   return computedId;
 }
 
+/**
+ * Reimporta, uma única vez, os pedidos de cada cupom acompanhado.
+ * Isso preenche discountCodes nos snapshots históricos sem exigir um sync completo da loja.
+ */
+async function backfillTrackedCouponOrders(
+  supabaseAdmin: (typeof import("@/integrations/supabase/client.server"))["supabaseAdmin"],
+  shopifyGraphQL: (query: string, variables?: Record<string, unknown>) => Promise<any>,
+  ordersQuery: string,
+): Promise<number> {
+  const { data: aliases, error } = await (supabaseAdmin.from("whatsapp_campaign_coupon_codes" as never) as any)
+    .select("id, code")
+    .is("backfilled_at", null)
+    .order("created_at", { ascending: true })
+    .limit(20);
+
+  if (error) {
+    console.warn("Backfill de cupons ainda indisponível:", error.message);
+    return 0;
+  }
+
+  let totalUpdated = 0;
+  for (const alias of (aliases ?? []) as { id: string; code: string }[]) {
+    const normalizedCode = alias.code.trim().toUpperCase();
+    if (!normalizedCode) continue;
+
+    let cursor: string | null = null;
+    let hasNextPage = true;
+    let scanned = 0;
+    let completed = false;
+
+    try {
+      while (hasNextPage) {
+        const escapedCode = normalizedCode.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+        const result: any = await shopifyGraphQL(ordersQuery, {
+          cursor,
+          query: `discount_code:"${escapedCode}"`,
+        });
+        const connection = result?.orders;
+        if (!connection) throw new Error("Shopify não retornou a conexão de pedidos.");
+
+        for (const edge of connection.edges ?? []) {
+          const order = edge.node;
+          const codes = ((order.discountCodes ?? []) as string[]).map((code) => code.trim().toUpperCase());
+          if (!codes.includes(normalizedCode)) continue;
+
+          const { error: updateError } = await (supabaseAdmin.from("shopify_orders") as any)
+            .update({
+              raw_data: order,
+              total_discounts: parseFloat(order.totalDiscountsSet?.presentmentMoney?.amount ?? "0"),
+              financial_status: order.displayFinancialStatus,
+              cancelled_at: order.cancelledAt ?? null,
+              updated_at: order.updatedAt,
+            })
+            .eq("id", order.id);
+          if (updateError) throw updateError;
+          totalUpdated++;
+        }
+
+        scanned += connection.edges?.length ?? 0;
+        hasNextPage = Boolean(connection.pageInfo?.hasNextPage);
+        cursor = connection.pageInfo?.endCursor ?? null;
+        if (scanned > 5000) throw new Error(`Limite de segurança atingido no cupom ${normalizedCode}.`);
+      }
+      completed = true;
+    } catch (couponError) {
+      console.error(`Backfill do cupom ${normalizedCode} falhou:`, couponError);
+    }
+
+    if (completed) {
+      await (supabaseAdmin.from("whatsapp_campaign_coupon_codes" as never) as any)
+        .update({ backfilled_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq("id", alias.id);
+    }
+  }
+
+  return totalUpdated;
+}
+
 /** Puxa clientes, pedidos e checkouts abandonados da Shopify pra dentro do CRM.
  *  Chamado tanto pelo botão "Sincronizar Shopify" (crm-sync.functions.ts) quanto
  *  pelo tick periódico (src/server.ts) — é o único lugar com essa lógica. */
@@ -292,6 +370,9 @@ export async function runShopifySync(fullSync: boolean) {
       if (totalImported > 5000) break;
     }
 
+    // Traz GANHE5/POP5 históricos uma única vez; pedidos futuros já chegam no sync incremental.
+    const couponOrdersBackfilled = await backfillTrackedCouponOrders(supabaseAdmin, shopifyGraphQL, ORDERS_QUERY);
+
     // Reprocessa cupons que falharam ou cancelamentos pendentes de sincronizações anteriores.
     try {
       await reprocessPendingCashback();
@@ -412,6 +493,7 @@ export async function runShopifySync(fullSync: boolean) {
     return {
       success: true,
       totalImported,
+      couponOrdersBackfilled,
       rfm: {
         updatedCustomers: rfmResult.count,
         historyDays: rfmResult.historyDays,

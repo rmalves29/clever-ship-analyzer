@@ -47,14 +47,66 @@ type Ga4ApiReport = {
   dataLossFromOtherRow?: boolean;
 };
 
-export type Ga4Record = Record<string, string | number>;
+export type Ga4Record = {
+  [key: string]: string | number | undefined;
+  date?: string;
+  totalUsers?: number;
+  activeUsers?: number;
+  newUsers?: number;
+  sessions?: number;
+  screenPageViews?: number;
+  engagementRate?: number;
+  averageSessionDuration?: number;
+  keyEvents?: number;
+  ecommercePurchases?: number;
+  purchaseRevenue?: number;
+  pagePathPlusQueryString?: string;
+  pageTitle?: string;
+  sessionDefaultChannelGroup?: string;
+  sessionSourceMedium?: string;
+  sessionCampaignName?: string;
+  itemId?: string;
+  itemName?: string;
+  itemsViewed?: number;
+  itemViewEvents?: number;
+  itemsAddedToCart?: number;
+  itemsCheckedOut?: number;
+  itemsPurchased?: number;
+  itemRevenue?: number;
+  cartToViewRate?: number;
+  purchaseToViewRate?: number;
+  deviceCategory?: string;
+  browser?: string;
+  operatingSystem?: string;
+  country?: string;
+  region?: string;
+  city?: string;
+  unifiedScreenName?: string;
+  eventName?: string;
+  eventCount?: number;
+  engagedSessions?: number;
+};
+
+type Ga4Changes = {
+  [key: string]: number | null | undefined;
+  totalUsers?: number | null;
+  activeUsers?: number | null;
+  newUsers?: number | null;
+  sessions?: number | null;
+  screenPageViews?: number | null;
+  engagementRate?: number | null;
+  averageSessionDuration?: number | null;
+  keyEvents?: number | null;
+  ecommercePurchases?: number | null;
+  purchaseRevenue?: number | null;
+};
 
 export type Ga4HistoricalDashboard = {
   range: Ga4DateRange;
   previousRange: Ga4DateRange;
   summary: Ga4Record;
   previousSummary: Ga4Record;
-  changes: Record<string, number | null>;
+  changes: Ga4Changes;
   trend: Ga4Record[];
   pages: Ga4Record[];
   channels: Ga4Record[];
@@ -113,8 +165,8 @@ function parseServiceAccount(raw: string): ServiceAccountCredentials {
     type: "service_account",
     client_email: value.client_email,
     private_key: value.private_key.replace(/\\n/g, "\n"),
-    private_key_id: value.private_key_id,
     token_uri: value.token_uri || TOKEN_URL,
+    ...(value.private_key_id ? { private_key_id: value.private_key_id } : {}),
   };
 }
 
@@ -507,8 +559,8 @@ export async function getGa4HistoricalDashboard(
   const reports = [...firstBatch, ...secondBatch];
   if (reports.length < 10)
     throw new Error("O GA4 retornou um conjunto incompleto de relatórios.");
-  const summary = summaryRow(reports[0]);
-  const previousSummary = summaryRow(reports[1]);
+  const summary = summaryRow(reports[0]!);
+  const previousSummary = summaryRow(reports[1]!);
   const changes = Object.fromEntries(
     summaryMetrics.map(({ name }) => [
       name,
@@ -526,14 +578,14 @@ export async function getGa4HistoricalDashboard(
     summary,
     previousSummary,
     changes,
-    trend: reportRows(reports[2]),
-    pages: reportRows(reports[3]),
-    channels: reportRows(reports[4]),
-    sources: reportRows(reports[5]),
-    campaigns: reportRows(reports[6]),
-    products: reportRows(reports[7]),
-    devices: reportRows(reports[8]),
-    geography: reportRows(reports[9]),
+    trend: reportRows(reports[2]!),
+    pages: reportRows(reports[3]!),
+    channels: reportRows(reports[4]!),
+    sources: reportRows(reports[5]!),
+    campaigns: reportRows(reports[6]!),
+    products: reportRows(reports[7]!),
+    devices: reportRows(reports[8]!),
+    geography: reportRows(reports[9]!),
     warnings: reportWarnings(reports),
   };
 }

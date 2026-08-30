@@ -150,7 +150,7 @@ function StatCard({
 }: {
   label: string;
   value: string;
-  change?: number | null;
+  change?: number | null | undefined;
   hint?: string;
 }) {
   return (

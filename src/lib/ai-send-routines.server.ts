@@ -231,26 +231,21 @@ function advanceNextRunAt(recurrence: RoutineRecurrence, prevNextRunAt: string):
  *  ou entra na fila de agendados do Fluxo de Envio (aba Envios, já tem cron próprio) se for uma
  *  data futura. Retorna quantos grupos foram alvo, pra o chamador decidir o que fazer se for 0. */
 export async function dispatchToCampaignGroups(campaignId: string, contentText: string, contentImageUrl: string | null, scheduledAtIso?: string): Promise<{ groupCount: number; messageIds: string[] }> {
-  const { getLiveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
-  const liveLaunchpadAdmin = await getLiveLaunchpadAdmin();
+  const { resolveEnvioCampaignAudience } = await import("./envio-campaigns.server");
+  const audience = await resolveEnvioCampaignAudience(campaignId);
+  if (audience.groupCount === 0) return { groupCount: 0, messageIds: [] };
 
-  const { data: links } = await (liveLaunchpadAdmin.from("fe_campaign_groups") as any).select("group_id").eq("campaign_id", campaignId);
-  const groupIds = ((links ?? []) as any[]).map((l) => l.group_id as string);
+  const { createAndSendEnvioMessage } = await import("./envio-messages.server");
+  const res = await createAndSendEnvioMessage({
+    campaignId,
+    groupIds: audience.groupIds,
+    contentType: contentImageUrl ? "image" : "text",
+    contentText,
+    mediaUrl: contentImageUrl ?? undefined,
+    scheduledAt: scheduledAtIso,
+  });
 
-  let messageIds: string[] = [];
-  if (groupIds.length > 0) {
-    const { createAndSendEnvioMessage } = await import("./envio-messages.server");
-    const res = await createAndSendEnvioMessage({
-      groupIds,
-      contentType: contentImageUrl ? "image" : "text",
-      contentText,
-      mediaUrl: contentImageUrl ?? undefined,
-      scheduledAt: scheduledAtIso,
-    });
-    messageIds = res.messageIds;
-  }
-
-  return { groupCount: groupIds.length, messageIds };
+  return { groupCount: audience.groupCount, messageIds: res.messageIds };
 }
 
 export async function createAiSendRoutine(input: {

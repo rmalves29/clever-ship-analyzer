@@ -128,7 +128,7 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
   { field: "automacao_whatsapp", operator: "completed", value: "auto-1" },
   { field: "customer_tag", operator: "contains", value: "VIP" },
   { field: "tags_custom", operator: "contains", value: "Teste" },
-  { field: "rfm_segment", operator: "eq", value: "Nova compra" },
+  { field: "rfm_segment", operator: "eq", value: "Novos" },
 ];
 
 describe("catálogo confiável de filtros do CRM", () => {

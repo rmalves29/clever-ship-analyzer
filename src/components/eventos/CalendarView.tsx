@@ -73,7 +73,7 @@ export function CalendarView({
         <p className="font-semibold">{MONTH_LABELS[month - 1]} de {year}</p>
         <div className="flex items-center gap-2">
           <Button size="sm" className="gap-1.5" onClick={() => setAiDialogOpen(true)}>
-            <Sparkles className="size-3.5" /> Criar fluxo com IA
+            <Sparkles className="size-3.5" /> Criar calendário com IA
           </Button>
           <Button variant="ghost" size="icon" className="size-8" onClick={goPrev}>
             <ChevronLeft className="size-4" />

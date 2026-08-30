@@ -4,7 +4,6 @@ import type { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Sparkles, Store, Settings, RefreshCw } from "lucide-react";
-import { Toaster } from "@/components/ui/sonner";
 import { KpiCard } from "@/components/crm/KpiCard";
 import { PeriodFilter } from "@/components/crm/PeriodFilter";
 import { ExecutiveSummary } from "@/components/crm/ExecutiveSummary";
@@ -310,7 +309,6 @@ function Index() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Toaster position="top-right" />
       <div className="mx-auto max-w-[1400px] px-4 py-8 md:px-8">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">

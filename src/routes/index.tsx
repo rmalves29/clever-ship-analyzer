@@ -23,10 +23,7 @@ import {
 import { getShopifyDashboardData } from "@/lib/shopify-dashboard.functions";
 import { syncShopifyData } from "@/lib/crm-sync.functions";
 import { getStoreSettings } from "@/lib/store-settings.functions";
-import {
-  getLatestAiAnalysis,
-  generateAiAnalysis,
-} from "@/lib/ai-analysis.functions";
+import { getLatestAiAnalysis, generateAiAnalysis } from "@/lib/ai-analysis.functions";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -43,14 +40,10 @@ export const Route = createFileRoute("/")({
         content:
           "Dashboard de CRM para e-commerce: recompra, LTV, churn, envios e tempo médio de envio, com análise e fluxos gerados por IA.",
       },
-      {
-        property: "og:title",
-        content: "CRM Analytics — Análise de base e fluxos com IA",
-      },
+      { property: "og:title", content: "CRM Analytics — Análise de base e fluxos com IA" },
       {
         property: "og:description",
-        content:
-          "Métricas de recompra, LTV, churn e operação de envio com análise automática e ações sugeridas.",
+        content: "Métricas de recompra, LTV, churn e operação de envio com análise automática e ações sugeridas.",
       },
     ],
   }),
@@ -75,18 +68,15 @@ function Index() {
 
   const { data: shopifyData, isLoading: isShopifyLoading } = useQuery({
     queryKey: ["shopify-dashboard", period, range?.from, range?.to],
-    queryFn: () =>
-      getShopifyData({
-        data: {
-          period,
-          range: range?.from
-            ? {
-                from: range.from.toISOString(),
-                to: range.to?.toISOString(),
-              }
-            : undefined,
-        },
-      }),
+    queryFn: () => getShopifyData({
+      data: {
+        period,
+        range: range?.from ? {
+          from: range.from.toISOString(),
+          to: range.to?.toISOString()
+        } : undefined
+      }
+    }),
   });
 
   const queryClient = useQueryClient();
@@ -102,8 +92,7 @@ function Index() {
     Boolean(aiAnalysis?.analysis) &&
     aiAnalysis?.period === period &&
     Boolean(aiAnalysis?.generatedAt) &&
-    Date.now() - new Date(aiAnalysis!.generatedAt!).getTime() <
-      24 * 60 * 60 * 1000 &&
+    Date.now() - new Date(aiAnalysis!.generatedAt!).getTime() < 24 * 60 * 60 * 1000 &&
     new Date(aiAnalysis!.generatedAt!).getTime() >= METRICS_REVISION_AT;
   const aiIsStaleForPeriod = Boolean(aiAnalysis?.analysis) && !aiIsFresh;
 
@@ -112,17 +101,10 @@ function Index() {
       ? `${format(range.from, "dd/MM/yyyy", { locale: ptBR })} – ${format(range.to, "dd/MM/yyyy", { locale: ptBR })}`
       : undefined;
 
-  const base = useMemo(
-    () => emptyDashboardData(period, customLabel),
-    [period, customLabel],
-  );
+  const base = useMemo(() => emptyDashboardData(period, customLabel), [period, customLabel]);
 
   const brl0 = (v: number) =>
-    new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-      maximumFractionDigits: 0,
-    }).format(v);
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v);
 
   // Sem fallback silencioso: enquanto os dados reais não chegam, mostramos o estado vazio.
   const data = useMemo(() => {
@@ -140,11 +122,7 @@ function Index() {
     const kpis = base.kpis.map((kpi) => {
       switch (kpi.id) {
         case "clientes":
-          return {
-            ...kpi,
-            value: String(s.uniqueCustomers),
-            hint: `${s.numPedidos} pedidos pagos no período`,
-          };
+          return { ...kpi, value: String(s.uniqueCustomers), hint: `${s.numPedidos} pedidos pagos no período` };
         case "pedidos":
           return { ...kpi, value: String(s.numPedidos) };
         case "vendas":
@@ -154,18 +132,11 @@ function Index() {
             ...kpi,
             value: s.numPedidos ? brl0(s.ticketMedio) : "—",
             status: s.numPedidos
-              ? statusHigherIsBetter(
-                  s.ticketMedio,
-                  GOALS.ticketMedio.meta,
-                  GOALS.ticketMedio.regular,
-                )
+              ? statusHigherIsBetter(s.ticketMedio, GOALS.ticketMedio.meta, GOALS.ticketMedio.regular)
               : undefined,
           };
         case "ltv":
-          return {
-            ...kpi,
-            value: s.uniqueCustomers ? brl0(s.receitaPorCliente) : "—",
-          };
+          return { ...kpi, value: s.uniqueCustomers ? brl0(s.receitaPorCliente) : "—" };
         case "recompra":
           return {
             ...kpi,
@@ -176,11 +147,7 @@ function Index() {
                 : `Base insuficiente (${baseClientes} clientes)`,
             status:
               baseClientes >= minSample
-                ? statusHigherIsBetter(
-                    taxa,
-                    GOALS.taxaRecompra.meta,
-                    GOALS.taxaRecompra.regular,
-                  )
+                ? statusHigherIsBetter(taxa, GOALS.taxaRecompra.meta, GOALS.taxaRecompra.regular)
                 : undefined,
           };
         case "pedidos-enviados":
@@ -191,18 +158,11 @@ function Index() {
           return {
             ...kpi,
             value: amostraEnvio === 0 ? "—" : `${envioDias.toFixed(1)} dias`,
-            hint:
-              amostraEnvio === 0
-                ? "Sem envios com rastreio no período"
-                : `Base: ${amostraEnvio} pedido(s) enviados`,
+            hint: amostraEnvio === 0 ? "Sem envios com rastreio no período" : `Base: ${amostraEnvio} pedido(s) enviados`,
             status:
               amostraEnvio === 0
                 ? undefined
-                : statusLowerIsBetter(
-                    envioDias,
-                    GOALS.tempoMedioEnvio.meta,
-                    GOALS.tempoMedioEnvio.regular,
-                  ),
+                : statusLowerIsBetter(envioDias, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
           };
         default:
           return kpi;
@@ -210,43 +170,18 @@ function Index() {
     });
 
     const panelStatus = {
-      recompra:
-        baseClientes >= minSample
-          ? statusHigherIsBetter(
-              taxa,
-              GOALS.taxaRecompra.meta,
-              GOALS.taxaRecompra.regular,
-            )
-          : ("sem-dados" as const),
-      clv:
-        baseClientes >= minSample
-          ? ("regular" as const)
-          : ("sem-dados" as const),
-      ticketRecorrencia:
-        baseClientes >= minSample
-          ? ("regular" as const)
-          : ("sem-dados" as const),
-      faixaTicket:
-        s.numPedidos >= minSample
-          ? ("regular" as const)
-          : ("sem-dados" as const),
-      regioes: s.regioes?.length
-        ? ("regular" as const)
+      recompra: baseClientes >= minSample
+        ? statusHigherIsBetter(taxa, GOALS.taxaRecompra.meta, GOALS.taxaRecompra.regular)
         : ("sem-dados" as const),
-      churn:
-        madura && baseClientes >= minSample
-          ? ("regular" as const)
-          : ("sem-dados" as const),
-      tempoEntreCompras:
-        gaps >= minSample ? ("regular" as const) : ("sem-dados" as const),
-      curvaRecompra:
-        gaps >= minSample ? ("regular" as const) : ("sem-dados" as const),
+      clv: baseClientes >= minSample ? ("regular" as const) : ("sem-dados" as const),
+      ticketRecorrencia: baseClientes >= minSample ? ("regular" as const) : ("sem-dados" as const),
+      faixaTicket: s.numPedidos >= minSample ? ("regular" as const) : ("sem-dados" as const),
+      regioes: s.regioes?.length ? ("regular" as const) : ("sem-dados" as const),
+      churn: madura && baseClientes >= minSample ? ("regular" as const) : ("sem-dados" as const),
+      tempoEntreCompras: gaps >= minSample ? ("regular" as const) : ("sem-dados" as const),
+      curvaRecompra: gaps >= minSample ? ("regular" as const) : ("sem-dados" as const),
       envios: amostraEnvio
-        ? statusLowerIsBetter(
-            envioDias,
-            GOALS.tempoMedioEnvio.meta,
-            GOALS.tempoMedioEnvio.regular,
-          )
+        ? statusLowerIsBetter(envioDias, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular)
         : ("sem-dados" as const),
     };
 
@@ -258,15 +193,10 @@ function Index() {
           baseClientes >= minSample
             ? `${s.recomprasCount} de ${baseClientes} clientes com pedido pago voltaram a comprar.`
             : "Base de clientes ainda pequena para uma leitura confiável de recompra.",
-        highlight:
-          baseClientes >= minSample ? `${taxa.toFixed(2)}%` : undefined,
+        highlight: baseClientes >= minSample ? `${taxa.toFixed(2)}%` : undefined,
         tone:
           baseClientes >= minSample
-            ? statusHigherIsBetter(
-                taxa,
-                GOALS.taxaRecompra.meta,
-                GOALS.taxaRecompra.regular,
-              )
+            ? statusHigherIsBetter(taxa, GOALS.taxaRecompra.meta, GOALS.taxaRecompra.regular)
             : "info",
       },
       {
@@ -281,16 +211,11 @@ function Index() {
           amostraEnvio === 0
             ? "Nenhum envio com rastreio registrado no período."
             : `Média entre pagamento e primeiro envio, sobre ${amostraEnvio} pedido(s).`,
-        highlight:
-          amostraEnvio === 0 ? undefined : `${envioDias.toFixed(1)} dias`,
+        highlight: amostraEnvio === 0 ? undefined : `${envioDias.toFixed(1)} dias`,
         tone:
           amostraEnvio === 0
             ? "info"
-            : statusLowerIsBetter(
-                envioDias,
-                GOALS.tempoMedioEnvio.meta,
-                GOALS.tempoMedioEnvio.regular,
-              ),
+            : statusLowerIsBetter(envioDias, GOALS.tempoMedioEnvio.meta, GOALS.tempoMedioEnvio.regular),
       },
       {
         title: "Maturidade da base",
@@ -340,6 +265,7 @@ function Index() {
     } satisfies DashboardData;
   }, [base, shopifyData, aiAnalysis, aiIsFresh]);
 
+
   const runSync = useServerFn(syncShopifyData);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -347,15 +273,10 @@ function Index() {
     setIsSyncing(true);
     try {
       const res = await runSync({ data: { fullSync: false } });
-      toast.success(
-        `Sincronização concluída: ${res.totalImported} pedido(s) atualizados.`,
-      );
+      toast.success(`Sincronização concluída: ${res.totalImported} pedido(s) atualizados.`);
       await queryClient.invalidateQueries();
-    } catch (err: unknown) {
-      toast.error(
-        "Erro ao sincronizar: " +
-          (err instanceof Error ? err.message : "falha desconhecida"),
-      );
+    } catch (err: any) {
+      toast.error("Erro ao sincronizar: " + (err?.message ?? "falha desconhecida"));
     } finally {
       setIsSyncing(false);
     }
@@ -379,11 +300,8 @@ function Index() {
       await queryClient.invalidateQueries({ queryKey: ["ai-analysis"] });
       setAnalyzedAt(new Date());
       toast.success("Análise atualizada pela IA.");
-    } catch (err: unknown) {
-      toast.error(
-        "Erro ao gerar análise: " +
-          (err instanceof Error ? err.message : "falha desconhecida"),
-      );
+    } catch (err: any) {
+      toast.error("Erro ao gerar análise: " + (err?.message ?? "falha desconhecida"));
     } finally {
       setLoading(false);
     }
@@ -398,9 +316,7 @@ function Index() {
               <Sparkles className="size-5" />
             </span>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">
-                CRM Analytics
-              </h1>
+              <h1 className="text-2xl font-bold tracking-tight">CRM Analytics</h1>
               <p className="text-sm text-muted-foreground">
                 Análise da base • {data.periodLabel}
               </p>
@@ -411,24 +327,11 @@ function Index() {
               <span className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground">
                 <Store className="size-3.5" /> Shopify: Integrado
               </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSync}
-                disabled={isSyncing}
-                className="h-8 gap-2"
-              >
-                <RefreshCw
-                  className={`size-3.5 ${isSyncing ? "animate-spin" : ""}`}
-                />
+              <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing} className="h-8 gap-2">
+                <RefreshCw className={`size-3.5 ${isSyncing ? "animate-spin" : ""}`} />
                 {isSyncing ? "Sincronizando..." : "Sincronizar Shopify"}
               </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                asChild
-                className="size-8 rounded-full"
-              >
+              <Button variant="outline" size="icon" asChild className="size-8 rounded-full">
                 <Link to="/configuracoes">
                   <Settings className="size-4" />
                 </Link>
@@ -461,9 +364,8 @@ function Index() {
 
         {aiIsStaleForPeriod && (
           <div className="mt-6 rounded-lg border border-warning/30 bg-warning-soft/60 px-4 py-2.5 text-sm text-warning">
-            A última análise por IA é de outro período ou tem mais de 24h. Os
-            insights abaixo vêm direto dos dados reais deste período — clique em
-            "Refazer análise" para a leitura completa da IA.
+            A última análise por IA é de outro período ou tem mais de 24h. Os insights abaixo vêm direto dos dados
+            reais deste período — clique em "Refazer análise" para a leitura completa da IA.
           </div>
         )}
 
@@ -485,10 +387,8 @@ function Index() {
           </div>
         )}
         <footer className="mt-10 pb-6 text-center text-xs text-muted-foreground">
-          Legenda do semáforo:{" "}
-          <span className="text-critical">vermelho crítico</span> ·{" "}
-          <span className="text-warning">amarelo regular</span> ·{" "}
-          <span className="text-success">verde dentro da meta</span>
+          Legenda do semáforo: <span className="text-critical">vermelho crítico</span> ·{" "}
+          <span className="text-warning">amarelo regular</span> · <span className="text-success">verde dentro da meta</span>
         </footer>
       </div>
     </div>

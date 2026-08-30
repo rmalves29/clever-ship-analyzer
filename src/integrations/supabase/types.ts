@@ -175,6 +175,27 @@ export type Database = {
         }
         Relationships: []
       }
+      automation_tick_locks: {
+        Row: {
+          holder: string | null
+          locked_until: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          holder?: string | null
+          locked_until?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          holder?: string | null
+          locked_until?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       automation_tick_runs: {
         Row: {
           automations_processed: number

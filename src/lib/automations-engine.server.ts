@@ -3,6 +3,7 @@
 
 import { automationDeliveryAction } from "./whatsapp-automation-delivery-state";
 import { decideAutomationReentry } from "./whatsapp-automation-reentry";
+import { resolveWaitInput } from "./automation-wait";
 
 export type SendStep = {
   id: string;
@@ -52,6 +53,8 @@ type RawStep = {
   id?: unknown;
   type?: unknown;
   waitMinutes?: unknown;
+  waitValue?: unknown;
+  waitUnit?: unknown;
   templateName?: unknown;
   templateLanguage?: unknown;
   messageType?: unknown;
@@ -118,10 +121,13 @@ export function parseSteps(raw: unknown): AutomationStep[] {
       }
       const templateName = String(s.templateName ?? "");
       if (!templateName) return null;
+      const resolved = resolveWaitInput(s);
       return {
         id,
         type: "send",
-        waitMinutes: Number(s.waitMinutes ?? 0),
+        waitMinutes: resolved.waitMinutes,
+        waitValue: resolved.waitValue,
+        waitUnit: resolved.waitUnit,
         templateName,
         templateLanguage: String(s.templateLanguage ?? "pt_BR"),
         messageType: s.messageType === "utility" ? "utility" : "marketing",

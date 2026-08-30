@@ -1014,6 +1014,8 @@ export type AutomationStepInput =
       id: string;
       type: "send";
       waitMinutes: number;
+      waitValue?: number | undefined;
+      waitUnit?: ("minutes" | "days") | undefined;
       templateName: string;
       templateLanguage?: string | undefined;
       messageType: MessageType;
@@ -1069,6 +1071,8 @@ export async function upsertAutomation(input: AutomationInput) {
           id: s.id,
           type: "send" as const,
           waitMinutes: s.waitMinutes,
+          ...(s.waitValue !== undefined ? { waitValue: s.waitValue } : {}),
+          ...(s.waitUnit ? { waitUnit: s.waitUnit } : {}),
           templateName: s.templateName.trim(),
           templateLanguage: s.templateLanguage?.trim() || settings.templateLanguage,
           messageType: s.messageType,

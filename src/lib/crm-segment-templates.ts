@@ -1,4 +1,5 @@
 import { CRM_FILTER_CATEGORIES, getCRMFilterField } from "./crm-filter-catalog";
+import { RFM_SEGMENTS_CONFIG, type RFMSegment } from "./crm-rfm-shared";
 
 export type CRMSegmentTemplateCondition = {
   field: string;
@@ -27,6 +28,36 @@ export type PersistedCRMSegmentRules = {
     }>;
   }>;
 };
+
+const CRM_RFM_TEMPLATE_IDS: Record<RFMSegment, string> = {
+  "Sem compra": "rfm-sem-compra",
+  Campeões: "rfm-campeoes",
+  Leais: "rfm-leais",
+  "Potencialmente Leais": "rfm-potencialmente-leais",
+  Novos: "rfm-novos",
+  "Precisa de atenção": "rfm-precisa-atencao",
+  "Quase hibernando": "rfm-quase-hibernando",
+  "Em risco": "rfm-em-risco",
+  Hibernando: "rfm-hibernando",
+  "Não pode perder": "rfm-nao-pode-perder",
+  Perdidos: "rfm-perdidos",
+};
+
+/**
+ * Um modelo dinâmico para cada classificação da matriz RFM.
+ * A audiência não é congelada: o resolvedor do CRM lê o rfm_segment atual
+ * do cliente sempre que exibe, exporta ou envia uma campanha.
+ */
+export const CRM_RFM_SEGMENT_TEMPLATES: CRMSegmentTemplate[] = (
+  Object.entries(RFM_SEGMENTS_CONFIG) as Array<
+    [RFMSegment, (typeof RFM_SEGMENTS_CONFIG)[RFMSegment]]
+  >
+).map(([segment, config]) => ({
+  id: CRM_RFM_TEMPLATE_IDS[segment],
+  name: `RFM — ${segment}`,
+  description: `Segmento RFM dinâmico. ${config.description} A composição é atualizada automaticamente após cada recálculo da RFM.`,
+  conditions: [{ field: "rfm_segment", operator: "eq", value: segment }],
+}));
 
 /**
  * Modelos intencionalmente prontos para uso: não possuem placeholders vazios.
@@ -131,18 +162,7 @@ export const CRM_SEGMENT_TEMPLATES: CRMSegmentTemplate[] = [
       { field: "ultima_compra", operator: "last_days", value: 30 },
     ],
   },
-  {
-    id: "vip-em-formacao",
-    name: "VIP em formação",
-    description: "Clientes classificados pela matriz RFM como VIP em formação. Boa audiência para acelerar frequência e fidelização.",
-    conditions: [{ field: "rfm_segment", operator: "eq", value: "VIP em formação" }],
-  },
-  {
-    id: "vip-leais",
-    name: "Clientes VIP / Leais",
-    description: "Clientes atualmente classificados como VIP/Leal pela matriz RFM. Público para exclusividade, acesso antecipado e lançamentos.",
-    conditions: [{ field: "rfm_segment", operator: "eq", value: "VIP/Leal" }],
-  },
+  ...CRM_RFM_SEGMENT_TEMPLATES,
   {
     id: "baixo-ticket-recente",
     name: "Ticket abaixo de R$150 + recente",

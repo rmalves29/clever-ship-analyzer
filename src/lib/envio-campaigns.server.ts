@@ -34,6 +34,14 @@ export type EnvioCampaign = {
   last_spawn_at: string | null;
   created_at: string;
   updated_at: string;
+  group_count?: number;
+};
+
+export type EnvioCampaignAudience = {
+  campaign: EnvioCampaign;
+  groupIds: string[];
+  groupNames: string[];
+  groupCount: number;
 };
 
 function slugify(name: string): string {
@@ -53,7 +61,61 @@ export async function listEnvioCampaigns(): Promise<EnvioCampaign[]> {
     .eq("tenant_id", tenant)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
-  return (data ?? []) as EnvioCampaign[];
+
+  const campaigns = (data ?? []) as EnvioCampaign[];
+  if (campaigns.length === 0) return [];
+
+  const { data: links, error: linksError } = await (supabaseAdmin.from("fe_campaign_groups" as any) as any)
+    .select("campaign_id")
+    .in("campaign_id", campaigns.map((campaign) => campaign.id));
+  if (linksError) throw new Error(linksError.message);
+
+  const counts = new Map<string, number>();
+  for (const link of (links ?? []) as any[]) {
+    const campaignId = link.campaign_id as string;
+    counts.set(campaignId, (counts.get(campaignId) ?? 0) + 1);
+  }
+  return campaigns.map((campaign) => ({ ...campaign, group_count: counts.get(campaign.id) ?? 0 }));
+}
+
+/** Resolve campanha e grupos no banco dono do Fluxo de Envio. O tenant é sempre validado no
+ * servidor; IDs e nomes recebidos do navegador nunca são tratados como fonte de verdade. */
+export async function resolveEnvioCampaignAudience(campaignId: string): Promise<EnvioCampaignAudience> {
+  const supabaseAdmin = await admin();
+  const tenant = await tenantId();
+
+  const { data: rawCampaign, error: campaignError } = await (supabaseAdmin.from("fe_campaigns" as any) as any)
+    .select("*")
+    .eq("id", campaignId)
+    .eq("tenant_id", tenant)
+    .maybeSingle();
+  if (campaignError) throw new Error(campaignError.message);
+  if (!rawCampaign) throw new Error("Campanha não encontrada.");
+  const campaign = rawCampaign as EnvioCampaign;
+  if (!campaign.is_active) throw new Error("A campanha selecionada está inativa.");
+
+  const { data: links, error: linksError } = await (supabaseAdmin.from("fe_campaign_groups" as any) as any)
+    .select("group_id")
+    .eq("campaign_id", campaignId)
+    .order("sort_order", { ascending: true });
+  if (linksError) throw new Error(linksError.message);
+
+  const groupIds = ((links ?? []) as any[]).map((link) => link.group_id as string).filter(Boolean);
+  let groupNames: string[] = [];
+  if (groupIds.length > 0) {
+    const { data: groups } = await (supabaseAdmin.from("fe_groups" as any) as any)
+      .select("id, group_name")
+      .in("id", groupIds);
+    const namesById = new Map(((groups ?? []) as any[]).map((group) => [group.id as string, group.group_name as string]));
+    groupNames = groupIds.map((id) => namesById.get(id)).filter((name): name is string => Boolean(name));
+  }
+
+  return {
+    campaign: { ...campaign, group_count: groupIds.length },
+    groupIds,
+    groupNames,
+    groupCount: groupIds.length,
+  };
 }
 
 export async function createEnvioCampaign(input: { name: string; description?: string | undefined }): Promise<EnvioCampaign> {

@@ -295,7 +295,10 @@ function expectedLink(slot: ContentSlot): { type: "instagram" | "site" | "none";
   if (slot.kind === "top_post_1" || slot.kind === "top_post_2" || slot.kind === "top_reel") {
     return slot.permalink ? { type: "instagram", url: slot.permalink } : { type: "none", url: null };
   }
-  return slot.productUrl ? { type: "site", url: slot.productUrl } : { type: "none", url: null };
+  if (slot.kind === "top_seller_1" || slot.kind === "top_seller_2" || slot.kind === "top_visited") {
+    return slot.productUrl ? { type: "site", url: slot.productUrl } : { type: "none", url: null };
+  }
+  return { type: "none", url: null };
 }
 
 function allowedCta(slot: ContentSlot): string {
@@ -930,10 +933,15 @@ async function gatherPostPerformance(sinceIso: string): Promise<PostPerformanceR
   if (items.length === 0) return [];
 
   const idsForItem = (item: any): string[] => {
-    const ids = Array.isArray(item.envio_message_ids)
-      ? item.envio_message_ids.filter((id: unknown): id is string => typeof id === "string")
+    const ids: string[] = Array.isArray(item.envio_message_ids)
+      ? (item.envio_message_ids as unknown[]).filter((id): id is string => typeof id === "string")
       : [];
-    return [...new Set(ids.length > 0 ? ids : item.envio_message_id ? [String(item.envio_message_id)] : [])];
+    const candidates: string[] = ids.length > 0
+      ? ids
+      : item.envio_message_id
+        ? [String(item.envio_message_id)]
+        : [];
+    return Array.from(new Set<string>(candidates));
   };
   const messageIds = [...new Set(items.flatMap(idsForItem))];
 

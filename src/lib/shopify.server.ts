@@ -146,6 +146,7 @@ export const ORDERS_QUERY = `
           sourceName
           subtotalPriceSet { presentmentMoney { amount } }
           totalDiscountsSet { presentmentMoney { amount } }
+          discountCodes
           totalShippingPriceSet { presentmentMoney { amount } }
           totalTaxSet { presentmentMoney { amount } }
           totalPriceSet { presentmentMoney { amount } }

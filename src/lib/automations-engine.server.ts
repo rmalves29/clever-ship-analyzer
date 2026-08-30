@@ -8,6 +8,8 @@ export type SendStep = {
   id: string;
   type: "send";
   waitMinutes: number;
+  waitValue?: number;
+  waitUnit?: "minutes" | "days";
   templateName: string;
   templateLanguage: string;
   messageType: "marketing" | "utility";

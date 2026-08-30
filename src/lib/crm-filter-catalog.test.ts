@@ -17,7 +17,7 @@ const NOW = new Date("2026-08-24T15:00:00-03:00");
 const buyer: CRMAdvancedCustomerContext = {
   customer: {
     id: "c1", first_name: "Ana", city: "Belo Horizonte", province: "MG",
-    tags: ["VIP"], tags_custom: ["Teste"], rfm_segment: "Nova compra",
+    tags: ["VIP"], tags_custom: ["Teste"], rfm_segment: "Novos",
     last_visit_at: "2026-08-24T10:00:00-03:00",
     has_active_cashback: true,
   },
@@ -128,7 +128,7 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
   { field: "automacao_whatsapp", operator: "completed", value: "auto-1" },
   { field: "customer_tag", operator: "contains", value: "VIP" },
   { field: "tags_custom", operator: "contains", value: "Teste" },
-  { field: "rfm_segment", operator: "eq", value: "Nova compra" },
+  { field: "rfm_segment", operator: "eq", value: "Novos" },
 ];
 
 describe("catálogo confiável de filtros do CRM", () => {
@@ -203,7 +203,7 @@ describe("catálogo confiável de filtros do CRM", () => {
   });
 
   it("aceita múltiplos segmentos RFM conhecidos", () => {
-    expect(validateCRMFilterCondition({ field: "rfm_segment", operator: "in", value: ["Nova compra", "VIP/Leal"] })).toBeNull();
+    expect(validateCRMFilterCondition({ field: "rfm_segment", operator: "in", value: ["Novos", "Leais"] })).toBeNull();
     expect(validateCRMFilterCondition({ field: "rfm_segment", operator: "in", value: [] })).toContain("pelo menos um");
   });
 

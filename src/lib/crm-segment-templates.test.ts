@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { CRM_SEGMENT_TEMPLATES, buildPersistedRulesFromTemplate } from "./crm-segment-templates";
+import { CRM_RFM_SEGMENT_TEMPLATES, CRM_SEGMENT_TEMPLATES, buildPersistedRulesFromTemplate } from "./crm-segment-templates";
+import { RFM_SEGMENTS_CONFIG } from "./crm-rfm-shared";
 import { getCRMFilterField, validateCRMFilterCondition, validateSegmentRulesPayload } from "./crm-filter-catalog";
 
 describe("modelos prontos de segmentos", () => {
   it("mantém IDs únicos e modelos com nome e descrição", () => {
-    expect(CRM_SEGMENT_TEMPLATES.length).toBe(16);
+    expect(CRM_SEGMENT_TEMPLATES.length).toBe(25);
     expect(new Set(CRM_SEGMENT_TEMPLATES.map((template) => template.id)).size).toBe(CRM_SEGMENT_TEMPLATES.length);
     for (const template of CRM_SEGMENT_TEMPLATES) {
       expect(template.name.trim()).not.toBe("");
@@ -45,10 +46,21 @@ describe("modelos prontos de segmentos", () => {
       "alto-valor-30d",
       "compra-unica-alto-valor",
       "recorrente-alto-valor",
-      "vip-em-formacao",
-      "vip-leais",
+      "rfm-campeoes",
+      "rfm-hibernando",
       "baixo-ticket-recente",
     ].forEach((id) => expect(ids.has(id)).toBe(true));
+  });
+
+  it("oferece um segmento dinâmico para cada classificação RFM", () => {
+    const rfmValues = CRM_RFM_SEGMENT_TEMPLATES.map((template) => template.conditions[0]?.value);
+    expect(rfmValues).toEqual(Object.keys(RFM_SEGMENTS_CONFIG));
+
+    for (const template of CRM_RFM_SEGMENT_TEMPLATES) {
+      const segment = template.conditions[0]?.value;
+      expect(template.name).toBe(`RFM — ${segment}`);
+      expect(template.conditions).toEqual([{ field: "rfm_segment", operator: "eq", value: segment }]);
+    }
   });
 
   it.each(CRM_SEGMENT_TEMPLATES)("$name gera regras persistíveis e editáveis", (template) => {

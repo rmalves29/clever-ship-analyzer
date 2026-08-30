@@ -26,6 +26,15 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+async function syncAiQueueState(messageId: string): Promise<void> {
+  try {
+    const { syncAiContentQueueDeliveryStateForMessage } = await import("./ai-content-queue.server");
+    await syncAiContentQueueDeliveryStateForMessage(messageId);
+  } catch (error) {
+    console.error(`Falha ao sincronizar a fila de conteúdo IA para ${messageId}:`, error);
+  }
+}
+
 const CONTENT_TO_MEDIA_TYPE: Record<Exclude<EnvioContentType, "text">, MediaType> = {
   image: "image",
   audio: "audio",
@@ -68,13 +77,15 @@ async function sendOneMessage(messageId: string): Promise<void> {
       .update({ status: "sent", sent_at: new Date().toISOString(), wa_message_id: waMessageId ?? null } as never)
       .eq("id", messageId)
       .eq("status", "sending");
+    await syncAiQueueState(messageId);
   } catch (error) {
     console.error(`sendOneMessage falhou (${messageId}):`, error);
     await (supabaseAdmin
       .from("envio_messages" as any) as any)
-      .update({ status: "failed" } as never)
+      .update({ status: "failed", updated_at: new Date().toISOString() } as never)
       .eq("id", messageId)
       .eq("status", "sending");
+    await syncAiQueueState(messageId);
   }
 }
 
@@ -88,6 +99,7 @@ async function sendMessagesSequentially(messageIds: string[]): Promise<void> {
 }
 
 export async function createAndSendEnvioMessage(input: {
+  campaignId?: string | undefined;
   groupIds: string[];
   contentType: EnvioContentType;
   contentText?: string | undefined;
@@ -97,6 +109,7 @@ export async function createAndSendEnvioMessage(input: {
   const supabaseAdmin = await admin();
   const isScheduled = Boolean(input.scheduledAt);
   const rows = input.groupIds.map((groupId) => ({
+    campaign_id: input.campaignId ?? null,
     group_id: groupId,
     content_type: input.contentType,
     content_text: input.contentText ?? null,

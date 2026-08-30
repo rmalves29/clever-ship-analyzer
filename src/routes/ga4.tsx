@@ -189,19 +189,31 @@ function ConnectionPanel({ connected }: { connected: boolean }) {
   const disconnect = useServerFn(removeGa4Connection);
   const [propertyId, setPropertyId] = useState("");
   const [serviceAccountJson, setServiceAccountJson] = useState("");
+  const [connectionFeedback, setConnectionFeedback] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+  const canSave = Boolean(propertyId.trim() && serviceAccountJson.trim());
 
   const saveMutation = useMutation({
     mutationFn: () =>
       saveConnection({ data: { propertyId, serviceAccountJson } }),
+    onMutate: () => setConnectionFeedback(null),
     onSuccess: () => {
+      setConnectionFeedback({
+        type: "success",
+        message: "Conexão salva e testada com sucesso.",
+      });
       toast.success("GA4 conectado e testado com sucesso.");
       setServiceAccountJson("");
       queryClient.invalidateQueries({ queryKey: ["ga4"] });
     },
-    onError: (error: unknown) =>
-      toast.error(
-        error instanceof Error ? error.message : "Falha ao conectar o GA4.",
-      ),
+    onError: (error: unknown) => {
+      const message =
+        error instanceof Error ? error.message : "Falha ao conectar o GA4.";
+      setConnectionFeedback({ type: "error", message });
+      toast.error(message);
+    },
   });
   const testMutation = useMutation({
     mutationFn: () => testConnection(),
@@ -263,14 +275,30 @@ function ConnectionPanel({ connected }: { connected: boolean }) {
               A chave é processada e armazenada somente no servidor.
             </p>
           </div>
+          {connectionFeedback && (
+            <Alert
+              variant={
+                connectionFeedback.type === "error" ? "destructive" : "default"
+              }
+            >
+              {connectionFeedback.type === "error" ? (
+                <AlertTriangle className="size-4" />
+              ) : (
+                <CheckCircle2 className="size-4" />
+              )}
+              <AlertTitle>
+                {connectionFeedback.type === "error"
+                  ? "Não foi possível conectar"
+                  : "Conexão concluída"}
+              </AlertTitle>
+              <AlertDescription>{connectionFeedback.message}</AlertDescription>
+            </Alert>
+          )}
           <div className="flex flex-wrap gap-2">
             <Button
+              type="button"
               onClick={() => saveMutation.mutate()}
-              disabled={
-                !propertyId.trim() ||
-                !serviceAccountJson.trim() ||
-                saveMutation.isPending
-              }
+              disabled={!canSave || saveMutation.isPending}
               className="gap-2"
             >
               {saveMutation.isPending ? (
@@ -299,6 +327,13 @@ function ConnectionPanel({ connected }: { connected: boolean }) {
               </>
             )}
           </div>
+          <p className="text-xs text-muted-foreground">
+            {!canSave
+              ? "Preencha o ID da propriedade e o JSON para liberar o botão."
+              : saveMutation.isPending
+                ? "Testando o acesso no Google Analytics..."
+                : "O teste pode levar alguns segundos e o resultado aparecerá aqui."}
+          </p>
         </CardContent>
       </Card>
 

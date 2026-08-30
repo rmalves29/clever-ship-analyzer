@@ -408,6 +408,8 @@ const sendStepSchema = z.object({
   id: z.string().min(1),
   type: z.literal("send"),
   waitMinutes: z.number().int().min(0).max(43200),
+  waitValue: z.number().int().min(0).max(43200).optional(),
+  waitUnit: z.enum(["minutes", "days"]).optional(),
   templateName: z.string().min(1),
   templateLanguage: z.string().optional(),
   messageType: messageTypeSchema.default("marketing"),

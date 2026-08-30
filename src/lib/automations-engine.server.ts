@@ -3,11 +3,14 @@
 
 import { automationDeliveryAction } from "./whatsapp-automation-delivery-state";
 import { decideAutomationReentry } from "./whatsapp-automation-reentry";
+import { resolveWaitInput } from "./automation-wait";
 
 export type SendStep = {
   id: string;
   type: "send";
   waitMinutes: number;
+  waitValue?: number;
+  waitUnit?: "minutes" | "days";
   templateName: string;
   templateLanguage: string;
   messageType: "marketing" | "utility";
@@ -50,6 +53,8 @@ type RawStep = {
   id?: unknown;
   type?: unknown;
   waitMinutes?: unknown;
+  waitValue?: unknown;
+  waitUnit?: unknown;
   templateName?: unknown;
   templateLanguage?: unknown;
   messageType?: unknown;
@@ -116,10 +121,13 @@ export function parseSteps(raw: unknown): AutomationStep[] {
       }
       const templateName = String(s.templateName ?? "");
       if (!templateName) return null;
+      const resolved = resolveWaitInput(s);
       return {
         id,
         type: "send",
-        waitMinutes: Number(s.waitMinutes ?? 0),
+        waitMinutes: resolved.waitMinutes,
+        waitValue: resolved.waitValue,
+        waitUnit: resolved.waitUnit,
         templateName,
         templateLanguage: String(s.templateLanguage ?? "pt_BR"),
         messageType: s.messageType === "utility" ? "utility" : "marketing",
@@ -610,8 +618,42 @@ export async function getAllAutomationRunMetrics(): Promise<
   return result;
 }
 
+const TICK_LOCK_NAME = "automations_tick";
+/** Lease de 5 min: se um tick travar/morrer, o próximo assume depois desse prazo. */
+const TICK_LOCK_LEASE_MS = 5 * 60_000;
+
+/** Trava atômica (UPDATE condicional) pra impedir dois ticks simultâneos no ciclo de 1 min. */
+async function acquireTickLease(): Promise<string | null> {
+  const supabaseAdmin = await admin();
+  const holder = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const { data } = await supabaseAdmin
+    .from("automation_tick_locks" as never)
+    .update({ locked_until: new Date(Date.now() + TICK_LOCK_LEASE_MS).toISOString(), holder, updated_at: now } as never)
+    .eq("name", TICK_LOCK_NAME)
+    .lt("locked_until", now)
+    .select("holder");
+  const rows = (data ?? []) as { holder: string }[];
+  return rows.length > 0 ? holder : null;
+}
+
+async function releaseTickLease(holder: string) {
+  const supabaseAdmin = await admin();
+  await supabaseAdmin
+    .from("automation_tick_locks" as never)
+    .update({ locked_until: new Date().toISOString(), updated_at: new Date().toISOString() } as never)
+    .eq("name", TICK_LOCK_NAME)
+    .eq("holder", holder);
+}
+
 export async function runAutomationsTickWithLog() {
   const supabaseAdmin = await admin();
+
+  const holder = await acquireTickLease();
+  if (!holder) {
+    return { skipped: true as const, reason: "tick_already_running", automationsProcessed: 0, runsProcessed: 0 };
+  }
+
   const { data: logRow } = await supabaseAdmin
     .from("automation_tick_runs")
     .insert({ started_at: new Date().toISOString() } as never)
@@ -645,5 +687,7 @@ export async function runAutomationsTickWithLog() {
         .eq("id", logId);
     }
     throw error;
+  } finally {
+    await releaseTickLease(holder);
   }
 }

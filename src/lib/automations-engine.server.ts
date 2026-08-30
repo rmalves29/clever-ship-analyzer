@@ -687,5 +687,7 @@ export async function runAutomationsTickWithLog() {
         .eq("id", logId);
     }
     throw error;
+  } finally {
+    await releaseTickLease(holder);
   }
 }

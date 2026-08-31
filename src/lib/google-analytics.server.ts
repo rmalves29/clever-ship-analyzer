@@ -683,7 +683,7 @@ export async function getGa4MostViewedProducts(
       dimensions: [{ name: "pagePathPlusQueryString" }, { name: "pageTitle" }],
       metrics: [{ name: "screenPageViews" }],
       orderBys: metricOrder("screenPageViews"),
-      limit: "250",
+      limit: "10000",
     }).catch(() => ({ rows: [] }) as Ga4ApiReport),
   ]);
   const excluded = new Set(
@@ -696,7 +696,8 @@ export async function getGa4MostViewedProducts(
       /^gid:\/\/shopify\/Product\//,
       "",
     );
-    return id && !excluded.has(id);
+    const title = String(product.itemName || "").trim();
+    return Boolean(id || title) && (!id || !excluded.has(id));
   }).map((product) => ({ ...product, productViewSource: "ecommerce_item" }));
 
   const pagesByHandle = new Map<string, Ga4Record>();

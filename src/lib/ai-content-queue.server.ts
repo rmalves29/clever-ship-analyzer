@@ -100,6 +100,7 @@ type ProductSourceSlot = {
   productUrl: string | null;
   productId: string;
   views: number | null;
+  periodLabel?: string;
   launchRankedByViews: boolean;
   media: SlotMedia;
 };
@@ -225,6 +226,25 @@ function ga4Views(row: Ga4Record): number {
   return Number(row.itemsViewed ?? row.itemViewEvents ?? row.screenPageViews ?? 0);
 }
 
+function shiftIsoDate(date: string, days: number): string {
+  const parsed = new Date(`${date}T12:00:00Z`);
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  return parsed.toISOString().slice(0, 10);
+}
+
+async function firstResolvableViewedProduct(
+  rows: Ga4Record[],
+  recentProducts: ShopifyProductDetail[],
+  excludedIds: Set<string>,
+): Promise<{ detail: ShopifyProductDetail; row: Ga4Record } | null> {
+  for (const row of rows) {
+    const detail = await resolveGa4Product(row, recentProducts);
+    if (!detail || excludedIds.has(normalizedProductId(detail.id)) || !productMedia(detail)) continue;
+    return { detail, row };
+  }
+  return null;
+}
+
 /** Junta as seis fontes reais: Ads por CTR de link, Shopify por vendas, Instagram por resultado,
  * GA4 por visualização, Story ativo (ou Reels) e lançamento recente mais visto. */
 async function gatherWeeklySignals(startDate: string): Promise<WeeklySignals> {
@@ -257,24 +277,30 @@ async function gatherWeeklySignals(startDate: string): Promise<WeeklySignals> {
 
   const excludedIds = new Set(bestSellerIds.map(normalizedProductId));
   if (sellerDetail) excludedIds.add(normalizedProductId(sellerDetail.id));
-  let viewedDetail: ShopifyProductDetail | null = null;
-  let viewedRow: Ga4Record | null = null;
-  for (const row of gaRows.slice(0, 25)) {
-    const detail = await resolveGa4Product(row, recentProducts);
-    if (!detail || excludedIds.has(normalizedProductId(detail.id)) || !productMedia(detail)) continue;
-    viewedDetail = detail;
-    viewedRow = row;
-    break;
+  let viewRowsForSelection = gaRows;
+  let viewPeriodLabel = "semana anterior";
+  let viewed = await firstResolvableViewedProduct(viewRowsForSelection, recentProducts, excludedIds);
+  if (!viewed) {
+    // A propriedade pode ter sido ligada recentemente ou não ter `view_item` na semana exata.
+    // Mantemos a fonte GA4 e ampliamos somente até 30 dias, informando a janela usada no card.
+    viewRowsForSelection = await getGa4MostViewedProducts(
+      { startDate: shiftIsoDate(endDate, -29), endDate },
+      bestSellerIds,
+    ).catch(() => [] as Ga4Record[]);
+    viewPeriodLabel = "últimos 30 dias (fallback sem dado resolvível na semana anterior)";
+    viewed = await firstResolvableViewedProduct(viewRowsForSelection, recentProducts, excludedIds);
   }
+  const viewedDetail = viewed?.detail ?? null;
+  const viewedRow = viewed?.row ?? null;
   const viewedMedia = viewedDetail ? productMedia(viewedDetail) : null;
   const topViewed: ProductSourceSlot | null = viewedDetail && viewedRow && viewedMedia
-    ? { kind: "top_viewed", title: viewedDetail.title, description: viewedDetail.description, productUrl: viewedDetail.productUrl, productId: viewedDetail.id, views: ga4Views(viewedRow), launchRankedByViews: false, media: viewedMedia }
+    ? { kind: "top_viewed", title: viewedDetail.title, description: viewedDetail.description, productUrl: viewedDetail.productUrl, productId: viewedDetail.id, views: ga4Views(viewedRow), periodLabel: viewPeriodLabel, launchRankedByViews: false, media: viewedMedia }
     : null;
   if (viewedDetail) excludedIds.add(normalizedProductId(viewedDetail.id));
 
   let launchDetail: ShopifyProductDetail | null = null;
   let launchViews: number | null = null;
-  for (const row of gaRows) {
+  for (const row of viewRowsForSelection) {
     const candidate = findRecentProductForGaRow(row, recentProducts);
     if (!candidate || excludedIds.has(normalizedProductId(candidate.id)) || !productMedia(candidate)) continue;
     launchDetail = candidate;
@@ -363,7 +389,7 @@ function sourceVerifiedFacts(slot: ContentSlot): string[] {
       ];
     case "top_viewed":
       return [
-        `"${slot.title}" foi o produto mais visualizado no GA4 na semana anterior entre os elegíveis, sem repetir o mais vendido${slot.views !== null ? ` (${slot.views} visualizações registradas)` : ""}.`,
+        `"${slot.title}" foi o produto mais visualizado no GA4 em ${slot.periodLabel ?? "semana anterior"} entre os elegíveis, sem repetir o mais vendido${slot.views !== null ? ` (${slot.views} visualizações registradas)` : ""}.`,
         ...(slot.description ? [`Descrição cadastrada: ${slot.description.slice(0, 300)}`] : []),
       ];
     case "top_recent_launch":
@@ -392,7 +418,7 @@ function sourceSummary(slot: ContentSlot): string {
     case "top_ad_ctr": return `Anúncio com melhor CTR ${slot.ctrMetric === "link" ? "de link" : "geral"}: ${slot.name}.`;
     case "top_seller": return `Produto mais vendido: ${slot.title}.`;
     case "top_instagram": return "Publicação de imagem com melhor resultado no Instagram.";
-    case "top_viewed": return `Produto mais visualizado no GA4, sem repetir o mais vendido: ${slot.title}.`;
+    case "top_viewed": return `Produto mais visualizado no GA4 em ${slot.periodLabel ?? "semana anterior"}, sem repetir o mais vendido: ${slot.title}.`;
     case "top_story_or_reel": return slot.resultLabel.includes("Story") ? "Story ativo mais visualizado." : "Melhor Reels da semana anterior (fallback sem Story ativo).";
     case "top_recent_launch": return `Lançamento recente${slot.launchRankedByViews ? " mais visualizado" : ""}: ${slot.title}.`;
   }

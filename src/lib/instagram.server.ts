@@ -292,8 +292,11 @@ export type InstagramMedia = {
  *  `getInstagramTopContentInRange` (range arbitrário, ex: "semana anterior" pro lote de IA).
  *  `untilISO` é exclusivo (mesma semântica dos outros usos de range nesse arquivo). */
 async function fetchTopContentInRange(pageToken: string, igId: string, sinceISO: string, untilISO: string): Promise<InstagramMedia[]> {
-  const sinceTs = Math.floor(new Date(sinceISO + "T00:00:00Z").getTime() / 1000);
-  const untilTs = Math.floor(new Date(untilISO + "T00:00:00Z").getTime() / 1000);
+  const sinceTs = instagramRangeBoundarySeconds(sinceISO);
+  const untilTs = instagramRangeBoundarySeconds(untilISO);
+  if (sinceTs === null || untilTs === null || sinceTs >= untilTs) {
+    throw new Error("Período inválido para consultar as publicações do Instagram.");
+  }
 
   const listRes = await graphGET(
     `/${igId}/media`,
@@ -335,6 +338,17 @@ async function fetchTopContentInRange(pageToken: string, igId: string, sinceISO:
   return withInsights
     .sort((a, b) => b.totalInteractions - a.totalInteractions)
     .slice(0, 10);
+}
+
+/** Aceita tanto `AAAA-MM-DD` quanto um ISO completo. O calendário usa limites com fuso de São
+ * Paulo, enquanto a tela de Instagram usa datas simples; normalizar aqui evita concatenar dois
+ * horários e transformar o período em `Invalid Date`. */
+export function instagramRangeBoundarySeconds(value: string): number | null {
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value.trim())
+    ? `${value.trim()}T00:00:00Z`
+    : value.trim();
+  const timestamp = new Date(normalized).getTime();
+  return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : null;
 }
 
 /** Métricas disponíveis variam por tipo de mídia e versão da Graph API. Uma métrica inválida não

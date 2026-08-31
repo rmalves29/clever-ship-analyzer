@@ -878,11 +878,12 @@ export async function getCalendarMonthData(year: number, month: number): Promise
     if (!occurredAt) continue;
     const date = dayKey(occurredAt);
     const campaign = campaignRowsById.get(row.campaign_id);
-    const key = `${date}:${row.campaign_id}:${row.status}`;
+    const key = `${date}:${row.campaign_id}`;
     const current = groupedWhatsapp.get(key);
     if (current) {
       current.destinations += 1;
       if (occurredAt < current.occurredAt) current.occurredAt = occurredAt;
+      if (row.status !== "sent") current.status = row.status;
       continue;
     }
 
@@ -891,7 +892,7 @@ export async function getCalendarMonthData(year: number, month: number): Promise
     const templateBody = templateBodyByKey.get(`${row.template_name}:${row.template_language}`);
     const renderedBody = row.wa_message_id ? inboxBodyByMessageId.get(row.wa_message_id) : null;
     groupedWhatsapp.set(key, {
-      id: `whatsapp:${row.campaign_id}:${date}:${row.status}`,
+      id: `whatsapp:${row.campaign_id}:${date}`,
       source: "whatsapp_api",
       title: campaign?.nome ?? row.template_name ?? "Campanha WhatsApp",
       content: renderedBody ?? (templateBody ? renderCalendarTemplate(templateBody, bodyParams, bodyParamTokens) : `Template: ${row.template_name}`),
@@ -909,13 +910,13 @@ export async function getCalendarMonthData(year: number, month: number): Promise
   for (const campaign of campaignsBySentDate ?? []) {
     if (!campaign.sent_at) continue;
     const date = dayKey(campaign.sent_at);
-    const alreadyIncluded = Array.from(groupedWhatsapp.values()).some((detail) => detail.id.startsWith(`whatsapp:${campaign.id}:${date}:`));
+    const alreadyIncluded = Array.from(groupedWhatsapp.values()).some((detail) => detail.id === `whatsapp:${campaign.id}:${date}`);
     if (alreadyIncluded) continue;
     const bodyParams = Array.isArray(campaign.body_params) ? campaign.body_params.map(String) : [];
     const bodyParamTokens = Array.isArray(campaign.body_param_tokens) ? campaign.body_param_tokens.map(String) : null;
     const templateBody = templateBodyByKey.get(`${campaign.template_name}:${campaign.template_language}`);
     groupedWhatsapp.set(`${date}:${campaign.id}:legacy`, {
-      id: `whatsapp:${campaign.id}:${date}:legacy`,
+      id: `whatsapp:${campaign.id}:${date}`,
       source: "whatsapp_api",
       title: campaign.nome,
       content: templateBody ? renderCalendarTemplate(templateBody, bodyParams, bodyParamTokens) : `Template: ${campaign.template_name}`,

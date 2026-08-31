@@ -329,6 +329,7 @@ function CRMPage() {
                 <DropdownMenuItem onClick={handleSync}>Sincronizar Shopify</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <ImportContactsDialog open={importDialogOpen} onOpenChange={setImportDialogOpen} />
           </div>
         </div>
 

@@ -287,9 +287,15 @@ export async function enqueueCampaign(
     frozenContexts = await loadAutomationContextsForCampaign(campaignId);
   }
 
+  const needsOrderTokens = bodyParams.some((p) => p.includes("{{"));
+  const bundles = needsOrderTokens
+    ? await preloadOrderBundles(recipients.filter((r) => !frozenContexts.has(r.id)).map((r) => r.id))
+    : new Map<string, OrderBundle>();
+
   const scheduledAt = schedule.iso;
   const rows: Record<string, unknown>[] = [];
   let skipped = 0;
+
   for (const recipient of recipients) {
     const to = toE164(recipient.phone);
     if (!to) {

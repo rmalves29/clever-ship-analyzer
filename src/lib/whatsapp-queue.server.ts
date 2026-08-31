@@ -94,12 +94,97 @@ function shippingTitle(rawData: any): string {
   return rawData?.shipping_lines?.[0]?.title || rawData?.shippingLine?.title || rawData?.shippingLines?.edges?.[0]?.node?.title || "—";
 }
 
+type OrderBundle = {
+  order: any;
+  items: any[];
+  fulfillment: any;
+  cashback: Awaited<ReturnType<typeof import("./cashback.server")["loadCashbackForOrder"]>>;
+};
+
+function chunk<T>(list: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
+/** Carrega em LOTE (poucas queries) o último pedido + itens + rastreio + cashback de todos os
+ *  destinatários. Sem isso, resolver tokens por destinatário faria 3–4 queries por pessoa e o
+ *  enfileiramento de campanhas grandes estourava o tempo da requisição — deixando a fila vazia. */
+async function preloadOrderBundles(customerIds: string[]): Promise<Map<string, OrderBundle>> {
+  const result = new Map<string, OrderBundle>();
+  const ids = [...new Set(customerIds.filter(Boolean))];
+  if (ids.length === 0) return result;
+  const supabaseAdmin = await admin();
+
+  const latestByCustomer = new Map<string, any>();
+  for (const part of chunk(ids, 200)) {
+    const { data } = await supabaseAdmin
+      .from("shopify_orders")
+      .select("id, customer_id, processed_at, order_number, name, total_price, fulfillment_status, raw_data")
+      .in("customer_id", part)
+      .order("processed_at", { ascending: false });
+    for (const row of (data ?? []) as any[]) {
+      if (!latestByCustomer.has(row.customer_id)) latestByCustomer.set(row.customer_id, row);
+    }
+  }
+
+  const orderIds = [...latestByCustomer.values()].map((o) => String(o.id));
+  const itemsByOrder = new Map<string, any[]>();
+  const fulfillmentByOrder = new Map<string, any>();
+  const cashbackByOrder = new Map<string, OrderBundle["cashback"]>();
+
+  for (const part of chunk(orderIds, 200)) {
+    const [{ data: itemRows }, { data: fulfillmentRows }, { data: cashbackRows }] = await Promise.all([
+      supabaseAdmin.from("shopify_order_items").select("order_id, title, variant_title, quantity").in("order_id", part),
+      supabaseAdmin
+        .from("shopify_fulfillments")
+        .select("order_id, tracking_number, tracking_url, tracking_company, status, updated_at")
+        .in("order_id", part)
+        .order("updated_at", { ascending: false }),
+      supabaseAdmin
+        .from("cashback_coupons")
+        .select("shopify_order_id, code, cashback_amount, minimum_purchase, starts_at, ends_at, status")
+        .in("shopify_order_id", part),
+    ]);
+    for (const row of (itemRows ?? []) as any[]) {
+      const list = itemsByOrder.get(String(row.order_id)) ?? [];
+      list.push(row);
+      itemsByOrder.set(String(row.order_id), list);
+    }
+    for (const row of (fulfillmentRows ?? []) as any[]) {
+      if (!fulfillmentByOrder.has(String(row.order_id))) fulfillmentByOrder.set(String(row.order_id), row);
+    }
+    for (const row of (cashbackRows ?? []) as any[]) {
+      if (row.status === "cancelled") continue;
+      cashbackByOrder.set(String(row.shopify_order_id), {
+        code: String(row.code),
+        amount: Number(row.cashback_amount ?? 0),
+        minimumPurchase: Number(row.minimum_purchase ?? 0),
+        startsAt: String(row.starts_at),
+        endsAt: String(row.ends_at),
+      });
+    }
+  }
+
+  for (const [customerId, order] of latestByCustomer) {
+    const key = String(order.id);
+    result.set(customerId, {
+      order,
+      items: itemsByOrder.get(key) ?? [],
+      fulfillment: fulfillmentByOrder.get(key) ?? null,
+      cashback: cashbackByOrder.get(key) ?? null,
+    });
+  }
+  return result;
+}
+
 /** Resolve os tokens dinâmicos no momento do enfileiramento. Em automações, o snapshot congelado
  * tem prioridade absoluta; campanhas avulsas continuam usando o estado mais recente do cliente. */
 async function resolveBodyParams(
   bodyParams: string[],
   recipient: { id: string; first_name?: string | null; checkout_url?: string | null },
   frozenContext?: AutomationEventContext,
+  bundle?: OrderBundle,
 ): Promise<string[]> {
   if (!bodyParams.some((p) => p.includes("{{"))) return [...bodyParams];
   if (frozenContext) {
@@ -109,44 +194,12 @@ async function resolveBodyParams(
     });
   }
 
-  const supabaseAdmin = await admin();
-  const { data: lastOrder } = await supabaseAdmin
-    .from("shopify_orders")
-    .select("*")
-    .eq("customer_id", recipient.id)
-    .order("processed_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const order = lastOrder as any;
+  const order = bundle?.order ?? null;
   const rawData = order?.raw_data as any;
-  let purchasedItems: any[] = [];
-  let fulfillment: any = null;
-  if (order?.id) {
-    const [{ data: itemRows }, { data: fulfillmentRow }] = await Promise.all([
-      supabaseAdmin.from("shopify_order_items").select("title, variant_title, quantity").eq("order_id", order.id),
-      supabaseAdmin
-        .from("shopify_fulfillments")
-        .select("tracking_number, tracking_url, tracking_company, status, updated_at")
-        .eq("order_id", order.id)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ]);
-    purchasedItems = itemRows ?? [];
-    fulfillment = fulfillmentRow;
-  }
+  const purchasedItems: any[] = bundle?.items ?? [];
+  const fulfillment: any = bundle?.fulfillment ?? null;
+  const cashback = bundle?.cashback ?? null;
 
-  // Cashback do último pedido (campanha avulsa, sem contexto congelado).
-  let cashback: Awaited<ReturnType<typeof import("./cashback.server")["loadCashbackForOrder"]>> = null;
-  if (order?.id) {
-    try {
-      const { loadCashbackForOrder } = await import("./cashback.server");
-      cashback = await loadCashbackForOrder(String(order.id));
-    } catch (error) {
-      console.error("Falha ao resolver cashback para tokens da campanha:", error);
-    }
-  }
   const brl = (value: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
 

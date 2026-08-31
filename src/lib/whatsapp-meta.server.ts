@@ -377,8 +377,20 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
 export async function getCustomersWithPhone(ids: string[]) {
   if (ids.length === 0) return [];
   const supabaseAdmin = await admin();
-  const { data } = await supabaseAdmin.from("shopify_customers").select("id, phone, first_name").in("id", ids);
-  return (data ?? []).filter((c) => Boolean(c.phone)) as { id: string; phone: string; first_name: string | null }[];
+  // Listas grandes (milhares de ids) estouram o tamanho da querystring do PostgREST e voltavam
+  // vazias silenciosamente — por isso a busca é feita em blocos.
+  const CHUNK = 200;
+  const rows: { id: string; phone: string; first_name: string | null }[] = [];
+  for (let start = 0; start < ids.length; start += CHUNK) {
+    const batch = ids.slice(start, start + CHUNK);
+    const { data, error } = await supabaseAdmin
+      .from("shopify_customers")
+      .select("id, phone, first_name")
+      .in("id", batch);
+    if (error) throw new Error(`Erro ao carregar destinatários: ${error.message}`);
+    rows.push(...((data ?? []) as typeof rows));
+  }
+  return rows.filter((c) => Boolean(c.phone));
 }
 
 export async function countSegmentRecipients(segmentType: SegmentType | string, segmentId?: string) {

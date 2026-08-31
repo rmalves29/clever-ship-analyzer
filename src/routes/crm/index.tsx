@@ -48,6 +48,7 @@ import { identifyAbandonedCheckouts } from "@/lib/abandoned-checkout.functions";
 import { brl } from "@/lib/crm-mock";
 import { updateCustomerTags } from "@/lib/crm-tags.functions";
 import { SegmentEditor } from "@/components/crm/SegmentEditor";
+import { ImportContactsDialog } from "@/components/crm/ImportContactsDialog";
 import { toast } from "sonner";
 
 const VALID_TABS = ["contatos", "segmentos", "listas", "rfm"] as const;
@@ -94,6 +95,7 @@ function CRMPage() {
   const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
   const [editingSegment, setEditingSegment] = useState<any>(null);
   const [showEditor, setShowEditor] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   
   const fetchList = useServerFn(getCustomersList);
   const fetchStats = useServerFn(getCRMStats);
@@ -275,7 +277,7 @@ function CRMPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>Importar CSV</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setImportDialogOpen(true)}>Importar CSV</DropdownMenuItem>
                 <DropdownMenuItem onClick={async () => {
                   const promise = runNormalizePhones();
                   toast.promise(promise, {
@@ -327,6 +329,7 @@ function CRMPage() {
                 <DropdownMenuItem onClick={handleSync}>Sincronizar Shopify</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <ImportContactsDialog open={importDialogOpen} onOpenChange={setImportDialogOpen} />
           </div>
         </div>
 

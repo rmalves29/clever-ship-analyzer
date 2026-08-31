@@ -33,7 +33,12 @@ export function ImportContactsDialog({ open, onOpenChange }: { open: boolean; on
   function handleFile(file: File) {
     const reader = new FileReader();
     reader.onload = () => {
-      const text = String(reader.result ?? "");
+      const buffer = reader.result as ArrayBuffer;
+      let text = new TextDecoder("utf-8").decode(buffer);
+      // Arquivos exportados de sistemas legados costumam vir em Latin-1/Windows-1252.
+      if (text.includes("\uFFFD")) {
+        text = new TextDecoder("windows-1252").decode(buffer);
+      }
       const result = parseContactsCsv(text);
       if (result.rows.length === 0) {
         toast.error("Nenhuma linha de contato encontrada no arquivo.");
@@ -42,8 +47,9 @@ export function ImportContactsDialog({ open, onOpenChange }: { open: boolean; on
       setParsed(result);
       setFileName(file.name);
     };
-    reader.readAsText(file, "utf-8");
+    reader.readAsArrayBuffer(file);
   }
+
 
   function handleParsePaste() {
     const result = parseContactsCsv(pasteText);

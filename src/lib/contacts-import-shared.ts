@@ -19,9 +19,9 @@ export type ContactsImportParseResult = {
 };
 
 const HEADER_ALIASES: Record<keyof Omit<ImportedContactRow, "line" | "tags" | "lastPurchaseAt" | "errors"> | "tag" | "lastPurchase", string[]> = {
-  nome: ["nome", "name", "nome completo", "cliente"],
-  email: ["email", "e-mail", "mail"],
-  phone: ["telefone", "phone", "celular", "whatsapp", "tel", "fone"],
+  nome: ["nome", "name", "nome completo", "nome cliente", "nome do cliente", "cliente", "contato"],
+  email: ["email", "e-mail", "mail", "e mail"],
+  phone: ["telefone", "telefone 1", "telefone 2", "phone", "celular", "whatsapp", "tel", "fone", "numero", "número"],
   tag: ["tag", "tags", "etiqueta", "etiquetas"],
   lastPurchase: [
     "data da ultima compra",
@@ -32,6 +32,8 @@ const HEADER_ALIASES: Record<keyof Omit<ImportedContactRow, "line" | "tags" | "l
     "last purchase",
     "last_order_at",
     "data_pedido",
+    "data compra",
+    "data da compra",
   ],
 };
 
@@ -40,9 +42,12 @@ function normalizeHeader(value: string): string {
     .trim()
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/\s+/g, " ");
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
+
 
 function detectDelimiter(headerLine: string): string {
   const candidates = [";", ",", "\t"];
@@ -148,19 +153,35 @@ export function parseContactsCsv(text: string): ContactsImportParseResult {
 
   const columnIndex: Partial<Record<"nome" | "email" | "phone" | "tag" | "lastPurchase", number>> = {};
   const ignored: string[] = [];
+  const setCol = (key: keyof typeof columnIndex, idx: number) => {
+    if (columnIndex[key] === undefined) columnIndex[key] = idx;
+  };
+
   headers.forEach((h, idx) => {
+    if (!h) return;
     let matched = false;
     for (const [key, aliases] of Object.entries(HEADER_ALIASES)) {
-      if (aliases.includes(h)) {
-        if (columnIndex[key as keyof typeof columnIndex] === undefined) {
-          columnIndex[key as keyof typeof columnIndex] = idx;
-        }
+      if (aliases.map(normalizeHeader).includes(h)) {
+        setCol(key as keyof typeof columnIndex, idx);
         matched = true;
         break;
       }
     }
-    if (!matched && h) ignored.push(h);
+    if (matched) return;
+
+    // Correspondência aproximada (cabeçalhos variados / acentos corrompidos)
+    if (/mail/.test(h)) setCol("email", idx);
+    else if (/(telefone|celular|whats|fone|tel\b)/.test(h)) setCol("phone", idx);
+    else if (/(compra|pedido|purchase)/.test(h) && /(data|ultima|last|ltima)/.test(h)) setCol("lastPurchase", idx);
+    else if (/compra/.test(h)) setCol("lastPurchase", idx);
+    else if (/(tag|etiqueta)/.test(h)) setCol("tag", idx);
+    else if (/(nome|name|cliente|contato)/.test(h)) setCol("nome", idx);
+    else {
+      ignored.push(h);
+      return;
+    }
   });
+
 
   const rows: ImportedContactRow[] = [];
   for (let i = 1; i < lines.length; i++) {

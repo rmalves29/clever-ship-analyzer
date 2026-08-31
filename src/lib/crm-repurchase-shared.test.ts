@@ -124,6 +124,24 @@ describe("summarizeRepurchase", () => {
     expect(summary.secondAverageTicket).toBe(50);
     expect(summary.gapToTarget).toBeCloseTo(0.25);
   });
+
+  it("calcula a taxa madura apenas com clientes que completaram a janela", () => {
+    const journey = buildRepurchaseJourney([
+      order("a1", "a", "2026-07-01T12:00:00Z"),
+      order("a2", "a", "2026-07-20T12:00:00Z"),
+      order("b1", "b", "2026-07-05T12:00:00Z"),
+      order("b2", "b", "2026-08-10T12:00:00Z"),
+      order("c1", "c", "2026-08-20T12:00:00Z"),
+    ], NOW);
+    const summary = summarizeRepurchase(journey, 0.75, 30, NOW);
+
+    expect(summary.buyers).toBe(3);
+    expect(summary.converted).toBe(2);
+    expect(summary.matureEligible).toBe(2);
+    expect(summary.matureConverted).toBe(1);
+    expect(summary.matureConversionRate).toBe(0.5);
+    expect(summary.customersMissingToTarget).toBe(1);
+  });
 });
 
 describe("buildRepurchaseCohorts", () => {
@@ -136,6 +154,28 @@ describe("buildRepurchaseCohorts", () => {
     const cohorts = buildRepurchaseCohorts(journey);
     expect(cohorts.map((c) => c.month)).toEqual(["2026-08", "2026-07"]);
     expect(cohorts.find((c) => c.month === "2026-07")?.converted).toBe(1);
+  });
+
+  it("marca coortes recentes como aguardando e não exibe taxa prematura", () => {
+    const journey = buildRepurchaseJourney([
+      order("a1", "a", "2026-07-01T12:00:00Z"),
+      order("a2", "a", "2026-07-10T12:00:00Z"),
+      order("b1", "b", "2026-08-20T12:00:00Z"),
+    ], NOW);
+    const cohorts = buildRepurchaseCohorts(journey, 30, NOW);
+
+    expect(cohorts.find((cohort) => cohort.month === "2026-07")).toMatchObject({
+      maturityStatus: "completa",
+      matureCustomers: 1,
+      matureConverted: 1,
+      matureConversionRate: 1,
+    });
+    expect(cohorts.find((cohort) => cohort.month === "2026-08")).toMatchObject({
+      maturityStatus: "aguardando",
+      matureCustomers: 0,
+      matureConverted: 0,
+      matureConversionRate: null,
+    });
   });
 });
 

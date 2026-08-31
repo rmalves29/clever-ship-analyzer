@@ -317,7 +317,7 @@ export async function enqueueCampaign(
       origem: campaign.origem ?? "crm",
       template_name: campaign.template_name,
       template_language: campaign.template_language ?? settings.templateLanguage,
-      body_params: await resolveBodyParams(bodyParams, recipient, context),
+      body_params: await resolveBodyParams(bodyParams, recipient, context, bundles.get(recipient.id)),
       body_param_tokens: bodyParamTokens,
       header_media_url: isValidMediaUrl(recipient.video_url) ? recipient.video_url : null,
       status: "queued" satisfies QueueStatus,
@@ -332,12 +332,23 @@ export async function enqueueCampaign(
   }
 
   let queued = 0;
-  for (let i = 0; i < rows.length; i += 200) {
-    const chunk = rows.slice(i, i + 200);
-    const { error } = await supabaseAdmin.from(QUEUE_TABLE).upsert(chunk, { onConflict: "dedup_key", ignoreDuplicates: true });
-    if (error) return { success: false as const, error: error.message };
-    queued += chunk.length;
+  for (const part of chunk(rows, 200)) {
+    const { error } = await supabaseAdmin.from(QUEUE_TABLE).upsert(part, { onConflict: "dedup_key", ignoreDuplicates: true });
+    if (error) {
+      console.error("[enqueueCampaign] falha ao inserir lote na fila", { campaignId, queued, batch: part.length, error: error.message });
+      return { success: false as const, error: error.message };
+    }
+    queued += part.length;
   }
+
+  if (queued === 0) {
+    console.error("[enqueueCampaign] nenhuma mensagem enfileirada", {
+      campaignId,
+      recipients: recipients.length,
+      skipped,
+    });
+  }
+
 
   await supabaseAdmin
     .from("whatsapp_campaigns")

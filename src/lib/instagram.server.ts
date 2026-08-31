@@ -297,7 +297,7 @@ async function fetchTopContentInRange(pageToken: string, igId: string, sinceISO:
 
   const listRes = await graphGET(
     `/${igId}/media`,
-    { fields: "id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp", limit: "50" },
+    { fields: "id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp,like_count,comments_count", limit: "50" },
     pageToken,
   );
   const items = ((listRes.data ?? []) as any[]).filter((m) => {
@@ -307,36 +307,62 @@ async function fetchTopContentInRange(pageToken: string, igId: string, sinceISO:
 
   const withInsights = await Promise.all(
     items.map(async (m) => {
-      try {
-        const insRes = await graphGET(`/${m.id}/insights`, { metric: "reach,likes,comments,shares,saved,total_interactions" }, pageToken);
-        const byName = new Map<string, number>(((insRes.data ?? []) as any[]).map((row) => [row.name, row.values?.[0]?.value ?? row.total_value?.value ?? 0]));
-        return {
-          id: m.id,
-          caption: m.caption ?? null,
-          mediaType: m.media_type,
-          productType: m.media_product_type,
-          permalink: m.permalink ?? null,
-          mediaUrl: m.media_url ?? null,
-          thumbnailUrl: m.thumbnail_url ?? (m.media_type === "IMAGE" || m.media_type === "CAROUSEL_ALBUM" ? m.media_url : null) ?? null,
-          timestamp: m.timestamp,
-          views: byName.get("views") ?? byName.get("plays") ?? 0,
-          reach: byName.get("reach") ?? 0,
-          likes: byName.get("likes") ?? 0,
-          comments: byName.get("comments") ?? 0,
-          shares: byName.get("shares") ?? 0,
-          saved: byName.get("saved") ?? 0,
-          totalInteractions: byName.get("total_interactions") ?? 0,
-        } as InstagramMedia;
-      } catch {
-        return null;
-      }
+      const byName = await fetchMediaInsights(m.id, pageToken);
+      const likes = Number(m.like_count ?? 0);
+      const comments = Number(m.comments_count ?? 0);
+      const shares = byName.get("shares") ?? 0;
+      const saved = byName.get("saved") ?? 0;
+      return {
+        id: m.id,
+        caption: m.caption ?? null,
+        mediaType: m.media_type,
+        productType: m.media_product_type,
+        permalink: m.permalink ?? null,
+        mediaUrl: m.media_url ?? null,
+        thumbnailUrl: m.thumbnail_url ?? (m.media_type === "IMAGE" || m.media_type === "CAROUSEL_ALBUM" ? m.media_url : null) ?? null,
+        timestamp: m.timestamp,
+        views: byName.get("views") ?? byName.get("plays") ?? 0,
+        reach: byName.get("reach") ?? 0,
+        likes,
+        comments,
+        shares,
+        saved,
+        totalInteractions: byName.get("total_interactions") ?? likes + comments + shares + saved,
+      } as InstagramMedia;
     }),
   );
 
   return withInsights
-    .filter((m): m is InstagramMedia => m !== null)
     .sort((a, b) => b.totalInteractions - a.totalInteractions)
     .slice(0, 10);
+}
+
+/** Métricas disponíveis variam por tipo de mídia e versão da Graph API. Uma métrica inválida não
+ * pode eliminar a postagem inteira: tentamos conjuntos progressivamente menores e preservamos os
+ * contadores básicos (`like_count` e `comments_count`) retornados pelo próprio objeto de mídia. */
+async function fetchMediaInsights(mediaId: string, pageToken: string): Promise<Map<string, number>> {
+  const metricGroups = [
+    "views,reach,total_interactions,saved,shares",
+    "plays,reach,total_interactions,saved,shares",
+    "impressions,reach,total_interactions,saved,shares",
+    "reach,total_interactions,saved,shares",
+    "reach,saved,shares",
+    "reach",
+  ];
+  for (const metric of metricGroups) {
+    try {
+      const response = await graphGET(`/${mediaId}/insights`, { metric }, pageToken);
+      return new Map<string, number>(
+        ((response.data ?? []) as any[]).map((row) => [
+          row.name,
+          Number(row.values?.[0]?.value ?? row.total_value?.value ?? 0),
+        ]),
+      );
+    } catch {
+      // Tenta um conjunto compatível com outro tipo de mídia/versão da API.
+    }
+  }
+  return new Map<string, number>();
 }
 
 export async function getInstagramTopContent(datePreset: InstagramDatePreset): Promise<{ success: true; media: InstagramMedia[] } | { success: false; error: string }> {

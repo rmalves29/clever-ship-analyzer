@@ -67,6 +67,8 @@ export type Ga4Record = {
   sessionCampaignName?: string;
   itemId?: string;
   itemName?: string;
+  productHandle?: string;
+  productViewSource?: string;
   itemsViewed?: number;
   itemViewEvents?: number;
   itemsAddedToCart?: number;
@@ -665,27 +667,76 @@ export async function getGa4MostViewedProducts(
 ) {
   const { row, credentials } = await loadConnection();
   const token = await getAccessToken(credentials);
-  const report = await googleRequest<Ga4ApiReport>(
-    `/properties/${row.property_id}:runReport`,
-    token,
-    {
+  const endpoint = `/properties/${row.property_id}:runReport`;
+  const [itemReport, pageReport] = await Promise.all([
+    googleRequest<Ga4ApiReport>(endpoint, token, {
       dateRanges: dateRange(range),
       dimensions: [{ name: "itemId" }, { name: "itemName" }],
       metrics: [{ name: "itemsViewed" }, { name: "itemViewEvents" }],
       orderBys: metricOrder("itemsViewed"),
       limit: "100",
-    },
-  );
+    }).catch(() => ({ rows: [] }) as Ga4ApiReport),
+    // Nem toda instalação envia o evento ecommerce `view_item`. As URLs das páginas de
+    // produto continuam sendo registradas pelo GA4 e formam uma segunda fonte confiável.
+    googleRequest<Ga4ApiReport>(endpoint, token, {
+      dateRanges: dateRange(range),
+      dimensions: [{ name: "pagePathPlusQueryString" }, { name: "pageTitle" }],
+      metrics: [{ name: "screenPageViews" }],
+      orderBys: metricOrder("screenPageViews"),
+      limit: "250",
+    }).catch(() => ({ rows: [] }) as Ga4ApiReport),
+  ]);
   const excluded = new Set(
     excludedProductIds.map((id) =>
       id.replace(/^gid:\/\/shopify\/Product\//, ""),
     ),
   );
-  return reportRows(report).filter((product) => {
+  const itemRows = reportRows(itemReport).filter((product) => {
     const id = String(product.itemId || "").replace(
       /^gid:\/\/shopify\/Product\//,
       "",
     );
     return id && !excluded.has(id);
-  });
+  }).map((product) => ({ ...product, productViewSource: "ecommerce_item" }));
+
+  const pagesByHandle = new Map<string, Ga4Record>();
+  for (const page of reportRows(pageReport)) {
+    const handle = extractShopifyProductHandle(String(page.pagePathPlusQueryString ?? ""));
+    if (!handle) continue;
+    const current = pagesByHandle.get(handle);
+    if (current) {
+      current.screenPageViews = Number(current.screenPageViews ?? 0) + Number(page.screenPageViews ?? 0);
+      continue;
+    }
+    pagesByHandle.set(handle, {
+      ...page,
+      productHandle: handle,
+      productViewSource: "product_page",
+    });
+  }
+  const pageRows = [...pagesByHandle.values()]
+    .sort((a, b) => Number(b.screenPageViews ?? 0) - Number(a.screenPageViews ?? 0));
+
+  // Caminhos `/products/...` são diretamente resolvíveis pelo handle da Shopify. Eles vêm antes
+  // dos itemIds porque muitas tags enviam SKU/Variant ID no ecommerce, não o Product ID.
+  return [...pageRows, ...itemRows];
+}
+
+/** Extrai o handle de URLs absolutas ou caminhos Shopify como `/products/meu-produto?variant=...`. */
+export function extractShopifyProductHandle(pathOrUrl: string): string | null {
+  const value = pathOrUrl.trim();
+  if (!value) return null;
+  let pathname = value.split(/[?#]/, 1)[0] ?? "";
+  try {
+    if (/^https?:\/\//i.test(value)) pathname = new URL(value).pathname;
+  } catch {
+    return null;
+  }
+  const match = pathname.match(/(?:^|\/)products\/([^/?#]+)/i);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]).trim().toLocaleLowerCase("pt-BR") || null;
+  } catch {
+    return match[1].trim().toLocaleLowerCase("pt-BR") || null;
+  }
 }

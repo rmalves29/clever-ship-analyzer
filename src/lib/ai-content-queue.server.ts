@@ -192,7 +192,9 @@ function instagramMedia(item: InstagramMedia): SlotMedia | null {
 function findRecentProductForGaRow(row: Ga4Record, products: ShopifyProductDetail[]): ShopifyProductDetail | null {
   const itemId = normalizedProductId(String(row.itemId ?? ""));
   const itemName = normalizedTitle(String(row.itemName ?? ""));
-  return products.find((product) => normalizedProductId(product.id) === itemId)
+  const handle = String(row.productHandle ?? "").trim().toLocaleLowerCase("pt-BR");
+  return products.find((product) => handle && product.handle.toLocaleLowerCase("pt-BR") === handle)
+    ?? products.find((product) => normalizedProductId(product.id) === itemId)
     ?? products.find((product) => itemName && normalizedTitle(product.title) === itemName)
     ?? null;
 }
@@ -201,7 +203,12 @@ async function resolveGa4Product(row: Ga4Record, recentProducts: ShopifyProductD
   const recent = findRecentProductForGaRow(row, recentProducts);
   if (recent) return recent;
 
-  const { getShopifyProductById, getShopifyProductByTitle } = await import("./shopify.server");
+  const { getShopifyProductByHandle, getShopifyProductById, getShopifyProductByTitle } = await import("./shopify.server");
+  const handle = String(row.productHandle ?? "").trim();
+  if (handle) {
+    const byHandle = await getShopifyProductByHandle(handle);
+    if (byHandle) return byHandle;
+  }
   const rawId = String(row.itemId ?? "").trim();
   const numericId = normalizedProductId(rawId);
   if (/^\d+$/.test(numericId)) {
@@ -215,7 +222,7 @@ async function resolveGa4Product(row: Ga4Record, recentProducts: ShopifyProductD
 }
 
 function ga4Views(row: Ga4Record): number {
-  return Number(row.itemsViewed ?? row.itemViewEvents ?? 0);
+  return Number(row.itemsViewed ?? row.itemViewEvents ?? row.screenPageViews ?? 0);
 }
 
 /** Junta as seis fontes reais: Ads por CTR de link, Shopify por vendas, Instagram por resultado,

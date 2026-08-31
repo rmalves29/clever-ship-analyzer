@@ -27,6 +27,8 @@ export type CrmEvent = {
   createdAt: string;
 };
 
+const EVENT_PAGE_SIZE = 1_000;
+
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
@@ -47,11 +49,48 @@ function mapEvent(row: any): CrmEvent {
 
 export async function listEvents(range?: { from: string; to: string }): Promise<CrmEvent[]> {
   const supabaseAdmin = await admin();
-  let query = (supabaseAdmin.from("crm_events" as any) as any).select("*").order("event_date", { ascending: true });
-  if (range) query = query.gte("event_date", range.from).lte("event_date", range.to);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return (data ?? []).map(mapEvent);
+  const rows: any[] = [];
+
+  // O PostgREST costuma limitar respostas a 1.000 linhas. Paginar explicitamente evita que o
+  // histórico pare de crescer silenciosamente quando houver mais de 1.000 eventos/resumos.
+  for (let offset = 0; ; offset += EVENT_PAGE_SIZE) {
+    let query = (supabaseAdmin.from("crm_events" as any) as any)
+      .select("*")
+      .order("event_date", { ascending: true })
+      .order("created_at", { ascending: true })
+      .range(offset, offset + EVENT_PAGE_SIZE - 1);
+    if (range) query = query.gte("event_date", range.from).lte("event_date", range.to);
+
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < EVENT_PAGE_SIZE) break;
+  }
+
+  return rows.map(mapEvent);
+}
+
+/** Datas que possuem eventos, sem teto de quantidade. O conteúdo de cada dia é carregado
+ *  separadamente pela tela, evitando trazer todos os textos longos de uma só vez. */
+export async function listEventDates(): Promise<string[]> {
+  const supabaseAdmin = await admin();
+  const dates = new Set<string>();
+
+  for (let offset = 0; ; offset += EVENT_PAGE_SIZE) {
+    const { data, error } = await (supabaseAdmin.from("crm_events" as any) as any)
+      .select("event_date")
+      .order("event_date", { ascending: false })
+      .range(offset, offset + EVENT_PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    const page = data ?? [];
+    for (const row of page) {
+      if (row.event_date) dates.add(row.event_date);
+    }
+    if (page.length < EVENT_PAGE_SIZE) break;
+  }
+
+  return Array.from(dates).sort((a, b) => b.localeCompare(a));
 }
 
 export async function createEvent(
@@ -107,6 +146,16 @@ export async function updateEvent(input: {
 
 export async function deleteEvent(id: string): Promise<{ success: true }> {
   const supabaseAdmin = await admin();
+
+  const { data: existing, error: findError } = await (supabaseAdmin.from("crm_events" as any) as any)
+    .select("source, title")
+    .eq("id", id)
+    .maybeSingle();
+  if (findError) throw new Error(findError.message);
+  if (existing?.source === "auto" && String(existing.title ?? "").startsWith("Resumo do dia ")) {
+    throw new Error("O resumo diário automático faz parte do histórico permanente e não pode ser excluído.");
+  }
+
   const { error } = await (supabaseAdmin.from("crm_events" as any) as any).delete().eq("id", id);
   if (error) throw new Error(error.message);
   return { success: true };

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -14,7 +14,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
-import { Plus, Sparkles, Trash2, Pencil, Tag, LineChart, Network, CalendarDays } from "lucide-react";
+import { Plus, Sparkles, Trash2, Pencil, Tag, LineChart, Network, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,7 @@ import { EventsGraph } from "@/components/eventos/EventsGraph";
 import { CalendarView } from "@/components/eventos/CalendarView";
 import {
   listCrmEvents,
+  listCrmEventDates,
   createCrmEvent,
   updateCrmEvent,
   deleteCrmEvent,
@@ -201,6 +202,7 @@ function EventosPage() {
   const [rangeDays, setRangeDays] = useState(30);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<EventFormState | null>(null);
+  const [selectedEventDate, setSelectedEventDate] = useState("");
 
   const range = useMemo(() => {
     const to = new Date();
@@ -209,6 +211,8 @@ function EventosPage() {
   }, [rangeDays]);
 
   const runTimeline = useServerFn(getEventsTimelineData);
+  const runEventDates = useServerFn(listCrmEventDates);
+  const runEventsForDay = useServerFn(listCrmEvents);
   const runDelete = useServerFn(deleteCrmEvent);
   const runLatestAnalysis = useServerFn(getLatestEventsAnalysis);
   const runGenerateAnalysis = useServerFn(generateEventsAnalysis);
@@ -216,6 +220,23 @@ function EventosPage() {
   const { data: timeline, isLoading, refetch } = useQuery({
     queryKey: ["events-timeline", range.from, range.to],
     queryFn: () => runTimeline({ data: range }),
+  });
+
+  const { data: eventDates = [], isLoading: isLoadingEventDates } = useQuery({
+    queryKey: ["crm-event-dates"],
+    queryFn: () => runEventDates(),
+  });
+
+  useEffect(() => {
+    if (!selectedEventDate && !isLoadingEventDates) {
+      setSelectedEventDate(eventDates[0] ?? format(new Date(), "yyyy-MM-dd"));
+    }
+  }, [eventDates, isLoadingEventDates, selectedEventDate]);
+
+  const { data: dailyEvents = [], isLoading: isLoadingDailyEvents } = useQuery({
+    queryKey: ["crm-events-day", selectedEventDate],
+    queryFn: () => runEventsForDay({ data: { from: selectedEventDate, to: selectedEventDate } }),
+    enabled: Boolean(selectedEventDate),
   });
 
   const { data: latestAnalysis, refetch: refetchAnalysis } = useQuery({
@@ -244,6 +265,8 @@ function EventosPage() {
       await runDelete({ data: { id } });
       toast.success("Evento removido.");
       queryClient.invalidateQueries({ queryKey: ["events-timeline"] });
+      queryClient.invalidateQueries({ queryKey: ["crm-event-dates"] });
+      queryClient.invalidateQueries({ queryKey: ["crm-events-day"] });
       refetch();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao remover.");
@@ -262,6 +285,9 @@ function EventosPage() {
 
   const events = timeline?.events ?? [];
   const analysis = latestAnalysis?.analysis ?? null;
+  const selectedDateIndex = eventDates.indexOf(selectedEventDate);
+  const olderDate = selectedDateIndex >= 0 ? eventDates[selectedDateIndex + 1] : undefined;
+  const newerDate = selectedDateIndex > 0 ? eventDates[selectedDateIndex - 1] : undefined;
 
   return (
     <div className="p-6">
@@ -358,10 +384,55 @@ function EventosPage() {
 
           <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="lg:col-span-2 rounded-xl border border-border bg-card p-4">
-              <p className="font-semibold">Eventos do período</p>
-              {events.length === 0 && <p className="mt-2 text-sm text-muted-foreground">Nenhum evento registrado nesse período. Clica em "Novo evento" quando algo acontecer.</p>}
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="font-semibold">Histórico diário</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Um dia por vez, com todo o histórico preservado e sem limite de resumos.</p>
+                </div>
+                <div className="flex items-end gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="size-9"
+                    disabled={!olderDate}
+                    onClick={() => olderDate && setSelectedEventDate(olderDate)}
+                    aria-label="Data anterior com eventos"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </Button>
+                  <div>
+                    <Label htmlFor="event-history-date" className="text-[11px] text-muted-foreground">Filtrar por data</Label>
+                    <Input
+                      id="event-history-date"
+                      type="date"
+                      value={selectedEventDate}
+                      onChange={(e) => setSelectedEventDate(e.target.value)}
+                      className="h-9 w-[150px]"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="size-9"
+                    disabled={!newerDate}
+                    onClick={() => newerDate && setSelectedEventDate(newerDate)}
+                    aria-label="Próxima data com eventos"
+                  >
+                    <ChevronRight className="size-4" />
+                  </Button>
+                </div>
+              </div>
+
+              {isLoadingDailyEvents && <p className="mt-3 text-sm text-muted-foreground">Carregando eventos do dia...</p>}
+              {!isLoadingDailyEvents && dailyEvents.length === 0 && (
+                <p className="mt-3 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                  Nenhum evento registrado nesta data. Use as setas para navegar pelos dias com registros ou escolha outra data.
+                </p>
+              )}
               <div className="mt-3 space-y-2.5">
-                {events.map((ev: CrmEvent) => (
+                {dailyEvents.map((ev: CrmEvent) => {
+                  const isPermanentDailySummary = ev.source === "auto" && ev.title.startsWith("Resumo do dia ");
+                  return (
                   <div key={ev.id} className="flex items-start justify-between gap-3 rounded-lg border border-border p-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -389,7 +460,7 @@ function EventosPage() {
                         </div>
                       )}
                     </div>
-                    <div className="flex shrink-0 gap-1">
+                    {!isPermanentDailySummary && <div className="flex shrink-0 gap-1">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -404,9 +475,10 @@ function EventosPage() {
                       <Button variant="ghost" size="icon" className="size-7 text-critical" onClick={() => handleDelete(ev.id)}>
                         <Trash2 className="size-3.5" />
                       </Button>
-                    </div>
+                    </div>}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -454,6 +526,8 @@ function EventosPage() {
           initial={editing}
           onSaved={() => {
             queryClient.invalidateQueries({ queryKey: ["events-timeline"] });
+            queryClient.invalidateQueries({ queryKey: ["crm-event-dates"] });
+            queryClient.invalidateQueries({ queryKey: ["crm-events-day"] });
             refetch();
           }}
         />

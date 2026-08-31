@@ -153,19 +153,35 @@ export function parseContactsCsv(text: string): ContactsImportParseResult {
 
   const columnIndex: Partial<Record<"nome" | "email" | "phone" | "tag" | "lastPurchase", number>> = {};
   const ignored: string[] = [];
+  const setCol = (key: keyof typeof columnIndex, idx: number) => {
+    if (columnIndex[key] === undefined) columnIndex[key] = idx;
+  };
+
   headers.forEach((h, idx) => {
+    if (!h) return;
     let matched = false;
     for (const [key, aliases] of Object.entries(HEADER_ALIASES)) {
-      if (aliases.includes(h)) {
-        if (columnIndex[key as keyof typeof columnIndex] === undefined) {
-          columnIndex[key as keyof typeof columnIndex] = idx;
-        }
+      if (aliases.map(normalizeHeader).includes(h)) {
+        setCol(key as keyof typeof columnIndex, idx);
         matched = true;
         break;
       }
     }
-    if (!matched && h) ignored.push(h);
+    if (matched) return;
+
+    // Correspondência aproximada (cabeçalhos variados / acentos corrompidos)
+    if (/mail/.test(h)) setCol("email", idx);
+    else if (/(telefone|celular|whats|fone|tel\b)/.test(h)) setCol("phone", idx);
+    else if (/(compra|pedido|purchase)/.test(h) && /(data|ultima|last|ltima)/.test(h)) setCol("lastPurchase", idx);
+    else if (/compra/.test(h)) setCol("lastPurchase", idx);
+    else if (/(tag|etiqueta)/.test(h)) setCol("tag", idx);
+    else if (/(nome|name|cliente|contato)/.test(h)) setCol("nome", idx);
+    else {
+      ignored.push(h);
+      return;
+    }
   });
+
 
   const rows: ImportedContactRow[] = [];
   for (let i = 1; i < lines.length; i++) {

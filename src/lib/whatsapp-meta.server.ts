@@ -1,8 +1,8 @@
 import { GOALS, type SegmentType } from "./crm-mock";
 import { buildBodyParameters } from "./whatsapp-template-body-tokens";
+import { findFirstTouchCampaign } from "./whatsapp-attribution";
 
 const DAY_MS = 86_400_000;
-const ATTRIBUTION_WINDOW_DAYS = 3;
 
 export function normalizeCouponCode(value: unknown): string {
   return String(value ?? "").trim().toUpperCase();
@@ -932,8 +932,21 @@ export async function listCampaignsWithMetrics() {
     list.push({ phone: r.phone, status: r.status, sent_at: r.sent_at });
     recipientsByCampaign.set(r.campaign_id, list);
   }
+  const deliveriesByPhone = new Map<string, { campaignId: string; phone: string; status: string; sentAt: string | null }[]>();
+  for (const recipient of recipients ?? []) {
+    const phone = toE164(recipient.phone);
+    if (!phone) continue;
+    const list = deliveriesByPhone.get(phone) ?? [];
+    list.push({
+      campaignId: recipient.campaign_id,
+      phone,
+      status: recipient.status,
+      sentAt: recipient.sent_at,
+    });
+    deliveriesByPhone.set(phone, list);
+  }
 
-  // ---------- Atribuição de vendas: cupom (exato) tem prioridade; senão, telefone + janela de dias ----------
+  // ---------- Atribuição de vendas: cupom (exato) tem prioridade; senão, primeiro contato em 72h ----------
   // Código atual + aliases históricos: trocar GANHE5 por POP5 não apaga a medição anterior.
   const couponToCampaign = new Map<string, string>();
   const trackedCodesByCampaign = new Map<string, Set<string>>();
@@ -1028,23 +1041,12 @@ export async function listCampaignsWithMetrics() {
     if (!o.phone) continue;
     const orderPhone = toE164(o.phone);
     if (!orderPhone) continue;
-    const orderAt = new Date(o.processed_at).getTime();
-
-    let bestCampaignId: string | null = null;
-    let bestSentAt = -Infinity;
-    for (const c of campaignList) {
-      const recips = recipientsByCampaign.get(c.id) ?? [];
-      const match = recips.find((r) => r.phone === orderPhone && r.status !== "failed" && r.sent_at);
-      if (!match?.sent_at) continue;
-      const sentAt = new Date(match.sent_at).getTime();
-      if (sentAt > orderAt) continue;
-      if (orderAt - sentAt > ATTRIBUTION_WINDOW_DAYS * DAY_MS) continue;
-      if (sentAt > bestSentAt) {
-        bestSentAt = sentAt;
-        bestCampaignId = c.id;
-      }
-    }
-    if (bestCampaignId) addVenda(bestCampaignId, total, "assisted", o.customer_id);
+    const firstTouchCampaignId = findFirstTouchCampaign({
+      orderPhone,
+      orderAt: o.processed_at,
+      deliveries: deliveriesByPhone.get(orderPhone) ?? [],
+    });
+    if (firstTouchCampaignId) addVenda(firstTouchCampaignId, total, "assisted", o.customer_id);
   }
 
   const costMarketing = settings.costMarketing ?? 0;

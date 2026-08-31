@@ -100,11 +100,18 @@ export function ReportsTab() {
           <p className="mt-2 text-3xl font-bold">{leituraPct.toFixed(1)}%</p>
           <p className="mt-1 text-xs text-muted-foreground">{totals.lidas.toLocaleString("pt-BR")} mensagens lidas</p>
         </div>
-        <div className="surface-card bg-foreground p-5 text-background">
-          <p className="text-xs text-background/70">ROAS estimado</p>
-          <p className="mt-2 text-3xl font-bold">{roas !== null ? `${roas.toFixed(1)}x` : "—"}</p>
-          <p className="mt-1 text-xs text-background/70">{brlCents(totals.custo)} de custo estimado</p>
+        <div className="rounded-xl border border-foreground/10 !bg-foreground p-5 !text-white shadow-sm">
+          <p className="text-xs !text-white/70">ROAS estimado</p>
+          <p className="mt-2 text-3xl font-bold !text-white">{roas !== null ? `${roas.toFixed(1)}x` : "—"}</p>
+          <p className="mt-1 text-xs !text-white/70">{brlCents(totals.custo)} de custo estimado</p>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-brand/20 bg-brand-soft/50 px-4 py-3 text-sm">
+        <p className="font-semibold text-foreground">Como a receita é atribuída</p>
+        <p className="mt-1 text-muted-foreground">
+          Cupom identificado confirma a campanha. Sem cupom, o pedido é atribuído ao primeiro envio feito para o cliente nas 72 horas anteriores à compra. Cada pedido entra em apenas uma campanha.
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-6">

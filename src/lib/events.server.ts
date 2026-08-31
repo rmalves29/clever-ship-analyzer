@@ -717,7 +717,40 @@ export type CalendarDay = {
   crmEvents: CrmEvent[];
   envioMensagens: number;
   whatsappCampanhas: number;
+  messageDetails: CalendarMessageDetail[];
 };
+
+export type CalendarMessageDetail = {
+  id: string;
+  source: "fluxo_envio" | "whatsapp_api";
+  title: string;
+  content: string;
+  contentType: string;
+  mediaUrl: string | null;
+  status: string;
+  occurredAt: string;
+  destinations: number;
+  templateName: string | null;
+};
+
+function renderCalendarTemplate(bodyText: string, bodyParams: string[], bodyParamTokens: string[] | null): string {
+  return bodyText.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, token: string) => {
+    if (bodyParamTokens?.length) {
+      const idx = bodyParamTokens.indexOf(token);
+      return idx >= 0 && bodyParams[idx] !== undefined ? bodyParams[idx] : match;
+    }
+    const idx = Number(token) - 1;
+    return Number.isInteger(idx) && bodyParams[idx] !== undefined ? bodyParams[idx] : match;
+  });
+}
+
+function mediaType(url: string | null, fallback = "text"): string {
+  if (!url) return fallback;
+  const clean = url.split("?")[0]?.toLowerCase() ?? "";
+  if (/\.(mp4|mov|webm|m4v)$/.test(clean)) return "video";
+  if (/\.(jpg|jpeg|png|gif|webp)$/.test(clean)) return "image";
+  return fallback === "text" ? "media" : fallback;
+}
 
 /** Dados do calendário mensal: cruza faturamento/pedidos (getEventsTimeline, já existente) com
  *  datas comemorativas do varejo, eventos do CRM e volume de mensagens enviadas (WhatsApp API
@@ -738,44 +771,163 @@ export async function getCalendarMonthData(year: number, month: number): Promise
   // Conta tanto o que já foi enviado (por sent_at) quanto o que ainda está agendado/em fila
   // (por scheduled_at) — senão os lotes gerados pela IA pra dias futuros somem do calendário até
   // o cron realmente despachar, mesmo já aprovados e com data certa.
-  const [{ data: sentMsgs }, { data: scheduledMsgs }] = await Promise.all([
+  const [{ data: sentMsgs }, { data: scheduledMsgs }, { data: sentQueue }, { data: scheduledQueue }, { data: campaignsBySentDate }] = await Promise.all([
     (supabaseAdmin.from("envio_messages" as any) as any)
-      .select("sent_at")
+      .select("id, content_type, content_text, media_url, status, sent_at, scheduled_at")
       .eq("status", "sent")
       .gte("sent_at", fromISO)
       .lte("sent_at", toISO),
     (supabaseAdmin.from("envio_messages" as any) as any)
-      .select("scheduled_at")
+      .select("id, content_type, content_text, media_url, status, sent_at, scheduled_at")
       .in("status", ["pending", "sending"])
       .gte("scheduled_at", fromISO)
       .lte("scheduled_at", toISO),
+    (supabaseAdmin.from("whatsapp_message_queue" as any) as any)
+      .select("id, campaign_id, template_name, template_language, body_params, body_param_tokens, header_media_url, status, sent_at, scheduled_at, wa_message_id")
+      .eq("status", "sent")
+      .gte("sent_at", fromISO)
+      .lte("sent_at", toISO),
+    (supabaseAdmin.from("whatsapp_message_queue" as any) as any)
+      .select("id, campaign_id, template_name, template_language, body_params, body_param_tokens, header_media_url, status, sent_at, scheduled_at, wa_message_id")
+      .in("status", ["queued", "sending", "retry_wait"])
+      .gte("scheduled_at", fromISO)
+      .lte("scheduled_at", toISO),
+    supabaseAdmin
+      .from("whatsapp_campaigns")
+      .select("id, nome, status, template_name, template_language, body_params, body_param_tokens, sent_at, enviadas, total_destinatarios")
+      .gte("sent_at", fromISO)
+      .lte("sent_at", toISO),
   ]);
-  const envioByDay = new Map<string, number>();
-  for (const m of sentMsgs ?? []) {
-    const sentAt = (m as any).sent_at;
-    if (!sentAt) continue;
-    const key = dayKey(sentAt);
-    envioByDay.set(key, (envioByDay.get(key) ?? 0) + 1);
-  }
-  for (const m of scheduledMsgs ?? []) {
-    const scheduledAt = (m as any).scheduled_at;
-    if (!scheduledAt) continue;
-    const key = dayKey(scheduledAt);
-    envioByDay.set(key, (envioByDay.get(key) ?? 0) + 1);
+
+  const queueRows = [...(sentQueue ?? []), ...(scheduledQueue ?? [])] as any[];
+  const campaignIds = Array.from(new Set(queueRows.map((row) => row.campaign_id).filter(Boolean))) as string[];
+  const campaignRowsById = new Map<string, any>((campaignsBySentDate ?? []).map((row: any) => [row.id, row]));
+  const missingCampaignIds = campaignIds.filter((id) => !campaignRowsById.has(id));
+  if (missingCampaignIds.length > 0) {
+    const { data: missingCampaigns } = await supabaseAdmin
+      .from("whatsapp_campaigns")
+      .select("id, nome, status, template_name, template_language, body_params, body_param_tokens, sent_at, enviadas, total_destinatarios")
+      .in("id", missingCampaignIds);
+    for (const row of missingCampaigns ?? []) campaignRowsById.set(row.id, row);
   }
 
-  const { data: waCampaigns } = await supabaseAdmin
-    .from("whatsapp_campaigns")
-    .select("sent_at")
-    .gte("sent_at", fromISO)
-    .lte("sent_at", toISO);
-  const waByDay = new Map<string, number>();
-  for (const c of waCampaigns ?? []) {
-    const sentAt = (c as any).sent_at;
-    if (!sentAt) continue;
-    const key = dayKey(sentAt);
-    waByDay.set(key, (waByDay.get(key) ?? 0) + 1);
+  const waMessageIds = Array.from(new Set(queueRows.map((row) => row.wa_message_id).filter(Boolean))) as string[];
+  const inboxBodyByMessageId = new Map<string, string>();
+  if (waMessageIds.length > 0) {
+    const { data: inboxMessages } = await supabaseAdmin
+      .from("whatsapp_inbox_messages")
+      .select("wa_message_id, body")
+      .in("wa_message_id", waMessageIds);
+    for (const row of inboxMessages ?? []) {
+      if (row.wa_message_id && row.body) inboxBodyByMessageId.set(row.wa_message_id, row.body);
+    }
   }
+
+  const templateBodyByKey = new Map<string, string>();
+  try {
+    const { listMetaTemplates } = await import("./whatsapp-meta.server");
+    const result = await listMetaTemplates();
+    if (result.success) {
+      for (const template of result.templates) {
+        const body = template.components.find((component) => component.type === "BODY")?.text;
+        if (body) templateBodyByKey.set(`${template.name}:${template.language}`, body);
+      }
+    }
+  } catch {
+    // O calendário continua útil com o nome do template se a Meta estiver indisponível.
+  }
+
+  const detailsByDay = new Map<string, CalendarMessageDetail[]>();
+  const addDetail = (date: string, detail: CalendarMessageDetail) => {
+    const list = detailsByDay.get(date) ?? [];
+    list.push(detail);
+    detailsByDay.set(date, list);
+  };
+
+  const groupedEnvio = new Map<string, CalendarMessageDetail>();
+  for (const row of [...(sentMsgs ?? []), ...(scheduledMsgs ?? [])] as any[]) {
+    const occurredAt = row.sent_at ?? row.scheduled_at;
+    if (!occurredAt) continue;
+    const date = dayKey(occurredAt);
+    const key = [date, row.status, row.content_type, row.content_text ?? "", row.media_url ?? ""].join(":");
+    const current = groupedEnvio.get(key);
+    if (current) {
+      current.destinations += 1;
+      if (occurredAt < current.occurredAt) current.occurredAt = occurredAt;
+      continue;
+    }
+    groupedEnvio.set(key, {
+      id: `envio:${row.id}`,
+      source: "fluxo_envio",
+      title: "Fluxo de Envio",
+      content: row.content_text?.trim() || "Mensagem com mídia, sem legenda.",
+      contentType: row.content_type ?? mediaType(row.media_url),
+      mediaUrl: row.media_url ?? null,
+      status: row.status,
+      occurredAt,
+      destinations: 1,
+      templateName: null,
+    });
+  }
+  for (const detail of groupedEnvio.values()) addDetail(dayKey(detail.occurredAt), detail);
+
+  const groupedWhatsapp = new Map<string, CalendarMessageDetail>();
+  for (const row of queueRows) {
+    if (!row.campaign_id) continue;
+    const occurredAt = row.sent_at ?? row.scheduled_at;
+    if (!occurredAt) continue;
+    const date = dayKey(occurredAt);
+    const campaign = campaignRowsById.get(row.campaign_id);
+    const key = `${date}:${row.campaign_id}:${row.status}`;
+    const current = groupedWhatsapp.get(key);
+    if (current) {
+      current.destinations += 1;
+      if (occurredAt < current.occurredAt) current.occurredAt = occurredAt;
+      continue;
+    }
+
+    const bodyParams = Array.isArray(row.body_params) ? row.body_params.map(String) : [];
+    const bodyParamTokens = Array.isArray(row.body_param_tokens) ? row.body_param_tokens.map(String) : null;
+    const templateBody = templateBodyByKey.get(`${row.template_name}:${row.template_language}`);
+    const renderedBody = row.wa_message_id ? inboxBodyByMessageId.get(row.wa_message_id) : null;
+    groupedWhatsapp.set(key, {
+      id: `whatsapp:${row.campaign_id}:${date}:${row.status}`,
+      source: "whatsapp_api",
+      title: campaign?.nome ?? row.template_name ?? "Campanha WhatsApp",
+      content: renderedBody ?? (templateBody ? renderCalendarTemplate(templateBody, bodyParams, bodyParamTokens) : `Template: ${row.template_name}`),
+      contentType: mediaType(row.header_media_url, "text"),
+      mediaUrl: row.header_media_url ?? null,
+      status: row.status,
+      occurredAt,
+      destinations: 1,
+      templateName: row.template_name ?? null,
+    });
+  }
+
+  // Campanhas antigas podem não ter registros na fila. Elas continuam aparecendo com o
+  // template e os parâmetros registrados no momento do envio.
+  for (const campaign of campaignsBySentDate ?? []) {
+    if (!campaign.sent_at) continue;
+    const date = dayKey(campaign.sent_at);
+    const alreadyIncluded = Array.from(groupedWhatsapp.values()).some((detail) => detail.id.startsWith(`whatsapp:${campaign.id}:${date}:`));
+    if (alreadyIncluded) continue;
+    const bodyParams = Array.isArray(campaign.body_params) ? campaign.body_params.map(String) : [];
+    const bodyParamTokens = Array.isArray(campaign.body_param_tokens) ? campaign.body_param_tokens.map(String) : null;
+    const templateBody = templateBodyByKey.get(`${campaign.template_name}:${campaign.template_language}`);
+    groupedWhatsapp.set(`${date}:${campaign.id}:legacy`, {
+      id: `whatsapp:${campaign.id}:${date}:legacy`,
+      source: "whatsapp_api",
+      title: campaign.nome,
+      content: templateBody ? renderCalendarTemplate(templateBody, bodyParams, bodyParamTokens) : `Template: ${campaign.template_name}`,
+      contentType: "text",
+      mediaUrl: null,
+      status: campaign.status,
+      occurredAt: campaign.sent_at,
+      destinations: campaign.enviadas || campaign.total_destinatarios || 0,
+      templateName: campaign.template_name,
+    });
+  }
+  for (const detail of groupedWhatsapp.values()) addDetail(dayKey(detail.occurredAt), detail);
 
   const eventsByDay = new Map<string, CrmEvent[]>();
   for (const ev of events) {
@@ -784,13 +936,17 @@ export async function getCalendarMonthData(year: number, month: number): Promise
     eventsByDay.set(ev.eventDate, list);
   }
 
-  return days.map((d) => ({
-    date: d.date,
-    commercialDate: getCommercialDateName(d.date),
-    faturamento: d.faturamento,
-    pedidos: d.pedidos,
-    crmEvents: eventsByDay.get(d.date) ?? [],
-    envioMensagens: envioByDay.get(d.date) ?? 0,
-    whatsappCampanhas: waByDay.get(d.date) ?? 0,
-  }));
+  return days.map((d) => {
+    const messageDetails = (detailsByDay.get(d.date) ?? []).sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+    return {
+      date: d.date,
+      commercialDate: getCommercialDateName(d.date),
+      faturamento: d.faturamento,
+      pedidos: d.pedidos,
+      crmEvents: eventsByDay.get(d.date) ?? [],
+      envioMensagens: messageDetails.filter((detail) => detail.source === "fluxo_envio").reduce((sum, detail) => sum + detail.destinations, 0),
+      whatsappCampanhas: messageDetails.filter((detail) => detail.source === "whatsapp_api").length,
+      messageDetails,
+    };
+  });
 }

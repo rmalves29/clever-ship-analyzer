@@ -26,6 +26,15 @@ function displayCategoryLabel(category: EventCategory, categoryLabel: Record<Eve
   return category === "outro" ? "Evento" : categoryLabel[category];
 }
 
+const MESSAGE_STATUS_LABEL: Record<string, string> = {
+  sent: "Enviada",
+  finalizada: "Enviada",
+  queued: "Agendada",
+  pending: "Agendada",
+  sending: "Enviando",
+  retry_wait: "Aguardando nova tentativa",
+};
+
 export function CalendarView({
   categoryLabel,
   categoryColor,
@@ -140,7 +149,7 @@ export function CalendarView({
 
       {selected && (
         <Dialog open onOpenChange={(o) => !o && setSelected(null)}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-h-[88vh] max-w-2xl overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{new Date(`${selected.date}T12:00:00Z`).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}</DialogTitle>
             </DialogHeader>
@@ -168,6 +177,44 @@ export function CalendarView({
                 <div className="rounded-lg border border-border p-3">
                   <p className="text-xs text-muted-foreground">WhatsApp API</p>
                   <p className="font-semibold">{selected.whatsappCampanhas} campanha(s)</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold">Mensagens e ações do dia</p>
+                {(selected.messageDetails ?? []).length === 0 && (
+                  <p className="mt-1 text-sm text-muted-foreground">Nenhuma mensagem enviada ou agendada nesse dia.</p>
+                )}
+                <div className="mt-2 space-y-3">
+                  {(selected.messageDetails ?? []).map((detail) => (
+                    <div key={detail.id} className="overflow-hidden rounded-xl border border-border">
+                      {detail.mediaUrl && detail.contentType === "video" && (
+                        <video src={detail.mediaUrl} controls preload="metadata" className="max-h-64 w-full bg-black object-contain" />
+                      )}
+                      {detail.mediaUrl && detail.contentType === "image" && (
+                        <img src={detail.mediaUrl} alt="Mídia enviada" className="max-h-64 w-full bg-muted object-contain" />
+                      )}
+                      <div className="p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="font-semibold">{detail.title}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {detail.source === "whatsapp_api" ? "WhatsApp API" : "Fluxo de Envio"}
+                              {detail.templateName ? ` · Template ${detail.templateName}` : ""}
+                            </p>
+                          </div>
+                          <div className="text-right text-xs text-muted-foreground">
+                            <p>{new Date(detail.occurredAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}</p>
+                            <p>{MESSAGE_STATUS_LABEL[detail.status] ?? detail.status}</p>
+                          </div>
+                        </div>
+                        <p className="mt-3 whitespace-pre-wrap rounded-lg bg-muted/50 p-3 text-sm leading-relaxed">{detail.content}</p>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {detail.destinations} {detail.source === "whatsapp_api" ? "destinatário(s)" : "grupo(s)"}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 

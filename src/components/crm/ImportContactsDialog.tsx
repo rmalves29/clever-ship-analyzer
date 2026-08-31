@@ -19,6 +19,7 @@ export function ImportContactsDialog({ open, onOpenChange }: { open: boolean; on
   const runImport = useServerFn(importContacts);
   const queryClient = useQueryClient();
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
 
   const validRows = useMemo(() => parsed?.rows.filter((r) => r.errors.length === 0) ?? [], [parsed]);
   const invalidRows = useMemo(() => parsed?.rows.filter((r) => r.errors.length > 0) ?? [], [parsed]);
@@ -64,31 +65,48 @@ export function ImportContactsDialog({ open, onOpenChange }: { open: boolean; on
   async function handleImport() {
     if (validRows.length === 0) return;
     setImporting(true);
+    const batches = Array.from(
+      { length: Math.ceil(validRows.length / 2000) },
+      (_, index) => validRows.slice(index * 2000, (index + 1) * 2000),
+    );
+    setImportProgress({ current: 0, total: batches.length });
     try {
-      const summary = await runImport({
-        data: {
-          rows: validRows.map((r) => ({
-            line: r.line,
-            nome: r.nome,
-            email: r.email,
-            phone: r.phone,
-            tags: r.tags,
-            lastPurchaseAt: r.lastPurchaseAt,
-          })),
-        },
-      });
-      queryClient.invalidateQueries({ queryKey: ["crm-customers"] });
-      queryClient.invalidateQueries({ queryKey: ["crm-stats"] });
+      const totalSummary = { imported: 0, updated: 0, skipped: 0 };
+      for (let index = 0; index < batches.length; index++) {
+        const batch = batches[index];
+        if (!batch) continue;
+        setImportProgress({ current: index + 1, total: batches.length });
+        const summary = await runImport({
+          data: {
+            rows: batch.map((r) => ({
+              line: r.line,
+              nome: r.nome,
+              email: r.email,
+              phone: r.phone,
+              tags: r.tags,
+              lastPurchaseAt: r.lastPurchaseAt,
+            })),
+          },
+        });
+        totalSummary.imported += summary.imported;
+        totalSummary.updated += summary.updated;
+        totalSummary.skipped += summary.skipped;
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["crm-customers"] }),
+        queryClient.invalidateQueries({ queryKey: ["crm-stats"] }),
+      ]);
       toast.success(
-        `Importação concluída: ${summary.imported} novos, ${summary.updated} atualizados` +
-          (summary.skipped > 0 ? `, ${summary.skipped} ignorados` : ""),
+        `Importação concluída: ${totalSummary.imported} novos, ${totalSummary.updated} atualizados` +
+          (totalSummary.skipped > 0 ? `, ${totalSummary.skipped} ignorados` : ""),
       );
       onOpenChange(false);
       reset();
-    } catch (err: any) {
-      toast.error("Erro na importação: " + err.message);
+    } catch (err: unknown) {
+      toast.error("Erro na importação: " + (err instanceof Error ? err.message : "falha inesperada"));
     } finally {
       setImporting(false);
+      setImportProgress(null);
     }
   }
 
@@ -117,7 +135,7 @@ export function ImportContactsDialog({ open, onOpenChange }: { open: boolean; on
             >
               <Upload className="size-8 mx-auto mb-3 text-muted-foreground" />
               <p className="font-medium">Clique para escolher o arquivo CSV</p>
-              <p className="text-xs text-muted-foreground mt-1">Máximo 2.000 contatos por importação</p>
+              <p className="text-xs text-muted-foreground mt-1">Listas grandes são processadas automaticamente em lotes seguros</p>
             </button>
             <input
               ref={fileRef}
@@ -216,7 +234,9 @@ export function ImportContactsDialog({ open, onOpenChange }: { open: boolean; on
               </Button>
               <Button onClick={handleImport} disabled={importing || validRows.length === 0} className="gap-2">
                 {importing && <Loader2 className="size-4 animate-spin" />}
-                Importar {validRows.length} contatos
+                {importing && importProgress
+                  ? `Importando lote ${importProgress.current} de ${importProgress.total}`
+                  : `Importar ${validRows.length} contatos`}
               </Button>
             </div>
           </div>

@@ -143,7 +143,10 @@ function RepurchasePage() {
   const aiMutation = useMutation({
     mutationFn: async (selectedStage: RepurchaseWindow) => runSuggestion({ data: { stage: selectedStage } }),
     onSuccess: (result) => {
-      if (!result.success) return toast.error(result.error);
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
       setSuggestion(result.suggestion);
       toast.success("Sugestão de campanha criada para revisão.");
     },

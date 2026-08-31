@@ -878,7 +878,7 @@ export async function getCalendarMonthData(year: number, month: number): Promise
     const result = await listMetaTemplates();
     if (result.success) {
       for (const template of result.templates) {
-        const body = template.components.find((component) => component.type === "BODY")?.text;
+        const body = template.components.find((component: any) => component.type === "BODY")?.text;
         if (body) templateBodyByKey.set(`${template.name}:${template.language}`, body);
       }
     }

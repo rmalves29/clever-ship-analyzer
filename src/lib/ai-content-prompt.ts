@@ -1,16 +1,15 @@
 import { fromZonedTime } from "date-fns-tz";
 
-export const AI_CONTENT_PROMPT_VERSION = "ai-calendar-v2";
+export const AI_CONTENT_PROMPT_VERSION = "ai-calendar-v3";
 export const AI_CONTENT_TIMEZONE = "America/Sao_Paulo";
 
 export type AiSourceKind =
-  | "top_seller_1"
-  | "top_seller_2"
-  | "top_visited"
-  | "top_post_1"
-  | "top_post_2"
-  | "top_reel"
-  | "coupon"
+  | "top_ad_ctr"
+  | "top_seller"
+  | "top_instagram"
+  | "top_viewed"
+  | "top_story_or_reel"
+  | "top_recent_launch"
   | "none";
 
 export type AiPromptItemPlan = {
@@ -59,16 +58,8 @@ const SELLER_ANGLES = [
   ...SAFE_ANGLES,
 ] as const;
 
-const COUPON_ANGLES = [
-  "urgência baseada somente na validade real do cupom",
-  "benefício exclusivo com código, percentual e validade exatos",
-  "contagem regressiva baseada somente no prazo real informado",
-  "convite direto pra aproveitar o cupom dentro da validade",
-] as const;
-
 export function allowedAnglesForSource(kind: AiSourceKind): readonly string[] {
-  if (kind === "coupon") return COUPON_ANGLES;
-  if (kind === "top_seller_1" || kind === "top_seller_2") return SELLER_ANGLES;
+  if (kind === "top_seller") return SELLER_ANGLES;
   return SAFE_ANGLES;
 }
 
@@ -169,13 +160,14 @@ REGRAS OBRIGATÓRIAS
 - Use somente fatos presentes em "verifiedFacts" do item correspondente.
 - Não use "últimas unidades" sem quantidade de estoque verificada.
 - Não diga que clientes "amaram" sem avaliações ou feedback fornecido.
-- Cupom deve usar exatamente o código, percentual e validade informados.
+- Não crie ou mencione cupom, desconto ou oferta que não esteja nos fatos verificados.
+- Explique por que o conteúdo se destacou sem expor métricas internas desnecessárias.
 - Cada mensagem deve ter abertura, estrutura e CTA diferentes.
 - Máximo de 500 caracteres, 6 linhas e 3 emojis por mensagem.
 - Não escreva URLs; o servidor adiciona o link rastreado depois.
 - Não copie frases das mensagens anteriores.
 - Se um ângulo não for sustentado pelos fatos, adapte-o de forma honesta e registre o motivo em "risk_flags".
-- "image_prompt" só pode ser preenchido quando a fonte não tiver imagem real. Não peça texto, logotipo, código de cupom ou marca d'água na imagem.
+- A mídia real já foi selecionada e será anexada pelo servidor; devolva sempre "image_prompt": null.
 
 <PLAYBOOK>
 ${JSON.stringify(playbook ?? "")}

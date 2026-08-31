@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { AlertTriangle, AtSign, Check, Clock3, ImageOff, Link2, RefreshCw, Sparkles, X } from "lucide-react";
+import { AlertTriangle, AtSign, Check, Clock3, ImageOff, Link2, RefreshCw, Sparkles, Video, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -89,7 +89,14 @@ function QueueCard({
         </span>
       </div>
 
-      {item.contentImageUrl ? (
+      {item.contentImageUrl && item.contentMediaType === "video_note" ? (
+        <div className="space-y-1.5">
+          <video src={item.contentImageUrl} controls muted preload="metadata" className="max-h-56 w-full rounded-lg border border-border bg-black object-contain" />
+          <span className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground">
+            <Video className="size-3" /> Será enviado como vídeo redondo
+          </span>
+        </div>
+      ) : item.contentImageUrl ? (
         <img src={item.contentImageUrl} alt="Prévia" className="max-h-40 w-full rounded-lg border border-border object-cover" />
       ) : (
         <div className="flex h-16 items-center justify-center gap-2 rounded-lg border border-dashed border-border text-xs text-muted-foreground">
@@ -337,7 +344,7 @@ export function AiBatchDialog({ open, onOpenChange }: { open: boolean; onOpenCha
             <Sparkles className="size-5 text-primary" /> Criar calendário com IA
           </DialogTitle>
           <DialogDescription>
-            Planeja mensagens com fontes reais, contexto da campanha e datas do calendário. Nada é enviado antes da sua aprovação.
+            Cria 6 mensagens sem cupom usando Ads, Shopify, Instagram e GA4. As imagens e os vídeos são baixados e anexados automaticamente. Nada é enviado antes da sua aprovação.
           </DialogDescription>
         </DialogHeader>
 
@@ -348,7 +355,7 @@ export function AiBatchDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               <Tabs value={mode} onValueChange={(value) => setMode(value as "day" | "week")}>
                 <TabsList>
                   <TabsTrigger value="day">Um dia</TabsTrigger>
-                  <TabsTrigger value="week">Uma semana (7 mensagens)</TabsTrigger>
+                  <TabsTrigger value="week">Plano completo (6 mensagens)</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
@@ -452,7 +459,7 @@ export function AiBatchDialog({ open, onOpenChange }: { open: boolean; onOpenCha
                 }
               >
                 {generateMut.isPending ? <RefreshCw className="mr-2 size-4 animate-spin" /> : <Sparkles className="mr-2 size-4" />}
-                {generateMut.isPending ? "Planejando..." : "Criar " + (mode === "week" ? "calendário de 7 dias" : "mensagem")}
+                {generateMut.isPending ? "Planejando..." : "Criar " + (mode === "week" ? "plano de 6 mensagens" : "mensagem")}
               </Button>
             </div>
           </div>

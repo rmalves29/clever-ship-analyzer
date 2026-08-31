@@ -230,7 +230,13 @@ function advanceNextRunAt(recurrence: RoutineRecurrence, prevNextRunAt: string):
  *  `scheduledAtIso` for null/omitido (cai no envio em background do próprio createAndSendEnvioMessage),
  *  ou entra na fila de agendados do Fluxo de Envio (aba Envios, já tem cron próprio) se for uma
  *  data futura. Retorna quantos grupos foram alvo, pra o chamador decidir o que fazer se for 0. */
-export async function dispatchToCampaignGroups(campaignId: string, contentText: string, contentImageUrl: string | null, scheduledAtIso?: string): Promise<{ groupCount: number; messageIds: string[] }> {
+export async function dispatchToCampaignGroups(
+  campaignId: string,
+  contentText: string,
+  contentMediaUrl: string | null,
+  scheduledAtIso?: string,
+  contentMediaType: "image" | "video_note" = "image",
+): Promise<{ groupCount: number; messageIds: string[] }> {
   const { resolveEnvioCampaignAudience } = await import("./envio-campaigns.server");
   const audience = await resolveEnvioCampaignAudience(campaignId);
   if (audience.groupCount === 0) return { groupCount: 0, messageIds: [] };
@@ -239,9 +245,9 @@ export async function dispatchToCampaignGroups(campaignId: string, contentText: 
   const res = await createAndSendEnvioMessage({
     campaignId,
     groupIds: audience.groupIds,
-    contentType: contentImageUrl ? "image" : "text",
+    contentType: contentMediaUrl ? contentMediaType : "text",
     contentText,
-    mediaUrl: contentImageUrl ?? undefined,
+    mediaUrl: contentMediaUrl ?? undefined,
     scheduledAt: scheduledAtIso,
   });
 

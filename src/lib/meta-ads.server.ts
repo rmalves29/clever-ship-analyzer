@@ -657,6 +657,141 @@ export async function getMetaAdsCreatives(datePreset: MetaAdsDatePreset): Promis
   }
 }
 
+export type MetaAdsCreativeSource = {
+  id: string;
+  name: string;
+  impressions: number;
+  ctrLink: number;
+  ctrAll: number;
+  ctrMetric: "link" | "all";
+  thumbnailUrl: string | null;
+  mediaUrl: string | null;
+  mediaType: "image" | "video";
+  destinationUrl: string | null;
+};
+
+function nestedCreativeVideoId(creative: any): string | null {
+  return creative?.video_id
+    ?? creative?.object_story_spec?.video_data?.video_id
+    ?? creative?.object_story_spec?.link_data?.child_attachments?.find((item: any) => item?.video_id)?.video_id
+    ?? creative?.asset_feed_spec?.videos?.find((item: any) => item?.video_id)?.video_id
+    ?? null;
+}
+
+function nestedCreativeDestination(creative: any): string | null {
+  const value = creative?.object_story_spec?.link_data?.link
+    ?? creative?.object_story_spec?.video_data?.call_to_action?.value?.link
+    ?? creative?.object_story_spec?.photo_data?.call_to_action?.value?.link
+    ?? creative?.asset_feed_spec?.link_urls?.find((item: any) => item?.website_url)?.website_url
+    ?? null;
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchAdCreative(adId: string, accessToken: string): Promise<any> {
+  const fieldSets = [
+    "id,creative{thumbnail_url,image_url,video_id,object_story_spec,asset_feed_spec}",
+    "id,creative{thumbnail_url,image_url,video_id,object_story_spec}",
+    "id,creative{thumbnail_url,image_url,video_id}",
+  ];
+  let lastError: unknown;
+  for (const fields of fieldSets) {
+    try {
+      return await graphGET(`/${adId}`, { fields }, accessToken);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Não foi possível consultar a mídia do anúncio.");
+}
+
+/** Melhor anúncio da janela por CTR de link. CTR geral só é usado quando a conta não devolve
+ * cliques de link no período. O piso de 100 impressões evita escolher um anúncio vencedor por uma
+ * amostra irrelevante; se nenhum alcançar o piso, usa o melhor anúncio disponível como fallback. */
+export async function getMetaAdsTopCtrCreativeInRange(
+  sinceDate: string,
+  untilDate: string,
+  minImpressions = 100,
+): Promise<{ success: true; creative: MetaAdsCreativeSource | null } | { success: false; error: string }> {
+  const { accessToken, accountId } = await loadMetaAdsSettings();
+  if (!accessToken || !accountId) {
+    return { success: false, error: "Meta Ads não conectado. Configure em Configurações." };
+  }
+
+  try {
+    const insights = await graphGET(
+      `/${accountId}/insights`,
+      {
+        level: "ad",
+        time_range: JSON.stringify({ since: sinceDate, until: untilDate }),
+        fields: "ad_id,ad_name,impressions,inline_link_clicks,ctr",
+        limit: "500",
+      },
+      accessToken,
+    );
+    const rows = ((insights.data ?? []) as any[])
+      .map((row) => {
+        const impressions = num(row.impressions);
+        const linkClicks = num(row.inline_link_clicks);
+        return {
+          id: String(row.ad_id ?? ""),
+          name: String(row.ad_name ?? "Anúncio sem nome"),
+          impressions,
+          ctrLink: impressions > 0 ? linkClicks / impressions : 0,
+          ctrAll: num(row.ctr) / 100,
+        };
+      })
+      .filter((row) => row.id && row.impressions > 0);
+    if (rows.length === 0) return { success: true, creative: null };
+
+    const eligible = rows.filter((row) => row.impressions >= minImpressions);
+    const candidates = eligible.length > 0 ? eligible : rows;
+    const hasLinkCtr = candidates.some((row) => row.ctrLink > 0);
+    candidates.sort((a, b) => (hasLinkCtr ? b.ctrLink - a.ctrLink : b.ctrAll - a.ctrAll) || b.impressions - a.impressions);
+    const winner = candidates[0]!;
+
+    const ad = await fetchAdCreative(winner.id, accessToken);
+    const creative = ad.creative ?? {};
+    const thumbnailUrl = creative.thumbnail_url ?? creative.image_url ?? null;
+    const videoId = nestedCreativeVideoId(creative);
+    let mediaUrl: string | null = creative.image_url ?? thumbnailUrl;
+    let mediaType: "image" | "video" = "image";
+
+    if (videoId) {
+      try {
+        const video = await graphGET(`/${videoId}`, { fields: "source,picture" }, accessToken);
+        if (video.source) {
+          mediaUrl = video.source;
+          mediaType = "video";
+        } else if (!thumbnailUrl && video.picture) {
+          mediaUrl = video.picture;
+        }
+      } catch (error) {
+        console.error(`[meta-ads] Não foi possível baixar o vídeo ${videoId}; usando a miniatura:`, error);
+      }
+    }
+
+    return {
+      success: true,
+      creative: {
+        ...winner,
+        ctrMetric: hasLinkCtr ? "link" : "all",
+        thumbnailUrl,
+        mediaUrl,
+        mediaType,
+        destinationUrl: nestedCreativeDestination(creative),
+      },
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar o melhor anúncio." };
+  }
+}
+
 function average(values: number[]): number {
   return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
 }

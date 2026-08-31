@@ -1,6 +1,8 @@
 import { z } from "zod";
-import { fetchImageAsDataUri, dataUriToBase64, dataUriContentType, generateImageBase64, dispatchToCampaignGroups } from "./ai-send-routines.server";
+import { fetchImageAsDataUri, dataUriToBase64, dataUriContentType, dispatchToCampaignGroups } from "./ai-send-routines.server";
 import type { BestSellingProduct } from "./shopify-products.server";
+import type { ShopifyProductDetail } from "./shopify.server";
+import type { Ga4Record } from "./google-analytics.server";
 import type { InstagramMedia } from "./instagram.server";
 import { getCommercialDateName } from "./commercial-dates";
 import {
@@ -30,6 +32,7 @@ export type ContentQueueItem = {
   campaignName: string;
   contentText: string;
   contentImageUrl: string | null;
+  contentMediaType: "none" | "image" | "video_note";
   linkType: "instagram" | "site" | "none";
   linkUrl: string | null;
   sourceSummary: string;
@@ -54,6 +57,7 @@ function mapRow(row: any): ContentQueueItem {
     campaignName: row.campaign_name,
     contentText: row.content_text,
     contentImageUrl: row.content_image_url,
+    contentMediaType: row.content_media_type ?? (row.content_image_url ? "image" : "none"),
     linkType: row.link_type ?? "none",
     linkUrl: row.link_url,
     sourceSummary: row.source_summary,
@@ -83,32 +87,44 @@ type DraftItem = {
   image_prompt: string | null;
 };
 
+type SlotMedia = {
+  sourceUrl: string;
+  previewImageUrl: string | null;
+  preferredType: "image" | "video_note";
+};
+
 type ProductSourceSlot = {
-  kind: "top_seller_1" | "top_seller_2" | "top_visited";
+  kind: "top_seller" | "top_viewed" | "top_recent_launch";
   title: string;
   description: string | null;
-  imageUrl: string | null;
   productUrl: string | null;
+  productId: string;
+  views: number | null;
+  launchRankedByViews: boolean;
+  media: SlotMedia;
+};
+
+type MetaAdsSourceSlot = {
+  kind: "top_ad_ctr";
+  name: string;
+  impressions: number;
+  ctr: number;
+  ctrMetric: "link" | "all";
+  destinationUrl: string | null;
+  media: SlotMedia;
 };
 
 type InstagramSourceSlot = {
-  kind: "top_post_1" | "top_post_2" | "top_reel";
+  kind: "top_instagram" | "top_story_or_reel";
   caption: string | null;
-  imageUrl: string | null;
   permalink: string | null;
+  resultLabel: string;
+  resultValue: number;
+  media: SlotMedia;
 };
 
-type CouponSourceSlot = {
-  kind: "coupon";
-  code: string;
-  percentageLabel: string; // "8%"
-  expiresAtLabel: string; // já formatado pt-BR/America-Sao_Paulo
-};
-
-type ContentSlot = ProductSourceSlot | InstagramSourceSlot | CouponSourceSlot | null;
-
-type NonCouponSlotKind = "top_seller_1" | "top_seller_2" | "top_visited" | "top_post_1" | "top_post_2" | "top_reel";
-type SlotKind = NonCouponSlotKind | "coupon";
+type ContentSlot = ProductSourceSlot | MetaAdsSourceSlot | InstagramSourceSlot | null;
+type SlotKind = "top_ad_ctr" | "top_seller" | "top_instagram" | "top_viewed" | "top_story_or_reel" | "top_recent_launch";
 
 function buildScheduledDates(startDate: string, count: number): string[] {
   const [startYear, startMonth, startDay] = startDate.split("-").map(Number) as [number, number, number];
@@ -120,117 +136,205 @@ function buildScheduledDates(startDate: string, count: number): string[] {
   return dates;
 }
 
-function isSunday(dateStr: string): boolean {
-  const [y, m, d] = dateStr.split("-").map(Number) as [number, number, number];
-  return new Date(y, m - 1, d).getDay() === 0;
-}
+const SLOT_KINDS: SlotKind[] = ["top_ad_ctr", "top_seller", "top_instagram", "top_viewed", "top_story_or_reel", "top_recent_launch"];
 
-const NON_COUPON_KINDS: NonCouponSlotKind[] = ["top_seller_1", "top_seller_2", "top_visited", "top_post_1", "top_post_2", "top_reel"];
-
-/** Domingo (sempre existe exatamente 1 numa janela de 7 dias corridos) sempre vira cupom. As
- *  outras datas recebem as 6 fontes reais em ordem embaralhada a cada geração — nunca a mesma
- *  sequência fixa toda semana. No modo "dia" (count=1, não-domingo) isso naturalmente sorteia 1
- *  das 6 fontes aleatoriamente, sem correspondência fixa dia-da-semana -> fonte. */
+/** As seis fontes entram uma vez cada no calendário, em ordem embaralhada. */
 function assignSlotKinds(scheduledDates: string[]): SlotKind[] {
-  const shuffled = [...NON_COUPON_KINDS].sort(() => Math.random() - 0.5);
-  let ptr = 0;
-  return scheduledDates.map((d) => {
-    if (isSunday(d)) return "coupon";
-    const kind = shuffled[ptr % shuffled.length]!;
-    ptr++;
-    return kind;
-  });
+  return [...SLOT_KINDS].sort(() => Math.random() - 0.5).slice(0, scheduledDates.length);
 }
 
 function dateOnlyToSaoPauloISO(dateStr: string): string {
   return new Date(`${dateStr}T00:00:00-03:00`).toISOString();
 }
 
-/** "Semana anterior" = 7 dias corridos antes de `startDate` (data de início do lote). */
-function previousWeekRange(startDate: string): { sinceDate: string; untilDate: string; sinceISO: string; untilISO: string } {
+/** "Semana anterior" = os 7 dias corridos completos anteriores a `startDate`. */
+function previousWeekRange(startDate: string): { sinceDate: string; endDate: string; untilDate: string; sinceISO: string; untilISO: string } {
   const [y, m, d] = startDate.split("-").map(Number) as [number, number, number];
   const fmt = (dt: Date) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
   const untilDate = fmt(new Date(y, m - 1, d));
   const sinceDate = fmt(new Date(y, m - 1, d - 7));
-  return { sinceDate, untilDate, sinceISO: dateOnlyToSaoPauloISO(sinceDate), untilISO: dateOnlyToSaoPauloISO(untilDate) };
+  const endDate = fmt(new Date(y, m - 1, d - 1));
+  return { sinceDate, endDate, untilDate, sinceISO: dateOnlyToSaoPauloISO(sinceDate), untilISO: dateOnlyToSaoPauloISO(untilDate) };
 }
 
 type WeeklySignals = {
-  topSeller1: ProductSourceSlot | null;
-  topSeller2: ProductSourceSlot | null;
-  topVisited: ProductSourceSlot | null;
-  topPost1: InstagramSourceSlot | null;
-  topPost2: InstagramSourceSlot | null;
-  topReel: InstagramSourceSlot | null;
+  topAdCtr: MetaAdsSourceSlot | null;
+  topSeller: ProductSourceSlot | null;
+  topInstagram: InstagramSourceSlot | null;
+  topViewed: ProductSourceSlot | null;
+  topStoryOrReel: InstagramSourceSlot | null;
+  topRecentLaunch: ProductSourceSlot | null;
 };
 
-/** Junta os sinais reais da semana anterior a `startDate`: 2 produtos mais vendidos, 1 produto
- *  mais acessado (nunca coincidindo com os 2 vendidos), 2 posts + 1 reels de mais engajamento do
- *  Instagram. Cada sub-busca tem fallback isolado — uma fonte falhando não derruba as outras. */
-async function gatherWeeklySignals(startDate: string): Promise<WeeklySignals> {
-  const { sinceDate, untilDate, sinceISO, untilISO } = previousWeekRange(startDate);
-
-  const { getBestSellingProducts, getMostVisitedProducts } = await import("./shopify-products.server");
-  const { getShopifyProductsByIds } = await import("./shopify.server");
-  const { getInstagramTopContentInRange } = await import("./instagram.server");
-
-  const [bestSellers, igRes] = await Promise.all([
-    getBestSellingProducts({ startISO: sinceISO, endISO: untilISO, limit: 2 }).catch(() => [] as BestSellingProduct[]),
-    getInstagramTopContentInRange(sinceISO, untilISO).catch(() => ({ success: false as const, error: "" })),
-  ]);
-
-  const bestSellerIds = bestSellers.map((p) => p.productId).filter((id): id is string => !!id);
-  const [productDetails, mostVisited] = await Promise.all([
-    getShopifyProductsByIds(bestSellerIds).catch(() => new Map()),
-    getMostVisitedProducts({ sinceDate, untilDate, excludeProductIds: bestSellerIds, limit: 1 }).catch(() => []),
-  ]);
-
-  function toProductSlot(kind: "top_seller_1" | "top_seller_2", seller: BestSellingProduct | undefined): ProductSourceSlot | null {
-    if (!seller) return null;
-    const detail = seller.productId ? productDetails.get(seller.productId) : undefined;
-    return {
-      kind,
-      title: detail?.title ?? seller.title,
-      description: detail?.description ?? null,
-      imageUrl: detail?.featuredImageUrl ?? null,
-      productUrl: detail?.productUrl ?? null,
-    };
-  }
-
-  const topSeller1 = toProductSlot("top_seller_1", bestSellers[0]);
-  const topSeller2 = toProductSlot("top_seller_2", bestSellers[1]);
-  const visited = mostVisited[0];
-  const topVisited: ProductSourceSlot | null = visited
-    ? { kind: "top_visited", title: visited.detail.title, description: visited.detail.description, imageUrl: visited.detail.featuredImageUrl, productUrl: visited.detail.productUrl }
-    : null;
-
-  const media = igRes.success ? igRes.media : [];
-  const nonVideo = media.filter((m) => m.mediaType === "IMAGE" || m.mediaType === "CAROUSEL_ALBUM").sort((a, b) => b.totalInteractions - a.totalInteractions);
-  const reels = media.filter((m) => m.mediaType === "VIDEO" || m.productType === "REELS").sort((a, b) => b.totalInteractions - a.totalInteractions);
-
-  function toIgSlot(kind: "top_post_1" | "top_post_2" | "top_reel", m: InstagramMedia | undefined): InstagramSourceSlot | null {
-    if (!m) return null;
-    return { kind, caption: m.caption, imageUrl: m.thumbnailUrl, permalink: m.permalink };
-  }
-
-  return {
-    topSeller1,
-    topSeller2,
-    topVisited,
-    topPost1: toIgSlot("top_post_1", nonVideo[0]),
-    topPost2: toIgSlot("top_post_2", nonVideo[1]),
-    topReel: toIgSlot("top_reel", reels[0]),
-  };
+function normalizedProductId(value: string): string {
+  return value.replace(/^gid:\/\/shopify\/Product\//, "").trim();
 }
 
-function slotForKind(kind: NonCouponSlotKind, signals: WeeklySignals): ContentSlot {
+function normalizedTitle(value: string): string {
+  return value.trim().toLocaleLowerCase("pt-BR");
+}
+
+function productMedia(detail: ShopifyProductDetail): SlotMedia | null {
+  return detail.featuredImageUrl
+    ? { sourceUrl: detail.featuredImageUrl, previewImageUrl: detail.featuredImageUrl, preferredType: "image" }
+    : null;
+}
+
+function instagramMedia(item: InstagramMedia): SlotMedia | null {
+  const isVideo = item.mediaType === "VIDEO" || item.productType === "REELS";
+  if (isVideo && item.mediaUrl) {
+    return { sourceUrl: item.mediaUrl, previewImageUrl: item.thumbnailUrl, preferredType: "video_note" };
+  }
+  const imageUrl = item.mediaUrl ?? item.thumbnailUrl;
+  return imageUrl ? { sourceUrl: imageUrl, previewImageUrl: item.thumbnailUrl ?? imageUrl, preferredType: "image" } : null;
+}
+
+function findRecentProductForGaRow(row: Ga4Record, products: ShopifyProductDetail[]): ShopifyProductDetail | null {
+  const itemId = normalizedProductId(String(row.itemId ?? ""));
+  const itemName = normalizedTitle(String(row.itemName ?? ""));
+  return products.find((product) => normalizedProductId(product.id) === itemId)
+    ?? products.find((product) => itemName && normalizedTitle(product.title) === itemName)
+    ?? null;
+}
+
+async function resolveGa4Product(row: Ga4Record, recentProducts: ShopifyProductDetail[]): Promise<ShopifyProductDetail | null> {
+  const recent = findRecentProductForGaRow(row, recentProducts);
+  if (recent) return recent;
+
+  const { getShopifyProductById, getShopifyProductByTitle } = await import("./shopify.server");
+  const rawId = String(row.itemId ?? "").trim();
+  const numericId = normalizedProductId(rawId);
+  if (/^\d+$/.test(numericId)) {
+    const byId = await getShopifyProductById(`gid://shopify/Product/${numericId}`);
+    if (byId) return byId;
+  } else if (rawId.startsWith("gid://shopify/Product/")) {
+    const byId = await getShopifyProductById(rawId);
+    if (byId) return byId;
+  }
+  return getShopifyProductByTitle(String(row.itemName ?? ""));
+}
+
+function ga4Views(row: Ga4Record): number {
+  return Number(row.itemsViewed ?? row.itemViewEvents ?? 0);
+}
+
+/** Junta as seis fontes reais: Ads por CTR de link, Shopify por vendas, Instagram por resultado,
+ * GA4 por visualização, Story ativo (ou Reels) e lançamento recente mais visto. */
+async function gatherWeeklySignals(startDate: string): Promise<WeeklySignals> {
+  const { sinceDate, endDate, sinceISO, untilISO } = previousWeekRange(startDate);
+  const { getBestSellingProducts } = await import("./shopify-products.server");
+  const { getShopifyProductsByIds, getShopifyRecentProducts, getShopifyProductByTitle } = await import("./shopify.server");
+  const { getInstagramTopContentInRange, getInstagramActiveStories } = await import("./instagram.server");
+  const { getMetaAdsTopCtrCreativeInRange } = await import("./meta-ads.server");
+  const { getGa4MostViewedProducts } = await import("./google-analytics.server");
+
+  const bestSellers = await getBestSellingProducts({ startISO: sinceISO, endISO: untilISO, limit: 1 }).catch(() => [] as BestSellingProduct[]);
+  const bestSellerIds = bestSellers.map((product) => product.productId).filter((id): id is string => Boolean(id));
+  const [productDetails, gaRows, recentProducts, igResult, storiesResult, adsResult] = await Promise.all([
+    getShopifyProductsByIds(bestSellerIds).catch(() => new Map<string, ShopifyProductDetail>()),
+    getGa4MostViewedProducts({ startDate: sinceDate, endDate }, bestSellerIds).catch(() => [] as Ga4Record[]),
+    getShopifyRecentProducts(20).catch(() => [] as ShopifyProductDetail[]),
+    getInstagramTopContentInRange(sinceISO, untilISO).catch(() => ({ success: false as const, error: "" })),
+    getInstagramActiveStories().catch(() => ({ success: false as const, error: "" })),
+    getMetaAdsTopCtrCreativeInRange(sinceDate, endDate, 100).catch(() => ({ success: false as const, error: "" })),
+  ]);
+
+  const seller = bestSellers[0];
+  const sellerDetail = seller
+    ? (seller.productId ? productDetails.get(seller.productId) : null) ?? await getShopifyProductByTitle(seller.title)
+    : null;
+  const sellerMedia = sellerDetail ? productMedia(sellerDetail) : null;
+  const topSeller: ProductSourceSlot | null = seller && sellerDetail && sellerMedia
+    ? { kind: "top_seller", title: sellerDetail.title, description: sellerDetail.description, productUrl: sellerDetail.productUrl, productId: sellerDetail.id, views: null, launchRankedByViews: false, media: sellerMedia }
+    : null;
+
+  const excludedIds = new Set(bestSellerIds.map(normalizedProductId));
+  if (sellerDetail) excludedIds.add(normalizedProductId(sellerDetail.id));
+  let viewedDetail: ShopifyProductDetail | null = null;
+  let viewedRow: Ga4Record | null = null;
+  for (const row of gaRows.slice(0, 25)) {
+    const detail = await resolveGa4Product(row, recentProducts);
+    if (!detail || excludedIds.has(normalizedProductId(detail.id)) || !productMedia(detail)) continue;
+    viewedDetail = detail;
+    viewedRow = row;
+    break;
+  }
+  const viewedMedia = viewedDetail ? productMedia(viewedDetail) : null;
+  const topViewed: ProductSourceSlot | null = viewedDetail && viewedRow && viewedMedia
+    ? { kind: "top_viewed", title: viewedDetail.title, description: viewedDetail.description, productUrl: viewedDetail.productUrl, productId: viewedDetail.id, views: ga4Views(viewedRow), launchRankedByViews: false, media: viewedMedia }
+    : null;
+  if (viewedDetail) excludedIds.add(normalizedProductId(viewedDetail.id));
+
+  let launchDetail: ShopifyProductDetail | null = null;
+  let launchViews: number | null = null;
+  for (const row of gaRows) {
+    const candidate = findRecentProductForGaRow(row, recentProducts);
+    if (!candidate || excludedIds.has(normalizedProductId(candidate.id)) || !productMedia(candidate)) continue;
+    launchDetail = candidate;
+    launchViews = ga4Views(row);
+    break;
+  }
+  if (!launchDetail) {
+    launchDetail = recentProducts.find((product) => !excludedIds.has(normalizedProductId(product.id)) && Boolean(productMedia(product))) ?? null;
+  }
+  const launchMedia = launchDetail ? productMedia(launchDetail) : null;
+  const topRecentLaunch: ProductSourceSlot | null = launchDetail && launchMedia
+    ? { kind: "top_recent_launch", title: launchDetail.title, description: launchDetail.description, productUrl: launchDetail.productUrl, productId: launchDetail.id, views: launchViews, launchRankedByViews: launchViews !== null, media: launchMedia }
+    : null;
+
+  const ad = adsResult.success ? adsResult.creative : null;
+  const adSourceUrl = ad?.mediaUrl ?? ad?.thumbnailUrl ?? null;
+  const topAdCtr: MetaAdsSourceSlot | null = ad && adSourceUrl
+    ? {
+        kind: "top_ad_ctr",
+        name: ad.name,
+        impressions: ad.impressions,
+        ctr: ad.ctrMetric === "link" ? ad.ctrLink : ad.ctrAll,
+        ctrMetric: ad.ctrMetric,
+        destinationUrl: ad.destinationUrl,
+        media: { sourceUrl: adSourceUrl, previewImageUrl: ad.thumbnailUrl, preferredType: ad.mediaType === "video" ? "video_note" : "image" },
+      }
+    : null;
+
+  const instagramItems = igResult.success ? igResult.media : [];
+  const feedWinner = instagramItems
+    .filter((item) => item.mediaType === "IMAGE" || item.mediaType === "CAROUSEL_ALBUM")
+    .sort((a, b) => b.totalInteractions - a.totalInteractions || b.reach - a.reach)
+    .find((item) => Boolean(instagramMedia(item)));
+  const feedMedia = feedWinner ? instagramMedia(feedWinner) : null;
+  const topInstagram: InstagramSourceSlot | null = feedWinner && feedMedia
+    ? { kind: "top_instagram", caption: feedWinner.caption, permalink: feedWinner.permalink, resultLabel: "interações", resultValue: feedWinner.totalInteractions, media: feedMedia }
+    : null;
+
+  const activeStory = storiesResult.success ? storiesResult.media.find((item) => Boolean(instagramMedia(item))) : undefined;
+  const bestReel = instagramItems
+    .filter((item) => item.mediaType === "VIDEO" || item.productType === "REELS")
+    .sort((a, b) => b.views - a.views || b.reach - a.reach || b.totalInteractions - a.totalInteractions)
+    .find((item) => Boolean(instagramMedia(item)));
+  const storyOrReel = activeStory ?? bestReel;
+  const storyOrReelMedia = storyOrReel ? instagramMedia(storyOrReel) : null;
+  const topStoryOrReel: InstagramSourceSlot | null = storyOrReel && storyOrReelMedia
+    ? {
+        kind: "top_story_or_reel",
+        caption: storyOrReel.caption,
+        permalink: storyOrReel.permalink,
+        resultLabel: activeStory ? "visualizações do Story ativo" : "resultado do Reels da semana anterior",
+        resultValue: activeStory ? activeStory.views || activeStory.reach : bestReel?.views || bestReel?.reach || bestReel?.totalInteractions || 0,
+        media: storyOrReelMedia,
+      }
+    : null;
+
+  return { topAdCtr, topSeller, topInstagram, topViewed, topStoryOrReel, topRecentLaunch };
+}
+
+function slotForKind(kind: SlotKind, signals: WeeklySignals): ContentSlot {
   switch (kind) {
-    case "top_seller_1": return signals.topSeller1;
-    case "top_seller_2": return signals.topSeller2;
-    case "top_visited": return signals.topVisited;
-    case "top_post_1": return signals.topPost1;
-    case "top_post_2": return signals.topPost2;
-    case "top_reel": return signals.topReel;
+    case "top_ad_ctr": return signals.topAdCtr;
+    case "top_seller": return signals.topSeller;
+    case "top_instagram": return signals.topInstagram;
+    case "top_viewed": return signals.topViewed;
+    case "top_story_or_reel": return signals.topStoryOrReel;
+    case "top_recent_launch": return signals.topRecentLaunch;
   }
 }
 
@@ -241,38 +345,36 @@ function sourceKind(slot: ContentSlot): AiSourceKind {
 function sourceVerifiedFacts(slot: ContentSlot): string[] {
   if (!slot) return ["Nenhuma fonte comercial específica estava disponível; fale apenas da marca sem inventar produto ou oferta."];
   switch (slot.kind) {
-    case "top_seller_1":
+    case "top_ad_ctr":
+      return [
+        `O anúncio "${slot.name}" teve o melhor CTR ${slot.ctrMetric === "link" ? "de link" : "geral"} elegível da semana anterior (${(slot.ctr * 100).toFixed(2)}%, ${slot.impressions} impressões).`,
+      ];
+    case "top_seller":
       return [
         `"${slot.title}" foi o produto mais vendido na semana anterior.`,
         ...(slot.description ? [`Descrição cadastrada: ${slot.description.slice(0, 300)}`] : []),
       ];
-    case "top_seller_2":
+    case "top_viewed":
       return [
-        `"${slot.title}" foi o segundo produto mais vendido na semana anterior.`,
+        `"${slot.title}" foi o produto mais visualizado no GA4 na semana anterior entre os elegíveis, sem repetir o mais vendido${slot.views !== null ? ` (${slot.views} visualizações registradas)` : ""}.`,
         ...(slot.description ? [`Descrição cadastrada: ${slot.description.slice(0, 300)}`] : []),
       ];
-    case "top_visited":
+    case "top_recent_launch":
       return [
-        `"${slot.title}" foi o produto mais acessado no site na semana anterior entre os produtos elegíveis.`,
+        slot.launchRankedByViews
+          ? `"${slot.title}" foi o mais visualizado no GA4 entre os 20 produtos ativos mais recentes${slot.views !== null ? ` (${slot.views} visualizações registradas)` : ""}.`
+          : `"${slot.title}" está entre os 20 produtos ativos cadastrados mais recentemente na Shopify.`,
         ...(slot.description ? [`Descrição cadastrada: ${slot.description.slice(0, 300)}`] : []),
       ];
-    case "top_post_1":
-    case "top_post_2":
+    case "top_instagram":
       return [
-        "A publicação esteve entre os posts com mais interações na semana anterior.",
+        `A publicação de imagem teve o melhor resultado entre os posts do Instagram da semana anterior (${slot.resultValue} ${slot.resultLabel}).`,
         ...(slot.caption ? [`Legenda original: ${slot.caption.slice(0, 500)}`] : []),
       ];
-    case "top_reel":
+    case "top_story_or_reel":
       return [
-        "O Reels foi o vídeo com mais interações na semana anterior.",
+        `O conteúdo selecionado teve o melhor ${slot.resultLabel}${slot.resultValue ? ` (${slot.resultValue})` : ""}. Stories são avaliados somente enquanto estão ativos; sem Story ativo, usa-se o melhor Reels da semana anterior.`,
         ...(slot.caption ? [`Legenda original: ${slot.caption.slice(0, 500)}`] : []),
-      ];
-    case "coupon":
-      return [
-        `Código do cupom: ${slot.code}`,
-        `Desconto: ${slot.percentageLabel} OFF`,
-        `Validade: até ${slot.expiresAtLabel}`,
-        "Benefício destinado aos grupos vinculados à campanha.",
       ];
   }
 }
@@ -280,22 +382,24 @@ function sourceVerifiedFacts(slot: ContentSlot): string[] {
 function sourceSummary(slot: ContentSlot): string {
   if (!slot) return "Marca em geral, sem fonte comercial específica.";
   switch (slot.kind) {
-    case "top_seller_1": return `Produto mais vendido: ${slot.title}`;
-    case "top_seller_2": return `Segundo produto mais vendido: ${slot.title}`;
-    case "top_visited": return `Produto mais acessado: ${slot.title}`;
-    case "top_post_1": return "Post #1 com mais interações no Instagram.";
-    case "top_post_2": return "Post #2 com mais interações no Instagram.";
-    case "top_reel": return "Reels com mais interações no Instagram.";
-    case "coupon": return `Cupom ${slot.code}, ${slot.percentageLabel} OFF, válido até ${slot.expiresAtLabel}.`;
+    case "top_ad_ctr": return `Anúncio com melhor CTR ${slot.ctrMetric === "link" ? "de link" : "geral"}: ${slot.name}.`;
+    case "top_seller": return `Produto mais vendido: ${slot.title}.`;
+    case "top_instagram": return "Publicação de imagem com melhor resultado no Instagram.";
+    case "top_viewed": return `Produto mais visualizado no GA4, sem repetir o mais vendido: ${slot.title}.`;
+    case "top_story_or_reel": return slot.resultLabel.includes("Story") ? "Story ativo mais visualizado." : "Melhor Reels da semana anterior (fallback sem Story ativo).";
+    case "top_recent_launch": return `Lançamento recente${slot.launchRankedByViews ? " mais visualizado" : ""}: ${slot.title}.`;
   }
 }
 
 function expectedLink(slot: ContentSlot): { type: "instagram" | "site" | "none"; url: string | null } {
-  if (!slot || slot.kind === "coupon") return { type: "none", url: null };
-  if (slot.kind === "top_post_1" || slot.kind === "top_post_2" || slot.kind === "top_reel") {
+  if (!slot) return { type: "none", url: null };
+  if (slot.kind === "top_instagram" || slot.kind === "top_story_or_reel") {
     return slot.permalink ? { type: "instagram", url: slot.permalink } : { type: "none", url: null };
   }
-  if (slot.kind === "top_seller_1" || slot.kind === "top_seller_2" || slot.kind === "top_visited") {
+  if (slot.kind === "top_ad_ctr") {
+    return slot.destinationUrl ? { type: "site", url: slot.destinationUrl } : { type: "none", url: null };
+  }
+  if (slot.kind === "top_seller" || slot.kind === "top_viewed" || slot.kind === "top_recent_launch") {
     return slot.productUrl ? { type: "site", url: slot.productUrl } : { type: "none", url: null };
   }
   return { type: "none", url: null };
@@ -305,7 +409,6 @@ function allowedCta(slot: ContentSlot): string {
   const link = expectedLink(slot);
   if (link.type === "instagram") return "Convidar a ver a publicação no Instagram.";
   if (link.type === "site") return "Convidar a ver o produto no site.";
-  if (slot?.kind === "coupon") return "Convidar a usar o código dentro da validade.";
   return "Convidar a responder ou interagir no grupo.";
 }
 
@@ -362,7 +465,7 @@ async function requestBatchCompletion(
     body: JSON.stringify({
       model,
       temperature: 0.8,
-      max_tokens: count === 7 ? 3000 : 900,
+      max_tokens: count > 1 ? 3000 : 900,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: systemPrompt },
@@ -400,15 +503,15 @@ async function callOpenAiBatch(
 ): Promise<{ items: DraftItem[]; slotImageDataUris: (string | null)[]; model: string }> {
   const slotImageDataUris = await Promise.all(
     slots.map((slot) => {
-      if (!slot || slot.kind === "coupon") return Promise.resolve(null);
-      return slot.imageUrl ? fetchImageAsDataUri(slot.imageUrl) : Promise.resolve(null);
+      if (!slot) return Promise.resolve(null);
+      return slot.media.previewImageUrl ? fetchImageAsDataUri(slot.media.previewImageUrl) : Promise.resolve(null);
     }),
   );
 
   const imageParts: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }> = [];
   slots.forEach((slot, index) => {
     const dataUri = slotImageDataUris[index];
-    if (!dataUri || !slot || slot.kind === "coupon") return;
+    if (!dataUri || !slot) return;
     imageParts.push({ type: "text", text: `Imagem real da mensagem ${index + 1} — ${sourceSummary(slot)}` });
     imageParts.push({ type: "image_url", image_url: { url: dataUri } });
   });
@@ -465,47 +568,31 @@ export async function generateAiContentBatch(input: {
   if (!apiKey) return { success: false, error: "Configure a API key da OpenAI em Configurações antes de usar isso." };
   const playbook = (settings as any)?.ai_marketing_playbook as string | null;
 
-  const { cleanupOrphanedAiCoupons } = await import("./ai-coupons.server");
-  await cleanupOrphanedAiCoupons().catch((error) => console.error("Falha ao limpar cupons órfãos:", error));
-
-  const count = input.mode === "week" ? 7 : 1;
+  const count = input.mode === "week" ? 6 : 1;
   const scheduledDates = buildScheduledDates(input.startDate, count);
-  const kinds = assignSlotKinds(scheduledDates);
   const batchId = crypto.randomUUID();
   const signals = await gatherWeeklySignals(input.startDate);
-
-  const hasAnySignal = Boolean(signals.topSeller1 || signals.topSeller2 || signals.topVisited || signals.topPost1 || signals.topPost2 || signals.topReel);
-  if (!hasAnySignal && !kinds.includes("coupon")) {
-    return { success: false, error: "Nenhum produto vendido, produto acessado ou conteúdo do Instagram estava disponível na semana anterior." };
+  const labels: Record<SlotKind, string> = {
+    top_ad_ctr: "anúncio com melhor CTR",
+    top_seller: "produto mais vendido",
+    top_instagram: "melhor publicação do Instagram",
+    top_viewed: "produto mais visualizado no GA4",
+    top_story_or_reel: "Story ativo ou Reels",
+    top_recent_launch: "lançamento recente",
+  };
+  const availableKinds = SLOT_KINDS.filter((kind) => Boolean(slotForKind(kind, signals)));
+  if (availableKinds.length === 0) {
+    return { success: false, error: "Nenhuma das fontes necessárias retornou um conteúdo com mídia. Verifique Meta Ads, Instagram, Shopify e GA4." };
+  }
+  if (input.mode === "week" && availableKinds.length !== SLOT_KINDS.length) {
+    const missing = SLOT_KINDS.filter((kind) => !availableKinds.includes(kind)).map((kind) => labels[kind]);
+    return { success: false, error: `Não foi possível montar as 6 mensagens com mídia. Fontes ausentes: ${missing.join(", ")}.` };
   }
 
-  const slots: ContentSlot[] = [];
-  for (let index = 0; index < count; index++) {
-    if (kinds[index] === "coupon") {
-      const { prepareBatchCoupon } = await import("./ai-coupons.server");
-      const prepared = await prepareBatchCoupon({ scheduledDate: scheduledDates[index]!, batchId });
-      if (prepared.success) {
-        const expiresAtLabel = new Date(prepared.coupon.endsAt).toLocaleString("pt-BR", {
-          timeZone: TZ,
-          day: "2-digit",
-          month: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-        slots.push({
-          kind: "coupon",
-          code: prepared.coupon.code,
-          percentageLabel: `${Math.round(prepared.coupon.percentage * 100)}%`,
-          expiresAtLabel,
-        });
-      } else {
-        console.error(`Falha ao reservar cupom para ${scheduledDates[index]}: ${prepared.error}`);
-        slots.push(NON_COUPON_KINDS.map((kind) => slotForKind(kind, signals)).find(Boolean) ?? null);
-      }
-    } else {
-      slots.push(slotForKind(kinds[index] as NonCouponSlotKind, signals));
-    }
-  }
+  const kinds = input.mode === "week"
+    ? assignSlotKinds(scheduledDates)
+    : [[...availableKinds].sort(() => Math.random() - 0.5)[0]!];
+  const slots: ContentSlot[] = kinds.map((kind) => slotForKind(kind, signals));
 
   const [{ data: sentRows }, { data: rejectedRows }, calendarEvents] = await Promise.all([
     (supabaseAdmin.from("ai_content_queue" as any) as any)
@@ -560,12 +647,10 @@ export async function generateAiContentBatch(input: {
   try {
     batchResult = await callOpenAiBatch(apiKey, slots, count, systemPrompt, userPrompt);
   } catch (error) {
-    const { cancelCouponsForBatch } = await import("./ai-coupons.server");
-    await cancelCouponsForBatch(batchId);
     return { success: false, error: error instanceof Error ? error.message : "Falha ao gerar o lote com a OpenAI." };
   }
 
-  const { uploadEnvioMedia } = await import("./envio-messages.server");
+  const { mirrorRemoteEnvioMedia, uploadEnvioMedia } = await import("./envio-messages.server");
   const items: ContentQueueItem[] = [];
 
   for (const draft of batchResult.items) {
@@ -573,23 +658,31 @@ export async function generateAiContentBatch(input: {
     const slot = slots[index] ?? null;
     const slotDataUri = batchResult.slotImageDataUris[index];
     let contentImageUrl: string | null = null;
+    let contentMediaType: "none" | "image" | "video_note" = "none";
     try {
-      if (slotDataUri) {
+      if (!slot) throw new Error("Fonte do conteúdo não encontrada.");
+      try {
+        const mirrored = await mirrorRemoteEnvioMedia({
+          sourceUrl: slot.media.sourceUrl,
+          fileStem: `ai-batch-${slot.kind}-${index}`,
+        });
+        contentImageUrl = mirrored.url;
+        contentMediaType = slot.media.preferredType === "video_note" && mirrored.contentType.startsWith("video/")
+          ? "video_note"
+          : "image";
+      } catch (primaryError) {
+        if (!slotDataUri) throw primaryError;
+        console.error(`Falha ao espelhar a mídia principal do item ${draft.index}; usando a imagem de capa:`, primaryError);
         contentImageUrl = (await uploadEnvioMedia({
           fileName: `ai-batch-${Date.now()}-${index}.jpg`,
           base64Data: dataUriToBase64(slotDataUri),
           contentType: dataUriContentType(slotDataUri),
         })).url;
-      } else if ((!slot || slot.kind === "coupon") && draft.image_prompt) {
-        const base64 = await generateImageBase64(apiKey, draft.image_prompt);
-        contentImageUrl = (await uploadEnvioMedia({
-          fileName: `ai-batch-${Date.now()}-${index}.png`,
-          base64Data: base64,
-          contentType: "image/png",
-        })).url;
+        contentMediaType = "image";
       }
     } catch (error) {
-      console.error(`Falha ao preparar imagem do item ${draft.index}; seguindo sem imagem:`, error);
+      console.error(`Falha ao preparar a mídia obrigatória do item ${draft.index}:`, error);
+      continue;
     }
 
     const link = expectedLink(slot);
@@ -599,6 +692,7 @@ export async function generateAiContentBatch(input: {
       briefing,
       plan: plans[index],
       modelAudit: { factsUsed: draft.facts_used, riskFlags: draft.risk_flags },
+      media: { type: contentMediaType, sourceType: slot?.media.preferredType ?? "none" },
       groupNames: audienceContext.groupNames,
     };
 
@@ -609,6 +703,7 @@ export async function generateAiContentBatch(input: {
         campaign_name: audienceContext.campaign.name,
         content_text: draft.message_text,
         content_image_url: contentImageUrl,
+        content_media_type: contentMediaType,
         link_type: link.type,
         link_url: link.url,
         source_summary: sourceSummary(slot),
@@ -640,10 +735,6 @@ export async function generateAiContentBatch(input: {
       if (updated) row = updated;
     }
 
-    if (slot?.kind === "coupon") {
-      const { associateCouponWithContentItem } = await import("./ai-coupons.server");
-      await associateCouponWithContentItem(batchId, scheduledDate, row.id);
-    }
     items.push(mapRow(row));
   }
 
@@ -656,8 +747,6 @@ export async function generateAiContentBatch(input: {
       } as never)
       .eq("batch_id", batchId)
       .eq("status", "review");
-    const { cancelCouponsForBatch } = await import("./ai-coupons.server");
-    await cancelCouponsForBatch(batchId);
     return { success: false, error: `O lote ficou incompleto (${items.length}/${count}) e foi descartado com segurança.` };
   }
 
@@ -722,26 +811,23 @@ async function approveOne(id: string): Promise<{ success: true } | { success: fa
     return { success: false, error: message };
   }
 
-  const { activateCouponForContentItem, rollbackActivatedCouponForContentItem } = await import("./ai-coupons.server");
-  const coupon = await activateCouponForContentItem(id);
-  if (!coupon.success) {
-    await restoreReview(id, coupon.error);
-    return coupon;
-  }
-
   const scheduledAt = scheduledAtInSaoPaulo(String(row.scheduled_date), String(row.time_of_day));
   let dispatch: { groupCount: number; messageIds: string[] };
   try {
-    dispatch = await dispatchToCampaignGroups(row.campaign_id, row.content_text, row.content_image_url, scheduledAt.toISOString());
+    dispatch = await dispatchToCampaignGroups(
+      row.campaign_id,
+      row.content_text,
+      row.content_image_url,
+      scheduledAt.toISOString(),
+      row.content_media_type === "video_note" ? "video_note" : "image",
+    );
   } catch (error) {
-    await rollbackActivatedCouponForContentItem(id);
     const message = error instanceof Error ? error.message : "Falha ao agendar os envios.";
     await restoreReview(id, message);
     return { success: false, error: message };
   }
 
   if (dispatch.groupCount === 0 || dispatch.messageIds.length === 0) {
-    await rollbackActivatedCouponForContentItem(id);
     const message = "Nenhum envio foi criado porque a campanha está sem grupos válidos.";
     await restoreReview(id, message);
     return { success: false, error: message };
@@ -763,7 +849,6 @@ async function approveOne(id: string): Promise<{ success: true } | { success: fa
   if (updateError || !updated) {
     const { cancelPendingEnvioMessage } = await import("./envio-messages.server");
     for (const messageId of dispatch.messageIds) await cancelPendingEnvioMessage(messageId).catch(() => {});
-    await rollbackActivatedCouponForContentItem(id);
     const message = updateError?.message ?? "O item mudou de estado durante a aprovação.";
     await restoreReview(id, message);
     return { success: false, error: message };

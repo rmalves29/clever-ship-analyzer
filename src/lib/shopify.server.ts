@@ -324,6 +324,7 @@ const PRODUCT_DETAIL_FIELDS = `
   handle
   title
   description
+  createdAt
   onlineStorePreviewUrl
   featuredImage { url }
 `;
@@ -333,6 +334,7 @@ export type ShopifyProductDetail = {
   handle: string;
   title: string;
   description: string | null;
+  createdAt: string | null;
   featuredImageUrl: string | null;
   productUrl: string | null;
 };
@@ -344,6 +346,7 @@ function mapProductNode(node: any, storeUrl: string | null): ShopifyProductDetai
     handle: node.handle,
     title: node.title,
     description: node.description || null,
+    createdAt: node.createdAt ?? null,
     featuredImageUrl: node.featuredImage?.url ?? null,
     productUrl: node.onlineStorePreviewUrl ?? (storeUrl && node.handle ? `${storeUrl}/products/${node.handle}` : null),
   };
@@ -374,6 +377,54 @@ export async function getShopifyProductByHandle(handle: string): Promise<Shopify
   } catch (error) {
     console.error("getShopifyProductByHandle falhou:", error);
     return null;
+  }
+}
+
+/** Resolve um produto pelo título informado no ecommerce/GA4. O ID do item no GA4 nem sempre é
+ * o Product GID da Shopify (algumas tags enviam SKU ou Variant ID), então o título é um fallback
+ * necessário para não perder os dados de visualização. */
+export async function getShopifyProductByTitle(title: string): Promise<ShopifyProductDetail | null> {
+  const normalizedTitle = title.trim();
+  if (!normalizedTitle) return null;
+  try {
+    const [data, storeUrl] = await Promise.all([
+      shopifyGraphQL(
+        `query getProductByTitle($query: String!) { products(first: 10, query: $query) { nodes { ${PRODUCT_DETAIL_FIELDS} } } }`,
+        { query: `title:${JSON.stringify(normalizedTitle)}` },
+      ),
+      getShopifyStoreUrl(),
+    ]);
+    const candidates = ((data?.products?.nodes ?? []) as any[])
+      .map((node) => mapProductNode(node, storeUrl))
+      .filter((product): product is ShopifyProductDetail => product !== null);
+    const wanted = normalizedTitle.toLocaleLowerCase("pt-BR");
+    return candidates.find((product) => product.title.trim().toLocaleLowerCase("pt-BR") === wanted)
+      ?? candidates[0]
+      ?? null;
+  } catch (error) {
+    console.error("getShopifyProductByTitle falhou:", error);
+    return null;
+  }
+}
+
+/** Produtos ativos mais novos da loja. Esse conjunto define o que é considerado "lançamento"
+ * no calendário: os 20 cadastros ativos mais recentes, ordenados por createdAt. */
+export async function getShopifyRecentProducts(limit = 20): Promise<ShopifyProductDetail[]> {
+  const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 50);
+  try {
+    const [data, storeUrl] = await Promise.all([
+      shopifyGraphQL(
+        `query getRecentProducts($first: Int!) { products(first: $first, sortKey: CREATED_AT, reverse: true, query: "status:active") { nodes { ${PRODUCT_DETAIL_FIELDS} } } }`,
+        { first: safeLimit },
+      ),
+      getShopifyStoreUrl(),
+    ]);
+    return ((data?.products?.nodes ?? []) as any[])
+      .map((node) => mapProductNode(node, storeUrl))
+      .filter((product): product is ShopifyProductDetail => product !== null);
+  } catch (error) {
+    console.error("getShopifyRecentProducts falhou:", error);
+    return [];
   }
 }
 

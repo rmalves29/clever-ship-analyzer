@@ -2289,6 +2289,7 @@ export type Database = {
           steps: Json
           total_execucoes: number
           trigger_template_name: string | null
+          trigger_timeout_minutes: number | null
           trigger_type: string
           trigger_values: string[]
           updated_at: string
@@ -2303,6 +2304,7 @@ export type Database = {
           steps?: Json
           total_execucoes?: number
           trigger_template_name?: string | null
+          trigger_timeout_minutes?: number | null
           trigger_type: string
           trigger_values?: string[]
           updated_at?: string
@@ -2317,6 +2319,7 @@ export type Database = {
           steps?: Json
           total_execucoes?: number
           trigger_template_name?: string | null
+          trigger_timeout_minutes?: number | null
           trigger_type?: string
           trigger_values?: string[]
           updated_at?: string

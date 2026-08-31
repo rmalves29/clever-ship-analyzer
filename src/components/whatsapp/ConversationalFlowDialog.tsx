@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Plus, Trash2, GitBranch, MessageCircle, Settings, Rocket, MousePointerClick, Type } from "lucide-react";
+import { Plus, Trash2, GitBranch, MessageCircle, Settings, Rocket, MousePointerClick, Type, Menu as MenuIcon, Clock } from "lucide-react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -57,16 +57,26 @@ export type DecisionStepSeed = {
   noStepId: string | null;
 };
 
-export type ConvStepSeed = ConvSendStepSeed | DecisionStepSeed;
+export type ConvMenuOptionSeed = { id: string; label: string; nextStepId: string | null };
+export type ConvMenuStepSeed = {
+  id: string;
+  type: "menu";
+  waitMinutes: number;
+  text: string;
+  options: ConvMenuOptionSeed[];
+};
+
+export type ConvStepSeed = ConvSendStepSeed | ConvMenuStepSeed | DecisionStepSeed;
 
 export type ConversationalFlowSeed = {
   id?: string | undefined;
   nome: string;
   descricao?: string | undefined;
   ativo?: boolean | undefined;
-  triggerType?: "button_click" | "keyword" | undefined;
+  triggerType?: "button_click" | "keyword" | "unanswered_timeout" | undefined;
   triggerTemplateName?: string | undefined;
   triggerValues?: string[] | undefined;
+  triggerTimeoutMinutes?: number | undefined;
   steps?: ConvStepSeed[] | undefined;
 };
 
@@ -80,6 +90,20 @@ function newSendStep(): ConvSendStepSeed {
 
 function newDecisionStep(condition: DecisionCondition): DecisionStepSeed {
   return { id: newId(), type: "decision", condition, yesStepId: null, noStepId: null };
+}
+
+function newMenuStep(): ConvMenuStepSeed {
+  return {
+    id: newId(),
+    type: "menu",
+    waitMinutes: 0,
+    text: "",
+    options: [
+      { id: newId(), label: "SAC", nextStepId: null },
+      { id: newId(), label: "Vendas", nextStepId: null },
+      { id: newId(), label: "Trocas/Devoluções", nextStepId: null },
+    ],
+  };
 }
 
 const FINANCIAL_STATUSES = ["PAID", "PENDING", "PARTIALLY_PAID", "REFUNDED", "PARTIALLY_REFUNDED", "VOIDED", "EXPIRED"];
@@ -110,7 +134,9 @@ function layoutSteps(steps: ConvStepSeed[], rootStepId: string | null): Record<s
     positions[id] = { x: col * COL_W, y: depth * ROW_H };
     const step = byId.get(id)!;
     if (step.type === "send") place(step.nextStepId, depth + 1);
-    else {
+    else if (step.type === "menu") {
+      for (const option of step.options) place(option.nextStepId, depth + 1);
+    } else {
       place(step.yesStepId, depth + 1);
       place(step.noStepId, depth + 1);
     }
@@ -176,7 +202,34 @@ function DecisionNode({ data, selected }: NodeProps) {
   );
 }
 
-const nodeTypes = { trigger: TriggerNode, send: SendNode, decision: DecisionNode };
+function MenuNode({ data, selected }: NodeProps) {
+  const d = data as unknown as { step: ConvMenuStepSeed };
+  const options = d.step.options;
+  return (
+    <div className={cn("w-64 rounded-xl border-2 bg-background px-4 py-3 shadow-sm cursor-pointer transition-colors", selected ? "border-primary" : "border-border")}>
+      <Handle type="target" position={Position.Top} id="in" className="!bg-muted-foreground !size-2.5" />
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+        <MenuIcon className="size-3" /> Menu ({options.length} opções)
+      </p>
+      <p className="text-sm font-medium mt-1 truncate">{d.step.text || "Escreva a mensagem do menu"}</p>
+      <div className="flex justify-between mt-2 gap-1 text-[9px] font-semibold px-1">
+        {options.map((o, i) => <span key={o.id} className="truncate flex-1 text-center">{o.label || `Opção ${i + 1}`}</span>)}
+      </div>
+      {options.map((o, i) => (
+        <Handle
+          key={o.id}
+          type="source"
+          position={Position.Bottom}
+          id={`opt${i}`}
+          style={{ left: `${((i + 1) / (options.length + 1)) * 100}%` }}
+          className="!bg-primary !size-2.5"
+        />
+      ))}
+    </div>
+  );
+}
+
+const nodeTypes = { trigger: TriggerNode, send: SendNode, decision: DecisionNode, menu: MenuNode };
 const TRIGGER_ID = "__trigger__";
 
 function CanvasSync({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) {
@@ -207,9 +260,10 @@ export function ConversationalFlowDialog({
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
   const [ativo, setAtivo] = useState(true);
-  const [triggerType, setTriggerType] = useState<"button_click" | "keyword">("keyword");
+  const [triggerType, setTriggerType] = useState<"button_click" | "keyword" | "unanswered_timeout">("keyword");
   const [triggerTemplateName, setTriggerTemplateName] = useState<string | undefined>(undefined);
   const [triggerValuesText, setTriggerValuesText] = useState("");
+  const [triggerTimeoutMinutes, setTriggerTimeoutMinutes] = useState<number>(15);
   const [steps, setSteps] = useState<ConvStepSeed[]>([newSendStep()]);
   const [rootStepId, setRootStepId] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -225,6 +279,7 @@ export function ConversationalFlowDialog({
     setTriggerType(seed?.triggerType ?? "keyword");
     setTriggerTemplateName(seed?.triggerTemplateName);
     setTriggerValuesText((seed?.triggerValues ?? []).join(", "));
+    setTriggerTimeoutMinutes(seed?.triggerTimeoutMinutes ?? 15);
     const initialSteps = seed?.steps?.length ? seed.steps : [newSendStep()];
     setSteps(initialSteps);
     setRootStepId(initialSteps[0]!.id);
@@ -251,9 +306,11 @@ export function ConversationalFlowDialog({
       ? triggerTemplateName
         ? `Clique em botão de "${triggerTemplateName}"`
         : "Clique em botão (escolha o template)"
-      : triggerValuesText
-        ? `Palavra-chave: ${triggerValuesText}`
-        : "Palavra-chave (escolha o gatilho)";
+      : triggerType === "unanswered_timeout"
+        ? `Sem resposta em ${triggerTimeoutMinutes}min`
+        : triggerValuesText
+          ? `Palavra-chave: ${triggerValuesText}`
+          : "Palavra-chave (escolha o gatilho)";
 
   const updateStep = (id: string, patch: Partial<ConvStepSeed>) => {
     setSteps((prev) => prev.map((s) => (s.id === id ? ({ ...s, ...patch } as ConvStepSeed) : s)));
@@ -267,7 +324,9 @@ export function ConversationalFlowDialog({
         const cleaned = rest.map((s) =>
           s.type === "send"
             ? { ...s, nextStepId: s.nextStepId === id ? null : s.nextStepId }
-            : { ...s, yesStepId: s.yesStepId === id ? null : s.yesStepId, noStepId: s.noStepId === id ? null : s.noStepId },
+            : s.type === "menu"
+              ? { ...s, options: s.options.map((o) => (o.nextStepId === id ? { ...o, nextStepId: null } : o)) }
+              : { ...s, yesStepId: s.yesStepId === id ? null : s.yesStepId, noStepId: s.noStepId === id ? null : s.noStepId },
         );
         if (cleaned.length === 0) {
           const fresh = newSendStep();
@@ -275,7 +334,7 @@ export function ConversationalFlowDialog({
           return [fresh];
         }
         if (id === rootStepId) {
-          const newRoot = cleaned.find((s) => s.type === "send") ?? cleaned[0]!;
+          const newRoot = cleaned.find((s) => s.type === "send" || s.type === "menu") ?? cleaned[0]!;
           setRootStepId(newRoot.id);
         }
         return cleaned;
@@ -288,12 +347,20 @@ export function ConversationalFlowDialog({
   const addStep = (step: ConvStepSeed) => {
     setSteps((prev) => {
       const preferred = selectedNodeId && selectedNodeId !== TRIGGER_ID ? prev.find((s) => s.id === selectedNodeId) : undefined;
-      const hasOpenSlot = (s: ConvStepSeed) => (s.type === "send" ? s.nextStepId === null : s.yesStepId === null || s.noStepId === null);
+      const hasOpenSlot = (s: ConvStepSeed) =>
+        s.type === "send" ? s.nextStepId === null : s.type === "menu" ? s.options.some((o) => o.nextStepId === null) : s.yesStepId === null || s.noStepId === null;
       const target = (preferred && hasOpenSlot(preferred) ? preferred : undefined) ?? prev.find(hasOpenSlot);
       if (!target) return [...prev, step];
       const updated = prev.map((s) => {
         if (s.id !== target.id) return s;
         if (s.type === "send") return { ...s, nextStepId: step.id };
+        if (s.type === "menu") {
+          const openIndex = s.options.findIndex((o) => o.nextStepId === null);
+          if (openIndex === -1) return s;
+          const options = [...s.options];
+          options[openIndex] = { ...options[openIndex]!, nextStepId: step.id };
+          return { ...s, options };
+        }
         if (s.yesStepId === null) return { ...s, yesStepId: step.id };
         return { ...s, noStepId: step.id };
       });
@@ -308,8 +375,8 @@ export function ConversationalFlowDialog({
       if (!conn.target) return;
       if (conn.source === TRIGGER_ID) {
         const targetStep = steps.find((s) => s.id === conn.target);
-        if (targetStep?.type !== "send") {
-          toast.error("O gatilho precisa apontar pra uma etapa de Enviar WhatsApp.");
+        if (targetStep?.type !== "send" && targetStep?.type !== "menu") {
+          toast.error("O gatilho precisa apontar pra uma etapa de Enviar WhatsApp ou Menu.");
           return;
         }
         setRootStepId(conn.target);
@@ -320,6 +387,13 @@ export function ConversationalFlowDialog({
         prev.map((s) => {
           if (s.id !== conn.source) return s;
           if (s.type === "send") return { ...s, nextStepId: conn.target };
+          if (s.type === "menu") {
+            const optIndex = conn.sourceHandle?.startsWith("opt") ? Number(conn.sourceHandle.slice(3)) : -1;
+            if (optIndex < 0 || optIndex >= s.options.length) return s;
+            const options = [...s.options];
+            options[optIndex] = { ...options[optIndex]!, nextStepId: conn.target };
+            return { ...s, options };
+          }
           if (conn.sourceHandle === "yes") return { ...s, yesStepId: conn.target };
           if (conn.sourceHandle === "no") return { ...s, noStepId: conn.target };
           return s;
@@ -350,6 +424,12 @@ export function ConversationalFlowDialog({
         const match = deleted.find((e) => e.source === s.id);
         if (!match) return s;
         if (s.type === "send" && match.sourceHandle === "out") return { ...s, nextStepId: null };
+        if (s.type === "menu" && match.sourceHandle?.startsWith("opt")) {
+          const optIndex = Number(match.sourceHandle.slice(3));
+          const options = [...s.options];
+          if (options[optIndex]) options[optIndex] = { ...options[optIndex]!, nextStepId: null };
+          return { ...s, options };
+        }
         if (s.type === "decision" && match.sourceHandle === "yes") return { ...s, yesStepId: null };
         if (s.type === "decision" && match.sourceHandle === "no") return { ...s, noStepId: null };
         return s;
@@ -378,7 +458,7 @@ export function ConversationalFlowDialog({
       data: { step: s },
       selected: selectedNodeId === s.id,
       width: 256,
-      height: s.type === "decision" ? 118 : 100,
+      height: s.type === "decision" || s.type === "menu" ? 118 : 100,
     }));
     return [triggerNode, ...stepNodes];
   }, [layout, steps, manualPositions, selectedNodeId, rootStepId, triggerLabel]);
@@ -391,6 +471,10 @@ export function ConversationalFlowDialog({
     for (const s of steps) {
       if (s.type === "send") {
         if (s.nextStepId) list.push({ id: `${s.id}-next`, source: s.id, sourceHandle: "out", target: s.nextStepId, targetHandle: "in" });
+      } else if (s.type === "menu") {
+        s.options.forEach((o, i) => {
+          if (o.nextStepId) list.push({ id: `${s.id}-opt${i}`, source: s.id, sourceHandle: `opt${i}`, target: o.nextStepId, targetHandle: "in", label: o.label });
+        });
       } else {
         if (s.yesStepId) list.push({ id: `${s.id}-yes`, source: s.id, sourceHandle: "yes", target: s.yesStepId, targetHandle: "in", label: "Sim", style: { stroke: "var(--success)" } });
         if (s.noStepId) list.push({ id: `${s.id}-no`, source: s.id, sourceHandle: "no", target: s.noStepId, targetHandle: "in", label: "Não", style: { stroke: "var(--critical)" } });
@@ -402,22 +486,30 @@ export function ConversationalFlowDialog({
   const graphKey = useMemo(() => edges.map((e) => e.id).join(",") + "|" + nodes.map((n) => n.id).join(","), [edges, nodes]);
 
   const save = async () => {
-    if (steps.some((s) => s.type === "send" && !s.text.trim())) {
-      toast.error("Escreva a mensagem de cada etapa de envio.");
+    if (steps.some((s) => (s.type === "send" || s.type === "menu") && !s.text.trim())) {
+      toast.error("Escreva a mensagem de cada etapa de envio/menu.");
+      return;
+    }
+    if (steps.some((s) => s.type === "menu" && s.options.some((o) => !o.label.trim()))) {
+      toast.error("Preencha o rótulo de todas as opções do menu.");
       return;
     }
     const rootStep = steps.find((s) => s.id === rootStepId);
-    if (!rootStep || rootStep.type !== "send") {
-      toast.error("O gatilho precisa apontar pra uma etapa de Enviar WhatsApp.");
+    if (!rootStep || (rootStep.type !== "send" && rootStep.type !== "menu")) {
+      toast.error("O gatilho precisa apontar pra uma etapa de Enviar WhatsApp ou Menu.");
       return;
     }
     const triggerValues = triggerValuesText.split(",").map((v) => v.trim()).filter(Boolean);
-    if (triggerValues.length === 0) {
+    if (triggerType !== "unanswered_timeout" && triggerValues.length === 0) {
       toast.error(triggerType === "button_click" ? "Informe o texto de pelo menos um botão." : "Informe pelo menos uma palavra-chave.");
       return;
     }
     if (triggerType === "button_click" && !triggerTemplateName) {
       toast.error("Escolha o template cujo clique de botão dispara esse fluxo.");
+      return;
+    }
+    if (triggerType === "unanswered_timeout" && (!triggerTimeoutMinutes || triggerTimeoutMinutes < 1)) {
+      toast.error("Informe depois de quantos minutos sem resposta o bot deve entrar.");
       return;
     }
 
@@ -433,10 +525,13 @@ export function ConversationalFlowDialog({
           triggerType,
           triggerTemplateName: triggerType === "button_click" ? triggerTemplateName : undefined,
           triggerValues,
+          triggerTimeoutMinutes: triggerType === "unanswered_timeout" ? triggerTimeoutMinutes : undefined,
           steps: orderedSteps.map((s) =>
             s.type === "send"
               ? { id: s.id, type: "send" as const, waitMinutes: s.waitMinutes, text: s.text, buttonText: s.buttonText || undefined, buttonUrl: s.buttonUrl || undefined, nextStepId: s.nextStepId }
-              : { id: s.id, type: "decision" as const, condition: s.condition, yesStepId: s.yesStepId, noStepId: s.noStepId },
+              : s.type === "menu"
+                ? { id: s.id, type: "menu" as const, waitMinutes: s.waitMinutes, text: s.text, options: s.options.map((o) => ({ id: o.id, label: o.label, nextStepId: o.nextStepId })) }
+                : { id: s.id, type: "decision" as const, condition: s.condition, yesStepId: s.yesStepId, noStepId: s.noStepId },
           ),
         },
       });
@@ -522,6 +617,10 @@ export function ConversationalFlowDialog({
                       <p className="text-sm font-medium flex items-center gap-1.5"><MessageCircle className="size-3.5" /> Enviar WhatsApp</p>
                       <p className="text-xs text-muted-foreground mt-0.5">Texto livre — sem precisar de template aprovado.</p>
                     </button>
+                    <button type="button" className="w-full text-left rounded-lg border border-border p-3 hover:border-primary hover:bg-muted/40 transition-colors" onClick={() => addStep(newMenuStep())}>
+                      <p className="text-sm font-medium flex items-center gap-1.5"><MenuIcon className="size-3.5" /> Menu (até 3 opções)</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Botões de resposta rápida — cada um leva a uma etapa diferente.</p>
+                    </button>
                   </div>
 
                   <div className="space-y-1.5">
@@ -557,7 +656,7 @@ export function ConversationalFlowDialog({
 
                   <div className="space-y-1.5">
                     <Label className="text-xs">Tipo de gatilho</Label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <button
                         type="button"
                         onClick={() => setTriggerType("keyword")}
@@ -572,8 +671,31 @@ export function ConversationalFlowDialog({
                       >
                         <p className="text-xs font-medium flex items-center gap-1"><MousePointerClick className="size-3.5" /> Clique em botão</p>
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setTriggerType("unanswered_timeout")}
+                        className={cn("rounded-lg border p-2.5 text-left transition-colors", triggerType === "unanswered_timeout" ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40")}
+                      >
+                        <p className="text-xs font-medium flex items-center gap-1"><Clock className="size-3.5" /> Sem resposta</p>
+                      </button>
                     </div>
                   </div>
+
+                  {triggerType === "unanswered_timeout" && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Minutos sem resposta humana antes do bot entrar</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={1440}
+                        value={triggerTimeoutMinutes}
+                        onChange={(e) => setTriggerTimeoutMinutes(Math.max(1, Math.min(1440, Number(e.target.value) || 1)))}
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        Conta a partir da última mensagem do cliente. Não dispara se alguém já respondeu pela aba Conversas.
+                      </p>
+                    </div>
+                  )}
 
                   {triggerType === "button_click" && (
                     <div className="space-y-1.5">
@@ -587,15 +709,17 @@ export function ConversationalFlowDialog({
                     </div>
                   )}
 
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">{triggerType === "button_click" ? "Texto do(s) botão(ões) que disparam (separado por vírgula)" : "Palavra(s)-chave — dispara se a mensagem contiver qualquer uma (separado por vírgula)"}</Label>
-                    <Textarea
-                      rows={2}
-                      value={triggerValuesText}
-                      onChange={(e) => setTriggerValuesText(e.target.value)}
-                      placeholder={triggerType === "button_click" ? "ex: Quero saber mais, Sim" : "ex: oi, olá, ajuda"}
-                    />
-                  </div>
+                  {triggerType !== "unanswered_timeout" && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">{triggerType === "button_click" ? "Texto do(s) botão(ões) que disparam (separado por vírgula)" : "Palavra(s)-chave — dispara se a mensagem contiver qualquer uma (separado por vírgula)"}</Label>
+                      <Textarea
+                        rows={2}
+                        value={triggerValuesText}
+                        onChange={(e) => setTriggerValuesText(e.target.value)}
+                        placeholder={triggerType === "button_click" ? "ex: Quero saber mais, Sim" : "ex: oi, olá, ajuda"}
+                      />
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between rounded-lg border border-border p-3">
                     <div>
@@ -609,6 +733,10 @@ export function ConversationalFlowDialog({
 
               {!addPanelOpen && selectedStep?.type === "send" && (
                 <ConvSendStepPanel step={selectedStep} onChange={(patch) => updateStep(selectedStep.id, patch)} onDelete={() => removeStepById(selectedStep.id)} />
+              )}
+
+              {!addPanelOpen && selectedStep?.type === "menu" && (
+                <ConvMenuStepPanel step={selectedStep} onChange={(patch) => updateStep(selectedStep.id, patch)} onDelete={() => removeStepById(selectedStep.id)} />
               )}
 
               {!addPanelOpen && selectedStep?.type === "decision" && (
@@ -647,6 +775,50 @@ function ConvSendStepPanel({ step, onChange, onDelete }: { step: ConvSendStepSee
       </div>
 
       <p className="text-xs text-muted-foreground">Arraste uma conexão a partir do ponto embaixo do card pra ligar com a próxima etapa.</p>
+    </>
+  );
+}
+
+function ConvMenuStepPanel({ step, onChange, onDelete }: { step: ConvMenuStepSeed; onChange: (patch: Partial<ConvMenuStepSeed>) => void; onDelete: () => void }) {
+  const updateOption = (index: number, patch: Partial<ConvMenuOptionSeed>) => {
+    const options = [...step.options];
+    options[index] = { ...options[index]!, ...patch };
+    onChange({ options });
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold flex items-center gap-1.5"><MenuIcon className="size-3.5" /> Menu</p>
+        <Button type="button" size="icon" variant="ghost" className="size-7 text-critical" onClick={onDelete}><Trash2 className="size-3.5" /></Button>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">Esperar antes de enviar (minutos)</Label>
+        <Input type="number" min={0} max={43_200} value={step.waitMinutes} onChange={(e) => onChange({ waitMinutes: Number(e.target.value) || 0 })} />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">Mensagem</Label>
+        <Textarea value={step.text} onChange={(e) => onChange({ text: e.target.value })} rows={3} maxLength={1024} placeholder="Desculpa a demora! Pra te atender melhor, escolhe uma opção:" />
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs">Opções (até 3 botões de resposta rápida — 20 caracteres cada)</Label>
+        {step.options.map((option, index) => (
+          <Input
+            key={option.id}
+            value={option.label}
+            maxLength={20}
+            onChange={(e) => updateOption(index, { label: e.target.value })}
+            placeholder={`Opção ${index + 1}`}
+          />
+        ))}
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Arraste uma conexão a partir de cada bolinha embaixo do card pra ligar cada opção com a mensagem daquele setor.
+      </p>
     </>
   );
 }

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, MousePointerClick, Type } from "lucide-react";
+import { Plus, Pencil, Trash2, MousePointerClick, Type, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -18,8 +18,9 @@ type FlowRow = {
   nome: string;
   descricao: string | null;
   ativo: boolean;
-  trigger_type: "button_click" | "keyword";
+  trigger_type: "button_click" | "keyword" | "unanswered_timeout";
   trigger_template_name: string | null;
+  trigger_timeout_minutes: number | null;
   trigger_values: string[];
   steps: unknown[];
   total_execucoes: number;
@@ -82,6 +83,7 @@ export function ConversationalFlowsTab() {
       triggerType: flow.trigger_type,
       triggerTemplateName: flow.trigger_template_name ?? undefined,
       triggerValues: flow.trigger_values,
+      triggerTimeoutMinutes: flow.trigger_timeout_minutes ?? undefined,
       steps: flow.steps as ConversationalFlowSeed["steps"],
     });
     setDialogOpen(true);
@@ -93,7 +95,7 @@ export function ConversationalFlowsTab() {
     <div className="mt-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Dispara quando o <strong>cliente</strong> manda uma mensagem — clique em botão de um template, ou palavra-chave em texto livre.
+          Dispara quando o <strong>cliente</strong> manda uma mensagem (clique em botão ou palavra-chave), ou quando ninguém responde por X minutos.
         </p>
         <Button size="sm" onClick={openNew} className="gap-2">
           <Plus className="size-3.5" /> Criar fluxo
@@ -120,8 +122,12 @@ export function ConversationalFlowsTab() {
 
               <div className="mt-3 flex flex-wrap gap-1.5">
                 <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-                  {flow.trigger_type === "button_click" ? <MousePointerClick className="size-3" /> : <Type className="size-3" />}
-                  {flow.trigger_type === "button_click" ? `Botão: ${flow.trigger_template_name ?? "?"}` : "Palavra-chave"}
+                  {flow.trigger_type === "button_click" ? <MousePointerClick className="size-3" /> : flow.trigger_type === "unanswered_timeout" ? <Clock className="size-3" /> : <Type className="size-3" />}
+                  {flow.trigger_type === "button_click"
+                    ? `Botão: ${flow.trigger_template_name ?? "?"}`
+                    : flow.trigger_type === "unanswered_timeout"
+                      ? `Sem resposta em ${flow.trigger_timeout_minutes ?? "?"}min`
+                      : "Palavra-chave"}
                 </span>
                 <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">{flow.steps.length} etapa{flow.steps.length === 1 ? "" : "s"}</span>
                 {m && m.total > 0 && (
@@ -131,9 +137,11 @@ export function ConversationalFlowsTab() {
                 )}
               </div>
 
-              <p className="mt-2 text-xs text-muted-foreground truncate">
-                {flow.trigger_type === "button_click" ? flow.trigger_values.join(", ") : `"${flow.trigger_values.join('", "')}"`}
-              </p>
+              {flow.trigger_type !== "unanswered_timeout" && (
+                <p className="mt-2 text-xs text-muted-foreground truncate">
+                  {flow.trigger_type === "button_click" ? flow.trigger_values.join(", ") : `"${flow.trigger_values.join('", "')}"`}
+                </p>
+              )}
 
               <div className="mt-3 flex items-center gap-2">
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openEdit(flow)}>

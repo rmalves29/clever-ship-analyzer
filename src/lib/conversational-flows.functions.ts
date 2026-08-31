@@ -29,16 +29,31 @@ const decisionStepSchema = z.object({
   noStepId: z.string().nullable().default(null),
 });
 
-const convStepSchema = z.discriminatedUnion("type", [convSendStepSchema, decisionStepSchema]);
+const convMenuOptionSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1).max(20),
+  nextStepId: z.string().nullable().default(null),
+});
+
+const convMenuStepSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal("menu"),
+  waitMinutes: z.number().int().min(0).max(43_200),
+  text: z.string().min(1).max(4096),
+  options: z.array(convMenuOptionSchema).min(1).max(3),
+});
+
+const convStepSchema = z.discriminatedUnion("type", [convSendStepSchema, convMenuStepSchema, decisionStepSchema]);
 
 const flowSchema = z.object({
   id: z.string().uuid().optional(),
   nome: z.string().min(1),
   descricao: z.string().optional(),
   ativo: z.boolean().default(true),
-  triggerType: z.enum(["button_click", "keyword"]),
+  triggerType: z.enum(["button_click", "keyword", "unanswered_timeout"]),
   triggerTemplateName: z.string().optional(),
-  triggerValues: z.array(z.string().min(1)).min(1),
+  triggerValues: z.array(z.string().min(1)).optional().default([]),
+  triggerTimeoutMinutes: z.number().int().min(1).max(1440).optional(),
   steps: z.array(convStepSchema).min(1),
 });
 
@@ -51,16 +66,24 @@ export const saveConversationalFlow = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const firstStep = data.steps[0];
-    if (!firstStep || firstStep.type !== "send") {
-      return { success: false as const, error: "A primeira etapa precisa ser um envio (não pode começar direto numa decisão)." };
+    if (!firstStep || (firstStep.type !== "send" && firstStep.type !== "menu")) {
+      return { success: false as const, error: "A primeira etapa precisa ser um envio ou um menu (não pode começar direto numa decisão)." };
     }
     const stepIds = new Set(data.steps.map((s) => s.id));
-    const badRef = data.steps.find((s) =>
-      s.type === "send" ? s.nextStepId !== null && !stepIds.has(s.nextStepId) : (s.yesStepId !== null && !stepIds.has(s.yesStepId)) || (s.noStepId !== null && !stepIds.has(s.noStepId)),
-    );
+    const badRef = data.steps.find((s) => {
+      if (s.type === "send") return s.nextStepId !== null && !stepIds.has(s.nextStepId);
+      if (s.type === "menu") return s.options.some((o) => o.nextStepId !== null && !stepIds.has(o.nextStepId));
+      return (s.yesStepId !== null && !stepIds.has(s.yesStepId)) || (s.noStepId !== null && !stepIds.has(s.noStepId));
+    });
     if (badRef) return { success: false as const, error: `A etapa "${badRef.id}" aponta pra uma etapa que não existe mais.` };
     if (data.triggerType === "button_click" && !data.triggerTemplateName) {
       return { success: false as const, error: "Escolha o template cujo clique de botão dispara esse fluxo." };
+    }
+    if ((data.triggerType === "button_click" || data.triggerType === "keyword") && data.triggerValues.length === 0) {
+      return { success: false as const, error: "Informe pelo menos um valor de gatilho (palavra-chave ou texto do botão)." };
+    }
+    if (data.triggerType === "unanswered_timeout" && !data.triggerTimeoutMinutes) {
+      return { success: false as const, error: "Informe depois de quantos minutos sem resposta o bot deve entrar." };
     }
 
     const row = {
@@ -70,6 +93,7 @@ export const saveConversationalFlow = createServerFn({ method: "POST" })
       trigger_type: data.triggerType,
       trigger_template_name: data.triggerType === "button_click" ? data.triggerTemplateName : null,
       trigger_values: data.triggerValues,
+      trigger_timeout_minutes: data.triggerType === "unanswered_timeout" ? data.triggerTimeoutMinutes : null,
       steps: data.steps,
       updated_at: new Date().toISOString(),
     };

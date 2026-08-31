@@ -17,7 +17,19 @@ export type ConvSendStep = {
   nextStepId: string | null;
 };
 
-export type ConvStep = ConvSendStep | DecisionStep;
+/** Etapa de menu: manda até 3 botões de resposta rápida nativos do WhatsApp (diferente do botão de
+ *  link — `cta_url` — do ConvSendStep). Não avança sozinha: fica esperando o cliente clicar numa
+ *  opção, que decide pra qual etapa seguinte o run vai. */
+export type ConvMenuOption = { id: string; label: string; nextStepId: string | null };
+export type ConvMenuStep = {
+  id: string;
+  type: "menu";
+  waitMinutes: number;
+  text: string;
+  options: ConvMenuOption[];
+};
+
+export type ConvStep = ConvSendStep | ConvMenuStep | DecisionStep;
 
 type RawStep = {
   id?: unknown;
@@ -27,6 +39,7 @@ type RawStep = {
   buttonText?: unknown;
   buttonUrl?: unknown;
   nextStepId?: unknown;
+  options?: unknown;
   condition?: unknown;
   yesStepId?: unknown;
   noStepId?: unknown;
@@ -72,6 +85,24 @@ export function parseConvSteps(raw: unknown): ConvStep[] {
           noStepId: s.noStepId ? String(s.noStepId) : null,
         };
       }
+      if (s.type === "menu") {
+        const text = String(s.text ?? "");
+        if (!text) return null;
+        const rawOptions = Array.isArray(s.options) ? s.options : [];
+        const options: ConvMenuOption[] = rawOptions
+          .slice(0, 3)
+          .map((o: unknown) => {
+            const opt = (o ?? {}) as { id?: unknown; label?: unknown; nextStepId?: unknown };
+            return {
+              id: String(opt.id ?? ""),
+              label: String(opt.label ?? "").slice(0, 20),
+              nextStepId: opt.nextStepId ? String(opt.nextStepId) : null,
+            };
+          })
+          .filter((o) => o.id && o.label);
+        if (options.length === 0) return null;
+        return { id, type: "menu", waitMinutes: Number(s.waitMinutes ?? 0), text, options };
+      }
       const text = String(s.text ?? "");
       if (!text) return null;
       return {
@@ -97,23 +128,24 @@ async function resolveNextConvStep(
   steps: ConvStep[],
   startStepId: string | null,
   run: { customer_id: string; enrolled_at: string },
-): Promise<ConvSendStep | null> {
+): Promise<ConvSendStep | ConvMenuStep | null> {
   let currentId = startStepId;
   let guard = 0;
   while (currentId && guard < 50) {
     guard++;
     const step = steps.find((s) => s.id === currentId);
     if (!step) return null;
-    if (step.type === "send") return step;
+    if (step.type === "send" || step.type === "menu") return step;
     const isYes = await evaluateDecision(step.condition, run);
     currentId = isYes ? step.yesStepId : step.noStepId;
   }
   return null;
 }
 
-/** Envia a etapa (texto livre + botão CTA opcional) via Graph API — sem template, sem aprovação:
- *  só é chamado depois que o próprio cliente mandou mensagem, então estamos na janela de 24h. */
-async function sendConversationMessage(step: ConvSendStep, phone: string): Promise<{ ok: boolean; waMessageId?: string; error?: string }> {
+/** Envia a etapa via Graph API — sem template, sem aprovação: só é chamado depois que o próprio
+ *  cliente mandou mensagem, então estamos na janela de 24h. Três formatos possíveis: menu (até 3
+ *  botões de resposta rápida), texto + botão de link (cta_url), ou texto livre. */
+async function sendConversationMessage(step: ConvSendStep | ConvMenuStep, phone: string): Promise<{ ok: boolean; waMessageId?: string; error?: string }> {
   const { loadSettings } = await import("./whatsapp-meta.server");
   const settings = await loadSettings();
   if (!settings.accessToken || !settings.phoneNumberId) {
@@ -121,18 +153,29 @@ async function sendConversationMessage(step: ConvSendStep, phone: string): Promi
   }
 
   const body =
-    step.buttonText && step.buttonUrl
+    step.type === "menu"
       ? {
           messaging_product: "whatsapp",
           to: phone,
           type: "interactive",
           interactive: {
-            type: "cta_url",
+            type: "button",
             body: { text: step.text },
-            action: { name: "cta_url", parameters: { display_text: step.buttonText, url: step.buttonUrl } },
+            action: { buttons: step.options.slice(0, 3).map((o) => ({ type: "reply", reply: { id: o.id, title: o.label } })) },
           },
         }
-      : { messaging_product: "whatsapp", to: phone, type: "text", text: { body: step.text, preview_url: false } };
+      : step.buttonText && step.buttonUrl
+        ? {
+            messaging_product: "whatsapp",
+            to: phone,
+            type: "interactive",
+            interactive: {
+              type: "cta_url",
+              body: { text: step.text },
+              action: { name: "cta_url", parameters: { display_text: step.buttonText, url: step.buttonUrl } },
+            },
+          }
+        : { messaging_product: "whatsapp", to: phone, type: "text", text: { body: step.text, preview_url: false } };
 
   const res = await fetch(`https://graph.facebook.com/v20.0/${settings.phoneNumberId}/messages`, {
     method: "POST",
@@ -149,13 +192,22 @@ async function sendConversationMessage(step: ConvSendStep, phone: string): Promi
 
 /** Dispara a etapa atual do run e avança pra próxima (ou completa o fluxo). Reaproveitado tanto
  *  pelo tick agendado quanto pelo disparo imediato da 1ª etapa (`matchIncomingMessage`). */
-async function dispatchRunStep(run: { id: string; customer_id: string | null; phone: string; started_at: string }, step: ConvSendStep, steps: ConvStep[]) {
+async function dispatchRunStep(run: { id: string; customer_id: string | null; phone: string; started_at: string }, step: ConvSendStep | ConvMenuStep, steps: ConvStep[]) {
   const supabaseAdmin = await admin();
   const result = await sendConversationMessage(step, run.phone);
   if (!result.ok) {
     await supabaseAdmin
       .from("whatsapp_conversation_runs")
       .update({ status: "failed", last_error: result.error, updated_at: new Date().toISOString() } as never)
+      .eq("id", run.id);
+    return;
+  }
+
+  if (step.type === "menu") {
+    // Não avança sozinho: espera o cliente clicar numa opção (ver matchIncomingMessage).
+    await supabaseAdmin
+      .from("whatsapp_conversation_runs")
+      .update({ current_step_id: step.id, status: "active", next_run_at: null, updated_at: new Date().toISOString() } as never)
       .eq("id", run.id);
     return;
   }
@@ -201,7 +253,7 @@ export async function processDueConversationRuns(): Promise<number> {
   for (const run of runs) {
     const steps = stepsByFlow.get(run.flow_id);
     const step = steps?.find((s) => s.id === run.current_step_id);
-    if (!steps || !step || step.type !== "send") {
+    if (!steps || !step || (step.type !== "send" && step.type !== "menu")) {
       await supabaseAdmin
         .from("whatsapp_conversation_runs")
         .update({ status: "failed", last_error: "Etapa não encontrada (fluxo editado)" } as never)
@@ -244,6 +296,42 @@ export async function matchIncomingMessage(message: IncomingMessage): Promise<vo
 
   const buttonText = message.button?.text ?? message.interactive?.button_reply?.title;
   const bodyText = message.text?.body;
+  const menuReplyId = message.interactive?.button_reply?.id;
+
+  // Se já existe um run ativo esperando o cliente clicar num menu, resolve ali e não abre um run
+  // novo procurando gatilho — o clique é resposta a uma pergunta já em andamento, não um gatilho.
+  if (menuReplyId) {
+    const { data: activeRuns } = await supabaseAdmin
+      .from("whatsapp_conversation_runs")
+      .select("id, flow_id, customer_id, phone, current_step_id, started_at")
+      .eq("phone", phone)
+      .eq("status", "active");
+    const runsForPhone = (activeRuns ?? []) as { id: string; flow_id: string; customer_id: string | null; phone: string; current_step_id: string; started_at: string }[];
+    if (runsForPhone.length > 0) {
+      const flowIds = Array.from(new Set(runsForPhone.map((r) => r.flow_id)));
+      const { data: runFlows } = await supabaseAdmin.from("whatsapp_conversational_flows").select("id, steps").in("id", flowIds);
+      const stepsByRunFlow = new Map<string, ConvStep[]>();
+      for (const f of (runFlows ?? []) as { id: string; steps: unknown }[]) stepsByRunFlow.set(f.id, parseConvSteps(f.steps));
+
+      for (const run of runsForPhone) {
+        const steps = stepsByRunFlow.get(run.flow_id);
+        const currentStep = steps?.find((s) => s.id === run.current_step_id);
+        if (!steps || !currentStep || currentStep.type !== "menu") continue;
+        const option = currentStep.options.find((o) => o.id === menuReplyId);
+        if (!option) continue;
+
+        const nextStep = await resolveNextConvStep(steps, option.nextStepId, { customer_id: run.customer_id ?? "", enrolled_at: run.started_at });
+        if (nextStep) await dispatchRunStep(run, nextStep, steps);
+        else {
+          await supabaseAdmin
+            .from("whatsapp_conversation_runs")
+            .update({ status: "completed", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() } as never)
+            .eq("id", run.id);
+        }
+        return;
+      }
+    }
+  }
 
   const { data: activeFlows } = await supabaseAdmin
     .from("whatsapp_conversational_flows")
@@ -283,7 +371,7 @@ export async function matchIncomingMessage(message: IncomingMessage): Promise<vo
 
   const steps = parseConvSteps(matched.steps);
   const firstStep = steps[0];
-  if (!firstStep || firstStep.type !== "send") return;
+  if (!firstStep || (firstStep.type !== "send" && firstStep.type !== "menu")) return;
 
   const { data: existingActive } = await supabaseAdmin
     .from("whatsapp_conversation_runs")
@@ -318,4 +406,96 @@ export async function matchIncomingMessage(message: IncomingMessage): Promise<vo
   if (firstStep.waitMinutes === 0) {
     await dispatchRunStep(newRun as any, firstStep, steps);
   }
+}
+
+const UNANSWERED_CHECK_LIMIT = 20;
+
+/** Chamado no mesmo tick de 15 min de processDueConversationRuns: dispara fluxos com
+ *  trigger_type "unanswered_timeout" pras conversas que ficaram X minutos sem resposta HUMANA
+ *  (uma resposta do próprio motor conversacional não conta — só quem responde pela aba Conversas,
+ *  via sendInboxReply, grava linha "outbound" em whatsapp_inbox_messages). Não duplica disparo pra
+ *  quem já foi roteado na mesma janela de silêncio (checa se já existe run desse flow começado
+ *  depois da última mensagem recebida), e tem um teto por tick pra não disparar em massa pra
+ *  conversas antigas já paradas na primeira vez que o gatilho for ativado. */
+export async function checkUnansweredThreads(): Promise<number> {
+  const supabaseAdmin = await admin();
+  const { data: activeFlows } = await supabaseAdmin
+    .from("whatsapp_conversational_flows")
+    .select("*")
+    .eq("ativo", true)
+    .eq("trigger_type", "unanswered_timeout");
+  const flows = (activeFlows ?? []) as any[];
+  if (flows.length === 0) return 0;
+
+  let dispatched = 0;
+  for (const flow of flows) {
+    if (dispatched >= UNANSWERED_CHECK_LIMIT) break;
+    const timeoutMinutes = Number(flow.trigger_timeout_minutes ?? 0);
+    if (!Number.isFinite(timeoutMinutes) || timeoutMinutes <= 0) continue;
+
+    const steps = parseConvSteps(flow.steps);
+    const firstStep = steps[0];
+    if (!firstStep || (firstStep.type !== "send" && firstStep.type !== "menu")) continue;
+
+    const cutoff = new Date(Date.now() - timeoutMinutes * 60_000).toISOString();
+    const { data: candidateThreads } = await supabaseAdmin
+      .from("whatsapp_inbox_threads")
+      .select("id, phone, customer_id, last_inbound_at")
+      .not("last_inbound_at", "is", null)
+      .lte("last_inbound_at", cutoff)
+      .order("last_inbound_at", { ascending: true })
+      .limit(UNANSWERED_CHECK_LIMIT);
+    const threads = (candidateThreads ?? []) as { id: string; phone: string; customer_id: string | null; last_inbound_at: string }[];
+
+    for (const thread of threads) {
+      if (dispatched >= UNANSWERED_CHECK_LIMIT) break;
+
+      const { data: repliedAfter } = await supabaseAdmin
+        .from("whatsapp_inbox_messages")
+        .select("id")
+        .eq("thread_id", thread.id)
+        .eq("direction", "outbound")
+        .gt("created_at", thread.last_inbound_at)
+        .limit(1)
+        .maybeSingle();
+      if (repliedAfter) continue; // humano já respondeu
+
+      const { data: existingRun } = await supabaseAdmin
+        .from("whatsapp_conversation_runs")
+        .select("id")
+        .eq("flow_id", flow.id)
+        .eq("phone", thread.phone)
+        .gte("started_at", thread.last_inbound_at)
+        .limit(1)
+        .maybeSingle();
+      if (existingRun) continue; // já roteado nessa mesma janela de silêncio
+
+      const startedAt = new Date().toISOString();
+      const { data: newRun } = await supabaseAdmin
+        .from("whatsapp_conversation_runs")
+        .insert({
+          flow_id: flow.id,
+          customer_id: thread.customer_id ?? null,
+          phone: thread.phone,
+          status: "active",
+          current_step_id: firstStep.id,
+          next_run_at: new Date(Date.now() + firstStep.waitMinutes * 60_000).toISOString(),
+          started_at: startedAt,
+        } as never)
+        .select("id, flow_id, customer_id, phone, current_step_id, started_at")
+        .single();
+      if (!newRun) continue;
+
+      await supabaseAdmin
+        .from("whatsapp_conversational_flows")
+        .update({ last_run_at: startedAt, total_execucoes: (flow.total_execucoes ?? 0) + 1 } as never)
+        .eq("id", flow.id);
+
+      if (firstStep.waitMinutes === 0) {
+        await dispatchRunStep(newRun as any, firstStep, steps);
+      }
+      dispatched++;
+    }
+  }
+  return dispatched;
 }

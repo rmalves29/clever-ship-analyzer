@@ -663,8 +663,9 @@ export async function runAutomationsTickWithLog() {
 
   try {
     const result = await runAutomationsTick();
-    const { processDueConversationRuns } = await import("./conversational-flows.server");
+    const { processDueConversationRuns, checkUnansweredThreads } = await import("./conversational-flows.server");
     await processDueConversationRuns();
+    await checkUnansweredThreads();
     if (logId) {
       await supabaseAdmin
         .from("automation_tick_runs")

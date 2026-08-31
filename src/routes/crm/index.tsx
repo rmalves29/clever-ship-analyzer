@@ -275,7 +275,7 @@ function CRMPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>Importar CSV</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setImportDialogOpen(true)}>Importar CSV</DropdownMenuItem>
                 <DropdownMenuItem onClick={async () => {
                   const promise = runNormalizePhones();
                   toast.promise(promise, {

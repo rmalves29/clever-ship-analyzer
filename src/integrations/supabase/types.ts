@@ -16,51 +16,81 @@ export type Database = {
     Tables: {
       ai_content_queue: {
         Row: {
+          approved_at: string | null
           batch_id: string
           campaign_id: string
           campaign_name: string
           content_image_url: string | null
+          content_media_type: string
           content_text: string
           created_at: string
           envio_message_id: string | null
+          envio_message_ids: string[]
+          generation_context: Json
+          generation_model: string | null
           id: string
+          last_error: string | null
           link_type: string | null
           link_url: string | null
+          prompt_snapshot: string | null
+          prompt_version: string | null
+          rejection_reason: string | null
           scheduled_date: string
+          sent_at: string | null
           source_summary: string
           status: string
           time_of_day: string
           updated_at: string
         }
         Insert: {
+          approved_at?: string | null
           batch_id: string
           campaign_id: string
           campaign_name: string
           content_image_url?: string | null
+          content_media_type?: string
           content_text: string
           created_at?: string
           envio_message_id?: string | null
+          envio_message_ids?: string[]
+          generation_context?: Json
+          generation_model?: string | null
           id?: string
+          last_error?: string | null
           link_type?: string | null
           link_url?: string | null
+          prompt_snapshot?: string | null
+          prompt_version?: string | null
+          rejection_reason?: string | null
           scheduled_date: string
+          sent_at?: string | null
           source_summary: string
           status?: string
           time_of_day: string
           updated_at?: string
         }
         Update: {
+          approved_at?: string | null
           batch_id?: string
           campaign_id?: string
           campaign_name?: string
           content_image_url?: string | null
+          content_media_type?: string
           content_text?: string
           created_at?: string
           envio_message_id?: string | null
+          envio_message_ids?: string[]
+          generation_context?: Json
+          generation_model?: string | null
           id?: string
+          last_error?: string | null
           link_type?: string | null
           link_url?: string | null
+          prompt_snapshot?: string | null
+          prompt_version?: string | null
+          rejection_reason?: string | null
           scheduled_date?: string
+          sent_at?: string | null
           source_summary?: string
           status?: string
           time_of_day?: string
@@ -70,7 +100,9 @@ export type Database = {
       }
       ai_coupons: {
         Row: {
+          activated_at: string | null
           batch_id: string
+          cancelled_at: string | null
           code: string
           content_queue_item_id: string | null
           created_at: string
@@ -82,9 +114,12 @@ export type Database = {
           shopify_discount_id: string | null
           starts_at: string
           status: string
+          updated_at: string
         }
         Insert: {
+          activated_at?: string | null
           batch_id: string
+          cancelled_at?: string | null
           code: string
           content_queue_item_id?: string | null
           created_at?: string
@@ -96,9 +131,12 @@ export type Database = {
           shopify_discount_id?: string | null
           starts_at: string
           status?: string
+          updated_at?: string
         }
         Update: {
+          activated_at?: string | null
           batch_id?: string
+          cancelled_at?: string | null
           code?: string
           content_queue_item_id?: string | null
           created_at?: string
@@ -110,6 +148,7 @@ export type Database = {
           shopify_discount_id?: string | null
           starts_at?: string
           status?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -458,6 +497,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      crm_repurchase_settings: {
+        Row: {
+          id: boolean
+          target_conversion_rate: number
+          target_window_days: number
+          updated_at: string
+        }
+        Insert: {
+          id?: boolean
+          target_conversion_rate?: number
+          target_window_days?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: boolean
+          target_conversion_rate?: number
+          target_window_days?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       crm_segments: {
         Row: {
@@ -1244,6 +1304,42 @@ export type Database = {
           raw_payload?: Json
           received_at?: string
           signature_valid?: boolean
+        }
+        Relationships: []
+      }
+      ga4_settings: {
+        Row: {
+          connected_at: string | null
+          created_at: string
+          id: number
+          last_error: string | null
+          last_tested_at: string | null
+          property_id: string
+          service_account_email: string
+          service_account_json: string
+          updated_at: string
+        }
+        Insert: {
+          connected_at?: string | null
+          created_at?: string
+          id?: number
+          last_error?: string | null
+          last_tested_at?: string | null
+          property_id: string
+          service_account_email: string
+          service_account_json: string
+          updated_at?: string
+        }
+        Update: {
+          connected_at?: string | null
+          created_at?: string
+          id?: number
+          last_error?: string | null
+          last_tested_at?: string | null
+          property_id?: string
+          service_account_email?: string
+          service_account_json?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -2081,6 +2177,44 @@ export type Database = {
             columns: ["segment_id"]
             isOneToOne: false
             referencedRelation: "crm_segments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_campaign_coupon_codes: {
+        Row: {
+          backfilled_at: string | null
+          campaign_id: string
+          code: string
+          created_at: string
+          id: string
+          is_current: boolean
+          updated_at: string
+        }
+        Insert: {
+          backfilled_at?: string | null
+          campaign_id: string
+          code: string
+          created_at?: string
+          id?: string
+          is_current?: boolean
+          updated_at?: string
+        }
+        Update: {
+          backfilled_at?: string | null
+          campaign_id?: string
+          code?: string
+          created_at?: string
+          id?: string
+          is_current?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_campaign_coupon_codes_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_campaigns"
             referencedColumns: ["id"]
           },
         ]

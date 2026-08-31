@@ -410,6 +410,34 @@ export async function matchIncomingMessage(message: IncomingMessage): Promise<vo
 
 const UNANSWERED_CHECK_LIMIT = 20;
 
+/** Última mensagem RECEBIDA de verdade numa thread — ignora clique de botão (message_type
+ *  "button"), porque isso é o cliente respondendo ao próprio bot (menu, ou botão de campanha),
+ *  não uma pergunta nova pedindo atendimento humano. Se a mais recente for um clique, procura a
+ *  próxima mensagem real antes dela; se não achar nenhuma, devolve null. */
+async function resolveLastRealInboundAt(supabaseAdmin: any, threadId: string): Promise<string | null> {
+  const { data: latest } = await supabaseAdmin
+    .from("whatsapp_inbox_messages")
+    .select("sent_at, message_type")
+    .eq("thread_id", threadId)
+    .eq("direction", "inbound")
+    .order("sent_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!latest) return null;
+  if (latest.message_type !== "button") return latest.sent_at;
+
+  const { data: real } = await supabaseAdmin
+    .from("whatsapp_inbox_messages")
+    .select("sent_at")
+    .eq("thread_id", threadId)
+    .eq("direction", "inbound")
+    .neq("message_type", "button")
+    .order("sent_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return real?.sent_at ?? null;
+}
+
 /** Chamado no mesmo tick de 15 min de processDueConversationRuns: dispara fluxos com
  *  trigger_type "unanswered_timeout" pras conversas que ficaram X minutos sem resposta HUMANA
  *  (uma resposta do próprio motor conversacional não conta — só quem responde pela aba Conversas,
@@ -438,24 +466,31 @@ export async function checkUnansweredThreads(): Promise<number> {
     if (!firstStep || (firstStep.type !== "send" && firstStep.type !== "menu")) continue;
 
     const cutoff = new Date(Date.now() - timeoutMinutes * 60_000).toISOString();
+    // Não dá pra filtrar direto por whatsapp_inbox_threads.last_inbound_at <= cutoff: esse campo
+    // sobe a cada mensagem recebida, INCLUSIVE clique de botão do próprio bot — sem esse cuidado,
+    // toda vez que o cliente clica numa opção do menu o relógio reiniciaria e o bot reenviaria o
+    // mesmo menu de novo, num loop. Por isso busca todas as threads com alguma mensagem recebida e
+    // resolve, pra cada uma, a última mensagem de verdade (não-botão) antes de decidir.
     const { data: candidateThreads } = await supabaseAdmin
       .from("whatsapp_inbox_threads")
       .select("id, phone, customer_id, last_inbound_at")
       .not("last_inbound_at", "is", null)
-      .lte("last_inbound_at", cutoff)
       .order("last_inbound_at", { ascending: true })
-      .limit(UNANSWERED_CHECK_LIMIT);
+      .limit(300);
     const threads = (candidateThreads ?? []) as { id: string; phone: string; customer_id: string | null; last_inbound_at: string }[];
 
     for (const thread of threads) {
       if (dispatched >= UNANSWERED_CHECK_LIMIT) break;
+
+      const lastRealInboundAt = await resolveLastRealInboundAt(supabaseAdmin, thread.id);
+      if (!lastRealInboundAt || lastRealInboundAt > cutoff) continue; // sem mensagem de verdade, ou ainda dentro da janela
 
       const { data: repliedAfter } = await supabaseAdmin
         .from("whatsapp_inbox_messages")
         .select("id")
         .eq("thread_id", thread.id)
         .eq("direction", "outbound")
-        .gt("created_at", thread.last_inbound_at)
+        .gt("created_at", lastRealInboundAt)
         .limit(1)
         .maybeSingle();
       if (repliedAfter) continue; // humano já respondeu
@@ -465,10 +500,10 @@ export async function checkUnansweredThreads(): Promise<number> {
         .select("id")
         .eq("flow_id", flow.id)
         .eq("phone", thread.phone)
-        .gte("started_at", thread.last_inbound_at)
+        .gte("started_at", lastRealInboundAt)
         .limit(1)
         .maybeSingle();
-      if (existingRun) continue; // já roteado nessa mesma janela de silêncio
+      if (existingRun) continue; // já roteado nessa mesma janela de silêncio (cliques em botão não abrem uma nova)
 
       const startedAt = new Date().toISOString();
       const { data: newRun } = await supabaseAdmin

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Plus, Trash2, GitBranch, MessageCircle, Settings, Rocket, X } from "lucide-react";
+import { Plus, Trash2, GitBranch, MessageCircle, Settings, Rocket, Send, X } from "lucide-react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -34,7 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { SEGMENT_TYPES } from "@/lib/crm-mock";
 import { getSegmentsList } from "@/lib/crm-segmentation.functions";
-import { listMetaTemplates, saveAutomation } from "@/lib/whatsapp-meta.functions";
+import { listMetaTemplates, saveAutomation, sendAutomationTestMessage } from "@/lib/whatsapp-meta.functions";
 import { previewWhatsappAudience } from "@/lib/whatsapp-audience-preview.functions";
 import { normalizeWhatsappAudienceSelection } from "@/lib/whatsapp-audience-selection";
 import { extractTemplateBodyTokens, isNamedParameterToken } from "@/lib/whatsapp-template-body-tokens";
@@ -966,6 +966,41 @@ function SendStepPanel({
   const tokens = templateBodyTokens(template?.components);
   const wait = resolveWaitInput(step);
 
+  const runTest = useServerFn(sendAutomationTestMessage);
+  const [testPhone, setTestPhone] = useState("");
+  const [testing, setTesting] = useState(false);
+  const handleTest = async () => {
+    if (!step.templateName) {
+      toast.error("Escolha um template antes de testar.");
+      return;
+    }
+    if (!testPhone.trim()) {
+      toast.error("Informe o número de WhatsApp que vai receber o teste.");
+      return;
+    }
+    setTesting(true);
+    try {
+      const result = await runTest({
+        data: {
+          phone: testPhone,
+          templateName: step.templateName,
+          templateLanguage: template?.language || "pt_BR",
+          bodyParams: step.bodyParams,
+          bodyParamTokens: tokens,
+        },
+      });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Teste enviado! Deve chegar no WhatsApp em instantes.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao enviar o teste.");
+    } finally {
+      setTesting(false);
+    }
+  };
+
   return (
     <>
       <div className="flex items-center justify-between">
@@ -1081,6 +1116,24 @@ function SendStepPanel({
           </div>
         </div>
       )}
+
+      <div className="space-y-1.5 rounded-lg border border-dashed border-border p-2">
+        <Label className="text-xs">Testar esta mensagem</Label>
+        <div className="flex gap-2">
+          <Input
+            placeholder="+55 11 91234-5678"
+            value={testPhone}
+            onChange={(e) => setTestPhone(e.target.value)}
+          />
+          <Button type="button" variant="outline" disabled={testing} onClick={handleTest} className="shrink-0 gap-1.5">
+            <Send className="size-3.5" /> {testing ? "Enviando..." : "Enviar teste"}
+          </Button>
+        </div>
+        <p className="text-[10px] text-muted-foreground">
+          Se o número bater com um cliente já cadastrado, os tokens usam os dados reais dele (último pedido, cashback etc.);
+          senão vêm com valores de exemplo. Não conta em nenhuma métrica de campanha.
+        </p>
+      </div>
 
       <div className="space-y-1.5">
         <Label className="text-xs">Cupom da Shopify (opcional)</Label>

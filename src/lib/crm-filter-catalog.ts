@@ -111,6 +111,7 @@ export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
       { id: "acesso_sem_compra", label: "Sem Compra Válida", kind: "boolean", description: "Cliente sem nenhuma compra válida." },
       { id: "visitou_site", label: "Visitou o Site (Pop-up instalado)", kind: "date", description: "Última visita ao site registrada pelo snippet do pop-up. Só funciona pra quem já foi capturado alguma vez pelo pop-up." },
       { id: "cashback_disponivel", label: "Tem Cashback Disponível", kind: "boolean", description: "Cliente tem cupom de cashback pendente ou ativo agora (não expirado nem cancelado)." },
+      { id: "janela_24h_aberta", label: "Janela de 24h Aberta (WhatsApp)", kind: "boolean", description: "Cliente mandou mensagem no WhatsApp nas últimas 24h — dá pra responder por sessão, sem custo de template." },
     ],
   },
   {

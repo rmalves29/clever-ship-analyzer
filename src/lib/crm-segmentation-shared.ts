@@ -40,6 +40,11 @@ export type CRMCustomerForSegmentation = {
   /** Tem cupom de cashback pendente ou ativo agora (join com cashback_coupons via pedido,
    *  feito por quem carrega os clientes — não é uma coluna de shopify_customers). */
   has_active_cashback?: boolean;
+  /** Horário da última mensagem RECEBIDA desse telefone no WhatsApp (join por telefone com
+   *  whatsapp_inbox_threads.last_inbound_at, feito por quem carrega os clientes — não é uma
+   *  coluna de shopify_customers). Base pra saber se a janela de atendimento de 24h da Meta
+   *  ainda está aberta (permite responder por sessão, sem custo de template). */
+  last_inbound_at?: string | null;
 };
 
 export type PurchaseMetrics = {
@@ -359,6 +364,14 @@ function purchasedInLast24h(context: CRMCustomerContext, now: Date): boolean {
   return Number.isFinite(time) && time >= now.getTime() - DAY_MS && time <= now.getTime();
 }
 
+/** Janela de atendimento de 24h da Meta: enquanto está aberta dá pra mandar mensagem de sessão
+ *  (texto livre) sem custo de template, respondendo à última mensagem que o cliente mandou. */
+function whatsappWindowOpen(context: CRMCustomerContext, now: Date): boolean {
+  if (!context.customer.last_inbound_at) return false;
+  const time = new Date(context.customer.last_inbound_at).getTime();
+  return Number.isFinite(time) && time >= now.getTime() - DAY_MS && time <= now.getTime();
+}
+
 function paymentStatusMatches(context: CRMCustomerContext, targetRaw: unknown): boolean {
   const target = normalizeStatus(targetRaw);
   if (!target) return false;
@@ -449,6 +462,7 @@ export function matchesSegmentCondition(context: CRMCustomerContext, condition: 
   if (field === "acesso_sem_compra") return compareBoolean(metrics.validOrderCount === 0, operator, value);
   if (field === "visitou_site") return compareDate(customer.last_visit_at ?? null, operator, value, now);
   if (field === "cashback_disponivel") return compareBoolean(Boolean(customer.has_active_cashback), operator, value);
+  if (field === "janela_24h_aberta") return compareBoolean(whatsappWindowOpen(context, now), operator, value);
 
   return false;
 }

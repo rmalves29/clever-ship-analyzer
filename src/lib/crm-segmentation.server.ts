@@ -98,6 +98,23 @@ async function loadPopupVisitByPhone(): Promise<Map<string, string>> {
   return map;
 }
 
+/** Telefone -> horário da última mensagem RECEBIDA no WhatsApp (whatsapp_inbox_threads.last_inbound_at)
+ *  — não é uma coluna de shopify_customers, então precisa ser mesclada depois de loadCustomers().
+ *  Join por telefone (não por customer_id) porque a thread só grava customer_id quando o telefone já
+ *  batia com um cliente conhecido NA HORA da 1ª mensagem — pode ficar desatualizado depois. */
+async function loadInboxLastInboundByPhone(): Promise<Map<string, string>> {
+  const db = await admin();
+  const map = new Map<string, string>();
+  const { data, error } = await (db.from("whatsapp_inbox_threads" as any) as any)
+    .select("phone, last_inbound_at")
+    .not("last_inbound_at", "is", null);
+  if (error) throw new Error(`Erro ao buscar última mensagem recebida no WhatsApp: ${error.message}`);
+  for (const row of (data ?? []) as { phone: string; last_inbound_at: string }[]) {
+    map.set(row.phone, row.last_inbound_at);
+  }
+  return map;
+}
+
 /** Order_id -> status de entrega (rastreio) mais recente, lido de shopify_fulfillments.display_status.
  *  Pedidos importados da Tray não têm esse dado (fulfillment sem raw_data da Shopify). */
 async function loadDeliveryStatusByOrderId(): Promise<Map<string, string>> {
@@ -467,19 +484,23 @@ export async function loadCRMProductFilterOptions(): Promise<CRMProductOption[]>
 }
 
 export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMAdvancedCustomerContext[]> {
-  const [customers, orders, abandonedCheckoutAtByCustomer, whatsappBehavior, popupVisitByPhone, activeCashbackCustomerIds] = await Promise.all([
+  const [customers, orders, abandonedCheckoutAtByCustomer, whatsappBehavior, popupVisitByPhone, activeCashbackCustomerIds, inboxLastInboundByPhone] = await Promise.all([
     loadCustomers(),
     loadOrders(),
     loadLatestAbandonedCheckoutByCustomer(),
     loadWhatsappBehaviorIndexes(),
     loadPopupVisitByPhone(),
     loadActiveCashbackCustomerIds(),
+    loadInboxLastInboundByPhone(),
   ]);
   for (const customer of customers) {
     if (customer.phone && popupVisitByPhone.has(customer.phone)) {
       customer.last_visit_at = popupVisitByPhone.get(customer.phone);
     }
     customer.has_active_cashback = activeCashbackCustomerIds.has(customer.id);
+    if (customer.phone && inboxLastInboundByPhone.has(customer.phone)) {
+      customer.last_inbound_at = inboxLastInboundByPhone.get(customer.phone);
+    }
   }
   const [shippedTodayValidOrderIds, orderItems] = await Promise.all([
     loadShippedTodayValidOrderIds(orders, now),

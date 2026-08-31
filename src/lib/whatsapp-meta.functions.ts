@@ -525,6 +525,27 @@ export const runWhatsappQueueTick = createServerFn({ method: "POST" })
     });
   });
 
+/** Envia uma mensagem de teste de uma etapa de automação (ainda em edição) pro número informado. */
+export const sendAutomationTestMessage = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  // dispara envio real, igual ao runWhatsappQueueTick.
+  .middleware([requireSupabaseAuth])
+  .validator((data: unknown) =>
+    z
+      .object({
+        phone: z.string().min(8),
+        templateName: z.string().min(1),
+        templateLanguage: z.string().min(2),
+        bodyParams: z.array(z.string()),
+        bodyParamTokens: z.array(z.string()).optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { sendAutomationTestMessage: sendTest } = await import("./whatsapp-meta.server");
+    return sendTest(data);
+  });
+
 /** Cancela os itens ainda não enviados de uma campanha. */
 export const cancelWhatsappCampaignQueue = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])

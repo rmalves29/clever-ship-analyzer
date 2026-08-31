@@ -1,6 +1,7 @@
 import { GOALS, type SegmentType } from "./crm-mock";
 import { buildBodyParameters } from "./whatsapp-template-body-tokens";
 import { findFirstTouchCampaign } from "./whatsapp-attribution";
+import type { AutomationEventContext } from "./whatsapp-automation-context";
 
 const DAY_MS = 86_400_000;
 
@@ -474,6 +475,68 @@ export async function sendTemplateMessage(params: {
   const waMessageId: string | undefined = json?.messages?.[0]?.id;
   console.log("[sendTemplateMessage] Success", { waMessageId, to: params.to });
   return { ok: true as const, waMessageId };
+}
+
+/** Envia uma mensagem de teste (etapa de automação ainda sendo editada) pro número informado.
+ *  Passa pela fila normal (origem "teste", sem campaign_id) em vez de chamar sendTemplateMessage
+ *  direto — reaproveita rate limit, retry e o espelhamento em Conversas, sem contar em métrica de
+ *  campanha nenhuma (o worker só grava em whatsapp_campaign_recipients quando há campaign_id).
+ *  Se o telefone bater com um cliente real, resolve as variáveis com o pedido mais recente dele
+ *  (igual a um envio de verdade); senão usa valores de fallback ("Cliente", "—", etc.). */
+export async function sendAutomationTestMessage(input: {
+  phone: string;
+  templateName: string;
+  templateLanguage: string;
+  bodyParams: string[];
+  bodyParamTokens?: string[] | undefined;
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const supabaseAdmin = await admin();
+  const phone = toE164(input.phone);
+  if (!phone) return { success: false as const, error: "Telefone inválido." };
+  if (!input.templateName.trim()) return { success: false as const, error: "Selecione um template aprovado antes de testar." };
+
+  const { data: customerRow } = await (supabaseAdmin.from("shopify_customers") as any)
+    .select("id, first_name")
+    .eq("phone", phone)
+    .maybeSingle();
+
+  const { captureAutomationEventContext } = await import("./whatsapp-automation-context.server");
+  const { resolveAutomationBodyParams } = await import("./whatsapp-automation-context");
+
+  let context: AutomationEventContext = { capturedAt: new Date().toISOString() };
+  let firstName = "Teste";
+  let customerId: string | null = null;
+  if (customerRow) {
+    customerId = String((customerRow as any).id);
+    firstName = (customerRow as any).first_name || "Cliente";
+    const captured = await captureAutomationEventContext(customerId);
+    context = captured.context;
+  }
+
+  const resolvedParams = resolveAutomationBodyParams(input.bodyParams, context, {
+    firstName,
+    checkoutUrl: context.checkout?.checkoutUrl ?? null,
+  });
+
+  const { error: insertError } = await (supabaseAdmin.from("whatsapp_message_queue") as any).insert({
+    campaign_id: null,
+    customer_id: customerId,
+    phone,
+    origem: "teste",
+    template_name: input.templateName,
+    template_language: input.templateLanguage,
+    body_params: resolvedParams,
+    ...(input.bodyParamTokens ? { body_param_tokens: input.bodyParamTokens } : {}),
+    status: "queued",
+    priority: 0,
+  });
+  if (insertError) return { success: false as const, error: insertError.message };
+
+  const { processWhatsappQueueBatch } = await import("./whatsapp-queue.server");
+  const processed = await processWhatsappQueueBatch({ limit: 5 });
+  if (!processed.success) return { success: false as const, error: `Mensagem enfileirada, mas o processamento imediato falhou: ${processed.error}` };
+  if (processed.failed > 0) return { success: false as const, error: "A Meta recusou o envio de teste. Confira o template e os parâmetros." };
+  return { success: true as const };
 }
 
 export async function listMetaTemplates() {

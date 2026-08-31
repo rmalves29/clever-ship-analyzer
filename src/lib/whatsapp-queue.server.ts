@@ -347,14 +347,25 @@ export async function enqueueCampaign(
       recipients: recipients.length,
       skipped,
     });
+    await supabaseAdmin
+      .from("whatsapp_campaigns")
+      .update({ status: "cancelada", total_destinatarios: 0 })
+      .eq("id", campaignId);
+    return {
+      success: false as const,
+      error:
+        recipients.length === 0
+          ? "Nenhum destinatário válido foi encontrado para esse público."
+          : `Nenhum telefone válido entre os ${recipients.length} destinatários (${skipped} descartados).`,
+    };
   }
-
 
   await supabaseAdmin
     .from("whatsapp_campaigns")
     .update({ status: schedule.future ? "agendada" : "enviando", total_destinatarios: queued })
     .eq("id", campaignId);
   return { success: true as const, campaignId, queued, skipped, total: recipients.length, scheduledAt };
+
 }
 
 export async function cancelCampaignQueue(campaignId: string) {

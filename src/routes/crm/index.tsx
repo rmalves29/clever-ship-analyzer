@@ -264,7 +264,7 @@ function CRMPage() {
             </span>
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Contatos</h1>
-              <p className="text-sm text-muted-foreground">qual o banco de dados que estamos usando</p>
+              <p className="text-sm text-muted-foreground">Base completa de clientes e leads.</p>
             </div>
           </div>
           <div className="flex items-center gap-2">

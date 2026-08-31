@@ -347,6 +347,11 @@ export async function processWhatsappQueueBatch(options?: {
     return { success: false as const, error: "Credenciais do WhatsApp (Meta) não configuradas." };
   }
 
+  // Jobs que ficaram presos em "sending" (worker morreu no meio) mantêm a campanha eternamente
+  // em "enviando". Antes de cada lote, devolvemos os travados pra fila.
+  const { error: requeueError } = await supabaseAdmin.rpc("requeue_stale_whatsapp_queue", { p_stale_minutes: 15 });
+  if (requeueError) console.error("Falha ao recolocar jobs travados na fila:", requeueError.message);
+
   const { data: claimed, error: claimError } = await supabaseAdmin.rpc(QUEUE_CLAIM_RPC, { p_limit: limit, p_worker: workerId });
   if (claimError) return { success: false as const, error: claimError.message };
   const batch = (claimed ?? []) as QueueRow[];

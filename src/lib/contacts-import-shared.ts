@@ -19,9 +19,9 @@ export type ContactsImportParseResult = {
 };
 
 const HEADER_ALIASES: Record<keyof Omit<ImportedContactRow, "line" | "tags" | "lastPurchaseAt" | "errors"> | "tag" | "lastPurchase", string[]> = {
-  nome: ["nome", "name", "nome completo", "cliente"],
-  email: ["email", "e-mail", "mail"],
-  phone: ["telefone", "phone", "celular", "whatsapp", "tel", "fone"],
+  nome: ["nome", "name", "nome completo", "nome cliente", "nome do cliente", "cliente", "contato"],
+  email: ["email", "e-mail", "mail", "e mail"],
+  phone: ["telefone", "telefone 1", "telefone 2", "phone", "celular", "whatsapp", "tel", "fone", "numero", "número"],
   tag: ["tag", "tags", "etiqueta", "etiquetas"],
   lastPurchase: [
     "data da ultima compra",
@@ -32,6 +32,8 @@ const HEADER_ALIASES: Record<keyof Omit<ImportedContactRow, "line" | "tags" | "l
     "last purchase",
     "last_order_at",
     "data_pedido",
+    "data compra",
+    "data da compra",
   ],
 };
 
@@ -40,9 +42,12 @@ function normalizeHeader(value: string): string {
     .trim()
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/\s+/g, " ");
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
+
 
 function detectDelimiter(headerLine: string): string {
   const candidates = [";", ",", "\t"];

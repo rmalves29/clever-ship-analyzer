@@ -4,8 +4,13 @@ import { requireAppAuth } from "./app-auth";
 import {
   buildRepurchaseCohorts,
   buildRepurchaseJourney,
+  DEFAULT_REPURCHASE_TARGET,
+  DEFAULT_REPURCHASE_TARGET_WINDOW_DAYS,
   REPURCHASE_WINDOWS,
+  REPURCHASE_TARGET_WINDOWS,
   summarizeRepurchase,
+  type RepurchaseCustomer,
+  type RepurchaseTargetWindowDays,
   type RepurchaseWindow,
 } from "./crm-repurchase-shared";
 
@@ -27,6 +32,7 @@ type OrderRow = {
   processed_at: string | null;
   created_at: string;
   financial_status: string | null;
+  cancelled_at: string | null;
   source_name: string | null;
   city: string | null;
   province: string | null;
@@ -46,7 +52,7 @@ async function loadAllOrders(): Promise<OrderRow[]> {
   for (let page = 0; ; page += 1) {
     const { data, error } = await supabaseAdmin
       .from("shopify_orders")
-      .select("id,customer_id,total_price,processed_at,created_at,financial_status,source_name,city,province")
+      .select("id,customer_id,total_price,processed_at,created_at,financial_status,cancelled_at,source_name,city,province")
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
     if (error) throw new Error(`Erro ao carregar pedidos da régua: ${error.message}`);
     if (!data?.length) break;
@@ -112,6 +118,7 @@ async function loadRepurchaseData() {
       totalPrice: Number(order.total_price ?? 0),
       processedAt: String(order.processed_at ?? order.created_at ?? ""),
       financialStatus: order.financial_status,
+      cancelledAt: order.cancelled_at,
       sourceName: order.source_name,
     })),
   );
@@ -127,6 +134,91 @@ async function loadRepurchaseData() {
 }
 
 type RepurchaseData = Awaited<ReturnType<typeof loadRepurchaseData>>;
+
+const dateRangeSchema = z.object({
+  from: z.string().date().optional(),
+  to: z.string().date().optional(),
+});
+
+const targetWindowSchema = z.union(REPURCHASE_TARGET_WINDOWS.map((days) => z.literal(days)) as [z.ZodLiteral<7>, z.ZodLiteral<15>, z.ZodLiteral<30>, z.ZodLiteral<60>, z.ZodLiteral<90>]);
+
+type RepurchaseDateRange = z.infer<typeof dateRangeSchema>;
+
+function filterJourneyByFirstOrder(journey: RepurchaseCustomer[], range: RepurchaseDateRange): RepurchaseCustomer[] {
+  const fromTime = range.from ? new Date(`${range.from}T00:00:00-03:00`).getTime() : null;
+  const toTime = range.to ? new Date(`${range.to}T23:59:59.999-03:00`).getTime() : null;
+  return journey.filter((row) => {
+    const time = new Date(row.firstOrderAt).getTime();
+    if (!Number.isFinite(time)) return false;
+    return (fromTime === null || time >= fromTime) && (toTime === null || time <= toTime);
+  });
+}
+
+async function loadRepurchaseSettings(): Promise<{ targetConversionRate: number; targetWindowDays: RepurchaseTargetWindowDays }> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await (supabaseAdmin.from("crm_repurchase_settings" as never) as any)
+    .select("target_conversion_rate,target_window_days")
+    .eq("id", true)
+    .maybeSingle();
+  if (error) throw new Error(`Erro ao carregar a meta de recompra: ${error.message}`);
+  const rate = Number(data?.target_conversion_rate ?? DEFAULT_REPURCHASE_TARGET);
+  const days = Number(data?.target_window_days ?? DEFAULT_REPURCHASE_TARGET_WINDOW_DAYS);
+  return {
+    targetConversionRate: Number.isFinite(rate) ? rate : DEFAULT_REPURCHASE_TARGET,
+    targetWindowDays: (REPURCHASE_TARGET_WINDOWS as readonly number[]).includes(days)
+      ? days as RepurchaseTargetWindowDays
+      : DEFAULT_REPURCHASE_TARGET_WINDOW_DAYS,
+  };
+}
+
+function getDataCoverage(journey: RepurchaseCustomer[]) {
+  const times = journey.map((row) => new Date(row.firstOrderAt).getTime()).filter(Number.isFinite);
+  if (!times.length) return { from: null, to: null, historyDays: 0 };
+  const from = new Date(Math.min(...times));
+  const to = new Date(Math.max(...times));
+  return {
+    from: from.toISOString(),
+    to: to.toISOString(),
+    historyDays: Math.max(1, Math.floor((to.getTime() - from.getTime()) / 86_400_000) + 1),
+  };
+}
+
+function buildProductPerformance(journey: RepurchaseCustomer[], data: RepurchaseData) {
+  const stats = new Map<string, { name: string; customers: number; converted: number; secondRevenue: number }>();
+  for (const row of journey) {
+    const products = new Set(productLabels(data.itemsByOrder.get(row.firstOrderId)));
+    for (const name of products) {
+      const current = stats.get(name) ?? { name, customers: 0, converted: 0, secondRevenue: 0 };
+      current.customers += 1;
+      if (row.converted) {
+        current.converted += 1;
+        current.secondRevenue += row.secondOrderRevenue ?? 0;
+      }
+      stats.set(name, current);
+    }
+  }
+  return [...stats.values()]
+    .map((row) => ({ ...row, conversionRate: row.customers ? row.converted / row.customers : 0 }))
+    .sort((a, b) => b.converted - a.converted || b.conversionRate - a.conversionRate || b.customers - a.customers)
+    .slice(0, 10);
+}
+
+function buildSourcePerformance(journey: RepurchaseCustomer[]) {
+  const stats = new Map<string, { source: string; customers: number; converted: number; secondRevenue: number }>();
+  for (const row of journey) {
+    const source = row.firstOrderSourceName?.trim() || "Não informado";
+    const current = stats.get(source) ?? { source, customers: 0, converted: 0, secondRevenue: 0 };
+    current.customers += 1;
+    if (row.converted) {
+      current.converted += 1;
+      current.secondRevenue += row.secondOrderRevenue ?? 0;
+    }
+    stats.set(source, current);
+  }
+  return [...stats.values()]
+    .map((row) => ({ ...row, conversionRate: row.customers ? row.converted / row.customers : 0 }))
+    .sort((a, b) => b.customers - a.customers);
+}
 
 function enrichCustomer(row: RepurchaseData["journey"][number], data: RepurchaseData) {
   const customer = data.customerMap.get(row.customerId);
@@ -173,14 +265,39 @@ function buildCampaignContext(stage: RepurchaseWindow, data: RepurchaseData) {
   };
 }
 
-export const getRepurchaseDashboard = createServerFn({ method: "GET" })
+export const getRepurchaseDashboard = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
-  .handler(async () => {
-    const data = await loadRepurchaseData();
+  .validator((input: unknown) => dateRangeSchema.parse(input))
+  .handler(async ({ data: range }) => {
+    const [data, settings] = await Promise.all([loadRepurchaseData(), loadRepurchaseSettings()]);
+    const journey = filterJourneyByFirstOrder(data.journey, range);
     return {
-      summary: summarizeRepurchase(data.journey),
-      cohorts: buildRepurchaseCohorts(data.journey),
+      settings,
+      dataCoverage: getDataCoverage(data.journey),
+      selectedRange: range,
+      summary: summarizeRepurchase(journey, settings.targetConversionRate, settings.targetWindowDays),
+      cohorts: buildRepurchaseCohorts(journey, settings.targetWindowDays),
+      products: buildProductPerformance(journey, data),
+      sources: buildSourcePerformance(journey),
     };
+  });
+
+export const saveRepurchaseSettings = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .validator((input: unknown) => z.object({
+    targetConversionRate: z.number().min(0.001).max(1),
+    targetWindowDays: targetWindowSchema,
+  }).parse(input))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await (supabaseAdmin.from("crm_repurchase_settings" as never) as any).upsert({
+      id: true,
+      target_conversion_rate: data.targetConversionRate,
+      target_window_days: data.targetWindowDays,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "id" });
+    if (error) throw new Error(`Erro ao salvar a meta de recompra: ${error.message}`);
+    return { success: true as const };
   });
 
 export const getRepurchaseCustomers = createServerFn({ method: "POST" })
@@ -192,13 +309,15 @@ export const getRepurchaseCustomers = createServerFn({ method: "POST" })
         search: z.string().max(120).optional(),
         limit: z.number().int().min(1).max(200).default(100),
         offset: z.number().int().min(0).default(0),
+        from: z.string().date().optional(),
+        to: z.string().date().optional(),
       })
       .parse(input),
   )
   .handler(async ({ data: input }) => {
     const data = await loadRepurchaseData();
     const needle = (input.search ?? "").trim().toLowerCase();
-    const rows = data.journey
+    const rows = filterJourneyByFirstOrder(data.journey, { from: input.from, to: input.to })
       .filter((row) => !input.stage || row.stage === input.stage)
       .map((row) => enrichCustomer(row, data))
       .filter(
@@ -227,26 +346,35 @@ export const createRepurchaseCampaignDraft = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((input: unknown) => z.object({ stage: repurchaseWindowSchema }).parse(input))
   .handler(async ({ data: input }) => {
-    const data = await loadRepurchaseData();
-    const context = buildCampaignContext(input.stage, data);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const name = `Régua de recompra — ${input.stage}`;
+    const firstPurchaseCondition = input.stage === "90+ dias"
+      ? { field: "primeira_compra", operator: "older_than_days", value: 90 }
+      : {
+          field: "primeira_compra",
+          operator: "between_days",
+          value: input.stage === "0–7 dias" ? { min: 0, max: 7 }
+            : input.stage === "8–15 dias" ? { min: 8, max: 15 }
+              : input.stage === "16–30 dias" ? { min: 16, max: 30 }
+                : input.stage === "31–60 dias" ? { min: 31, max: 60 }
+                  : { min: 61, max: 90 },
+        };
+    const rules = { groups: [{ type: "AND", conditions: [
+      { field: "total_pedidos", operator: "eq", value: 1 },
+      firstPurchaseCondition,
+    ] }] };
+    const now = new Date().toISOString();
+    const { data: existing } = await supabaseAdmin.from("crm_segments").select("id").eq("nome", name).maybeSingle();
+    const query = existing
+      ? supabaseAdmin.from("crm_segments").update({ descricao: `Público dinâmico da régua: ${input.stage}, ainda sem segunda compra.`, regras: rules, atualizado_em: now } as never).eq("id", existing.id)
+      : supabaseAdmin.from("crm_segments").insert({ nome: name, descricao: `Público dinâmico da régua: ${input.stage}, ainda sem segunda compra.`, regras: rules, criado_em: now, atualizado_em: now } as never);
+    const { data: segment, error } = await query.select("id,nome").single();
+    if (error || !segment) throw new Error(`Erro ao preparar o segmento da campanha: ${error?.message ?? "segmento não retornado"}`);
     return {
-      status: "draft" as const,
-      persisted: false,
-      sendingEnabled: false,
+      status: "segment_ready" as const,
+      persisted: true,
       name: `Recompra — ${input.stage}`,
-      channelOptions: ["whatsapp_meta", "uazapi", "email", "coupon"] as const,
-      audience: context,
-      attribution: {
-        required: true,
-        acceptedEvidence: [
-          "coupon",
-          "tracked_link",
-          "campaign_specific_landing",
-          "explicit_customer_reply",
-          "manual_verified",
-        ] as const,
-        temporalOnlyAttributionAllowed: false,
-      },
+      segment: { id: String(segment.id), nome: String(segment.nome) },
     };
   });
 

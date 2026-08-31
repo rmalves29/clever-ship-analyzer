@@ -1,7 +1,21 @@
-import { toZonedTime, fromZonedTime } from "date-fns-tz";
-import { fetchImageAsDataUri, dataUriToBase64, dataUriContentType, generateImageBase64, dispatchToCampaignGroups } from "./ai-send-routines.server";
+import { z } from "zod";
+import { fetchImageAsDataUri, dataUriToBase64, dataUriContentType, dispatchToCampaignGroups } from "./ai-send-routines.server";
 import type { BestSellingProduct } from "./shopify-products.server";
+import type { ShopifyProductDetail } from "./shopify.server";
+import type { Ga4Record } from "./google-analytics.server";
 import type { InstagramMedia } from "./instagram.server";
+import { getCommercialDateName } from "./commercial-dates";
+import {
+  AI_CONTENT_PROMPT_VERSION,
+  buildAiContentSystemPrompt,
+  buildAiContentUserPrompt,
+  pickAnglesForSources,
+  scheduledAtInSaoPaulo,
+  validateAiBatchSchedule,
+  type AiBatchBriefing,
+  type AiPromptItemPlan,
+  type AiSourceKind,
+} from "./ai-content-prompt";
 
 const TZ = "America/Sao_Paulo";
 const APP_BASE_URL = "https://clever-ship-analyzer.lovable.app";
@@ -18,13 +32,21 @@ export type ContentQueueItem = {
   campaignName: string;
   contentText: string;
   contentImageUrl: string | null;
+  contentMediaType: "none" | "image" | "video_note";
   linkType: "instagram" | "site" | "none";
   linkUrl: string | null;
   sourceSummary: string;
   scheduledDate: string;
   timeOfDay: string;
-  status: "review" | "approved" | "rejected" | "sent" | "failed";
+  status: "review" | "processing" | "approved" | "scheduled" | "rejected" | "sent" | "failed";
   envioMessageId: string | null;
+  envioMessageIds: string[];
+  rejectionReason: string | null;
+  lastError: string | null;
+  promptVersion: string | null;
+  generationModel: string | null;
+  approvedAt: string | null;
+  sentAt: string | null;
 };
 
 function mapRow(row: any): ContentQueueItem {
@@ -35,6 +57,7 @@ function mapRow(row: any): ContentQueueItem {
     campaignName: row.campaign_name,
     contentText: row.content_text,
     contentImageUrl: row.content_image_url,
+    contentMediaType: row.content_media_type ?? (row.content_image_url ? "image" : "none"),
     linkType: row.link_type ?? "none",
     linkUrl: row.link_url,
     sourceSummary: row.source_summary,
@@ -42,76 +65,67 @@ function mapRow(row: any): ContentQueueItem {
     timeOfDay: row.time_of_day,
     status: row.status,
     envioMessageId: row.envio_message_id,
+    envioMessageIds: Array.isArray(row.envio_message_ids)
+      ? row.envio_message_ids.filter((id: unknown): id is string => typeof id === "string")
+      : row.envio_message_id
+        ? [row.envio_message_id]
+        : [],
+    rejectionReason: row.rejection_reason ?? null,
+    lastError: row.last_error ?? null,
+    promptVersion: row.prompt_version ?? null,
+    generationModel: row.generation_model ?? null,
+    approvedAt: row.approved_at ?? null,
+    sentAt: row.sent_at ?? null,
   };
 }
 
 type DraftItem = {
+  index: number;
   message_text: string;
-  use_image: "product" | "post" | "generate" | "none";
+  facts_used: string[];
+  risk_flags: string[];
   image_prompt: string | null;
-  link_type: "instagram" | "site" | "none";
-  source_summary: string;
+};
+
+type SlotMedia = {
+  sourceUrl: string;
+  previewImageUrl: string | null;
+  preferredType: "image" | "video_note";
 };
 
 type ProductSourceSlot = {
-  kind: "top_seller_1" | "top_seller_2" | "top_visited";
+  kind: "top_seller" | "top_viewed" | "top_recent_launch";
   title: string;
   description: string | null;
-  imageUrl: string | null;
   productUrl: string | null;
+  productId: string;
+  views: number | null;
+  periodLabel?: string;
+  launchRankedByViews: boolean;
+  media: SlotMedia;
+};
+
+type MetaAdsSourceSlot = {
+  kind: "top_ad_ctr";
+  name: string;
+  impressions: number;
+  ctr: number;
+  ctrMetric: "link" | "all";
+  destinationUrl: string | null;
+  media: SlotMedia;
 };
 
 type InstagramSourceSlot = {
-  kind: "top_post_1" | "top_post_2" | "top_reel";
+  kind: "top_instagram" | "top_story_or_reel";
   caption: string | null;
-  imageUrl: string | null;
   permalink: string | null;
+  resultLabel: string;
+  resultValue: number;
+  media: SlotMedia;
 };
 
-type CouponSourceSlot = {
-  kind: "coupon";
-  code: string;
-  percentageLabel: string; // "8%"
-  expiresAtLabel: string; // já formatado pt-BR/America-Sao_Paulo
-};
-
-type ContentSlot = ProductSourceSlot | InstagramSourceSlot | CouponSourceSlot | null;
-
-type NonCouponSlotKind = "top_seller_1" | "top_seller_2" | "top_visited" | "top_post_1" | "top_post_2" | "top_reel";
-type SlotKind = NonCouponSlotKind | "coupon";
-
-type SignalsContext = {
-  slots: ContentSlot[]; // length === count, index-alinhado com angles/mensagens
-  playbook: string | null;
-  recentTexts: string[];
-};
-
-/** Deixar a diversidade só na mão da IA não é confiável — com os mesmos sinais de entrada, o
- *  modelo tende a convergir pra respostas parecidas entre chamadas separadas, mesmo com
- *  temperature alta (reportado pelo usuário: cancelar e gerar de novo voltava com as mesmas
- *  mensagens). Forçar um ângulo diferente e sorteado por item, por chamada, garante diversidade
- *  mecânica em vez de só pedir por texto. */
-const ANGLE_POOL = [
-  "pergunta direta que gera curiosidade",
-  "urgência (tempo acabando, últimas unidades)",
-  "prova social (outras clientes comprando/amando)",
-  "bastidores (algo íntimo da loja/processo)",
-  "escassez (edição limitada, poucas peças)",
-  "benefício direto e prático pro dia a dia",
-  "storytelling curto (uma cena/situação)",
-  "convite pra interação (pergunta, enquete, peça opinião)",
-  "comparação antes/depois ou com/sem o produto",
-  "humor leve ou tom descontraído",
-  "dica de uso prático (como combinar, quando usar)",
-  "contagem regressiva / prazo específico",
-] as const;
-
-function pickAngles(count: number): string[] {
-  const shuffled = [...ANGLE_POOL].sort(() => Math.random() - 0.5);
-  const picked: string[] = [];
-  for (let i = 0; i < count; i++) picked.push(shuffled[i % shuffled.length]!);
-  return picked;
-}
+type ContentSlot = ProductSourceSlot | MetaAdsSourceSlot | InstagramSourceSlot | null;
+type SlotKind = "top_ad_ctr" | "top_seller" | "top_instagram" | "top_viewed" | "top_story_or_reel" | "top_recent_launch";
 
 function buildScheduledDates(startDate: string, count: number): string[] {
   const [startYear, startMonth, startDay] = startDate.split("-").map(Number) as [number, number, number];
@@ -123,168 +137,359 @@ function buildScheduledDates(startDate: string, count: number): string[] {
   return dates;
 }
 
-function isSunday(dateStr: string): boolean {
-  const [y, m, d] = dateStr.split("-").map(Number) as [number, number, number];
-  return new Date(y, m - 1, d).getDay() === 0;
-}
+const SLOT_KINDS: SlotKind[] = ["top_ad_ctr", "top_seller", "top_instagram", "top_viewed", "top_story_or_reel", "top_recent_launch"];
 
-const NON_COUPON_KINDS: NonCouponSlotKind[] = ["top_seller_1", "top_seller_2", "top_visited", "top_post_1", "top_post_2", "top_reel"];
-
-/** Domingo (sempre existe exatamente 1 numa janela de 7 dias corridos) sempre vira cupom. As
- *  outras datas recebem as 6 fontes reais em ordem embaralhada a cada geração — nunca a mesma
- *  sequência fixa toda semana. No modo "dia" (count=1, não-domingo) isso naturalmente sorteia 1
- *  das 6 fontes aleatoriamente, sem correspondência fixa dia-da-semana -> fonte. */
+/** As seis fontes entram uma vez cada no calendário, em ordem embaralhada. */
 function assignSlotKinds(scheduledDates: string[]): SlotKind[] {
-  const shuffled = [...NON_COUPON_KINDS].sort(() => Math.random() - 0.5);
-  let ptr = 0;
-  return scheduledDates.map((d) => {
-    if (isSunday(d)) return "coupon";
-    const kind = shuffled[ptr % shuffled.length]!;
-    ptr++;
-    return kind;
-  });
+  return [...SLOT_KINDS].sort(() => Math.random() - 0.5).slice(0, scheduledDates.length);
 }
 
 function dateOnlyToSaoPauloISO(dateStr: string): string {
   return new Date(`${dateStr}T00:00:00-03:00`).toISOString();
 }
 
-/** "Semana anterior" = 7 dias corridos antes de `startDate` (data de início do lote). */
-function previousWeekRange(startDate: string): { sinceDate: string; untilDate: string; sinceISO: string; untilISO: string } {
+/** "Semana anterior" = os 7 dias corridos completos anteriores a `startDate`. */
+function previousWeekRange(startDate: string): { sinceDate: string; endDate: string; untilDate: string; sinceISO: string; untilISO: string } {
   const [y, m, d] = startDate.split("-").map(Number) as [number, number, number];
   const fmt = (dt: Date) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
   const untilDate = fmt(new Date(y, m - 1, d));
   const sinceDate = fmt(new Date(y, m - 1, d - 7));
-  return { sinceDate, untilDate, sinceISO: dateOnlyToSaoPauloISO(sinceDate), untilISO: dateOnlyToSaoPauloISO(untilDate) };
+  const endDate = fmt(new Date(y, m - 1, d - 1));
+  return { sinceDate, endDate, untilDate, sinceISO: dateOnlyToSaoPauloISO(sinceDate), untilISO: dateOnlyToSaoPauloISO(untilDate) };
 }
 
 type WeeklySignals = {
-  topSeller1: ProductSourceSlot | null;
-  topSeller2: ProductSourceSlot | null;
-  topVisited: ProductSourceSlot | null;
-  topPost1: InstagramSourceSlot | null;
-  topPost2: InstagramSourceSlot | null;
-  topReel: InstagramSourceSlot | null;
+  topAdCtr: MetaAdsSourceSlot | null;
+  topSeller: ProductSourceSlot | null;
+  topInstagram: InstagramSourceSlot | null;
+  topViewed: ProductSourceSlot | null;
+  topStoryOrReel: InstagramSourceSlot | null;
+  topRecentLaunch: ProductSourceSlot | null;
 };
 
-/** Junta os sinais reais da semana anterior a `startDate`: 2 produtos mais vendidos, 1 produto
- *  mais acessado (nunca coincidindo com os 2 vendidos), 2 posts + 1 reels de mais engajamento do
- *  Instagram. Cada sub-busca tem fallback isolado — uma fonte falhando não derruba as outras. */
-async function gatherWeeklySignals(startDate: string): Promise<WeeklySignals> {
-  const { sinceDate, untilDate, sinceISO, untilISO } = previousWeekRange(startDate);
+function normalizedProductId(value: string): string {
+  return value.replace(/^gid:\/\/shopify\/Product\//, "").trim();
+}
 
-  const { getBestSellingProducts, getMostVisitedProducts } = await import("./shopify-products.server");
-  const { getShopifyProductsByIds } = await import("./shopify.server");
-  const { getInstagramTopContentInRange } = await import("./instagram.server");
+function normalizedTitle(value: string): string {
+  return value.trim().toLocaleLowerCase("pt-BR");
+}
 
-  const [bestSellers, igRes] = await Promise.all([
-    getBestSellingProducts({ startISO: sinceISO, endISO: untilISO, limit: 2 }).catch(() => [] as BestSellingProduct[]),
-    getInstagramTopContentInRange(sinceISO, untilISO).catch(() => ({ success: false as const, error: "" })),
-  ]);
+function productMedia(detail: ShopifyProductDetail): SlotMedia | null {
+  return detail.featuredImageUrl
+    ? { sourceUrl: detail.featuredImageUrl, previewImageUrl: detail.featuredImageUrl, preferredType: "image" }
+    : null;
+}
 
-  const bestSellerIds = bestSellers.map((p) => p.productId).filter((id): id is string => !!id);
-  const [productDetails, mostVisited] = await Promise.all([
-    getShopifyProductsByIds(bestSellerIds).catch(() => new Map()),
-    getMostVisitedProducts({ sinceDate, untilDate, excludeProductIds: bestSellerIds, limit: 1 }).catch(() => []),
-  ]);
-
-  function toProductSlot(kind: "top_seller_1" | "top_seller_2", seller: BestSellingProduct | undefined): ProductSourceSlot | null {
-    if (!seller) return null;
-    const detail = seller.productId ? productDetails.get(seller.productId) : undefined;
-    return {
-      kind,
-      title: detail?.title ?? seller.title,
-      description: detail?.description ?? null,
-      imageUrl: detail?.featuredImageUrl ?? null,
-      productUrl: detail?.productUrl ?? null,
-    };
+function instagramMedia(item: InstagramMedia): SlotMedia | null {
+  const isVideo = item.mediaType === "VIDEO" || item.productType === "REELS";
+  if (isVideo && item.mediaUrl) {
+    return { sourceUrl: item.mediaUrl, previewImageUrl: item.thumbnailUrl, preferredType: "video_note" };
   }
+  const imageUrl = item.mediaUrl ?? item.thumbnailUrl;
+  return imageUrl ? { sourceUrl: imageUrl, previewImageUrl: item.thumbnailUrl ?? imageUrl, preferredType: "image" } : null;
+}
 
-  const topSeller1 = toProductSlot("top_seller_1", bestSellers[0]);
-  const topSeller2 = toProductSlot("top_seller_2", bestSellers[1]);
-  const visited = mostVisited[0];
-  const topVisited: ProductSourceSlot | null = visited
-    ? { kind: "top_visited", title: visited.detail.title, description: visited.detail.description, imageUrl: visited.detail.featuredImageUrl, productUrl: visited.detail.productUrl }
+function findRecentProductForGaRow(row: Ga4Record, products: ShopifyProductDetail[]): ShopifyProductDetail | null {
+  const itemId = normalizedProductId(String(row.itemId ?? ""));
+  const itemName = normalizedTitle(String(row.itemName ?? ""));
+  const handle = String(row.productHandle ?? "").trim().toLocaleLowerCase("pt-BR");
+  return products.find((product) => handle && product.handle.toLocaleLowerCase("pt-BR") === handle)
+    ?? products.find((product) => normalizedProductId(product.id) === itemId)
+    ?? products.find((product) => itemName && normalizedTitle(product.title) === itemName)
+    ?? null;
+}
+
+async function resolveGa4Product(row: Ga4Record, recentProducts: ShopifyProductDetail[]): Promise<ShopifyProductDetail | null> {
+  const recent = findRecentProductForGaRow(row, recentProducts);
+  if (recent) return recent;
+
+  const { getShopifyProductByHandle, getShopifyProductById, getShopifyProductByTitle } = await import("./shopify.server");
+  const handle = String(row.productHandle ?? "").trim();
+  if (handle) {
+    const byHandle = await getShopifyProductByHandle(handle);
+    if (byHandle) return byHandle;
+  }
+  const rawId = String(row.itemId ?? "").trim();
+  const numericId = normalizedProductId(rawId);
+  if (/^\d+$/.test(numericId)) {
+    const byId = await getShopifyProductById(`gid://shopify/Product/${numericId}`);
+    if (byId) return byId;
+  } else if (rawId.startsWith("gid://shopify/Product/")) {
+    const byId = await getShopifyProductById(rawId);
+    if (byId) return byId;
+  }
+  return getShopifyProductByTitle(String(row.itemName ?? ""));
+}
+
+function ga4Views(row: Ga4Record): number {
+  return Number(row.itemsViewed ?? row.itemViewEvents ?? row.screenPageViews ?? 0);
+}
+
+function shiftIsoDate(date: string, days: number): string {
+  const parsed = new Date(`${date}T12:00:00Z`);
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  return parsed.toISOString().slice(0, 10);
+}
+
+async function firstResolvableViewedProduct(
+  rows: Ga4Record[],
+  recentProducts: ShopifyProductDetail[],
+  excludedIds: Set<string>,
+): Promise<{ detail: ShopifyProductDetail; row: Ga4Record } | null> {
+  for (const row of rows) {
+    const detail = await resolveGa4Product(row, recentProducts);
+    if (!detail || excludedIds.has(normalizedProductId(detail.id)) || !productMedia(detail)) continue;
+    return { detail, row };
+  }
+  return null;
+}
+
+/** Junta as seis fontes reais: Ads por CTR de link, Shopify por vendas, Instagram por resultado,
+ * GA4 por visualização, Story ativo (ou Reels) e lançamento recente mais visto. */
+async function gatherWeeklySignals(startDate: string): Promise<WeeklySignals> {
+  const { sinceDate, endDate, sinceISO, untilISO } = previousWeekRange(startDate);
+  const { getBestSellingProducts } = await import("./shopify-products.server");
+  const { getShopifyProductsByIds, getShopifyRecentProducts, getShopifyProductByTitle } = await import("./shopify.server");
+  const { getInstagramTopContentInRange, getInstagramActiveStories } = await import("./instagram.server");
+  const { getMetaAdsTopCtrCreativeInRange } = await import("./meta-ads.server");
+  const { getGa4MostViewedProducts } = await import("./google-analytics.server");
+
+  const bestSellers = await getBestSellingProducts({ startISO: sinceISO, endISO: untilISO, limit: 1 }).catch(() => [] as BestSellingProduct[]);
+  const bestSellerIds = bestSellers.map((product) => product.productId).filter((id): id is string => Boolean(id));
+  const [productDetails, gaRows, recentProducts, igResult, storiesResult, adsResult] = await Promise.all([
+    getShopifyProductsByIds(bestSellerIds).catch(() => new Map<string, ShopifyProductDetail>()),
+    getGa4MostViewedProducts({ startDate: sinceDate, endDate }, bestSellerIds).catch(() => [] as Ga4Record[]),
+    getShopifyRecentProducts(20).catch(() => [] as ShopifyProductDetail[]),
+    getInstagramTopContentInRange(sinceISO, untilISO).catch(() => ({ success: false as const, error: "" })),
+    getInstagramActiveStories().catch(() => ({ success: false as const, error: "" })),
+    getMetaAdsTopCtrCreativeInRange(sinceDate, endDate, 100).catch(() => ({ success: false as const, error: "" })),
+  ]);
+
+  const seller = bestSellers[0];
+  const sellerDetail = seller
+    ? (seller.productId ? productDetails.get(seller.productId) : null) ?? await getShopifyProductByTitle(seller.title)
+    : null;
+  const sellerMedia = sellerDetail ? productMedia(sellerDetail) : null;
+  const topSeller: ProductSourceSlot | null = seller && sellerDetail && sellerMedia
+    ? { kind: "top_seller", title: sellerDetail.title, description: sellerDetail.description, productUrl: sellerDetail.productUrl, productId: sellerDetail.id, views: null, launchRankedByViews: false, media: sellerMedia }
     : null;
 
-  const media = igRes.success ? igRes.media : [];
-  const nonVideo = media.filter((m) => m.mediaType === "IMAGE" || m.mediaType === "CAROUSEL_ALBUM").sort((a, b) => b.totalInteractions - a.totalInteractions);
-  const reels = media.filter((m) => m.mediaType === "VIDEO" || m.productType === "REELS").sort((a, b) => b.totalInteractions - a.totalInteractions);
-
-  function toIgSlot(kind: "top_post_1" | "top_post_2" | "top_reel", m: InstagramMedia | undefined): InstagramSourceSlot | null {
-    if (!m) return null;
-    return { kind, caption: m.caption, imageUrl: m.thumbnailUrl, permalink: m.permalink };
+  const excludedIds = new Set(bestSellerIds.map(normalizedProductId));
+  if (sellerDetail) excludedIds.add(normalizedProductId(sellerDetail.id));
+  let viewRowsForSelection = gaRows;
+  let viewPeriodLabel = "semana anterior";
+  let viewed = await firstResolvableViewedProduct(viewRowsForSelection, recentProducts, excludedIds);
+  if (!viewed) {
+    // A propriedade pode ter sido ligada recentemente ou não ter `view_item` na semana exata.
+    // Mantemos a fonte GA4 e ampliamos somente até 30 dias, informando a janela usada no card.
+    viewRowsForSelection = await getGa4MostViewedProducts(
+      { startDate: shiftIsoDate(endDate, -29), endDate },
+      bestSellerIds,
+    ).catch(() => [] as Ga4Record[]);
+    viewPeriodLabel = "últimos 30 dias (fallback sem dado resolvível na semana anterior)";
+    viewed = await firstResolvableViewedProduct(viewRowsForSelection, recentProducts, excludedIds);
   }
+  const viewedDetail = viewed?.detail ?? null;
+  const viewedRow = viewed?.row ?? null;
+  const viewedMedia = viewedDetail ? productMedia(viewedDetail) : null;
+  const topViewed: ProductSourceSlot | null = viewedDetail && viewedRow && viewedMedia
+    ? { kind: "top_viewed", title: viewedDetail.title, description: viewedDetail.description, productUrl: viewedDetail.productUrl, productId: viewedDetail.id, views: ga4Views(viewedRow), periodLabel: viewPeriodLabel, launchRankedByViews: false, media: viewedMedia }
+    : null;
+  if (viewedDetail) excludedIds.add(normalizedProductId(viewedDetail.id));
 
-  return {
-    topSeller1,
-    topSeller2,
-    topVisited,
-    topPost1: toIgSlot("top_post_1", nonVideo[0]),
-    topPost2: toIgSlot("top_post_2", nonVideo[1]),
-    topReel: toIgSlot("top_reel", reels[0]),
-  };
+  let launchDetail: ShopifyProductDetail | null = null;
+  let launchViews: number | null = null;
+  for (const row of viewRowsForSelection) {
+    const candidate = findRecentProductForGaRow(row, recentProducts);
+    if (!candidate || excludedIds.has(normalizedProductId(candidate.id)) || !productMedia(candidate)) continue;
+    launchDetail = candidate;
+    launchViews = ga4Views(row);
+    break;
+  }
+  if (!launchDetail) {
+    launchDetail = recentProducts.find((product) => !excludedIds.has(normalizedProductId(product.id)) && Boolean(productMedia(product))) ?? null;
+  }
+  const launchMedia = launchDetail ? productMedia(launchDetail) : null;
+  const topRecentLaunch: ProductSourceSlot | null = launchDetail && launchMedia
+    ? { kind: "top_recent_launch", title: launchDetail.title, description: launchDetail.description, productUrl: launchDetail.productUrl, productId: launchDetail.id, views: launchViews, launchRankedByViews: launchViews !== null, media: launchMedia }
+    : null;
+
+  const ad = adsResult.success ? adsResult.creative : null;
+  const adSourceUrl = ad?.mediaUrl ?? ad?.thumbnailUrl ?? null;
+  const topAdCtr: MetaAdsSourceSlot | null = ad && adSourceUrl
+    ? {
+        kind: "top_ad_ctr",
+        name: ad.name,
+        impressions: ad.impressions,
+        ctr: ad.ctrMetric === "link" ? ad.ctrLink : ad.ctrAll,
+        ctrMetric: ad.ctrMetric,
+        destinationUrl: ad.destinationUrl,
+        media: { sourceUrl: adSourceUrl, previewImageUrl: ad.thumbnailUrl, preferredType: ad.mediaType === "video" ? "video_note" : "image" },
+      }
+    : null;
+
+  const instagramItems = igResult.success ? igResult.media : [];
+  const feedWinner = instagramItems
+    .filter((item) => item.mediaType === "IMAGE" || item.mediaType === "CAROUSEL_ALBUM")
+    .sort((a, b) => b.totalInteractions - a.totalInteractions || b.reach - a.reach)
+    .find((item) => Boolean(instagramMedia(item)));
+  const feedMedia = feedWinner ? instagramMedia(feedWinner) : null;
+  const topInstagram: InstagramSourceSlot | null = feedWinner && feedMedia
+    ? { kind: "top_instagram", caption: feedWinner.caption, permalink: feedWinner.permalink, resultLabel: "interações", resultValue: feedWinner.totalInteractions, media: feedMedia }
+    : null;
+
+  const activeStory = storiesResult.success ? storiesResult.media.find((item) => Boolean(instagramMedia(item))) : undefined;
+  const bestReel = instagramItems
+    .filter((item) => item.mediaType === "VIDEO" || item.productType === "REELS")
+    .sort((a, b) => b.views - a.views || b.reach - a.reach || b.totalInteractions - a.totalInteractions)
+    .find((item) => Boolean(instagramMedia(item)));
+  const storyOrReel = activeStory ?? bestReel;
+  const storyOrReelMedia = storyOrReel ? instagramMedia(storyOrReel) : null;
+  const topStoryOrReel: InstagramSourceSlot | null = storyOrReel && storyOrReelMedia
+    ? {
+        kind: "top_story_or_reel",
+        caption: storyOrReel.caption,
+        permalink: storyOrReel.permalink,
+        resultLabel: activeStory ? "visualizações do Story ativo" : "resultado do Reels da semana anterior",
+        resultValue: activeStory ? activeStory.views || activeStory.reach : bestReel?.views || bestReel?.reach || bestReel?.totalInteractions || 0,
+        media: storyOrReelMedia,
+      }
+    : null;
+
+  return { topAdCtr, topSeller, topInstagram, topViewed, topStoryOrReel, topRecentLaunch };
 }
 
-function slotForKind(kind: NonCouponSlotKind, signals: WeeklySignals): ContentSlot {
+function slotForKind(kind: SlotKind, signals: WeeklySignals): ContentSlot {
   switch (kind) {
-    case "top_seller_1": return signals.topSeller1;
-    case "top_seller_2": return signals.topSeller2;
-    case "top_visited": return signals.topVisited;
-    case "top_post_1": return signals.topPost1;
-    case "top_post_2": return signals.topPost2;
-    case "top_reel": return signals.topReel;
+    case "top_ad_ctr": return signals.topAdCtr;
+    case "top_seller": return signals.topSeller;
+    case "top_instagram": return signals.topInstagram;
+    case "top_viewed": return signals.topViewed;
+    case "top_story_or_reel": return signals.topStoryOrReel;
+    case "top_recent_launch": return signals.topRecentLaunch;
   }
 }
 
-function slotDescription(slot: ContentSlot): string {
-  if (!slot) return "Fonte: NENHUM dado disponível — fale da marca/loja em geral, gatilho mental sem citar produto específico";
+function sourceKind(slot: ContentSlot): AiSourceKind {
+  return slot?.kind ?? "none";
+}
+
+function sourceVerifiedFacts(slot: ContentSlot): string[] {
+  if (!slot) return ["Nenhuma fonte comercial específica estava disponível; fale apenas da marca sem inventar produto ou oferta."];
   switch (slot.kind) {
-    case "top_seller_1":
-      return `Fonte: produto #1 mais VENDIDO na semana passada — "${slot.title}"${slot.description ? `. Descrição real do produto: "${slot.description.slice(0, 300)}"` : ""}`;
-    case "top_seller_2":
-      return `Fonte: produto #2 mais VENDIDO na semana passada — "${slot.title}"${slot.description ? `. Descrição real do produto: "${slot.description.slice(0, 300)}"` : ""}`;
-    case "top_visited":
-      return `Fonte: produto mais ACESSADO no site na semana passada (bastante gente entrou pra ver) — "${slot.title}"${slot.description ? `. Descrição real do produto: "${slot.description.slice(0, 300)}"` : ""}`;
-    case "top_post_1":
-    case "top_post_2":
-      return `Fonte: post do Instagram com mais engajamento na semana passada — legenda original: "${slot.caption ?? "(sem legenda)"}"`;
-    case "top_reel":
-      return `Fonte: Reels com mais engajamento na semana passada — legenda original: "${slot.caption ?? "(sem legenda)"}"`;
-    case "coupon":
-      return `Fonte: CUPOM DE DESCONTO exclusivo pro Grupo VIP — código "${slot.code}", ${slot.percentageLabel} OFF, válido só até ${slot.expiresAtLabel}. Use EXATAMENTE esses dados — nunca invente nem altere código, percentual ou validade.`;
+    case "top_ad_ctr":
+      return [
+        `O anúncio "${slot.name}" teve o melhor CTR ${slot.ctrMetric === "link" ? "de link" : "geral"} elegível da semana anterior (${(slot.ctr * 100).toFixed(2)}%, ${slot.impressions} impressões).`,
+      ];
+    case "top_seller":
+      return [
+        `"${slot.title}" foi o produto mais vendido na semana anterior.`,
+        ...(slot.description ? [`Descrição cadastrada: ${slot.description.slice(0, 300)}`] : []),
+      ];
+    case "top_viewed":
+      return [
+        `"${slot.title}" foi o produto mais visualizado no GA4 em ${slot.periodLabel ?? "semana anterior"} entre os elegíveis, sem repetir o mais vendido${slot.views !== null ? ` (${slot.views} visualizações registradas)` : ""}.`,
+        ...(slot.description ? [`Descrição cadastrada: ${slot.description.slice(0, 300)}`] : []),
+      ];
+    case "top_recent_launch":
+      return [
+        slot.launchRankedByViews
+          ? `"${slot.title}" foi o mais visualizado no GA4 entre os 20 produtos ativos mais recentes${slot.views !== null ? ` (${slot.views} visualizações registradas)` : ""}.`
+          : `"${slot.title}" está entre os 20 produtos ativos cadastrados mais recentemente na Shopify.`,
+        ...(slot.description ? [`Descrição cadastrada: ${slot.description.slice(0, 300)}`] : []),
+      ];
+    case "top_instagram":
+      return [
+        `A publicação de imagem teve o melhor resultado entre os posts do Instagram da semana anterior (${slot.resultValue} ${slot.resultLabel}).`,
+        ...(slot.caption ? [`Legenda original: ${slot.caption.slice(0, 500)}`] : []),
+      ];
+    case "top_story_or_reel":
+      return [
+        `O conteúdo selecionado teve o melhor ${slot.resultLabel}${slot.resultValue ? ` (${slot.resultValue})` : ""}. Stories são avaliados somente enquanto estão ativos; sem Story ativo, usa-se o melhor Reels da semana anterior.`,
+        ...(slot.caption ? [`Legenda original: ${slot.caption.slice(0, 500)}`] : []),
+      ];
   }
 }
 
-function buildBatchPrompt(ctx: SignalsContext, count: number, angles: string[]): string {
-  return `Você é um copywriter de e-commerce especialista em WhatsApp pra grupos (moda feminina, loja "Mania de Mulher"). Escreva ${count} mensage${count > 1 ? "ns" : "m"} DIFERENTE${count > 1 ? "S" : ""} pra disparar em grupos de WhatsApp, uma por dia.
+function sourceSummary(slot: ContentSlot): string {
+  if (!slot) return "Marca em geral, sem fonte comercial específica.";
+  switch (slot.kind) {
+    case "top_ad_ctr": return `Anúncio com melhor CTR ${slot.ctrMetric === "link" ? "de link" : "geral"}: ${slot.name}.`;
+    case "top_seller": return `Produto mais vendido: ${slot.title}.`;
+    case "top_instagram": return "Publicação de imagem com melhor resultado no Instagram.";
+    case "top_viewed": return `Produto mais visualizado no GA4 em ${slot.periodLabel ?? "semana anterior"}, sem repetir o mais vendido: ${slot.title}.`;
+    case "top_story_or_reel": return slot.resultLabel.includes("Story") ? "Story ativo mais visualizado." : "Melhor Reels da semana anterior (fallback sem Story ativo).";
+    case "top_recent_launch": return `Lançamento recente${slot.launchRankedByViews ? " mais visualizado" : ""}: ${slot.title}.`;
+  }
+}
 
-CONFIGURAÇÃO OBRIGATÓRIA DE CADA MENSAGEM (mensagem 1 = item 1 do array JSON, etc — siga essa ordem e essa atribuição à risca, nunca troque):
-${angles.map((a, i) => `${i + 1}. Ângulo: ${a} — ${slotDescription(ctx.slots[i] ?? null)}`).join("\n")}
+function expectedLink(slot: ContentSlot): { type: "instagram" | "site" | "none"; url: string | null } {
+  if (!slot) return { type: "none", url: null };
+  if (slot.kind === "top_instagram" || slot.kind === "top_story_or_reel") {
+    return slot.permalink ? { type: "instagram", url: slot.permalink } : { type: "none", url: null };
+  }
+  if (slot.kind === "top_ad_ctr") {
+    return slot.destinationUrl ? { type: "site", url: slot.destinationUrl } : { type: "none", url: null };
+  }
+  if (slot.kind === "top_seller" || slot.kind === "top_viewed" || slot.kind === "top_recent_launch") {
+    return slot.productUrl ? { type: "site", url: slot.productUrl } : { type: "none", url: null };
+  }
+  return { type: "none", url: null };
+}
 
-REGRAS OBRIGATÓRIAS:
-- Siga o ângulo E a fonte designada de cada mensagem à risca — é isso que garante que o lote não saia parecido, e que gerar de novo não volte com as mesmas mensagens de antes.
-- Use gatilhos mentais de verdade (escassez, urgência, prova social, curiosidade, benefício claro) — sem exagero forçado, sem soar robótico.
-- Quando a fonte for um produto ou um cupom, seja CONCRETO (cite o nome do produto/o que o torna especial, ou o código e percentual exato do cupom) em vez de frases vagas tipo "nossos acessórios" que servem pra qualquer loja. Quando a fonte for "nenhum dado disponível", tudo bem ser mais genérico de marca.
-- Máximo 6 linhas por mensagem, emoji com moderação.
-- Se a fonte for um post/Reels do Instagram, marque "link_type":"instagram". Se a fonte for um produto (vendido ou acessado), marque "link_type":"site". Se a fonte for cupom ou nenhum dado disponível, marque "link_type":"none" (o cupom já leva o código escrito na própria mensagem, não precisa de link).
-- NUNCA escreva a URL literal no texto — só o convite claro ("responde aqui", "corre no link abaixo", "olha nosso Instagram") — o link real é adicionado depois, fora do seu texto.
-- Se a fonte for CUPOM: use exatamente o código, percentual e validade fornecidos — NUNCA invente nem altere esses dados. Deixe claro que é um benefício exclusivo pro Grupo VIP.
-- Imagem: se a fonte tiver uma imagem real anexada (produto ou post/Reels, rotulada abaixo), marque "use_image" como "product" (produto vendido/acessado) ou "post" (post/Reels do Instagram) — a imagem certa é resolvida automaticamente pela fonte atribuída, você só escolhe o TIPO, não precisa (nem consegue) escolher qual foto. Se a fonte não tiver imagem (cupom, ou nenhum dado disponível), use "generate" (descrevendo no image_prompt algo condizente com a mensagem) ou "none".
+function allowedCta(slot: ContentSlot): string {
+  const link = expectedLink(slot);
+  if (link.type === "instagram") return "Convidar a ver a publicação no Instagram.";
+  if (link.type === "site") return "Convidar a ver o produto no site.";
+  return "Convidar a responder ou interagir no grupo.";
+}
 
-${ctx.playbook ? `O QUE JÁ SABEMOS QUE FUNCIONA (aprendizado de mensagens anteriores — use como direção estratégica, NÃO copie frases):\n${ctx.playbook}\n` : ""}
-${ctx.recentTexts.length > 0 ? `MENSAGENS JÁ ENVIADAS RECENTEMENTE (NÃO repita a estrutura/abertura destas):\n${ctx.recentTexts.map((t, i) => `${i + 1}. ${t}`).join("\n")}\n` : ""}
+function weekdayLabel(date: string): string {
+  return new Intl.DateTimeFormat("pt-BR", { weekday: "long", timeZone: TZ }).format(new Date(`${date}T12:00:00-03:00`));
+}
 
-Responda em JSON estrito, um array com exatamente ${count} item(ns):
-{ "items": [ { "message_text": string, "use_image": "product"|"post"|"generate"|"none", "image_prompt": string|null, "link_type": "instagram"|"site"|"none", "source_summary": string (1 frase curta) } ] }`;
+async function loadCalendarContext(scheduledDates: string[]): Promise<Map<string, Array<{ title: string; description: string | null; category: string }>>> {
+  const supabaseAdmin = await admin();
+  const { data } = await (supabaseAdmin.from("crm_events" as any) as any)
+    .select("event_date, title, description, category")
+    .gte("event_date", scheduledDates[0]!)
+    .lte("event_date", scheduledDates[scheduledDates.length - 1]!)
+    .order("event_date", { ascending: true });
+  const byDate = new Map<string, Array<{ title: string; description: string | null; category: string }>>();
+  for (const event of (data ?? []) as any[]) {
+    const date = String(event.event_date);
+    const list = byDate.get(date) ?? [];
+    list.push({ title: String(event.title), description: event.description ?? null, category: String(event.category) });
+    byDate.set(date, list);
+  }
+  return byDate;
+}
+
+const draftItemSchema = z.object({
+  index: z.number().int().positive(),
+  message_text: z.string().trim().min(1).max(500).refine((text) => text.split(/\r?\n/).length <= 6, "Mensagem deve ter no máximo 6 linhas."),
+  facts_used: z.array(z.string().trim().min(1).max(300)).max(12),
+  risk_flags: z.array(z.string().trim().min(1).max(300)).max(8),
+  image_prompt: z.string().trim().min(1).max(600).nullable(),
+});
+
+function parseDraftItems(content: string, count: number): DraftItem[] {
+  const parsed = z.object({ items: z.array(draftItemSchema).length(count) }).parse(JSON.parse(content));
+  const indexes = parsed.items.map((item) => item.index).sort((a, b) => a - b);
+  const expected = Array.from({ length: count }, (_, index) => index + 1);
+  if (indexes.some((value, index) => value !== expected[index])) {
+    throw new Error("A IA não preservou os índices do plano de conteúdo.");
+  }
+  return parsed.items.sort((a, b) => a.index - b.index);
 }
 
 async function requestBatchCompletion(
   apiKey: string,
   model: string,
-  ctx: SignalsContext,
+  systemPrompt: string,
+  userPrompt: string,
   count: number,
-  angles: string[],
   imageParts: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>,
 ): Promise<DraftItem[]> {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -292,11 +497,12 @@ async function requestBatchCompletion(
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model,
-      temperature: 1,
+      temperature: 0.8,
+      max_tokens: count > 1 ? 3000 : 900,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: "Você é um copywriter de e-commerce sênior, especialista em variar tom e estrutura entre mensagens. Responda sempre em JSON válido." },
-        { role: "user", content: [{ type: "text", text: buildBatchPrompt(ctx, count, angles) }, ...imageParts] },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: [{ type: "text", text: userPrompt }, ...imageParts] },
       ],
     }),
   });
@@ -315,220 +521,271 @@ async function requestBatchCompletion(
     const reason = choice?.message?.refusal ? `recusa: ${choice.message.refusal}` : `finish_reason: ${choice?.finish_reason ?? "desconhecido"}`;
     throw new Error(`OpenAI (${model}) não retornou conteúdo (${reason}).`);
   }
-  const parsed = JSON.parse(content) as { items: DraftItem[] };
-  if (!Array.isArray(parsed.items) || parsed.items.length === 0) throw new Error(`OpenAI (${model}) não retornou nenhum item.`);
-  return parsed.items;
+  return parseDraftItems(content, count);
 }
 
-// gpt-4o (não o -mini) é o preferido pra essa geração especificamente: modelo menor tende a
-// convergir em vocabulário/fraseado parecidos entre chamadas separadas mesmo com o mesmo ângulo/
-// temperature alta — reportado pelo usuário como "continua repetindo". Mas se essa API key não
-// tiver acesso ao gpt-4o (ou tiver algum problema pontual), cai pro mini em vez de quebrar a
-// geração inteira — melhor um lote menos variado do que nenhum lote.
 const PREFERRED_MODEL = "gpt-4o";
 const FALLBACK_MODEL = "gpt-4o-mini";
 
 async function callOpenAiBatch(
   apiKey: string,
-  ctx: SignalsContext,
+  slots: ContentSlot[],
   count: number,
-): Promise<{ items: DraftItem[]; slotImageDataUris: (string | null)[] }> {
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<{ items: DraftItem[]; slotImageDataUris: (string | null)[]; model: string }> {
   const slotImageDataUris = await Promise.all(
-    ctx.slots.map((slot) => {
-      if (!slot || slot.kind === "coupon") return Promise.resolve(null);
-      return slot.imageUrl ? fetchImageAsDataUri(slot.imageUrl) : Promise.resolve(null);
+    slots.map((slot) => {
+      if (!slot) return Promise.resolve(null);
+      return slot.media.previewImageUrl ? fetchImageAsDataUri(slot.media.previewImageUrl) : Promise.resolve(null);
     }),
   );
 
   const imageParts: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }> = [];
-  ctx.slots.forEach((slot, i) => {
-    const dataUri = slotImageDataUris[i];
-    if (!dataUri || !slot || slot.kind === "coupon") return;
-    const isInstagramSlot = slot.kind === "top_post_1" || slot.kind === "top_post_2" || slot.kind === "top_reel";
-    const label = isInstagramSlot ? "post do Instagram" : (slot as ProductSourceSlot).title;
-    imageParts.push({ type: "text", text: `Imagem da mensagem ${i + 1} (${label}):` });
+  slots.forEach((slot, index) => {
+    const dataUri = slotImageDataUris[index];
+    if (!dataUri || !slot) return;
+    imageParts.push({ type: "text", text: `Imagem real da mensagem ${index + 1} — ${sourceSummary(slot)}` });
     imageParts.push({ type: "image_url", image_url: { url: dataUri } });
   });
 
-  const angles = pickAngles(count);
-
-  let model = PREFERRED_MODEL;
-  let items: DraftItem[];
   try {
-    items = await requestBatchCompletion(apiKey, model, ctx, count, angles, imageParts);
-  } catch (error) {
-    console.error(`callOpenAiBatch: falha no modelo preferido (${PREFERRED_MODEL}), caindo pro fallback (${FALLBACK_MODEL}):`, error);
-    model = FALLBACK_MODEL;
-    items = await requestBatchCompletion(apiKey, model, ctx, count, angles, imageParts);
+    const items = await requestBatchCompletion(apiKey, PREFERRED_MODEL, systemPrompt, userPrompt, count, imageParts);
+    return { items, slotImageDataUris, model: PREFERRED_MODEL };
+  } catch (preferredError) {
+    console.error(`callOpenAiBatch: falha no modelo preferido (${PREFERRED_MODEL}), usando ${FALLBACK_MODEL}:`, preferredError);
+    const items = await requestBatchCompletion(apiKey, FALLBACK_MODEL, systemPrompt, userPrompt, count, imageParts);
+    return { items, slotImageDataUris, model: FALLBACK_MODEL };
   }
-
-  // O modelo nem sempre respeita "exatamente N itens" — já reproduzido em produção (pediu 7,
-  // voltou 6, e o dia que sobrou some sem nenhum aviso). Tenta de novo 1x com o mesmo pedido antes
-  // de aceitar um lote incompleto.
-  if (items.length !== count) {
-    try {
-      const retry = await requestBatchCompletion(apiKey, model, ctx, count, angles, imageParts);
-      if (retry.length === count) items = retry;
-      else if (retry.length > items.length) items = retry;
-    } catch {
-      // mantém o resultado da primeira tentativa se a segunda falhar
-    }
-  }
-
-  return { items, slotImageDataUris };
 }
 
+
+
 export type BatchMode = "day" | "week";
+export type FunnelStage = "descoberta" | "consideracao" | "conversao" | "fidelizacao";
 
 export async function generateAiContentBatch(input: {
   campaignId: string;
-  campaignName: string;
   mode: BatchMode;
-  startDate: string; // "YYYY-MM-DD"
-  timeOfDay: string; // "HH:MM"
+  startDate: string;
+  timeOfDay: string;
+  brandName: string;
+  brandVoice: string;
+  audience: string;
+  campaignObjective: string;
+  funnelStage: FunnelStage;
+  prohibitedClaims: string;
 }): Promise<{ success: true; batchId: string; items: ContentQueueItem[] } | { success: false; error: string }> {
+  const scheduleError = validateAiBatchSchedule(input.startDate, input.timeOfDay);
+  if (scheduleError) return { success: false, error: scheduleError };
+
+  const { resolveEnvioCampaignAudience } = await import("./envio-campaigns.server");
+  let audienceContext;
+  try {
+    audienceContext = await resolveEnvioCampaignAudience(input.campaignId);
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Campanha inválida." };
+  }
+  if (audienceContext.groupCount === 0) {
+    return { success: false, error: "A campanha selecionada não possui grupos vinculados." };
+  }
+
   const supabaseAdmin = await admin();
-  const { data: settings } = await supabaseAdmin.from("store_settings").select("openai_api_key, ai_marketing_playbook").order("created_at", { ascending: true }).limit(1).maybeSingle();
+  const { data: settings } = await supabaseAdmin
+    .from("store_settings")
+    .select("openai_api_key, ai_marketing_playbook")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
   const apiKey = (settings as any)?.openai_api_key as string | undefined;
   if (!apiKey) return { success: false, error: "Configure a API key da OpenAI em Configurações antes de usar isso." };
   const playbook = (settings as any)?.ai_marketing_playbook as string | null;
 
-  const count = input.mode === "week" ? 7 : 1;
+  const count = input.mode === "week" ? 6 : 1;
   const scheduledDates = buildScheduledDates(input.startDate, count);
-  const kinds = assignSlotKinds(scheduledDates);
   const batchId = crypto.randomUUID();
-
   const signals = await gatherWeeklySignals(input.startDate);
-
-  const hasAnySignal = !!(signals.topSeller1 || signals.topSeller2 || signals.topVisited || signals.topPost1 || signals.topPost2 || signals.topReel);
-  const hasCouponDay = kinds.includes("coupon");
-  if (!hasAnySignal && !hasCouponDay) {
-    return { success: false, error: "Nenhum produto vendido, produto acessado ou post do Instagram disponível na semana anterior pra basear o conteúdo." };
+  const labels: Record<SlotKind, string> = {
+    top_ad_ctr: "anúncio com melhor CTR",
+    top_seller: "produto mais vendido",
+    top_instagram: "melhor publicação do Instagram",
+    top_viewed: "produto mais visualizado no GA4",
+    top_story_or_reel: "Story ativo ou Reels",
+    top_recent_launch: "lançamento recente",
+  };
+  const availableKinds = SLOT_KINDS.filter((kind) => Boolean(slotForKind(kind, signals)));
+  if (availableKinds.length === 0) {
+    return { success: false, error: "Nenhuma das fontes necessárias retornou um conteúdo com mídia. Verifique Meta Ads, Instagram, Shopify e GA4." };
+  }
+  if (input.mode === "week" && availableKinds.length !== SLOT_KINDS.length) {
+    const missing = SLOT_KINDS.filter((kind) => !availableKinds.includes(kind)).map((kind) => labels[kind]);
+    return { success: false, error: `Não foi possível montar as 6 mensagens com mídia. Fontes ausentes: ${missing.join(", ")}.` };
   }
 
-  // Monta os slots finais dia a dia — o cupom é criado aqui (precisa da scheduledDate exata pra
-  // saber a validade). Se a Shopify falhar, o dia cai pra uma das 6 fontes normais em vez de
-  // travar o lote inteiro.
-  const slots: ContentSlot[] = [];
-  for (let i = 0; i < count; i++) {
-    if (kinds[i] === "coupon") {
-      const { createBatchCoupon } = await import("./ai-coupons.server");
-      const couponRes = await createBatchCoupon({ scheduledDate: scheduledDates[i]!, batchId });
-      if (couponRes.success) {
-        const expiresAtLabel = new Date(couponRes.coupon.endsAt).toLocaleString("pt-BR", {
-          timeZone: TZ,
-          day: "2-digit",
-          month: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-        slots.push({
-          kind: "coupon",
-          code: couponRes.coupon.code,
-          percentageLabel: `${Math.round(couponRes.coupon.percentage * 100)}%`,
-          expiresAtLabel,
-        });
-      } else {
-        console.error(`generateAiContentBatch: falha ao criar cupom Shopify (${couponRes.error}), caindo pra fonte alternativa no dia ${scheduledDates[i]}`);
-        const fallback = NON_COUPON_KINDS.map((k) => slotForKind(k, signals)).find((s) => s !== null) ?? null;
-        slots.push(fallback);
-      }
-    } else {
-      slots.push(slotForKind(kinds[i] as NonCouponSlotKind, signals));
-    }
-  }
+  const kinds = input.mode === "week"
+    ? assignSlotKinds(scheduledDates)
+    : [[...availableKinds].sort(() => Math.random() - 0.5)[0]!];
+  const slots: ContentSlot[] = kinds.map((kind) => slotForKind(kind, signals));
 
-  const since = new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
-  const { data: recent } = await (supabaseAdmin.from("ai_content_queue" as any) as any)
-    .select("content_text")
-    .gte("created_at", since)
-    .order("created_at", { ascending: false })
-    .limit(20);
-  const recentTexts = ((recent ?? []) as any[]).map((r) => r.content_text as string).slice(0, 10);
+  const [{ data: sentRows }, { data: rejectedRows }, calendarEvents] = await Promise.all([
+    (supabaseAdmin.from("ai_content_queue" as any) as any)
+      .select("content_text")
+      .eq("status", "sent")
+      .not("sent_at", "is", null)
+      .order("sent_at", { ascending: false })
+      .limit(10),
+    (supabaseAdmin.from("ai_content_queue" as any) as any)
+      .select("content_text, rejection_reason")
+      .eq("status", "rejected")
+      .order("updated_at", { ascending: false })
+      .limit(10),
+    loadCalendarContext(scheduledDates),
+  ]);
 
-  let batchResult: { items: DraftItem[]; slotImageDataUris: (string | null)[] };
+  const sourceKinds = slots.map(sourceKind);
+  const angles = pickAnglesForSources(sourceKinds);
+  const briefing: AiBatchBriefing = {
+    brandName: input.brandName.trim(),
+    brandVoice: input.brandVoice.trim(),
+    audience: input.audience.trim(),
+    campaignName: audienceContext.campaign.name,
+    campaignDescription: audienceContext.campaign.description,
+    campaignObjective: input.campaignObjective.trim(),
+    funnelStage: input.funnelStage,
+    groupCount: audienceContext.groupCount,
+    prohibitedClaims: input.prohibitedClaims.trim(),
+  };
+  const plans: AiPromptItemPlan[] = scheduledDates.map((date, index) => ({
+    index: index + 1,
+    date,
+    weekday: weekdayLabel(date),
+    commercialEvent: getCommercialDateName(date),
+    crmEvents: calendarEvents.get(date) ?? [],
+    objective: briefing.campaignObjective,
+    angle: angles[index]!,
+    sourceType: sourceKinds[index]!,
+    verifiedFacts: sourceVerifiedFacts(slots[index] ?? null),
+    allowedCta: allowedCta(slots[index] ?? null),
+  }));
+  const sentMessages = ((sentRows ?? []) as any[]).map((row) => ({ text: String(row.content_text).slice(0, 700) }));
+  const rejectedMessages = ((rejectedRows ?? []) as any[]).map((row) => ({
+    text: String(row.content_text).slice(0, 700),
+    reason: row.rejection_reason ? String(row.rejection_reason).slice(0, 300) : "Rejeitada sem motivo informado.",
+  }));
+  const systemPrompt = buildAiContentSystemPrompt();
+  const userPrompt = buildAiContentUserPrompt({ count, briefing, plans, playbook, sentMessages, rejectedMessages });
+  const promptSnapshot = `SYSTEM\n${systemPrompt}\n\nUSER\n${userPrompt}`;
+
+  let batchResult: { items: DraftItem[]; slotImageDataUris: (string | null)[]; model: string };
   try {
-    batchResult = await callOpenAiBatch(apiKey, { slots, playbook, recentTexts }, count);
+    batchResult = await callOpenAiBatch(apiKey, slots, count, systemPrompt, userPrompt);
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Falha ao gerar o lote com a OpenAI." };
   }
 
-  const { uploadEnvioMedia } = await import("./envio-messages.server");
+  const { mirrorRemoteEnvioMedia, uploadEnvioMedia } = await import("./envio-messages.server");
   const items: ContentQueueItem[] = [];
 
-  for (let i = 0; i < batchResult.items.length; i++) {
-    const draft = batchResult.items[i]!;
-    const slot = slots[i] ?? null;
-
-    const slotDataUri = batchResult.slotImageDataUris[i];
+  for (const draft of batchResult.items) {
+    const index = draft.index - 1;
+    const slot = slots[index] ?? null;
+    const slotDataUri = batchResult.slotImageDataUris[index];
     let contentImageUrl: string | null = null;
+    let contentMediaType: "none" | "image" | "video_note" = "none";
     try {
-      if ((draft.use_image === "product" || draft.use_image === "post") && slotDataUri) {
-        contentImageUrl = (await uploadEnvioMedia({ fileName: `ai-batch-${Date.now()}-${i}.jpg`, base64Data: dataUriToBase64(slotDataUri), contentType: dataUriContentType(slotDataUri) })).url;
-      } else if (draft.use_image === "generate" && draft.image_prompt) {
-        const b64 = await generateImageBase64(apiKey, draft.image_prompt);
-        contentImageUrl = (await uploadEnvioMedia({ fileName: `ai-batch-${Date.now()}-${i}.png`, base64Data: b64, contentType: "image/png" })).url;
+      if (!slot) throw new Error("Fonte do conteúdo não encontrada.");
+      try {
+        const mirrored = await mirrorRemoteEnvioMedia({
+          sourceUrl: slot.media.sourceUrl,
+          fileStem: `ai-batch-${slot.kind}-${index}`,
+        });
+        contentImageUrl = mirrored.url;
+        contentMediaType = slot.media.preferredType === "video_note" && mirrored.contentType.startsWith("video/")
+          ? "video_note"
+          : "image";
+      } catch (primaryError) {
+        if (!slotDataUri) throw primaryError;
+        console.error(`Falha ao espelhar a mídia principal do item ${draft.index}; usando a imagem de capa:`, primaryError);
+        contentImageUrl = (await uploadEnvioMedia({
+          fileName: `ai-batch-${Date.now()}-${index}.jpg`,
+          base64Data: dataUriToBase64(slotDataUri),
+          contentType: dataUriContentType(slotDataUri),
+        })).url;
+        contentMediaType = "image";
       }
     } catch (error) {
-      console.error(`generateAiContentBatch: falha ao preparar imagem do item ${i}, seguindo sem imagem:`, error);
+      console.error(`Falha ao preparar a mídia obrigatória do item ${draft.index}:`, error);
+      continue;
     }
 
-    let linkType: "instagram" | "site" | "none" = draft.link_type;
-    let linkUrl: string | null = null;
-    if (linkType === "instagram" && slot && (slot.kind === "top_post_1" || slot.kind === "top_post_2" || slot.kind === "top_reel")) {
-      linkUrl = slot.permalink;
-    } else if (linkType === "site" && slot && (slot.kind === "top_seller_1" || slot.kind === "top_seller_2" || slot.kind === "top_visited")) {
-      linkUrl = slot.productUrl;
-    }
-    if (!linkUrl) linkType = "none";
-
-    const scheduledDateStr = scheduledDates[i]!;
+    const link = expectedLink(slot);
+    const scheduledDate = scheduledDates[index]!;
+    const generationContext = {
+      promptVersion: AI_CONTENT_PROMPT_VERSION,
+      briefing,
+      plan: plans[index],
+      modelAudit: { factsUsed: draft.facts_used, riskFlags: draft.risk_flags },
+      media: { type: contentMediaType, sourceType: slot?.media.preferredType ?? "none" },
+      groupNames: audienceContext.groupNames,
+    };
 
     const { data: inserted, error } = await (supabaseAdmin.from("ai_content_queue" as any) as any)
       .insert({
         batch_id: batchId,
-        campaign_id: input.campaignId,
-        campaign_name: input.campaignName,
+        campaign_id: audienceContext.campaign.id,
+        campaign_name: audienceContext.campaign.name,
         content_text: draft.message_text,
         content_image_url: contentImageUrl,
-        link_type: linkType,
-        link_url: linkUrl,
-        source_summary: draft.source_summary,
-        scheduled_date: scheduledDateStr,
+        content_media_type: contentMediaType,
+        link_type: link.type,
+        link_url: link.url,
+        source_summary: sourceSummary(slot),
+        scheduled_date: scheduledDate,
         time_of_day: input.timeOfDay,
         status: "review",
-      })
+        prompt_version: AI_CONTENT_PROMPT_VERSION,
+        generation_model: batchResult.model,
+        prompt_snapshot: promptSnapshot,
+        generation_context: generationContext,
+      } as never)
       .select("*")
       .single();
 
     if (error || !inserted) {
-      console.error(`generateAiContentBatch: falha ao inserir item ${i}:`, error);
+      console.error(`Falha ao salvar item ${draft.index} do lote:`, error);
       continue;
     }
 
     let row = inserted;
-    if (linkType !== "none" && linkUrl) {
+    if (link.type !== "none" && link.url) {
       const trackedUrl = `${APP_BASE_URL}/r/${row.id}`;
       const finalText = `${draft.message_text}\n\n🔗 ${trackedUrl}`;
       const { data: updated } = await (supabaseAdmin.from("ai_content_queue" as any) as any)
-        .update({ content_text: finalText, updated_at: new Date().toISOString() })
+        .update({ content_text: finalText, updated_at: new Date().toISOString() } as never)
         .eq("id", row.id)
         .select("*")
         .single();
       if (updated) row = updated;
     }
 
-    if (slot?.kind === "coupon") {
-      const { associateCouponWithContentItem } = await import("./ai-coupons.server");
-      await associateCouponWithContentItem(batchId, scheduledDateStr, row.id).catch((e) => console.error("generateAiContentBatch: falha ao associar cupom ao item de fila:", e));
-    }
-
     items.push(mapRow(row));
   }
 
-  if (items.length === 0) return { success: false, error: "Falha ao salvar os itens gerados." };
+  if (items.length !== count) {
+    await (supabaseAdmin.from("ai_content_queue" as any) as any)
+      .update({
+        status: "rejected",
+        rejection_reason: "Lote incompleto por falha de persistência.",
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("batch_id", batchId)
+      .eq("status", "review");
+    return { success: false, error: `O lote ficou incompleto (${items.length}/${count}) e foi descartado com segurança.` };
+  }
+
   return { success: true, batchId, items };
 }
+
 
 export async function listContentQueueBatch(batchId: string): Promise<ContentQueueItem[]> {
   const supabaseAdmin = await admin();
@@ -546,37 +803,91 @@ export async function updateContentQueueItemText(id: string, contentText: string
   return { success: true };
 }
 
-/** candidate e nowSP precisam ficar no MESMO "espaço" de representação (campos locais = hora de
- *  SP) antes de comparar — só converter pra instante UTC real via fromZonedTime no final, senão
- *  a comparação fica errada dependendo do fuso do runtime (mesma pegadinha de sempre com
- *  date-fns-tz, já resolvida direito em computeInitialNextRunAt de ai-send-routines.server.ts). */
-function computeScheduledAt(scheduledDate: string, timeOfDay: string): Date {
-  const [hh, mm] = timeOfDay.split(":").map(Number) as [number, number];
-  const [y, m, d] = scheduledDate.split("-").map(Number) as [number, number, number];
-  const nowSP = toZonedTime(new Date(), TZ);
-  const candidate = new Date(y, m - 1, d, hh, mm, 0, 0);
-  if (candidate <= nowSP) return new Date();
-  return fromZonedTime(candidate, TZ);
+async function restoreReview(id: string, error: string): Promise<void> {
+  const supabaseAdmin = await admin();
+  await (supabaseAdmin.from("ai_content_queue" as any) as any)
+    .update({ status: "review", last_error: error, updated_at: new Date().toISOString() } as never)
+    .eq("id", id)
+    .eq("status", "processing");
 }
 
 async function approveOne(id: string): Promise<{ success: true } | { success: false; error: string }> {
   const supabaseAdmin = await admin();
-  const { data: row } = await (supabaseAdmin.from("ai_content_queue" as any) as any).select("*").eq("id", id).eq("status", "review").maybeSingle();
-  if (!row) return { success: false, error: "Item não encontrado ou já processado." };
+  const now = new Date().toISOString();
+  const { data: row, error: lockError } = await (supabaseAdmin.from("ai_content_queue" as any) as any)
+    .update({ status: "processing", approved_at: now, last_error: null, updated_at: now } as never)
+    .eq("id", id)
+    .eq("status", "review")
+    .select("*")
+    .maybeSingle();
+  if (lockError) return { success: false, error: lockError.message };
+  if (!row) return { success: false, error: "Item não encontrado, já processado ou em processamento." };
 
-  const scheduledAt = computeScheduledAt(row.scheduled_date, row.time_of_day);
-  const isImmediate = scheduledAt.getTime() - Date.now() <= 60_000;
-
-  try {
-    const { messageIds } = await dispatchToCampaignGroups(row.campaign_id, row.content_text, row.content_image_url, isImmediate ? undefined : scheduledAt.toISOString());
-    await (supabaseAdmin.from("ai_content_queue" as any) as any)
-      .update({ status: "sent", envio_message_id: messageIds[0] ?? null, updated_at: new Date().toISOString() })
-      .eq("id", id);
-    return { success: true };
-  } catch (error) {
-    await (supabaseAdmin.from("ai_content_queue" as any) as any).update({ status: "failed", updated_at: new Date().toISOString() }).eq("id", id);
-    return { success: false, error: error instanceof Error ? error.message : "Falha ao despachar." };
+  const scheduleError = validateAiBatchSchedule(String(row.scheduled_date), String(row.time_of_day));
+  if (scheduleError) {
+    await restoreReview(id, scheduleError);
+    return { success: false, error: scheduleError };
   }
+
+  const { resolveEnvioCampaignAudience } = await import("./envio-campaigns.server");
+  let audience;
+  try {
+    audience = await resolveEnvioCampaignAudience(row.campaign_id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Campanha inválida.";
+    await restoreReview(id, message);
+    return { success: false, error: message };
+  }
+  if (audience.groupCount === 0) {
+    const message = "A campanha não possui grupos vinculados.";
+    await restoreReview(id, message);
+    return { success: false, error: message };
+  }
+
+  const scheduledAt = scheduledAtInSaoPaulo(String(row.scheduled_date), String(row.time_of_day));
+  let dispatch: { groupCount: number; messageIds: string[] };
+  try {
+    dispatch = await dispatchToCampaignGroups(
+      row.campaign_id,
+      row.content_text,
+      row.content_image_url,
+      scheduledAt.toISOString(),
+      row.content_media_type === "video_note" ? "video_note" : "image",
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha ao agendar os envios.";
+    await restoreReview(id, message);
+    return { success: false, error: message };
+  }
+
+  if (dispatch.groupCount === 0 || dispatch.messageIds.length === 0) {
+    const message = "Nenhum envio foi criado porque a campanha está sem grupos válidos.";
+    await restoreReview(id, message);
+    return { success: false, error: message };
+  }
+
+  const { data: updated, error: updateError } = await (supabaseAdmin.from("ai_content_queue" as any) as any)
+    .update({
+      status: "scheduled",
+      envio_message_id: dispatch.messageIds[0] ?? null,
+      envio_message_ids: dispatch.messageIds,
+      last_error: null,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("id", id)
+    .eq("status", "processing")
+    .select("id")
+    .maybeSingle();
+
+  if (updateError || !updated) {
+    const { cancelPendingEnvioMessage } = await import("./envio-messages.server");
+    for (const messageId of dispatch.messageIds) await cancelPendingEnvioMessage(messageId).catch(() => {});
+    const message = updateError?.message ?? "O item mudou de estado durante a aprovação.";
+    await restoreReview(id, message);
+    return { success: false, error: message };
+  }
+
+  return { success: true };
 }
 
 export async function approveContentQueueItem(id: string): Promise<{ success: true } | { success: false; error: string }> {
@@ -585,37 +896,122 @@ export async function approveContentQueueItem(id: string): Promise<{ success: tr
 
 export async function approveContentQueueBatch(batchId: string): Promise<{ approved: number; failed: number }> {
   const supabaseAdmin = await admin();
-  const { data } = await (supabaseAdmin.from("ai_content_queue" as any) as any).select("id").eq("batch_id", batchId).eq("status", "review");
+  const { data } = await (supabaseAdmin.from("ai_content_queue" as any) as any)
+    .select("id")
+    .eq("batch_id", batchId)
+    .eq("status", "review");
   let approved = 0;
   let failed = 0;
   for (const row of (data ?? []) as any[]) {
-    const res = await approveOne(row.id);
-    if (res.success) approved++;
+    const result = await approveOne(row.id);
+    if (result.success) approved++;
     else failed++;
   }
   return { approved, failed };
 }
 
-export async function rejectContentQueueItem(id: string): Promise<{ success: true }> {
+export async function rejectContentQueueItem(id: string, reason: string): Promise<{ success: true }> {
   const supabaseAdmin = await admin();
-  await (supabaseAdmin.from("ai_content_queue" as any) as any).update({ status: "rejected", updated_at: new Date().toISOString() }).eq("id", id).eq("status", "review");
+  const { data } = await (supabaseAdmin.from("ai_content_queue" as any) as any)
+    .update({
+      status: "rejected",
+      rejection_reason: reason.trim() || "Rejeitada manualmente.",
+      last_error: null,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("id", id)
+    .eq("status", "review")
+    .select("id")
+    .maybeSingle();
+  if (data) {
+    const { cancelCouponForContentItem } = await import("./ai-coupons.server");
+    const cancelled = await cancelCouponForContentItem(id);
+    if (!cancelled.success) {
+      await (supabaseAdmin.from("ai_content_queue" as any) as any)
+        .update({ last_error: `Conteúdo rejeitado, mas o cupom não pôde ser cancelado: ${cancelled.error}` } as never)
+        .eq("id", id);
+    }
+  }
   return { success: true };
 }
 
-/** Fecha o lote inteiro sem aprovar nada — chamado quando o usuário fecha o popup ou clica em
- *  "Gerar outro lote" com itens ainda em revisão. Sem isso, os itens abandonados ficavam presos
- *  em status='review' pra sempre: nunca despachavam, mas também continuavam entrando no pool de
- *  "recentTexts" de gerações futuras como se fossem conteúdo válido/recente. */
-export async function rejectContentQueueBatch(batchId: string): Promise<{ rejected: number }> {
+export async function rejectContentQueueBatch(batchId: string, reason = "Lote fechado ou descartado sem aprovação."): Promise<{ rejected: number }> {
   const supabaseAdmin = await admin();
   const { data, error } = await (supabaseAdmin.from("ai_content_queue" as any) as any)
-    .update({ status: "rejected", updated_at: new Date().toISOString() })
+    .update({
+      status: "rejected",
+      rejection_reason: reason,
+      updated_at: new Date().toISOString(),
+    } as never)
     .eq("batch_id", batchId)
     .eq("status", "review")
     .select("id");
   if (error) return { rejected: 0 };
+
+  const { cancelCouponsForBatch } = await import("./ai-coupons.server");
+  await cancelCouponsForBatch(batchId);
   return { rejected: (data ?? []).length };
 }
+
+/** Sincroniza o conteúdo com todos os envios de grupo vinculados. Só marca sent quando todos
+ * foram realmente enviados; qualquer falha deixa o resultado explícito. */
+export async function syncAiContentQueueDeliveryStateForMessage(messageId: string): Promise<void> {
+  const supabaseAdmin = await admin();
+  let { data: row } = await (supabaseAdmin.from("ai_content_queue" as any) as any)
+    .select("id, status, envio_message_id, envio_message_ids")
+    .contains("envio_message_ids", [messageId])
+    .in("status", ["processing", "scheduled"])
+    .maybeSingle();
+
+  if (!row) {
+    const legacy = await (supabaseAdmin.from("ai_content_queue" as any) as any)
+      .select("id, status, envio_message_id, envio_message_ids")
+      .eq("envio_message_id", messageId)
+      .in("status", ["processing", "scheduled"])
+      .maybeSingle();
+    row = legacy.data;
+  }
+  if (!row) return;
+
+  const messageIds = ((row.envio_message_ids ?? []) as string[]).length > 0
+    ? (row.envio_message_ids as string[])
+    : row.envio_message_id ? [row.envio_message_id as string] : [];
+  if (messageIds.length === 0) return;
+
+  const { data: messages } = await (supabaseAdmin.from("envio_messages" as any) as any)
+    .select("id, status, sent_at")
+    .in("id", messageIds);
+  const statuses = (messages ?? []) as any[];
+  if (statuses.length !== messageIds.length) return;
+
+  const now = new Date().toISOString();
+  if (statuses.some((message) => message.status === "failed")) {
+    const failed = statuses.filter((message) => message.status === "failed").length;
+    await (supabaseAdmin.from("ai_content_queue" as any) as any)
+      .update({
+        status: "failed",
+        last_error: `${failed} de ${messageIds.length} envio(s) falharam.`,
+        updated_at: now,
+      } as never)
+      .eq("id", row.id);
+    return;
+  }
+
+  if (statuses.every((message) => message.status === "sent")) {
+    const sentAt = statuses.map((message) => message.sent_at).filter(Boolean).sort().at(-1) ?? now;
+    await (supabaseAdmin.from("ai_content_queue" as any) as any)
+      .update({ status: "sent", sent_at: sentAt, last_error: null, updated_at: now } as never)
+      .eq("id", row.id);
+    return;
+  }
+
+  await (supabaseAdmin.from("ai_content_queue" as any) as any)
+    .update({ status: "scheduled", updated_at: now } as never)
+    .eq("id", row.id)
+    .in("status", ["processing", "scheduled"]);
+}
+
+
 
 function countBy(rows: any[], key: string): Map<string, number> {
   const map = new Map<string, number>();
@@ -643,11 +1039,29 @@ export type PostPerformanceRow = {
  *  grupo em até 24h após o envio (live-launchpad-79, correlacionado em memória por group_id). */
 async function gatherPostPerformance(sinceIso: string): Promise<PostPerformanceRow[]> {
   const supabaseAdmin = await admin();
-  const { data: sentItems } = await (supabaseAdmin.from("ai_content_queue" as any) as any).select("*").eq("status", "sent").gte("created_at", sinceIso);
-  const items = ((sentItems ?? []) as any[]).filter((i) => i.envio_message_id);
+  const { data: sentItems } = await (supabaseAdmin.from("ai_content_queue" as any) as any)
+    .select("*")
+    .eq("status", "sent")
+    .not("sent_at", "is", null)
+    .gte("sent_at", sinceIso);
+  const items = ((sentItems ?? []) as any[]).filter((item) => {
+    const ids = Array.isArray(item.envio_message_ids) ? item.envio_message_ids : [];
+    return ids.length > 0 || !!item.envio_message_id;
+  });
   if (items.length === 0) return [];
 
-  const messageIds = items.map((i) => i.envio_message_id as string);
+  const idsForItem = (item: any): string[] => {
+    const ids: string[] = Array.isArray(item.envio_message_ids)
+      ? (item.envio_message_ids as unknown[]).filter((id): id is string => typeof id === "string")
+      : [];
+    const candidates: string[] = ids.length > 0
+      ? ids
+      : item.envio_message_id
+        ? [String(item.envio_message_id)]
+        : [];
+    return Array.from(new Set<string>(candidates));
+  };
+  const messageIds = [...new Set(items.flatMap(idsForItem))];
 
   const [{ data: clicks }, { data: replies }, { data: feedback }, { data: envioMsgs }] = await Promise.all([
     (supabaseAdmin.from("envio_link_clicks" as any) as any).select("envio_message_id").in("envio_message_id", messageIds),
@@ -658,36 +1072,47 @@ async function gatherPostPerformance(sinceIso: string): Promise<PostPerformanceR
 
   const clicksByMsg = countBy((clicks ?? []) as any[], "envio_message_id");
   const repliesByMsg = countBy((replies ?? []) as any[], "envio_message_id");
-  const feedbackByMsg = new Map(((feedback ?? []) as any[]).map((f) => [f.envio_message_id, f.feedback as "good" | "bad"]));
-  const msgById = new Map(((envioMsgs ?? []) as any[]).map((m) => [m.id, m]));
+  const feedbackByMsg = new Map(((feedback ?? []) as any[]).map((row) => [row.envio_message_id, row.feedback as "good" | "bad"]));
+  const msgById = new Map(((envioMsgs ?? []) as any[]).map((message) => [message.id, message]));
 
-  const groupIds = [...new Set(((envioMsgs ?? []) as any[]).map((m) => m.group_id).filter(Boolean))] as string[];
+  const groupIds = [...new Set(((envioMsgs ?? []) as any[]).map((message) => message.group_id).filter(Boolean))] as string[];
   let leaveEvents: any[] = [];
   if (groupIds.length > 0) {
     const { getLiveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
     const liveLaunchpad = await getLiveLaunchpadAdmin();
-    const { data } = await (liveLaunchpad.from("fe_group_events") as any).select("group_id, created_at").eq("event_type", "leave").in("group_id", groupIds);
+    const { data } = await (liveLaunchpad.from("fe_group_events") as any)
+      .select("group_id, created_at")
+      .eq("event_type", "leave")
+      .in("group_id", groupIds);
     leaveEvents = data ?? [];
   }
 
   function churnFor(envioMessageId: string): number {
-    const msg = msgById.get(envioMessageId);
-    if (!msg?.sent_at) return 0;
-    const sentAt = new Date(msg.sent_at).getTime();
+    const message = msgById.get(envioMessageId);
+    if (!message?.sent_at) return 0;
+    const sentAt = new Date(message.sent_at).getTime();
     const windowEnd = sentAt + 24 * 3600_000;
-    return leaveEvents.filter((e) => e.group_id === msg.group_id && new Date(e.created_at).getTime() >= sentAt && new Date(e.created_at).getTime() <= windowEnd).length;
+    return leaveEvents.filter((event) =>
+      event.group_id === message.group_id
+      && new Date(event.created_at).getTime() >= sentAt
+      && new Date(event.created_at).getTime() <= windowEnd
+    ).length;
   }
 
-  return items.map((item) => ({
-    id: item.id as string,
-    campaignName: item.campaign_name as string,
-    scheduledDate: item.scheduled_date as string,
-    text: (item.content_text as string).slice(0, 200),
-    clicks: clicksByMsg.get(item.envio_message_id) ?? 0,
-    replies: repliesByMsg.get(item.envio_message_id) ?? 0,
-    exits24h: churnFor(item.envio_message_id),
-    feedback: feedbackByMsg.get(item.envio_message_id) ?? null,
-  }));
+  return items.map((item) => {
+    const itemMessageIds = idsForItem(item);
+    const itemFeedback = itemMessageIds.map((id) => feedbackByMsg.get(id)).filter(Boolean) as Array<"good" | "bad">;
+    return {
+      id: item.id as string,
+      campaignName: item.campaign_name as string,
+      scheduledDate: item.scheduled_date as string,
+      text: (item.content_text as string).slice(0, 200),
+      clicks: itemMessageIds.reduce((total, id) => total + (clicksByMsg.get(id) ?? 0), 0),
+      replies: itemMessageIds.reduce((total, id) => total + (repliesByMsg.get(id) ?? 0), 0),
+      exits24h: itemMessageIds.reduce((total, id) => total + churnFor(id), 0),
+      feedback: itemFeedback.includes("bad") ? "bad" : itemFeedback.includes("good") ? "good" : null,
+    };
+  });
 }
 
 export async function getAiContentPerformance(days = 30): Promise<PostPerformanceRow[]> {
@@ -700,6 +1125,9 @@ export async function getAiContentPerformance(days = 30): Promise<PostPerformanc
  *  grupo em até 24h/feedback manual, e pede pra IA extrair um playbook — o PRINCÍPIO por trás do
  *  que funcionou (não o texto literal) — que passa a ser injetado em toda geração futura. */
 export async function runAiPlaybookUpdate(): Promise<{ success: boolean; itemsAnalyzed: number; error?: string }> {
+  const { cleanupOrphanedAiCoupons } = await import("./ai-coupons.server");
+  await cleanupOrphanedAiCoupons().catch((error) => console.error("runAiPlaybookUpdate: falha na limpeza de cupons:", error));
+
   const supabaseAdmin = await admin();
   const { data: settings } = await supabaseAdmin.from("store_settings").select("id, openai_api_key").order("created_at", { ascending: true }).limit(1).maybeSingle();
   const apiKey = (settings as any)?.openai_api_key as string | undefined;

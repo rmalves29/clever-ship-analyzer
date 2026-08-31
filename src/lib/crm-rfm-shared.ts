@@ -25,72 +25,79 @@ export const INVALID_FINANCIAL_STATUSES = [
 ] as const;
 
 export type RFMSegment =
-  // Modo BASE NOVA (histórico útil < 90 dias)
   | "Sem compra"
-  | "Nova compra"
-  | "2ª compra pendente"
-  | "Recorrente"
-  | "VIP em formação"
-  | "VIP/Leal"
-  // Modo CLÁSSICO (habilitado só com >= 90 dias de histórico útil)
-  | "Precisa de Atenção"
-  | "Em Risco"
+  | "Campeões"
+  | "Leais"
+  | "Potencialmente Leais"
+  | "Novos"
+  | "Precisa de atenção"
+  | "Quase hibernando"
+  | "Em risco"
   | "Hibernando"
+  | "Não pode perder"
   | "Perdidos";
 
-/** Dias mínimos de histórico útil para liberar os segmentos clássicos de risco/hibernação. */
+/**
+ * Mantido para indicar quando o histórico já permite métricas de longo prazo, como LTV.
+ * A segmentação completa NÃO fica bloqueada por esse limite.
+ */
 export const CLASSIC_MODE_MIN_HISTORY_DAYS = 90;
 
 export const RFM_SEGMENTS_CONFIG: Record<RFMSegment, { color: string; description: string; mode: "base" | "classico" }> = {
   "Sem compra": {
     color: "#64748b",
-    description: "Contato sem nenhum pedido pago. Lead — nunca comprou.",
+    description: "Lead sem pedido pago. Permanece identificado fora da matriz dos compradores.",
     mode: "base",
   },
-  "Nova compra": {
-    color: "#a855f7",
-    description: "Fez a 1ª compra paga nos últimos 30 dias. Momento de onboarding.",
+  Campeões: {
+    color: "#0ea5e9",
+    description: "Compraram recentemente, têm alta frequência e estão entre os clientes de maior valor.",
     mode: "base",
   },
-  "2ª compra pendente": {
-    color: "#f59e0b",
-    description: "Comprou uma única vez há mais de 30 dias e ainda não voltou.",
-    mode: "base",
-  },
-  Recorrente: {
+  Leais: {
     color: "#10b981",
-    description: "Tem 2 compras pagas. Já repetiu, ainda não é alto valor.",
+    description: "Compram com frequência e mantêm relacionamento recente com a loja.",
     mode: "base",
   },
-  "VIP em formação": {
+  "Potencialmente Leais": {
     color: "#84cc16",
-    description: "3+ compras pagas ou valor acumulado no topo da base.",
+    description: "Já fizeram a segunda compra recentemente e têm potencial para se tornar leais.",
     mode: "base",
   },
-  "VIP/Leal": {
-    color: "#3b82f6",
-    description: "4+ compras pagas e valor acumulado no topo da base.",
+  Novos: {
+    color: "#8b5cf6",
+    description: "Fizeram a primeira compra dentro da janela recente de até 8 dias.",
     mode: "base",
   },
-  "Precisa de Atenção": {
+  "Precisa de atenção": {
+    color: "#f59e0b",
+    description: "Estão entre 9 e 15 dias sem comprar e ultrapassando o ciclo normal de recompra.",
+    mode: "base",
+  },
+  "Quase hibernando": {
+    color: "#06b6d4",
+    description: "Baixa frequência e entre 16 e 30 dias sem comprar.",
+    mode: "base",
+  },
+  "Em risco": {
     color: "#f97316",
-    description: "Boa frequência histórica, mas a recência começou a cair.",
-    mode: "classico",
-  },
-  "Em Risco": {
-    color: "#ef4444",
-    description: "Comprava bem e com frequência, mas não volta há muito tempo.",
-    mode: "classico",
+    description: "Tinham frequência relevante, mas estão entre 16 e 30 dias sem comprar.",
+    mode: "base",
   },
   Hibernando: {
-    color: "#ec4899",
-    description: "Última compra há muito tempo e poucos pedidos.",
-    mode: "classico",
+    color: "#d946ef",
+    description: "Estão há mais de 30 dias sem comprar, mas ainda possuem frequência ou valor relevante.",
+    mode: "base",
+  },
+  "Não pode perder": {
+    color: "#f43f5e",
+    description: "Eram clientes frequentes e de alto valor, mas estão há mais de 15 dias sem comprar.",
+    mode: "base",
   },
   Perdidos: {
     color: "#475569",
-    description: "Scores baixos em recência, frequência e valor.",
-    mode: "classico",
+    description: "Baixa frequência, baixo valor e mais de 30 dias sem comprar.",
+    mode: "base",
   },
 };
 
@@ -210,44 +217,52 @@ export function computeHistoryDays(orders: ValidOrder[], now: Date = new Date())
   return daysBetween(oldest, now);
 }
 
+/** Faixas de recência calibradas pelo ciclo observado: mediana 3,8 dias e P75 8,7 dias. */
+export function scoreRecency(recency: number | null): number {
+  if (recency === null) return 0;
+  if (recency <= 3) return 5;
+  if (recency <= 8) return 4;
+  if (recency <= 15) return 3;
+  if (recency <= 30) return 2;
+  return 1;
+}
+
+/** Frequência absoluta: evita que muitos clientes de uma compra recebam score alto por empate. */
+export function scoreFrequency(frequency: number): number {
+  if (frequency <= 0) return 0;
+  if (frequency === 1) return 1;
+  if (frequency === 2) return 2;
+  if (frequency === 3) return 3;
+  if (frequency === 4) return 4;
+  return 5;
+}
+
 export type ClassifyInput = {
   metrics: CustomerMetrics;
   scores: { r: number; f: number; m: number };
-  /** true quando há >= 90 dias de histórico útil. */
-  classicMode: boolean;
 };
 
 /**
- * Classificação.
- *
- * Base nova (< 90 dias): proibido rotular alguém como Hibernando/Perdido — não existe base
- * suficiente para afirmar churn. Usa regras ABSOLUTAS de recência/frequência.
- * Modo clássico (>= 90 dias): libera os segmentos de risco/hibernação por score.
+ * Matriz completa e mutuamente exclusiva. A ordem é parte da regra:
+ * clientes valiosos inativos são "Não pode perder" antes de "Em risco";
+ * clientes frequentes e recentes são "Campeões" antes de "Leais".
  */
-export function classifyCustomer({ metrics, scores, classicMode }: ClassifyInput): RFMSegment {
-  const { frequency, recency, monetary } = metrics;
+export function classifyCustomer({ metrics, scores }: ClassifyInput): RFMSegment {
+  const { frequency } = metrics;
+  const { r, f, m } = scores;
 
-  if (frequency === 0 || recency === null) return "Sem compra";
+  if (frequency === 0 || metrics.recency === null) return "Sem compra";
 
-  const highValue = scores.m >= 5;
-
-  if (!classicMode) {
-    if (frequency === 1) return recency <= 30 ? "Nova compra" : "2ª compra pendente";
-    if (frequency >= 4 && (scores.m >= 4 || highValue)) return "VIP/Leal";
-    if (frequency >= 3 || highValue) return "VIP em formação";
-    return "Recorrente";
-  }
-
-  // Modo clássico — só com histórico suficiente.
-  if (frequency === 1 && recency <= 30) return "Nova compra";
-  if (recency > 180 && (frequency >= 3 || monetary > 0 ? scores.m >= 4 : false)) return "Em Risco";
-  if (recency > 180 && scores.f <= 2 && scores.m <= 2) return "Perdidos";
-  if (recency > 120) return "Hibernando";
-  if (recency > 60 && frequency >= 2) return "Precisa de Atenção";
-  if (frequency === 1) return "2ª compra pendente";
-  if (frequency >= 4 && scores.m >= 4) return "VIP/Leal";
-  if (frequency >= 3 || highValue) return "VIP em formação";
-  return "Recorrente";
+  if (r >= 4 && f >= 4 && m >= 4) return "Campeões";
+  if (r <= 2 && f >= 4 && m >= 4) return "Não pode perder";
+  if (r <= 2 && f >= 3) return "Em risco";
+  if (r >= 3 && f >= 3) return "Leais";
+  if (r >= 4 && f === 2) return "Potencialmente Leais";
+  if (r >= 4 && f === 1) return "Novos";
+  if (r === 3) return "Precisa de atenção";
+  if (r === 2 && f <= 2) return "Quase hibernando";
+  if (r === 1 && (f >= 2 || m >= 3)) return "Hibernando";
+  return "Perdidos";
 }
 
 /** Pipeline completo: pedidos válidos -> métricas -> scores com empate correto -> segmento. */
@@ -261,16 +276,14 @@ export function computeRFM(
   const classicMode = historyDays >= CLASSIC_MODE_MIN_HISTORY_DAYS;
 
   const buyers = metrics.filter((m) => m.frequency > 0);
-  const scoreR = makeScorer(buyers.map((m) => m.recency ?? 0), false);
-  const scoreF = makeScorer(buyers.map((m) => m.frequency), true);
   const scoreM = makeScorer(buyers.map((m) => m.monetary), true);
 
   const customers = metrics.map((m) => {
     const scores =
       m.frequency > 0
-        ? { r: scoreR(m.recency ?? 0), f: scoreF(m.frequency), m: scoreM(m.monetary) }
+        ? { r: scoreRecency(m.recency), f: scoreFrequency(m.frequency), m: scoreM(m.monetary) }
         : { r: 0, f: 0, m: 0 };
-    return { ...m, ...scores, segment: classifyCustomer({ metrics: m, scores, classicMode }) };
+    return { ...m, ...scores, segment: classifyCustomer({ metrics: m, scores }) };
   });
 
   return { customers, historyDays, classicMode };

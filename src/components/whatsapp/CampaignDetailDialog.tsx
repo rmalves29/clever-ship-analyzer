@@ -7,6 +7,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getCampaignDetail } from "@/lib/whatsapp-meta.functions";
+import { brl } from "@/lib/crm-mock";
 import { deleteOtherManualWhatsappCampaignAttempts } from "@/lib/whatsapp-campaign-cleanup.functions";
 
 const STATUS_LABEL: Record<string, string> = { sent: "Enviada", delivered: "Entregue", read: "Lida", failed: "Falhou" };
@@ -81,8 +82,62 @@ export function CampaignDetailDialog({ campaignId, onOpenChange }: { campaignId:
           </Button>
         </div>
 
+        {!data && <p className="mt-2 text-sm text-muted-foreground">Carregando...</p>}
+
+        {data && data.couponCodes.length > 0 && (
+          <section className="mt-2 rounded-xl border border-border bg-muted/30 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h3 className="font-semibold">Compras confirmadas por cupom</h3>
+                <p className="text-xs text-muted-foreground">Pedidos válidos em que a Shopify registrou um dos códigos acompanhados.</p>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {data.couponCodes.map((code) => <Badge key={code} variant="outline">{code}</Badge>)}
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-lg bg-background p-2">
+                <p className="text-lg font-bold">{data.couponSummary.orders}</p>
+                <p className="text-[11px] text-muted-foreground">Pedidos</p>
+              </div>
+              <div className="rounded-lg bg-background p-2">
+                <p className="text-lg font-bold">{data.couponSummary.customers}</p>
+                <p className="text-[11px] text-muted-foreground">Clientes</p>
+              </div>
+              <div className="rounded-lg bg-background p-2">
+                <p className="text-lg font-bold">{brl(data.couponSummary.revenue)}</p>
+                <p className="text-[11px] text-muted-foreground">Receita</p>
+              </div>
+            </div>
+
+            {!data.couponBackfillComplete && (
+              <p className="mt-3 text-xs text-muted-foreground">O histórico ainda será completado na próxima sincronização da Shopify.</p>
+            )}
+            {data.couponBackfillComplete && data.couponConversions.length === 0 && (
+              <p className="mt-3 text-sm text-muted-foreground">Nenhum uso comprovado desses cupons foi encontrado.</p>
+            )}
+            {data.couponConversions.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {data.couponConversions.map((conversion) => (
+                  <div key={conversion.orderId} className="flex items-center justify-between gap-3 rounded-lg bg-background px-3 py-2 text-sm">
+                    <div>
+                      <p className="font-medium">{conversion.customerName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {conversion.orderNumber} · {conversion.couponCode}
+                        {conversion.processedAt ? ` · ${new Date(conversion.processedAt).toLocaleDateString("pt-BR")}` : ""}
+                      </p>
+                    </div>
+                    <p className="shrink-0 font-semibold">{brl(conversion.totalPrice)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         <div className="mt-2 space-y-1.5">
-          {!data && <p className="text-sm text-muted-foreground">Carregando...</p>}
+          {data && <p className="pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Destinatários</p>}
           {data?.recipients.length === 0 && <p className="text-sm text-muted-foreground">Nenhum destinatário registrado.</p>}
           {data?.recipients.map((r, i) => (
             <div key={i} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">

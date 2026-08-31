@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronLeft, Eye, MessageCircle, Play, Plus, RefreshCw, Settings, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -68,16 +68,17 @@ const STATUS_CLASS: Record<string, string> = {
 
 function StatCard({ label, value, hint, dark }: { label: string; value: string; hint: string; dark?: boolean }) {
   return (
-    <div className={dark ? "surface-card p-5 bg-foreground text-background" : "surface-card p-5"}>
-      <p className={dark ? "text-xs text-background/70" : "text-xs text-muted-foreground"}>{label}</p>
-      <p className="mt-2 text-3xl font-bold tracking-tight">{value}</p>
-      <p className={dark ? "mt-1 text-xs text-background/70" : "mt-1 text-xs text-muted-foreground"}>{hint}</p>
+    <div className={dark ? "rounded-xl border border-foreground/10 !bg-foreground p-5 !text-white shadow-sm" : "surface-card p-5"}>
+      <p className={dark ? "text-xs !text-white/70" : "text-xs text-muted-foreground"}>{label}</p>
+      <p className={dark ? "mt-2 text-3xl font-bold tracking-tight !text-white" : "mt-2 text-3xl font-bold tracking-tight"}>{value}</p>
+      <p className={dark ? "mt-1 text-xs !text-white/70" : "mt-1 text-xs text-muted-foreground"}>{hint}</p>
     </div>
   );
 }
 
 function CampanhasWhatsapp() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { tab } = Route.useSearch();
   const setTab = (value: string) => navigate({ to: "/campanhas-whatsapp", search: { tab: value } });
   const runApprove = useServerFn(approveCampaign);
@@ -95,12 +96,12 @@ function CampanhasWhatsapp() {
   const [statusFilter, setStatusFilter] = useState("todas");
   const [search, setSearch] = useState("");
 
-  const { data: campanhas, isLoading, refetch } = useQuery({
+  const { data: campanhas, isLoading, isFetching: isFetchingCampaigns, refetch } = useQuery({
     queryKey: ["whatsapp-campaigns"],
     queryFn: () => getCampaigns(),
   });
 
-  const { data: automations, refetch: refetchAutomations } = useQuery({
+  const { data: automations, isFetching: isFetchingAutomations, refetch: refetchAutomations } = useQuery({
     queryKey: ["whatsapp-automations"],
     queryFn: () => listAutomations(),
   });
@@ -141,6 +142,20 @@ function CampanhasWhatsapp() {
   const totalReceita = list.reduce((a, c) => a + c.receita, 0);
   const totalCusto = list.reduce((a, c) => a + c.custo, 0);
   const roas = totalCusto > 0 ? totalReceita / totalCusto : null;
+
+  const handleRefresh = async () => {
+    try {
+      await Promise.all([
+        refetch({ throwOnError: true }),
+        refetchAutomations({ throwOnError: true }),
+        queryClient.refetchQueries({ queryKey: ["whatsapp-automation-run-metrics"], type: "active" }),
+        queryClient.refetchQueries({ queryKey: ["whatsapp-failures"], type: "active" }),
+      ]);
+      toast.success("Campanhas e métricas atualizadas.");
+    } catch (error: any) {
+      toast.error(`Não foi possível atualizar: ${error?.message ?? "erro desconhecido"}`);
+    }
+  };
 
   const handleApprove = async (id: string) => {
     setBusyId(id);
@@ -203,8 +218,9 @@ function CampanhasWhatsapp() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
-              <RefreshCw className="size-3.5" /> Atualizar
+            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isFetchingCampaigns || isFetchingAutomations} className="gap-2">
+              <RefreshCw className={`size-3.5 ${isFetchingCampaigns || isFetchingAutomations ? "animate-spin" : ""}`} />
+              {isFetchingCampaigns || isFetchingAutomations ? "Atualizando..." : "Atualizar"}
             </Button>
             <Button variant="outline" size="icon" asChild className="size-9 rounded-full">
               <Link to="/configuracoes">

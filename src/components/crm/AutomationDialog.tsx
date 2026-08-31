@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatWaitLabel, maxWaitForUnit, resolveWaitInput, toWaitMinutes, type WaitUnit } from "@/lib/automation-wait";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -76,6 +77,8 @@ export type SendStepSeed = {
   id: string;
   type: "send";
   waitMinutes: number;
+  waitValue?: number | undefined;
+  waitUnit?: WaitUnit | undefined;
   templateName: string;
   templateLanguage?: string | undefined;
   bodyParams: string[];
@@ -127,6 +130,8 @@ function newSendStep(): SendStepSeed {
     id: newId(),
     type: "send",
     waitMinutes: 0,
+    waitValue: 0,
+    waitUnit: "minutes",
     templateName: "",
     bodyParams: [],
     nextStepId: null,
@@ -244,7 +249,9 @@ function SendNode({ data, selected }: NodeProps) {
         <MessageCircle className="size-3" /> Enviar WhatsApp
       </p>
       <p className="text-sm font-medium mt-1 truncate">{d.step.templateName || "Escolha um template"}</p>
-      <p className="text-xs text-muted-foreground mt-0.5">Espera {d.step.waitMinutes}min antes</p>
+      <p className="text-xs text-muted-foreground mt-0.5">
+                {formatWaitLabel(d.step) === "Sem espera" ? "Sem espera antes" : `Espera ${formatWaitLabel(d.step)} antes`}
+              </p>
       <Handle type="source" position={Position.Bottom} id="out" className="!bg-primary !size-2.5" />
     </div>
   );
@@ -660,7 +667,9 @@ export function AutomationDialog({
             return {
               id: s.id,
               type: "send" as const,
-              waitMinutes: s.waitMinutes,
+              waitMinutes: toWaitMinutes(resolveWaitInput(s).waitValue, resolveWaitInput(s).waitUnit),
+              waitValue: resolveWaitInput(s).waitValue,
+              waitUnit: resolveWaitInput(s).waitUnit,
               templateName: s.templateName,
               templateLanguage: s.templateLanguage,
               messageType: templateMessageType(tmpl?.category),
@@ -955,6 +964,7 @@ function SendStepPanel({
 }) {
   const template = approved.find((t) => t.name === step.templateName);
   const tokens = templateBodyTokens(template?.components);
+  const wait = resolveWaitInput(step);
 
   return (
     <>
@@ -968,14 +978,40 @@ function SendStepPanel({
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-xs">{isRoot ? "Esperar antes de matricular (minutos)" : "Esperar desde a etapa anterior (minutos)"}</Label>
-        <Input
-          type="number"
-          min={0}
-          max={43200}
-          value={step.waitMinutes}
-          onChange={(e) => onChange({ waitMinutes: Number(e.target.value) || 0 })}
-        />
+        <Label className="text-xs">{isRoot ? "Esperar antes de matricular" : "Esperar desde a etapa anterior"}</Label>
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            min={0}
+            max={maxWaitForUnit(wait.waitUnit)}
+            step={1}
+            className="flex-1"
+            value={wait.waitValue}
+            onChange={(e) => {
+              const value = Math.max(0, Math.min(maxWaitForUnit(wait.waitUnit), Math.floor(Number(e.target.value) || 0)));
+              onChange({ waitValue: value, waitUnit: wait.waitUnit, waitMinutes: toWaitMinutes(value, wait.waitUnit) });
+            }}
+          />
+          <Select
+            value={wait.waitUnit}
+            onValueChange={(v) => {
+              const unit = v as WaitUnit;
+              const value = Math.min(wait.waitValue, maxWaitForUnit(unit));
+              onChange({ waitValue: value, waitUnit: unit, waitMinutes: toWaitMinutes(value, unit) });
+            }}
+          >
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="minutes">Minutos</SelectItem>
+              <SelectItem value="days">Dias</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Máximo de 30 dias (43.200 minutos). {formatWaitLabel({ ...step, ...wait })}
+        </p>
       </div>
 
       <div className="space-y-1.5">

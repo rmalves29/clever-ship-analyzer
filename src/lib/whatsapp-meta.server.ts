@@ -1,8 +1,28 @@
 import { GOALS, type SegmentType } from "./crm-mock";
 import { buildBodyParameters } from "./whatsapp-template-body-tokens";
+import { findFirstTouchCampaign } from "./whatsapp-attribution";
 
 const DAY_MS = 86_400_000;
-const ATTRIBUTION_WINDOW_DAYS = 3;
+
+export function normalizeCouponCode(value: unknown): string {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+export function extractOrderDiscountCodes(rawData: unknown): string[] {
+  const raw = rawData as any;
+  const candidates = Array.isArray(raw?.discountCodes)
+    ? raw.discountCodes
+    : Array.isArray(raw?.discount_codes)
+      ? raw.discount_codes
+      : [];
+  return Array.from(
+    new Set(
+      candidates
+        .map((entry: unknown) => normalizeCouponCode(typeof entry === "string" ? entry : (entry as any)?.code))
+        .filter(Boolean),
+    ),
+  );
+}
 
 export type MessageType = "marketing" | "utility";
 
@@ -486,6 +506,29 @@ export async function listMetaTemplates() {
   return { success: true as const, templates };
 }
 
+async function rememberCampaignCouponCode(
+  supabaseAdmin: Awaited<ReturnType<typeof admin>>,
+  campaignId: string,
+  rawCode: unknown,
+): Promise<void> {
+  const code = normalizeCouponCode(rawCode);
+  if (!code) return;
+
+  const table = supabaseAdmin.from("whatsapp_campaign_coupon_codes" as never) as any;
+  const now = new Date().toISOString();
+  const { error: resetError } = await table
+    .update({ is_current: false, updated_at: now })
+    .eq("campaign_id", campaignId)
+    .neq("code", code);
+  if (resetError) throw new Error(`Falha ao preservar histórico de cupons: ${resetError.message}`);
+
+  const { error } = await table.upsert(
+    { campaign_id: campaignId, code, is_current: true, updated_at: now },
+    { onConflict: "campaign_id,code" },
+  );
+  if (error) throw new Error(`Falha ao salvar o cupom da campanha: ${error.message}`);
+}
+
 export type NewCampaignInput = {
   nome: string;
   segmentType: string;
@@ -536,7 +579,7 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
       message_type: input.messageType,
       body_params: input.bodyParams,
       body_param_tokens: input.bodyParamTokens ?? null,
-      coupon_code: input.couponCode?.trim() || null,
+      coupon_code: normalizeCouponCode(input.couponCode) || null,
       origem: input.origem ?? "crm",
       automation_id: input.automationId ?? null,
       automation_step_id: input.automationStepId ?? null,
@@ -547,7 +590,9 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
     .single();
 
   if (error || !campaign) return { success: false as const, error: error?.message ?? "Falha ao criar a campanha." };
-  return { success: true as const, campaignId: (campaign as { id: string }).id, destinatarios };
+  const campaignId = (campaign as { id: string }).id;
+  if (input.couponCode) await rememberCampaignCouponCode(supabaseAdmin, campaignId, input.couponCode);
+  return { success: true as const, campaignId, destinatarios };
 }
 
 /** Campanha já existente pra essa etapa de automação (a mais antiga, se houver mais de uma
@@ -586,11 +631,12 @@ export async function syncCampaignMessageConfig(
     message_type: step.messageType,
     body_params: step.bodyParams,
     body_param_tokens: step.bodyParamTokens ?? null,
-    coupon_code: step.couponCode?.trim() || null,
+    coupon_code: normalizeCouponCode(step.couponCode) || null,
   };
   if (step.templateName?.trim()) updates["template_name"] = step.templateName.trim();
   if (step.templateLanguage?.trim()) updates["template_language"] = step.templateLanguage.trim();
   await (supabaseAdmin.from("whatsapp_campaigns") as any).update(updates).eq("id", campaignId);
+  if (step.couponCode) await rememberCampaignCouponCode(supabaseAdmin, campaignId, step.couponCode);
 }
 
 /** Só pra automações com aprovação: acha a campanha dessa etapa (se já existir, seja qual for o
@@ -886,11 +932,40 @@ export async function listCampaignsWithMetrics() {
     list.push({ phone: r.phone, status: r.status, sent_at: r.sent_at });
     recipientsByCampaign.set(r.campaign_id, list);
   }
+  const deliveriesByPhone = new Map<string, { campaignId: string; phone: string; status: string; sentAt: string | null }[]>();
+  for (const recipient of recipients ?? []) {
+    const phone = toE164(recipient.phone);
+    if (!phone) continue;
+    const list = deliveriesByPhone.get(phone) ?? [];
+    list.push({
+      campaignId: recipient.campaign_id,
+      phone,
+      status: recipient.status,
+      sentAt: recipient.sent_at,
+    });
+    deliveriesByPhone.set(phone, list);
+  }
 
-  // ---------- Atribuição de vendas: cupom (exato) tem prioridade; senão, telefone + janela de dias ----------
-  // Cupom fixo por campanha (recompra, aniversário etc.) — um código só, configurado na campanha.
+  // ---------- Atribuição de vendas: cupom (exato) tem prioridade; senão, primeiro contato em 72h ----------
+  // Código atual + aliases históricos: trocar GANHE5 por POP5 não apaga a medição anterior.
   const couponToCampaign = new Map<string, string>();
-  for (const c of campaignList) if (c.coupon_code) couponToCampaign.set(c.coupon_code.toUpperCase(), c.id);
+  const trackedCodesByCampaign = new Map<string, Set<string>>();
+  const addTrackedCode = (campaignId: string, rawCode: unknown) => {
+    const code = normalizeCouponCode(rawCode);
+    if (!code) return;
+    couponToCampaign.set(code, campaignId);
+    const codes = trackedCodesByCampaign.get(campaignId) ?? new Set<string>();
+    codes.add(code);
+    trackedCodesByCampaign.set(campaignId, codes);
+  };
+  for (const c of campaignList) addTrackedCode(c.id, c.coupon_code);
+
+  const { data: couponAliasRows } = await (supabaseAdmin.from("whatsapp_campaign_coupon_codes" as never) as any)
+    .select("campaign_id, code")
+    .in("campaign_id", campaignList.map((c) => c.id));
+  for (const row of (couponAliasRows ?? []) as { campaign_id: string; code: string }[]) {
+    addTrackedCode(row.campaign_id, row.code);
+  }
 
   // Cupons dinâmicos (cashback: 1 código único por pedido, não dá pra configurar 1 código fixo na
   // campanha) — o código exato já fica congelado no contexto do run que mandou aquela mensagem,
@@ -914,17 +989,42 @@ export async function listCampaignsWithMetrics() {
     if (code) couponToCampaign.set(code.toUpperCase(), row.campaign_id);
   }
 
-  const { data: orders } = await supabaseAdmin
-    .from("shopify_orders")
-    .select("phone, total_price, processed_at, financial_status, raw_data")
+  const { data: orders } = await (supabaseAdmin.from("shopify_orders") as any)
+    .select("id, customer_id, phone, total_price, processed_at, financial_status, cancelled_at, raw_data")
+    .is("cancelled_at", null)
     .neq("financial_status", "VOIDED")
     .neq("financial_status", "REFUNDED");
 
-  const vendasPorCampanha = new Map<string, { vendas: number; receita: number }>();
-  const addVenda = (campaignId: string, total: number) => {
-    const agg = vendasPorCampanha.get(campaignId) ?? { vendas: 0, receita: 0 };
+  type SalesAggregate = {
+    vendas: number;
+    receita: number;
+    couponOrders: number;
+    couponRevenue: number;
+    couponCustomers: Set<string>;
+    assistedOrders: number;
+    assistedRevenue: number;
+  };
+  const vendasPorCampanha = new Map<string, SalesAggregate>();
+  const addVenda = (campaignId: string, total: number, kind: "coupon" | "assisted", customerId?: string | null) => {
+    const agg = vendasPorCampanha.get(campaignId) ?? {
+      vendas: 0,
+      receita: 0,
+      couponOrders: 0,
+      couponRevenue: 0,
+      couponCustomers: new Set<string>(),
+      assistedOrders: 0,
+      assistedRevenue: 0,
+    };
     agg.vendas += 1;
     agg.receita += total;
+    if (kind === "coupon") {
+      agg.couponOrders += 1;
+      agg.couponRevenue += total;
+      if (customerId) agg.couponCustomers.add(customerId);
+    } else {
+      agg.assistedOrders += 1;
+      agg.assistedRevenue += total;
+    }
     vendasPorCampanha.set(campaignId, agg);
   };
 
@@ -932,33 +1032,21 @@ export async function listCampaignsWithMetrics() {
     if (!o.processed_at) continue;
     const total = Number(o.total_price ?? 0);
 
-    const discountCodes = ((o.raw_data as any)?.discountCodes ?? []) as string[];
-    const couponMatch = discountCodes.map((d) => d.toUpperCase()).find((d) => couponToCampaign.has(d));
+    const couponMatch = extractOrderDiscountCodes(o.raw_data).find((code) => couponToCampaign.has(code));
     if (couponMatch) {
-      addVenda(couponToCampaign.get(couponMatch)!, total);
+      addVenda(couponToCampaign.get(couponMatch)!, total, "coupon", o.customer_id);
       continue;
     }
 
     if (!o.phone) continue;
     const orderPhone = toE164(o.phone);
     if (!orderPhone) continue;
-    const orderAt = new Date(o.processed_at).getTime();
-
-    let bestCampaignId: string | null = null;
-    let bestSentAt = -Infinity;
-    for (const c of campaignList) {
-      const recips = recipientsByCampaign.get(c.id) ?? [];
-      const match = recips.find((r) => r.phone === orderPhone && r.status !== "failed" && r.sent_at);
-      if (!match?.sent_at) continue;
-      const sentAt = new Date(match.sent_at).getTime();
-      if (sentAt > orderAt) continue;
-      if (orderAt - sentAt > ATTRIBUTION_WINDOW_DAYS * DAY_MS) continue;
-      if (sentAt > bestSentAt) {
-        bestSentAt = sentAt;
-        bestCampaignId = c.id;
-      }
-    }
-    if (bestCampaignId) addVenda(bestCampaignId, total);
+    const firstTouchCampaignId = findFirstTouchCampaign({
+      orderPhone,
+      orderAt: o.processed_at,
+      deliveries: deliveriesByPhone.get(orderPhone) ?? [],
+    });
+    if (firstTouchCampaignId) addVenda(firstTouchCampaignId, total, "assisted", o.customer_id);
   }
 
   const costMarketing = settings.costMarketing ?? 0;
@@ -968,8 +1056,9 @@ export async function listCampaignsWithMetrics() {
     const recips = recipientsByCampaign.get(c.id) ?? [];
     const entregues = recips.filter((r) => r.status === "delivered" || r.status === "read").length;
     const lidas = recips.filter((r) => r.status === "read").length;
-    const vendas = vendasPorCampanha.get(c.id)?.vendas ?? 0;
-    const receita = vendasPorCampanha.get(c.id)?.receita ?? 0;
+    const aggregate = vendasPorCampanha.get(c.id);
+    const vendas = aggregate?.vendas ?? 0;
+    const receita = aggregate?.receita ?? 0;
     const custoPorMsg = c.message_type === "utility" ? costUtility : costMarketing;
 
     return {
@@ -991,6 +1080,12 @@ export async function listCampaignsWithMetrics() {
       lidas,
       vendas,
       receita,
+      couponOrders: aggregate?.couponOrders ?? 0,
+      couponCustomers: aggregate?.couponCustomers.size ?? 0,
+      couponRevenue: aggregate?.couponRevenue ?? 0,
+      assistedOrders: aggregate?.assistedOrders ?? 0,
+      assistedRevenue: aggregate?.assistedRevenue ?? 0,
+      trackedCouponCodes: Array.from(trackedCodesByCampaign.get(c.id) ?? []),
       custo: Number((c.enviadas * custoPorMsg).toFixed(2)),
       createdAt: c.created_at,
       sentAt: c.sent_at,
@@ -1014,6 +1109,8 @@ export type AutomationStepInput =
       id: string;
       type: "send";
       waitMinutes: number;
+      waitValue?: number | undefined;
+      waitUnit?: ("minutes" | "days") | undefined;
       templateName: string;
       templateLanguage?: string | undefined;
       messageType: MessageType;
@@ -1069,6 +1166,8 @@ export async function upsertAutomation(input: AutomationInput) {
           id: s.id,
           type: "send" as const,
           waitMinutes: s.waitMinutes,
+          ...(s.waitValue !== undefined ? { waitValue: s.waitValue } : {}),
+          ...(s.waitUnit ? { waitUnit: s.waitUnit } : {}),
           templateName: s.templateName.trim(),
           templateLanguage: s.templateLanguage?.trim() || settings.templateLanguage,
           messageType: s.messageType,
@@ -1136,7 +1235,7 @@ export async function listAutomationsRows() {
   }));
 }
 
-/** Detalhe de 1 campanha — lista de destinatários com status, pra tela de "ver campanha". */
+/** Detalhe de 1 campanha: envios e compras comprovadas pelos códigos acompanhados. */
 export async function getCampaignDetailRow(campaignId: string) {
   const supabaseAdmin = await admin();
   const { data: campaign } = await supabaseAdmin
@@ -1146,13 +1245,82 @@ export async function getCampaignDetailRow(campaignId: string) {
     .maybeSingle();
   if (!campaign) return null;
 
-  const { data: recipients } = await supabaseAdmin
-    .from("whatsapp_campaign_recipients")
-    .select("phone, status, sent_at, delivered_at, read_at, error")
-    .eq("campaign_id", campaignId)
-    .order("sent_at", { ascending: false });
+  const [{ data: recipients }, { data: aliasRows }] = await Promise.all([
+    supabaseAdmin
+      .from("whatsapp_campaign_recipients")
+      .select("phone, status, sent_at, delivered_at, read_at, error")
+      .eq("campaign_id", campaignId)
+      .order("sent_at", { ascending: false }),
+    (supabaseAdmin.from("whatsapp_campaign_coupon_codes" as never) as any)
+      .select("code, is_current, backfilled_at")
+      .eq("campaign_id", campaignId)
+      .order("is_current", { ascending: false }),
+  ]);
 
-  return { campaign, recipients: recipients ?? [] };
+  const couponCodes = Array.from(
+    new Set([
+      ...((aliasRows ?? []) as { code: string }[]).map((row) => normalizeCouponCode(row.code)),
+      normalizeCouponCode((campaign as any).coupon_code),
+    ].filter(Boolean)),
+  );
+  const codeSet = new Set(couponCodes);
+
+  let matchedOrders: any[] = [];
+  if (codeSet.size > 0) {
+    const { data: orderRows } = await (supabaseAdmin.from("shopify_orders") as any)
+      .select("id, order_number, customer_id, total_price, total_discounts, processed_at, financial_status, cancelled_at, raw_data")
+      .is("cancelled_at", null)
+      .neq("financial_status", "VOIDED")
+      .neq("financial_status", "REFUNDED")
+      .order("processed_at", { ascending: false });
+    matchedOrders = (orderRows ?? [])
+      .map((order: any) => {
+        const couponCode = extractOrderDiscountCodes(order.raw_data).find((code) => codeSet.has(code));
+        return couponCode ? { ...order, couponCode } : null;
+      })
+      .filter(Boolean);
+  }
+
+  const customerIds = Array.from(new Set(matchedOrders.map((order) => order.customer_id).filter(Boolean))) as string[];
+  const customerById = new Map<string, string>();
+  if (customerIds.length > 0) {
+    const { data: customers } = await supabaseAdmin
+      .from("shopify_customers")
+      .select("id, first_name, last_name, email")
+      .in("id", customerIds);
+    for (const customer of customers ?? []) {
+      const name = [customer.first_name, customer.last_name].filter(Boolean).join(" ").trim();
+      customerById.set(customer.id, name || customer.email || "Cliente");
+    }
+  }
+
+  const couponConversions = matchedOrders.map((order) => ({
+    orderId: order.id as string,
+    orderNumber: (order.order_number ?? order.id) as string,
+    customerId: (order.customer_id ?? null) as string | null,
+    customerName: order.customer_id ? customerById.get(order.customer_id) ?? "Cliente" : "Cliente",
+    couponCode: order.couponCode as string,
+    processedAt: order.processed_at as string | null,
+    totalPrice: Number(order.total_price ?? 0),
+    totalDiscounts: Number(order.total_discounts ?? 0),
+  }));
+  const uniqueCustomers = new Set(couponConversions.map((order) => order.customerId).filter(Boolean)).size;
+
+  return {
+    campaign,
+    recipients: recipients ?? [],
+    couponCodes,
+    couponBackfillComplete:
+      couponCodes.length === 0 ||
+      ((aliasRows ?? []) as { backfilled_at: string | null }[]).every((row) => Boolean(row.backfilled_at)),
+    couponSummary: {
+      orders: couponConversions.length,
+      customers: uniqueCustomers,
+      revenue: couponConversions.reduce((sum, order) => sum + order.totalPrice, 0),
+      discounts: couponConversions.reduce((sum, order) => sum + order.totalDiscounts, 0),
+    },
+    couponConversions,
+  };
 }
 
 /** Agrupa os erros reais de envio (retornados pela Meta) por motivo — usado na aba Relatórios. */

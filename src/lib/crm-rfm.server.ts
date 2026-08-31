@@ -226,9 +226,7 @@ export async function getRFMStatsData(now: Date = new Date()) {
   const snapshot = await buildRFMSnapshot(now);
   const { customers, historyDays, classicMode, orders } = snapshot;
 
-  const activeSegments = (Object.keys(RFM_SEGMENTS_CONFIG) as RFMSegment[]).filter(
-    (s) => classicMode || RFM_SEGMENTS_CONFIG[s].mode === "base",
-  );
+  const activeSegments = Object.keys(RFM_SEGMENTS_CONFIG) as RFMSegment[];
 
   const acc = new Map<RFMSegment, { clientes: number; pedidos: number; receita: number; tenure: number[] }>();
   for (const seg of activeSegments) acc.set(seg, { clientes: 0, pedidos: 0, receita: 0, tenure: [] });

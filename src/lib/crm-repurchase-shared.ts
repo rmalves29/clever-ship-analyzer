@@ -11,8 +11,11 @@ export const REPURCHASE_WINDOWS = [
 
 export type RepurchaseWindow = (typeof REPURCHASE_WINDOWS)[number];
 
-/** Meta inicial exibida no painel. Pode virar configuração persistida em uma fase futura. */
-export const DEFAULT_REPURCHASE_TARGET = 0.15;
+/** Meta operacional inicial: segunda compra em até 30 dias. O usuário pode alterá-la no painel. */
+export const DEFAULT_REPURCHASE_TARGET = 0.10;
+export const DEFAULT_REPURCHASE_TARGET_WINDOW_DAYS = 30;
+export const REPURCHASE_TARGET_WINDOWS = [7, 15, 30, 60, 90] as const;
+export type RepurchaseTargetWindowDays = (typeof REPURCHASE_TARGET_WINDOWS)[number];
 
 export type RepurchaseOrder = {
   id: string;
@@ -125,7 +128,12 @@ export function buildRepurchaseJourney(orders: RepurchaseOrder[], now = new Date
   });
 }
 
-export function summarizeRepurchase(journey: RepurchaseCustomer[], target = DEFAULT_REPURCHASE_TARGET) {
+export function summarizeRepurchase(
+  journey: RepurchaseCustomer[],
+  target = DEFAULT_REPURCHASE_TARGET,
+  targetWindowDays: RepurchaseTargetWindowDays = DEFAULT_REPURCHASE_TARGET_WINDOW_DAYS,
+  now = new Date(),
+) {
   const buyers = journey.length;
   const convertedRows = journey.filter((x) => x.converted);
   const pendingRows = journey.filter((x) => !x.converted);
@@ -146,6 +154,16 @@ export function summarizeRepurchase(journey: RepurchaseCustomer[], target = DEFA
   const secondRevenue = convertedRows.reduce((sum, x) => sum + (x.secondOrderRevenue ?? 0), 0);
   const avg = (values: number[]) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0);
   const conversionRate = buyers ? convertedRows.length / buyers : 0;
+  const matureRows = journey.filter((row) => {
+    const first = new Date(row.firstOrderAt);
+    return !Number.isNaN(first.getTime()) && daysBetween(first, now) >= targetWindowDays;
+  });
+  const matureConvertedRows = matureRows.filter((row) => {
+    if (!row.secondOrderAt) return false;
+    return daysBetween(new Date(row.firstOrderAt), new Date(row.secondOrderAt)) <= targetWindowDays;
+  });
+  const matureConversionRate = matureRows.length ? matureConvertedRows.length / matureRows.length : 0;
+  const targetConvertedCustomers = Math.ceil(matureRows.length * target);
 
   return {
     buyers,
@@ -154,6 +172,12 @@ export function summarizeRepurchase(journey: RepurchaseCustomer[], target = DEFA
     conversionRate,
     targetConversionRate: target,
     gapToTarget: Math.max(0, target - conversionRate),
+    targetWindowDays,
+    matureEligible: matureRows.length,
+    matureConverted: matureConvertedRows.length,
+    matureConversionRate,
+    matureGapToTarget: Math.max(0, target - matureConversionRate),
+    customersMissingToTarget: Math.max(0, targetConvertedCustomers - matureConvertedRows.length),
     firstRevenue,
     firstAverageTicket: buyers ? firstRevenue / buyers : 0,
     secondRevenue,
@@ -164,7 +188,11 @@ export function summarizeRepurchase(journey: RepurchaseCustomer[], target = DEFA
   };
 }
 
-export function buildRepurchaseCohorts(journey: RepurchaseCustomer[]) {
+export function buildRepurchaseCohorts(
+  journey: RepurchaseCustomer[],
+  targetWindowDays: RepurchaseTargetWindowDays = DEFAULT_REPURCHASE_TARGET_WINDOW_DAYS,
+  now = new Date(),
+) {
   const map = new Map<string, RepurchaseCustomer[]>();
   for (const row of journey) {
     const month = row.firstOrderAt.slice(0, 7);
@@ -177,11 +205,19 @@ export function buildRepurchaseCohorts(journey: RepurchaseCustomer[]) {
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([month, rows]) => {
       const converted = rows.filter((x) => x.converted);
+      const mature = rows.filter((row) => daysBetween(new Date(row.firstOrderAt), now) >= targetWindowDays);
+      const matureConverted = mature.filter(
+        (row) => row.secondOrderAt && daysBetween(new Date(row.firstOrderAt), new Date(row.secondOrderAt)) <= targetWindowDays,
+      );
       return {
         month,
         customers: rows.length,
         converted: converted.length,
         conversionRate: rows.length ? converted.length / rows.length : 0,
+        matureCustomers: mature.length,
+        matureConverted: matureConverted.length,
+        matureConversionRate: mature.length ? matureConverted.length / mature.length : null,
+        maturityStatus: mature.length === rows.length ? "completa" as const : mature.length > 0 ? "parcial" as const : "aguardando" as const,
         averageDaysToSecondOrder: converted.length
           ? converted.reduce((s, x) => s + (x.daysToSecondOrder ?? 0), 0) / converted.length
           : 0,

@@ -40,7 +40,10 @@ export function ReportsTab() {
     const receita = list.reduce((a, c) => a + c.receita, 0);
     const custo = list.reduce((a, c) => a + c.custo, 0);
     const falhas = list.reduce((a, c) => a + c.falhas, 0);
-    return { enviadas, entregues, lidas, vendas, receita, custo, falhas };
+    const couponOrders = list.reduce((a, c) => a + (c.couponOrders ?? 0), 0);
+    const couponCustomers = list.reduce((a, c) => a + (c.couponCustomers ?? 0), 0);
+    const couponRevenue = list.reduce((a, c) => a + (c.couponRevenue ?? 0), 0);
+    return { enviadas, entregues, lidas, vendas, receita, custo, falhas, couponOrders, couponCustomers, couponRevenue };
   }, [list]);
 
   const roas = totals.custo > 0 ? totals.receita / totals.custo : null;
@@ -64,6 +67,7 @@ export function ReportsTab() {
   }, [list]);
 
   const ranking = [...list].sort((a, b) => b.receita - a.receita).slice(0, 8);
+  const trackedCouponCodes = Array.from(new Set(list.flatMap((campaign) => campaign.trackedCouponCodes ?? [])));
 
   const byCategory = useMemo(() => {
     const map = new Map<string, { enviadas: number; leitura: number; vendas: number; receita: number }>();
@@ -96,11 +100,18 @@ export function ReportsTab() {
           <p className="mt-2 text-3xl font-bold">{leituraPct.toFixed(1)}%</p>
           <p className="mt-1 text-xs text-muted-foreground">{totals.lidas.toLocaleString("pt-BR")} mensagens lidas</p>
         </div>
-        <div className="surface-card bg-foreground p-5 text-background">
-          <p className="text-xs text-background/70">ROAS estimado</p>
-          <p className="mt-2 text-3xl font-bold">{roas !== null ? `${roas.toFixed(1)}x` : "—"}</p>
-          <p className="mt-1 text-xs text-background/70">{brlCents(totals.custo)} de custo estimado</p>
+        <div className="rounded-xl border border-foreground/10 !bg-foreground p-5 !text-white shadow-sm">
+          <p className="text-xs !text-white/70">ROAS estimado</p>
+          <p className="mt-2 text-3xl font-bold !text-white">{roas !== null ? `${roas.toFixed(1)}x` : "—"}</p>
+          <p className="mt-1 text-xs !text-white/70">{brlCents(totals.custo)} de custo estimado</p>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-brand/20 bg-brand-soft/50 px-4 py-3 text-sm">
+        <p className="font-semibold text-foreground">Como a receita é atribuída</p>
+        <p className="mt-1 text-muted-foreground">
+          Cupom identificado confirma a campanha. Sem cupom, o pedido é atribuído ao primeiro envio feito para o cliente nas 72 horas anteriores à compra. Cada pedido entra em apenas uma campanha.
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-6">
@@ -118,6 +129,32 @@ export function ReportsTab() {
           </div>
         ))}
       </div>
+
+      {trackedCouponCodes.length > 0 && (
+        <section className="surface-card p-5">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="font-semibold">Conversões confirmadas por cupom</h3>
+              <p className="text-sm text-muted-foreground">Somente pedidos válidos em que a Shopify registrou o código usado.</p>
+            </div>
+            <p className="text-xs font-semibold text-muted-foreground">{trackedCouponCodes.join(" · ")}</p>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-border p-4">
+              <p className="text-xs text-muted-foreground">Pedidos com cupom</p>
+              <p className="mt-1 text-2xl font-bold">{totals.couponOrders}</p>
+            </div>
+            <div className="rounded-xl border border-border p-4">
+              <p className="text-xs text-muted-foreground">Clientes identificados</p>
+              <p className="mt-1 text-2xl font-bold">{totals.couponCustomers}</p>
+            </div>
+            <div className="rounded-xl border border-border p-4">
+              <p className="text-xs text-muted-foreground">Receita confirmada</p>
+              <p className="mt-1 text-2xl font-bold">{brl(totals.couponRevenue)}</p>
+            </div>
+          </div>
+        </section>
+      )}
 
       <PresendAuditPanel />
       <QueueHealthPanel />

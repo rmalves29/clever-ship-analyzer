@@ -36,6 +36,22 @@ import { brl } from "@/lib/crm-mock";
 
 const segColor = (name: string) => RFM_SEGMENTS_CONFIG[name as RFMSegment]?.color ?? "#94a3b8";
 
+const RFM_SEGMENT_ORDER: RFMSegment[] = [
+  "Campeões",
+  "Leais",
+  "Potencialmente Leais",
+  "Novos",
+  "Precisa de atenção",
+  "Quase hibernando",
+  "Em risco",
+  "Hibernando",
+  "Não pode perder",
+  "Perdidos",
+  "Sem compra",
+];
+
+const segmentOrder = (segment: RFMSegment) => RFM_SEGMENT_ORDER.indexOf(segment);
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === "string") return error;
@@ -114,13 +130,11 @@ export function RFMAnalysis() {
   }
 
   const summary = data?.summary ?? [];
-  const activeSegments = (Object.keys(RFM_SEGMENTS_CONFIG) as RFMSegment[]).filter(
-    (s) => data?.classicMode || RFM_SEGMENTS_CONFIG[s].mode === "base",
-  );
+  const activeSegments = RFM_SEGMENT_ORDER;
 
   const chartData = summary
     .map((s) => ({ name: s.name, clientes: s.clientes, receita: s.receita, color: segColor(s.name) }))
-    .sort((a, b) => b.clientes - a.clientes);
+    .sort((a, b) => segmentOrder(a.name) - segmentOrder(b.name));
 
   const freqData = (data?.frequencia ?? []).filter((f) => f.faixa !== "0x");
   const hasSourceCustomers = (data?.sourceCustomers ?? 0) > 0;
@@ -174,20 +188,17 @@ export function RFMAnalysis() {
         </div>
       )}
 
-      {!data?.classicMode && (
-        <div className="surface-card flex items-start gap-3 border-l-4 border-l-amber-500 p-4">
-          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-500" />
-          <div className="text-sm">
-            <p className="font-semibold">Base nova — modo de segmentação inicial ativo</p>
-            <p className="text-muted-foreground">
-              Há {data?.historyDays ?? 0} dias de histórico pago. Segmentos clássicos de risco
-              (Em Risco, Hibernando, Perdidos) só são liberados a partir de {CLASSIC_MODE_MIN_HISTORY_DAYS} dias —
-              até lá ninguém é rotulado como perdido. <strong>LTV projetado indisponível</strong>: exibimos apenas
-              métricas reais observadas.
-            </p>
-          </div>
+      <div className="surface-card flex items-start gap-3 border-l-4 border-l-brand p-4">
+        <Sparkles className="mt-0.5 size-5 shrink-0 text-brand" />
+        <div className="text-sm">
+          <p className="font-semibold">Matriz RFM completa ativa</p>
+          <p className="text-muted-foreground">
+            Todos os segmentos são avaliados desde já, sem bloqueio por idade da base. Há {data?.historyDays ?? 0} dias
+            de histórico pago; as faixas de recência usam o ciclo real de recompra da loja.{" "}
+            {!data?.ltvDisponivel && <><strong>LTV projetado continua indisponível</strong> até completar {CLASSIC_MODE_MIN_HISTORY_DAYS} dias.</>}
+          </p>
         </div>
-      )}
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="surface-card p-5">
@@ -293,7 +304,7 @@ export function RFMAnalysis() {
                 </TableRow>
               ) : (
                 [...summary]
-                  .sort((a, b) => b.receita - a.receita || b.clientes - a.clientes)
+                  .sort((a, b) => segmentOrder(a.name) - segmentOrder(b.name))
                   .map((s) => (
                     <TableRow key={s.name} className="group transition-colors hover:bg-muted/20">
                       <TableCell className="font-medium"><div className="flex items-center gap-2"><div className="size-2 rounded-full" style={{ backgroundColor: segColor(s.name) }} />{s.name}</div></TableCell>

@@ -276,8 +276,10 @@ export type InstagramMedia = {
   mediaType: string;
   productType: string;
   permalink: string | null;
+  mediaUrl: string | null;
   thumbnailUrl: string | null;
   timestamp: string;
+  views: number;
   reach: number;
   likes: number;
   comments: number;
@@ -290,12 +292,15 @@ export type InstagramMedia = {
  *  `getInstagramTopContentInRange` (range arbitrário, ex: "semana anterior" pro lote de IA).
  *  `untilISO` é exclusivo (mesma semântica dos outros usos de range nesse arquivo). */
 async function fetchTopContentInRange(pageToken: string, igId: string, sinceISO: string, untilISO: string): Promise<InstagramMedia[]> {
-  const sinceTs = Math.floor(new Date(sinceISO + "T00:00:00Z").getTime() / 1000);
-  const untilTs = Math.floor(new Date(untilISO + "T00:00:00Z").getTime() / 1000);
+  const sinceTs = instagramRangeBoundarySeconds(sinceISO);
+  const untilTs = instagramRangeBoundarySeconds(untilISO);
+  if (sinceTs === null || untilTs === null || sinceTs >= untilTs) {
+    throw new Error("Período inválido para consultar as publicações do Instagram.");
+  }
 
   const listRes = await graphGET(
     `/${igId}/media`,
-    { fields: "id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp", limit: "50" },
+    { fields: "id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp,like_count,comments_count", limit: "50" },
     pageToken,
   );
   const items = ((listRes.data ?? []) as any[]).filter((m) => {
@@ -305,34 +310,73 @@ async function fetchTopContentInRange(pageToken: string, igId: string, sinceISO:
 
   const withInsights = await Promise.all(
     items.map(async (m) => {
-      try {
-        const insRes = await graphGET(`/${m.id}/insights`, { metric: "reach,likes,comments,shares,saved,total_interactions" }, pageToken);
-        const byName = new Map<string, number>(((insRes.data ?? []) as any[]).map((row) => [row.name, row.values?.[0]?.value ?? row.total_value?.value ?? 0]));
-        return {
-          id: m.id,
-          caption: m.caption ?? null,
-          mediaType: m.media_type,
-          productType: m.media_product_type,
-          permalink: m.permalink ?? null,
-          thumbnailUrl: m.thumbnail_url ?? m.media_url ?? null,
-          timestamp: m.timestamp,
-          reach: byName.get("reach") ?? 0,
-          likes: byName.get("likes") ?? 0,
-          comments: byName.get("comments") ?? 0,
-          shares: byName.get("shares") ?? 0,
-          saved: byName.get("saved") ?? 0,
-          totalInteractions: byName.get("total_interactions") ?? 0,
-        } as InstagramMedia;
-      } catch {
-        return null;
-      }
+      const byName = await fetchMediaInsights(m.id, pageToken);
+      const likes = Number(m.like_count ?? 0);
+      const comments = Number(m.comments_count ?? 0);
+      const shares = byName.get("shares") ?? 0;
+      const saved = byName.get("saved") ?? 0;
+      return {
+        id: m.id,
+        caption: m.caption ?? null,
+        mediaType: m.media_type,
+        productType: m.media_product_type,
+        permalink: m.permalink ?? null,
+        mediaUrl: m.media_url ?? null,
+        thumbnailUrl: m.thumbnail_url ?? (m.media_type === "IMAGE" || m.media_type === "CAROUSEL_ALBUM" ? m.media_url : null) ?? null,
+        timestamp: m.timestamp,
+        views: byName.get("views") ?? byName.get("plays") ?? 0,
+        reach: byName.get("reach") ?? 0,
+        likes,
+        comments,
+        shares,
+        saved,
+        totalInteractions: byName.get("total_interactions") ?? likes + comments + shares + saved,
+      } as InstagramMedia;
     }),
   );
 
   return withInsights
-    .filter((m): m is InstagramMedia => m !== null)
     .sort((a, b) => b.totalInteractions - a.totalInteractions)
     .slice(0, 10);
+}
+
+/** Aceita tanto `AAAA-MM-DD` quanto um ISO completo. O calendário usa limites com fuso de São
+ * Paulo, enquanto a tela de Instagram usa datas simples; normalizar aqui evita concatenar dois
+ * horários e transformar o período em `Invalid Date`. */
+export function instagramRangeBoundarySeconds(value: string): number | null {
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value.trim())
+    ? `${value.trim()}T00:00:00Z`
+    : value.trim();
+  const timestamp = new Date(normalized).getTime();
+  return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : null;
+}
+
+/** Métricas disponíveis variam por tipo de mídia e versão da Graph API. Uma métrica inválida não
+ * pode eliminar a postagem inteira: tentamos conjuntos progressivamente menores e preservamos os
+ * contadores básicos (`like_count` e `comments_count`) retornados pelo próprio objeto de mídia. */
+async function fetchMediaInsights(mediaId: string, pageToken: string): Promise<Map<string, number>> {
+  const metricGroups = [
+    "views,reach,total_interactions,saved,shares",
+    "plays,reach,total_interactions,saved,shares",
+    "impressions,reach,total_interactions,saved,shares",
+    "reach,total_interactions,saved,shares",
+    "reach,saved,shares",
+    "reach",
+  ];
+  for (const metric of metricGroups) {
+    try {
+      const response = await graphGET(`/${mediaId}/insights`, { metric }, pageToken);
+      return new Map<string, number>(
+        ((response.data ?? []) as any[]).map((row) => [
+          row.name,
+          Number(row.values?.[0]?.value ?? row.total_value?.value ?? 0),
+        ]),
+      );
+    } catch {
+      // Tenta um conjunto compatível com outro tipo de mídia/versão da API.
+    }
+  }
+  return new Map<string, number>();
 }
 
 export async function getInstagramTopContent(datePreset: InstagramDatePreset): Promise<{ success: true; media: InstagramMedia[] } | { success: false; error: string }> {
@@ -360,5 +404,70 @@ export async function getInstagramTopContentInRange(sinceISO: string, untilISO: 
     return { success: true, media };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar o Instagram." };
+  }
+}
+
+async function fetchStoryInsights(storyId: string, pageToken: string): Promise<{ views: number; reach: number }> {
+  // `views` é a métrica atual. Contas ainda atendidas por uma versão anterior da API podem
+  // expor `impressions`; o fallback mantém a seleção funcionando durante a transição da Meta.
+  for (const metric of ["views,reach", "impressions,reach"]) {
+    try {
+      const response = await graphGET(`/${storyId}/insights`, { metric }, pageToken);
+      const byName = new Map<string, number>(
+        ((response.data ?? []) as any[]).map((row) => [
+          row.name,
+          Number(row.total_value?.value ?? row.values?.[0]?.value ?? 0),
+        ]),
+      );
+      return {
+        views: byName.get("views") ?? byName.get("impressions") ?? 0,
+        reach: byName.get("reach") ?? 0,
+      };
+    } catch {
+      // Tenta o conjunto de métricas compatível com a outra versão da API.
+    }
+  }
+  return { views: 0, reach: 0 };
+}
+
+/** Stories ainda ativos no momento da criação do calendário (janela prática de até 24h).
+ * A API não devolve Stories expirados por esse endpoint, então a seleção é sempre feita sobre o
+ * conteúdo que o público ainda consegue abrir. */
+export async function getInstagramActiveStories(): Promise<{ success: true; media: InstagramMedia[] } | { success: false; error: string }> {
+  const { pageToken, igId } = await loadInstagramSettings();
+  if (!pageToken || !igId) return { success: false, error: "Instagram não conectado. Configure em Configurações." };
+
+  try {
+    const response = await graphGET(
+      `/${igId}/stories`,
+      { fields: "id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp", limit: "50" },
+      pageToken,
+    );
+    const media = await Promise.all(
+      ((response.data ?? []) as any[]).map(async (story) => {
+        const insights = await fetchStoryInsights(story.id, pageToken);
+        return {
+          id: story.id,
+          caption: story.caption ?? null,
+          mediaType: story.media_type,
+          productType: story.media_product_type ?? "STORY",
+          permalink: story.permalink ?? null,
+          mediaUrl: story.media_url ?? null,
+          thumbnailUrl: story.thumbnail_url ?? (story.media_type === "IMAGE" ? story.media_url : null) ?? null,
+          timestamp: story.timestamp,
+          views: insights.views,
+          reach: insights.reach,
+          likes: 0,
+          comments: 0,
+          shares: 0,
+          saved: 0,
+          totalInteractions: 0,
+        } satisfies InstagramMedia;
+      }),
+    );
+    media.sort((a, b) => b.views - a.views || b.reach - a.reach || new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return { success: true, media };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar os Stories ativos." };
   }
 }

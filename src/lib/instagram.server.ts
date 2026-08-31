@@ -276,8 +276,10 @@ export type InstagramMedia = {
   mediaType: string;
   productType: string;
   permalink: string | null;
+  mediaUrl: string | null;
   thumbnailUrl: string | null;
   timestamp: string;
+  views: number;
   reach: number;
   likes: number;
   comments: number;
@@ -314,8 +316,10 @@ async function fetchTopContentInRange(pageToken: string, igId: string, sinceISO:
           mediaType: m.media_type,
           productType: m.media_product_type,
           permalink: m.permalink ?? null,
-          thumbnailUrl: m.thumbnail_url ?? m.media_url ?? null,
+          mediaUrl: m.media_url ?? null,
+          thumbnailUrl: m.thumbnail_url ?? (m.media_type === "IMAGE" || m.media_type === "CAROUSEL_ALBUM" ? m.media_url : null) ?? null,
           timestamp: m.timestamp,
+          views: byName.get("views") ?? byName.get("plays") ?? 0,
           reach: byName.get("reach") ?? 0,
           likes: byName.get("likes") ?? 0,
           comments: byName.get("comments") ?? 0,
@@ -360,5 +364,70 @@ export async function getInstagramTopContentInRange(sinceISO: string, untilISO: 
     return { success: true, media };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar o Instagram." };
+  }
+}
+
+async function fetchStoryInsights(storyId: string, pageToken: string): Promise<{ views: number; reach: number }> {
+  // `views` é a métrica atual. Contas ainda atendidas por uma versão anterior da API podem
+  // expor `impressions`; o fallback mantém a seleção funcionando durante a transição da Meta.
+  for (const metric of ["views,reach", "impressions,reach"]) {
+    try {
+      const response = await graphGET(`/${storyId}/insights`, { metric }, pageToken);
+      const byName = new Map<string, number>(
+        ((response.data ?? []) as any[]).map((row) => [
+          row.name,
+          Number(row.total_value?.value ?? row.values?.[0]?.value ?? 0),
+        ]),
+      );
+      return {
+        views: byName.get("views") ?? byName.get("impressions") ?? 0,
+        reach: byName.get("reach") ?? 0,
+      };
+    } catch {
+      // Tenta o conjunto de métricas compatível com a outra versão da API.
+    }
+  }
+  return { views: 0, reach: 0 };
+}
+
+/** Stories ainda ativos no momento da criação do calendário (janela prática de até 24h).
+ * A API não devolve Stories expirados por esse endpoint, então a seleção é sempre feita sobre o
+ * conteúdo que o público ainda consegue abrir. */
+export async function getInstagramActiveStories(): Promise<{ success: true; media: InstagramMedia[] } | { success: false; error: string }> {
+  const { pageToken, igId } = await loadInstagramSettings();
+  if (!pageToken || !igId) return { success: false, error: "Instagram não conectado. Configure em Configurações." };
+
+  try {
+    const response = await graphGET(
+      `/${igId}/stories`,
+      { fields: "id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,timestamp", limit: "50" },
+      pageToken,
+    );
+    const media = await Promise.all(
+      ((response.data ?? []) as any[]).map(async (story) => {
+        const insights = await fetchStoryInsights(story.id, pageToken);
+        return {
+          id: story.id,
+          caption: story.caption ?? null,
+          mediaType: story.media_type,
+          productType: story.media_product_type ?? "STORY",
+          permalink: story.permalink ?? null,
+          mediaUrl: story.media_url ?? null,
+          thumbnailUrl: story.thumbnail_url ?? (story.media_type === "IMAGE" ? story.media_url : null) ?? null,
+          timestamp: story.timestamp,
+          views: insights.views,
+          reach: insights.reach,
+          likes: 0,
+          comments: 0,
+          shares: 0,
+          saved: 0,
+          totalInteractions: 0,
+        } satisfies InstagramMedia;
+      }),
+    );
+    media.sort((a, b) => b.views - a.views || b.reach - a.reach || new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return { success: true, media };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar os Stories ativos." };
   }
 }

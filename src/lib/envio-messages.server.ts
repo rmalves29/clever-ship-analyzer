@@ -150,6 +150,57 @@ export async function uploadEnvioMedia(input: { fileName: string; base64Data: st
   return { url: data.publicUrl };
 }
 
+const REMOTE_MEDIA_MAX_BYTES = 64 * 1024 * 1024;
+
+function extensionForContentType(contentType: string): string {
+  const normalized = contentType.split(";")[0]?.trim().toLowerCase();
+  const byType: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "video/mp4": "mp4",
+    "video/quicktime": "mov",
+    "video/webm": "webm",
+  };
+  return byType[normalized ?? ""] ?? (normalized?.startsWith("video/") ? "mp4" : "jpg");
+}
+
+/** Baixa uma mídia temporária da Meta/Instagram e a rehospeda imediatamente. URLs dessas APIs
+ * expiram; salvar uma cópia pública no bucket evita que o anexo desapareça antes do agendamento. */
+export async function mirrorRemoteEnvioMedia(input: {
+  sourceUrl: string;
+  fileStem: string;
+}): Promise<{ url: string; contentType: string; bytes: number }> {
+  const response = await fetch(input.sourceUrl);
+  if (!response.ok) throw new Error(`A mídia de origem respondeu HTTP ${response.status}.`);
+
+  const announcedSize = Number(response.headers.get("content-length") ?? 0);
+  if (announcedSize > REMOTE_MEDIA_MAX_BYTES) {
+    throw new Error("A mídia ultrapassa o limite de 64 MB para anexo automático.");
+  }
+  const contentType = (response.headers.get("content-type") ?? "application/octet-stream").split(";")[0]!.trim().toLowerCase();
+  if (!contentType.startsWith("image/") && !contentType.startsWith("video/")) {
+    throw new Error(`Formato de mídia não suportado: ${contentType}.`);
+  }
+
+  const buffer = await response.arrayBuffer();
+  if (buffer.byteLength > REMOTE_MEDIA_MAX_BYTES) {
+    throw new Error("A mídia ultrapassa o limite de 64 MB para anexo automático.");
+  }
+
+  const supabaseAdmin = await admin();
+  const safeStem = input.fileStem.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const path = `${Date.now()}-${crypto.randomUUID()}-${safeStem}.${extensionForContentType(contentType)}`;
+  const { error } = await supabaseAdmin.storage.from("envio-uploads").upload(path, new Uint8Array(buffer), {
+    contentType,
+    upsert: false,
+  });
+  if (error) throw new Error(error.message);
+  const { data } = supabaseAdmin.storage.from("envio-uploads").getPublicUrl(path);
+  return { url: data.publicUrl, contentType, bytes: buffer.byteLength };
+}
+
 export type MessageFeedback = "good" | "bad";
 
 /** Feedback manual (bom/ruim) sobre uma mensagem já enviada — alimenta o loop de aprendizado

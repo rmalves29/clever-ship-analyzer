@@ -22,6 +22,13 @@ export const listCrmEvents = createServerFn({ method: "POST" })
     return listEvents(data);
   });
 
+export const listCrmEventDates = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth])
+  .handler(async () => {
+    const { listEventDates } = await import("./events.server");
+    return listEventDates();
+  });
+
 export const createCrmEvent = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => eventInput.parse(data))

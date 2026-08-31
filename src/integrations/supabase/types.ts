@@ -1617,6 +1617,7 @@ export type Database = {
           first_name: string | null
           id: string
           last_name: string | null
+          last_purchase_at: string | null
           phone: string | null
           province: string | null
           rfm_segment: string | null
@@ -1632,6 +1633,7 @@ export type Database = {
           first_name?: string | null
           id: string
           last_name?: string | null
+          last_purchase_at?: string | null
           phone?: string | null
           province?: string | null
           rfm_segment?: string | null
@@ -1647,6 +1649,7 @@ export type Database = {
           first_name?: string | null
           id?: string
           last_name?: string | null
+          last_purchase_at?: string | null
           phone?: string | null
           province?: string | null
           rfm_segment?: string | null

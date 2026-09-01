@@ -513,8 +513,24 @@ export async function checkUnansweredThreads(): Promise<number> {
         .maybeSingle();
       if (existingRun) continue; // já roteado nessa mesma janela de silêncio (cliques em botão não abrem uma nova)
 
+      // Uma run de uma janela de silêncio ANTERIOR pode ter ficado parada pra sempre num menu que
+      // o cliente nunca respondeu (nunca chega a completed/failed). O índice único
+      // (flow_id, phone) WHERE status='active' só permite 1 run ativa por vez — sem encerrar essa
+      // run velha antes, o insert abaixo falha (constraint) e falha CALADO (o erro é descartado),
+      // bloqueando esse telefone pra sempre. Encerra a run velha, superada por essa nova mensagem.
+      await supabaseAdmin
+        .from("whatsapp_conversation_runs")
+        .update({
+          status: "completed",
+          completed_at: new Date().toISOString(),
+          last_error: "Superada por nova mensagem do cliente antes de concluir",
+        } as never)
+        .eq("flow_id", flow.id)
+        .eq("phone", thread.phone)
+        .eq("status", "active");
+
       const startedAt = new Date().toISOString();
-      const { data: newRun } = await supabaseAdmin
+      const { data: newRun, error: insertError } = await supabaseAdmin
         .from("whatsapp_conversation_runs")
         .insert({
           flow_id: flow.id,
@@ -527,7 +543,10 @@ export async function checkUnansweredThreads(): Promise<number> {
         } as never)
         .select("id, flow_id, customer_id, phone, current_step_id, started_at")
         .single();
-      if (!newRun) continue;
+      if (!newRun) {
+        if (insertError) console.error("Falha ao criar run de 'sem resposta':", insertError.message);
+        continue;
+      }
 
       await supabaseAdmin
         .from("whatsapp_conversational_flows")

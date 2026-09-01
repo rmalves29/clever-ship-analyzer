@@ -812,11 +812,15 @@ export async function getStoredVerifyToken(): Promise<string | null> {
   return settings.verifyToken;
 }
 
+export type TemplateButtonInput =
+  | { type: "QUICK_REPLY"; text: string }
+  | { type: "URL"; text: string; url: string; example?: string[] | undefined };
+
 export type TemplateComponentInput =
   | { type: "HEADER"; format: "TEXT"; text: string }
   | { type: "BODY"; text: string }
   | { type: "FOOTER"; text: string }
-  | { type: "BUTTONS"; buttons: { type: "QUICK_REPLY"; text: string }[] };
+  | { type: "BUTTONS"; buttons: TemplateButtonInput[] };
 
 /** Cria um template novo no WABA e manda pra fila de revisão da Meta (fica "PENDING" até ela decidir). */
 export async function createTemplate(input: {

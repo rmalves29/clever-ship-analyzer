@@ -98,6 +98,9 @@ export function TemplatesTab() {
   const [newFooter, setNewFooter] = useState("");
   const [newButtons, setNewButtons] = useState<string[]>([]);
   const [newVariableExamples, setNewVariableExamples] = useState<string[]>([]);
+  const [newLinkButtonText, setNewLinkButtonText] = useState("");
+  const [newLinkButtonUrl, setNewLinkButtonUrl] = useState("");
+  const [newLinkButtonExample, setNewLinkButtonExample] = useState("");
   const [creating, setCreating] = useState(false);
 
   const newVariableValidation = useMemo(() => validateTemplateVariables(newBody), [newBody]);
@@ -106,6 +109,16 @@ export function TemplatesTab() {
     newVariableValidation.valid &&
     (newVariableCount === 0 ||
       newVariableValidation.indexes.every((_, index) => Boolean(newVariableExamples[index]?.trim())));
+
+  // O botão de link só aceita 1 variável ({{1}}), sempre no final da URL — diferente das variáveis
+  // do corpo, que podem ser várias em qualquer posição.
+  const linkButtonHasVariable = newLinkButtonUrl.includes("{{1}}");
+  const linkButtonReady =
+    !newLinkButtonText.trim() && !newLinkButtonUrl.trim()
+      ? true
+      : Boolean(newLinkButtonText.trim()) &&
+        Boolean(newLinkButtonUrl.trim()) &&
+        (!linkButtonHasVariable || Boolean(newLinkButtonExample.trim()));
 
   const resetNewForm = () => {
     setNewName("");
@@ -116,6 +129,9 @@ export function TemplatesTab() {
     setNewFooter("");
     setNewButtons([]);
     setNewVariableExamples([]);
+    setNewLinkButtonText("");
+    setNewLinkButtonUrl("");
+    setNewLinkButtonExample("");
   };
 
   const handleCreate = async () => {
@@ -130,6 +146,15 @@ export function TemplatesTab() {
       return;
     }
 
+    if (!linkButtonReady) {
+      toast.error(
+        linkButtonHasVariable
+          ? "Informe uma URL de exemplo completa para o botão de link (a Meta exige pra aprovar)."
+          : "Preencha o texto e a URL do botão de link, ou deixe os dois em branco.",
+      );
+      return;
+    }
+
     setCreating(true);
     try {
       const bodyComponent = {
@@ -141,7 +166,16 @@ export function TemplatesTab() {
       if (newHeader.trim()) components.unshift({ type: "HEADER", format: "TEXT", text: newHeader.trim() });
       if (newFooter.trim()) components.push({ type: "FOOTER", text: newFooter.trim() });
       const buttonTexts = newButtons.map((b) => b.trim()).filter(Boolean);
-      if (buttonTexts.length) components.push({ type: "BUTTONS", buttons: buttonTexts.map((text) => ({ type: "QUICK_REPLY", text })) });
+      const buttons: any[] = buttonTexts.map((text) => ({ type: "QUICK_REPLY", text }));
+      if (newLinkButtonText.trim() && newLinkButtonUrl.trim()) {
+        buttons.push({
+          type: "URL",
+          text: newLinkButtonText.trim(),
+          url: newLinkButtonUrl.trim(),
+          ...(linkButtonHasVariable ? { example: [newLinkButtonExample.trim()] } : {}),
+        });
+      }
+      if (buttons.length) components.push({ type: "BUTTONS", buttons });
 
       const res = await runCreate({ data: { name: newName, category: newCategory, language: newLanguage, components } });
       if (!res.success) {
@@ -464,16 +498,50 @@ export function TemplatesTab() {
             </div>
           </div>
 
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">Botão de link (opcional)</label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Input
+                value={newLinkButtonText}
+                onChange={(e) => setNewLinkButtonText(e.target.value)}
+                placeholder="Texto do botão (ex: Pagar agora)"
+                maxLength={25}
+              />
+              <Input
+                value={newLinkButtonUrl}
+                onChange={(e) => setNewLinkButtonUrl(e.target.value)}
+                placeholder="https://... (ou termine com {{1}} pra um link diferente por cliente)"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Pra um link que muda por cliente (ex: pagamento), a Meta só aceita variável no FINAL de uma URL com domínio
+              fixo — ex: <code>https://minhaloja.com.br/pedido/{"{{1}}"}</code>. Um link totalmente diferente por pedido
+              (como o de status da Shopify) não cabe nesse formato — nesses casos, continue mandando o link como texto no
+              corpo da mensagem.
+            </p>
+            {linkButtonHasVariable && (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold">Exemplo de URL completa (só pra Meta aprovar)</label>
+                <Input
+                  value={newLinkButtonExample}
+                  onChange={(e) => setNewLinkButtonExample(e.target.value)}
+                  placeholder="https://minhaloja.com.br/pedido/1548"
+                />
+              </div>
+            )}
+          </div>
+
           {(newHeader || newBody || newFooter) && (
             <div className="rounded-xl bg-[#075E54] p-4 text-white">
               {newHeader && <p className="font-semibold">{newHeader}</p>}
               <p className="mt-1 whitespace-pre-wrap text-sm">{renderTemplateVariablePreview(newBody, newVariableExamples)}</p>
               {newFooter && <p className="mt-1 text-xs text-white/70">{newFooter}</p>}
-              {newButtons.filter(Boolean).length > 0 && (
+              {(newButtons.filter(Boolean).length > 0 || newLinkButtonText.trim()) && (
                 <div className="mt-2 space-y-1 border-t border-white/20 pt-2">
                   {newButtons.filter(Boolean).map((b, i) => (
                     <p key={i} className="text-center text-sm text-[#53bdeb]">{b}</p>
                   ))}
+                  {newLinkButtonText.trim() && <p className="text-center text-sm text-[#53bdeb]">🔗 {newLinkButtonText}</p>}
                 </div>
               )}
             </div>
@@ -481,7 +549,7 @@ export function TemplatesTab() {
 
           <Button
             onClick={handleCreate}
-            disabled={creating || !newName || !newBody || !variableExamplesReady}
+            disabled={creating || !newName || !newBody || !variableExamplesReady || !linkButtonReady}
             className="w-full"
           >
             {creating ? "Enviando pra Meta..." : "Enviar pra aprovação"}

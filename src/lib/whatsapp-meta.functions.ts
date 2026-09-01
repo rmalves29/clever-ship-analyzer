@@ -310,7 +310,19 @@ const templateComponentSchema = z.union([
   z.object({ type: z.literal("FOOTER"), text: z.string().min(1) }),
   z.object({
     type: z.literal("BUTTONS"),
-    buttons: z.array(z.object({ type: z.literal("QUICK_REPLY"), text: z.string().min(1) })).min(1),
+    buttons: z
+      .array(
+        z.union([
+          z.object({ type: z.literal("QUICK_REPLY"), text: z.string().min(1) }),
+          z.object({
+            type: z.literal("URL"),
+            text: z.string().min(1),
+            url: z.string().min(1),
+            example: z.array(z.string().min(1)).optional(),
+          }),
+        ]),
+      )
+      .min(1),
   }),
 ]);
 

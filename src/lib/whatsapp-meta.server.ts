@@ -1004,6 +1004,60 @@ export async function listCampaignsWithMetrics() {
     deliveriesByPhone.set(phone, list);
   }
 
+  // ---------- Janela de 24h: mensagens de Utilidade enviadas com a janela de atendimento já
+  // aberta (o cliente mandou mensagem nas 24h anteriores ao envio) são gratuitas na Meta — só
+  // mensagens de Marketing são sempre cobradas, mesmo dentro da janela.
+  // https://business.whatsapp.com/products/platform-pricing
+  const inboundByPhone = new Map<string, number[]>();
+  {
+    const uniquePhones = Array.from(
+      new Set((recipients ?? []).map((r) => toE164(r.phone)).filter((p): p is string => Boolean(p))),
+    );
+    if (uniquePhones.length > 0) {
+      const { data: threadRows } = await supabaseAdmin
+        .from("whatsapp_inbox_threads")
+        .select("id, phone")
+        .in("phone", uniquePhones);
+      const phoneByThread = new Map<string, string>();
+      for (const t of (threadRows ?? []) as { id: string; phone: string }[]) phoneByThread.set(t.id, t.phone);
+      const threadIds = Array.from(phoneByThread.keys());
+      if (threadIds.length > 0) {
+        const { data: inboundRows } = await (supabaseAdmin.from("whatsapp_inbox_messages") as any)
+          .select("thread_id, sent_at")
+          .eq("direction", "inbound")
+          .in("thread_id", threadIds);
+        for (const m of (inboundRows ?? []) as { thread_id: string; sent_at: string | null }[]) {
+          const phone = phoneByThread.get(m.thread_id);
+          if (!phone || !m.sent_at) continue;
+          const list = inboundByPhone.get(phone) ?? [];
+          list.push(new Date(m.sent_at).getTime());
+          inboundByPhone.set(phone, list);
+        }
+        for (const list of inboundByPhone.values()) list.sort((a, b) => a - b);
+      }
+    }
+  }
+  /** Havia uma mensagem do cliente nas 24h antes de `atIso`? (janela de atendimento já aberta) */
+  const hasOpenServiceWindow = (phone: string, atIso: string): boolean => {
+    const list = inboundByPhone.get(phone);
+    if (!list || list.length === 0) return false;
+    const at = new Date(atIso).getTime();
+    const windowStart = at - DAY_MS;
+    let lo = 0;
+    let hi = list.length - 1;
+    let mostRecentBeforeOrAt = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (list[mid]! <= at) {
+        mostRecentBeforeOrAt = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return mostRecentBeforeOrAt >= 0 && list[mostRecentBeforeOrAt]! > windowStart;
+  };
+
   // ---------- Atribuição de vendas: primeiro contato por telefone em 72h; cupom confirma a conversão ----------
   // Código atual + aliases históricos: trocar GANHE5 por POP5 não apaga a medição anterior.
   const couponCampaigns = new Map<string, Set<string>>();
@@ -1132,7 +1186,26 @@ export async function listCampaignsWithMetrics() {
     const aggregate = vendasPorCampanha.get(c.id);
     const vendas = aggregate?.vendas ?? 0;
     const receita = aggregate?.receita ?? 0;
-    const custoPorMsg = c.message_type === "utility" ? costUtility : costMarketing;
+
+    let custo: number;
+    if (c.message_type === "utility") {
+      const sentRecips = recips.filter(
+        (r) => r.sent_at && (r.status === "sent" || r.status === "delivered" || r.status === "read"),
+      );
+      if (sentRecips.length > 0) {
+        const cobradas = sentRecips.filter((r) => {
+          const phone = toE164(r.phone);
+          return !phone || !hasOpenServiceWindow(phone, r.sent_at!);
+        }).length;
+        custo = cobradas * costUtility;
+      } else {
+        // Sem linhas de destinatário (dado legado) — não dá pra saber se a janela já estava
+        // aberta em cada envio, então mantém a estimativa simples de antes.
+        custo = c.enviadas * costUtility;
+      }
+    } else {
+      custo = c.enviadas * costMarketing;
+    }
 
     return {
       id: c.id,
@@ -1159,7 +1232,7 @@ export async function listCampaignsWithMetrics() {
       assistedOrders: aggregate?.assistedOrders ?? 0,
       assistedRevenue: aggregate?.assistedRevenue ?? 0,
       trackedCouponCodes: Array.from(trackedCodesByCampaign.get(c.id) ?? []),
-      custo: Number((c.enviadas * custoPorMsg).toFixed(2)),
+      custo: Number(custo.toFixed(2)),
       createdAt: c.created_at,
       sentAt: c.sent_at,
       approvedAt: c.approved_at,

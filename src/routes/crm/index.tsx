@@ -577,6 +577,11 @@ function CRMPage() {
                             regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "data_envio_hoje", operator: "eq", value: "sim", label: "Pedido Enviado Hoje" }] }] }
                           },
                           {
+                            nome: "Pedido Pendente (Pix)",
+                            descricao: "Clientes com pedido criado hoje aguardando confirmação de pagamento (ex.: Pix via Mercado Pago).",
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "pedido_pendente_hoje", operator: "eq", value: "sim", label: "Pedido Pendente (Pix) Criado Hoje" }] }] }
+                          },
+                          {
                             nome: "Checkouts Abandonados (CAR24)",
                             descricao: "Clientes capturados da integração de checkouts abandonados da Shopify.",
                             regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "checkout_abandonado", operator: "eq", value: "sim", label: "Checkout Abandonado (CAR24)" }] }] }

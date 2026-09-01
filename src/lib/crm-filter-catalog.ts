@@ -105,6 +105,7 @@ export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
       { id: "status_entrega", label: "Status da Entrega", kind: "fulfillment_status", description: "Status de rastreio do envio (Correios/transportadora) de qualquer pedido do cliente na Shopify. Pedidos antigos importados da Tray não têm esse dado." },
       { id: "perfil", label: "Perfil do Cliente", kind: "profile" },
       { id: "data_pedido_hoje", label: "Compra Válida Realizada Hoje", kind: "boolean" },
+      { id: "pedido_pendente_hoje", label: "Pedido Pendente (Pix) Criado Hoje", kind: "boolean", description: "Pedido com pagamento aguardando confirmação (ex.: Pix via Mercado Pago) criado hoje, ainda não pago nem vencido." },
       { id: "data_pedido_24h", label: "Compra Válida nas Últimas 24h", kind: "boolean", description: "Janela móvel de 24 horas." },
       { id: "data_envio_hoje", label: "Pedido Válido Enviado Hoje", kind: "boolean" },
       { id: "checkout_abandonado", label: "Checkout Abandonado Ativo", kind: "boolean", description: "Checkout mais recente sem uma compra válida posterior." },

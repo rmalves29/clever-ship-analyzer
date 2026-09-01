@@ -67,6 +67,7 @@ const DYNAMIC_VARS: { token: string; label: string }[] = [
   { token: "{{RASTREIO}}", label: "Código de rastreio" },
   { token: "{{STATUS_PEDIDO}}", label: "Status do envio (Enviado/Processando)" },
   { token: "{{LINK_CHECKOUT}}", label: "Link do checkout (carrinho abandonado)" },
+  { token: "{{LINK_PAGAMENTO}}", label: "Link para concluir o pagamento (Pix/Mercado Pago)" },
   { token: "{{CUPOM_CASHBACK}}", label: "Cupom de cashback do pedido" },
   { token: "{{VALOR_CASHBACK}}", label: "Valor do cashback gerado" },
   { token: "{{COMPRA_MINIMA_CASHBACK}}", label: "Compra mínima para usar o cashback" },

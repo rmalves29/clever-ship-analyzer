@@ -8,6 +8,9 @@ export type AutomationEventContext = {
     fulfillmentStatus?: string | null;
     discountCode?: string | null;
     shippingTitle?: string | null;
+    /** Página de status/pagamento do próprio pedido na Shopify (Order.statusPageUrl) — mostra
+     *  o botão "Pagar agora" quando o pedido está com saldo em aberto (ex.: Pix pendente). */
+    paymentUrl?: string | null;
   } | null;
   items?: Array<{ title: string; variantTitle?: string | null; quantity: number }>;
   fulfillment?: {
@@ -87,6 +90,7 @@ export function buildAutomationTokenReplacements(
     "{{LINK_RASTREIO}}": trackingUrl,
     "{{STATUS_PEDIDO}}": isSent ? "Enviado" : "Processando",
     "{{LINK_CHECKOUT}}": checkoutUrl,
+    "{{LINK_PAGAMENTO}}": order?.paymentUrl || "—",
     "{{CUPOM_CASHBACK}}": cashback?.code || "—",
     "{{VALOR_CASHBACK}}": cashback ? brl(cashback.amount) : "—",
     "{{COMPRA_MINIMA_CASHBACK}}": cashback ? brl(cashback.minimumPurchase) : "—",

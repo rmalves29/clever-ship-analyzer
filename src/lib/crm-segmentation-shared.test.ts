@@ -23,6 +23,7 @@ const orders: CRMOrderForSegmentation[] = [
   { id: "o3", customerId: "c2", totalPrice: 500, processedAt: isoDaysAgo(3), financialStatus: "REFUNDED" },
   { id: "o4", customerId: "c3", totalPrice: 80, processedAt: isoDaysAgo(20), financialStatus: "PAID", cancelledAt: isoDaysAgo(18) },
   { id: "o5", customerId: "c4", totalPrice: 150, processedAt: NOW.toISOString(), financialStatus: "PARTIALLY_PAID" },
+  { id: "o6", customerId: "c3", totalPrice: 90, processedAt: NOW.toISOString(), financialStatus: "PENDING" },
 ];
 
 const orderItems: CRMOrderItemForSegmentation[] = [
@@ -115,6 +116,13 @@ describe("filtros de comportamento", () => {
     expect(matchesSegmentRules(ctx("c4"), rule("data_pedido_24h", "eq", "sim"), NOW)).toBe(true);
     expect(matchesSegmentRules(ctx("c4"), rule("data_envio_hoje", "eq", "sim"), NOW)).toBe(true);
     expect(matchesSegmentRules(ctx("c2"), rule("data_pedido_24h", "eq", "sim"), NOW)).toBe(false);
+  });
+
+  it("pedido pendente hoje detecta Pix/checkout não concluído, sem contar como compra válida", () => {
+    expect(matchesSegmentRules(ctx("c3"), rule("pedido_pendente_hoje", "eq", "sim"), NOW)).toBe(true);
+    expect(ctx("c3").metrics.validOrderCount).toBe(0);
+    expect(matchesSegmentRules(ctx("c1"), rule("pedido_pendente_hoje", "eq", "sim"), NOW)).toBe(false);
+    expect(matchesSegmentRules(ctx("c2"), rule("pedido_pendente_hoje", "eq", "sim"), NOW)).toBe(false);
   });
 
   it("status pago exige pedido válido, mas refunded continua pesquisável", () => {

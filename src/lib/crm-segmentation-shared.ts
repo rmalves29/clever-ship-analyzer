@@ -54,6 +54,9 @@ export type PurchaseMetrics = {
   averageTicket: number;
   firstOrderAt: string | null;
   lastOrderAt: string | null;
+  /** Data do pedido PENDING mais recente (ex.: Pix aguardando pagamento) — ao contrário de
+   *  `lastOrderAt`, não passa por `isRevenueValidOrder` (que exclui PENDING de propósito). */
+  lastPendingOrderAt: string | null;
   validOrderIds: Set<string>;
   rawFinancialStatuses: Set<string>;
   validFinancialStatuses: Set<string>;
@@ -100,6 +103,7 @@ const EMPTY_METRICS = (customerId: string): PurchaseMetrics => ({
   averageTicket: 0,
   firstOrderAt: null,
   lastOrderAt: null,
+  lastPendingOrderAt: null,
   validOrderIds: new Set<string>(),
   rawFinancialStatuses: new Set<string>(),
   validFinancialStatuses: new Set<string>(),
@@ -140,6 +144,13 @@ export function buildPurchaseMetricsIndex(orders: CRMOrderForSegmentation[]): Ma
     if (order.cancelledAt || status === "CANCELLED" || status === "CANCELED") metrics.cancelledOrderCount += 1;
     const fulfillmentStatus = normalizeStatus(order.fulfillmentStatus);
     if (fulfillmentStatus) metrics.rawFulfillmentStatuses.add(fulfillmentStatus);
+
+    if (status === "PENDING") {
+      const pendingDate = new Date(order.processedAt);
+      if (!Number.isNaN(pendingDate.getTime()) && (!metrics.lastPendingOrderAt || pendingDate > new Date(metrics.lastPendingOrderAt))) {
+        metrics.lastPendingOrderAt = pendingDate.toISOString();
+      }
+    }
 
     if (isRevenueValidOrder(order)) {
       const date = new Date(order.processedAt);
@@ -364,6 +375,11 @@ function purchasedInLast24h(context: CRMCustomerContext, now: Date): boolean {
   return Number.isFinite(time) && time >= now.getTime() - DAY_MS && time <= now.getTime();
 }
 
+function hasPendingOrderToday(context: CRMCustomerContext, now: Date): boolean {
+  if (!context.metrics.lastPendingOrderAt) return false;
+  return businessDateKey(new Date(context.metrics.lastPendingOrderAt)) === businessDateKey(now);
+}
+
 /** Janela de atendimento de 24h da Meta: enquanto está aberta dá pra mandar mensagem de sessão
  *  (texto livre) sem custo de template, respondendo à última mensagem que o cliente mandou. */
 function whatsappWindowOpen(context: CRMCustomerContext, now: Date): boolean {
@@ -456,6 +472,7 @@ export function matchesSegmentCondition(context: CRMCustomerContext, condition: 
   }
 
   if (field === "data_pedido_hoje") return compareBoolean(hasPurchaseToday(context, now), operator, value);
+  if (field === "pedido_pendente_hoje") return compareBoolean(hasPendingOrderToday(context, now), operator, value);
   if (field === "data_pedido_24h") return compareBoolean(purchasedInLast24h(context, now), operator, value);
   if (field === "data_envio_hoje") return compareBoolean(context.shippedToday, operator, value);
   if (field === "checkout_abandonado") return compareBoolean(context.abandonedCheckout, operator, value);

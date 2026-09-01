@@ -220,6 +220,7 @@ async function resolveBodyParams(
     "{{LINK_RASTREIO}}": trackingUrl,
     "{{STATUS_PEDIDO}}": isSent ? "Enviado" : "Processando",
     "{{LINK_CHECKOUT}}": recipient.checkout_url || "—",
+    "{{LINK_PAGAMENTO}}": rawData?.statusPageUrl || "—",
     "{{CUPOM_CASHBACK}}": cashback?.code || "—",
     "{{VALOR_CASHBACK}}": cashback ? brl(cashback.amount) : "—",
     "{{COMPRA_MINIMA_CASHBACK}}": cashback ? brl(cashback.minimumPurchase) : "—",

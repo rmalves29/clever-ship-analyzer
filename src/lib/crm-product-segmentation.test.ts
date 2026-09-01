@@ -16,6 +16,7 @@ const context: CRMAdvancedCustomerContext = {
     averageTicket: 500 / 3,
     firstOrderAt: "2026-07-20T12:00:00-03:00",
     lastOrderAt: "2026-08-20T12:00:00-03:00",
+    lastPendingOrderAt: null,
     validOrderIds: new Set(["o1", "o2", "o3"]),
     rawFinancialStatuses: new Set(["PAID"]),
     validFinancialStatuses: new Set(["PAID"]),

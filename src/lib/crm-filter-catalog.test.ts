@@ -25,6 +25,7 @@ const buyer: CRMAdvancedCustomerContext = {
   metrics: {
     customerId: "c1", validOrderCount: 2, totalSpent: 300, averageTicket: 150,
     firstOrderAt: "2026-08-20T12:00:00-03:00", lastOrderAt: "2026-08-24T12:00:00-03:00",
+    lastPendingOrderAt: "2026-08-24T11:00:00-03:00",
     validOrderIds: new Set(["o1", "o2"]), rawFinancialStatuses: new Set(["PAID", "REFUNDED"]),
     validFinancialStatuses: new Set(["PAID"]), cancelledOrderCount: 1,
     rawFulfillmentStatuses: new Set(["FULFILLED"]),
@@ -63,7 +64,8 @@ const lead: CRMAdvancedCustomerContext = {
   customer: { id: "c2", city: "São Paulo", province: "SP" },
   metrics: {
     customerId: "c2", validOrderCount: 0, totalSpent: 0, averageTicket: 0,
-    firstOrderAt: null, lastOrderAt: null, validOrderIds: new Set(), rawFinancialStatuses: new Set(),
+    firstOrderAt: null, lastOrderAt: null, lastPendingOrderAt: null,
+    validOrderIds: new Set(), rawFinancialStatuses: new Set(),
     validFinancialStatuses: new Set(), cancelledOrderCount: 0,
     rawFulfillmentStatuses: new Set(),
   },
@@ -106,6 +108,7 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
   { field: "status_entrega", operator: "eq", value: "fulfilled" },
   { field: "perfil", operator: "eq", value: "carrinho" },
   { field: "data_pedido_hoje", operator: "eq", value: "sim" },
+  { field: "pedido_pendente_hoje", operator: "eq", value: "sim" },
   { field: "data_pedido_24h", operator: "eq", value: "sim" },
   { field: "data_envio_hoje", operator: "eq", value: "sim" },
   { field: "checkout_abandonado", operator: "eq", value: "sim" },
@@ -134,8 +137,8 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
 ];
 
 describe("catálogo confiável de filtros do CRM", () => {
-  it("expõe somente os 39 filtros implementados no motor", () => {
-    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(39);
+  it("expõe somente os 40 filtros implementados no motor", () => {
+    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(40);
     expect(new Set(SUPPORTED_SEGMENT_FIELD_IDS)).toEqual(new Set(cases.map((item) => item.field)));
   });
 

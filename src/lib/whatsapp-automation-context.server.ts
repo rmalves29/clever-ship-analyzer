@@ -105,6 +105,7 @@ export async function captureAutomationEventContext(customerId: string): Promise
           fulfillmentStatus: orderRow.fulfillment_status ?? null,
           discountCode: discountCode(rawData),
           shippingTitle: shippingTitle(rawData),
+          paymentUrl: rawData?.statusPageUrl ?? null,
         }
       : null,
     items,

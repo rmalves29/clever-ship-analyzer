@@ -140,6 +140,7 @@ export const ORDERS_QUERY = `
           cancelledAt
           displayFinancialStatus
           displayFulfillmentStatus
+          statusPageUrl
           currencyCode
           email
           phone

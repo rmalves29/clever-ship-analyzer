@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -34,9 +34,15 @@ export function InboxTab() {
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const { data: threads, isLoading, refetch } = useQuery({
-    queryKey: ["whatsapp-inbox-threads"],
-    queryFn: () => listInboxThreads(),
+    queryKey: ["whatsapp-inbox-threads", debouncedSearch],
+    queryFn: () => listInboxThreads({ data: { search: debouncedSearch || undefined } }),
     refetchInterval: 15_000,
   });
 
@@ -51,11 +57,7 @@ export function InboxTab() {
   const runMarkRead = useServerFn(markInboxThreadRead);
 
   const list = threads ?? [];
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((t) => (t.contact_name ?? "").toLowerCase().includes(q) || t.phone.includes(q));
-  }, [list, search]);
+  const filtered = list;
 
   const selected = list.find((t) => t.id === selectedId) ?? null;
   const wnd = windowLeft(selected?.last_inbound_at ?? null);
@@ -105,7 +107,9 @@ export function InboxTab() {
           {isLoading && <p className="p-4 text-center text-sm text-muted-foreground">Carregando conversas...</p>}
           {!isLoading && filtered.length === 0 && (
             <p className="p-4 text-center text-sm text-muted-foreground">
-              Nenhuma conversa ainda. Assim que um cliente enviar mensagem para o número conectado, ela aparece aqui.
+              {debouncedSearch
+                ? "Nenhuma conversa encontrada com esse nome ou telefone."
+                : "Nenhuma conversa ainda. Assim que um cliente enviar mensagem para o número conectado, ela aparece aqui."}
             </p>
           )}
           {filtered.map((t) => (

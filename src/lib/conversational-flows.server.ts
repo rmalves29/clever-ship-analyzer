@@ -203,6 +203,14 @@ async function dispatchRunStep(run: { id: string; customer_id: string | null; ph
     return;
   }
 
+  // Espelha na caixa de entrada (aba Conversas) — sem isso a mensagem do bot fica invisível ali,
+  // e a resposta do cliente aparece "do nada", sem a mensagem original que ela está respondendo.
+  const { recordOutboundQueueMessage } = await import("./whatsapp-inbox.server");
+  const mirroredBody = step.type === "menu" ? `${step.text}\n\n${step.options.map((o) => `• ${o.label}`).join("\n")}` : step.text;
+  await recordOutboundQueueMessage({ phone: run.phone, body: mirroredBody, waMessageId: result.waMessageId ?? null }).catch((error) =>
+    console.error("Falha ao espelhar mensagem do fluxo conversacional na caixa de entrada:", error),
+  );
+
   if (step.type === "menu") {
     // Não avança sozinho: espera o cliente clicar numa opção (ver matchIncomingMessage).
     await supabaseAdmin

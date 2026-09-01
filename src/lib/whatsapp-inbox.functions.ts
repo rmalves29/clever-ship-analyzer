@@ -4,13 +4,18 @@ import { requireAppAuth } from "./app-auth";
 
 export const listInboxThreads = createServerFn({ method: "GET" })
   .middleware([requireAppAuth])
-  .handler(async () => {
+  .validator((data: unknown) => z.object({ search: z.string().optional() }).parse(data ?? {}))
+  .handler(async ({ data: input }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data } = await supabaseAdmin
+    const search = input.search?.trim();
+    let query = supabaseAdmin
       .from("whatsapp_inbox_threads")
       .select("id, phone, contact_name, customer_id, last_message_at, last_message_preview, last_inbound_at, unread_count")
-      .order("last_message_at", { ascending: false })
-      .limit(200);
+      .order("last_message_at", { ascending: false });
+    // Sem busca: só as 200 conversas mais recentes (padrão de inbox). Com busca: procura em toda a
+    // base por nome/telefone, não só nessas 200 — senão uma conversa mais antiga nunca aparece.
+    query = search ? query.or(`contact_name.ilike.%${search}%,phone.ilike.%${search}%`).limit(100) : query.limit(200);
+    const { data } = await query;
     return (data ?? []) as {
       id: string;
       phone: string;

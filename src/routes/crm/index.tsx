@@ -41,6 +41,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment, exportSegmentCustomers, saveSegment } from "@/lib/crm-segmentation.functions";
 import { syncShopifyData } from "@/lib/crm-sync.functions";
 import { RFMAnalysis } from "@/components/crm/RFMAnalysis";
+import { ImportContactsDialog } from "@/components/crm/ImportContactsDialog";
 import { fixCustomerPhone, deepSyncCustomer, checkSpecificAbandonedCheckout } from "@/lib/admin-maintenance.functions";
 import { RFM_SEGMENTS_CONFIG } from "@/lib/crm-rfm-shared";
 import { normalizeAllPhones } from "@/lib/maintenance-scripts.functions";
@@ -107,6 +108,7 @@ function CRMPage() {
   const runIdentifyAbandoned = useServerFn(identifyAbandonedCheckouts);
   const runCheckSpecificAbandoned = useServerFn(checkSpecificAbandonedCheckout);
   const [isExporting, setIsExporting] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   const handleExport = async () => {
     try {
@@ -275,7 +277,7 @@ function CRMPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>Importar CSV</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setImportDialogOpen(true)}>Importar CSV</DropdownMenuItem>
                 <DropdownMenuItem onClick={async () => {
                   const promise = runNormalizePhones();
                   toast.promise(promise, {
@@ -692,6 +694,15 @@ function CRMPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <ImportContactsDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onImported={() => {
+          queryClient.invalidateQueries({ queryKey: ["crm-customers"] });
+          queryClient.invalidateQueries({ queryKey: ["crm-stats"] });
+        }}
+      />
     </div>
   );
 }

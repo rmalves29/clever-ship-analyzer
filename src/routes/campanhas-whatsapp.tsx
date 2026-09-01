@@ -2,13 +2,19 @@ import { useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ChevronLeft, Eye, MessageCircle, Play, Plus, RefreshCw, Settings, Trash2 } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronLeft, Eye, MessageCircle, Play, Plus, RefreshCw, Settings, Trash2 } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import type { DateRange } from "react-day-picker";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import {
   approveCampaign,
   deleteAutomation,
@@ -20,7 +26,7 @@ import {
   runAutomationNow,
   toggleAutomation,
 } from "@/lib/whatsapp-meta.functions";
-import { brl, brlCents } from "@/lib/crm-mock";
+import { brl, brlCents, PERIODS, type PeriodKey } from "@/lib/crm-mock";
 import { AutomationDialog, SEGMENT_LABEL, type AutomationSeed } from "@/components/crm/AutomationDialog";
 import { WhatsappSendDialog, type SendDialogSeed } from "@/components/whatsapp/WhatsappSendDialog";
 import { CampaignDetailDialog } from "@/components/whatsapp/CampaignDetailDialog";
@@ -66,6 +72,34 @@ const STATUS_CLASS: Record<string, string> = {
   erro: "bg-critical-soft text-critical",
 };
 
+/** Mesmos períodos do Dashboard (Diário/Semanal/Mensal/Anual/Tudo/Personalizado), calculados aqui
+ *  porque a lista de campanhas já vem inteira do servidor — filtra em memória, sem round-trip. */
+function resolvePeriodBounds(period: PeriodKey, range: DateRange | undefined): { start: Date | null; end: Date | null } {
+  const now = new Date();
+  if (period === "tudo") return { start: null, end: null };
+  if (period === "personalizado") {
+    if (!range?.from) return { start: null, end: null };
+    const start = new Date(range.from);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(range.to ?? range.from);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }
+  const start = new Date(now);
+  if (period === "diario") {
+    start.setHours(0, 0, 0, 0);
+  } else if (period === "semanal") {
+    start.setDate(start.getDate() - 7);
+  } else if (period === "mensal") {
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+  } else if (period === "anual") {
+    start.setMonth(0, 1);
+    start.setHours(0, 0, 0, 0);
+  }
+  return { start, end: now };
+}
+
 function StatCard({ label, value, hint, dark }: { label: string; value: string; hint: string; dark?: boolean }) {
   return (
     <div className={dark ? "rounded-xl border border-foreground/10 !bg-foreground p-5 !text-white shadow-sm" : "surface-card p-5"}>
@@ -95,6 +129,8 @@ function CampanhasWhatsapp() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("todas");
   const [search, setSearch] = useState("");
+  const [period, setPeriod] = useState<PeriodKey>("tudo");
+  const [customRange, setCustomRange] = useState<DateRange | undefined>();
 
   const { data: campanhas, isLoading, isFetching: isFetchingCampaigns, refetch } = useQuery({
     queryKey: ["whatsapp-campaigns"],
@@ -131,16 +167,29 @@ function CampanhasWhatsapp() {
     { value: "erro", label: "Erro" },
   ];
 
-  const filteredList = useMemo(() => {
+  const { start: periodStart, end: periodEnd } = useMemo(() => resolvePeriodBounds(period, customRange), [period, customRange]);
+  // Campanha ainda não enviada (agendada/aguardando aprovação) não tem sentAt — cai no createdAt,
+  // senão sumiria da lista assim que qualquer período diferente de "Tudo" fosse escolhido.
+  const periodList = useMemo(() => {
+    if (!periodStart) return list;
     return list.filter((c) => {
+      const ref = c.sentAt ?? c.createdAt;
+      if (!ref) return false;
+      const d = new Date(ref);
+      return d >= periodStart && d <= (periodEnd ?? new Date());
+    });
+  }, [list, periodStart, periodEnd]);
+
+  const filteredList = useMemo(() => {
+    return periodList.filter((c) => {
       if (statusFilter !== "todas" && c.status !== statusFilter) return false;
       if (search.trim() && !c.nome.toLowerCase().includes(search.trim().toLowerCase())) return false;
       return true;
     });
-  }, [list, statusFilter, search]);
-  const totalEnviadas = list.reduce((a, c) => a + c.enviadas, 0);
-  const totalReceita = list.reduce((a, c) => a + c.receita, 0);
-  const totalCusto = list.reduce((a, c) => a + c.custo, 0);
+  }, [periodList, statusFilter, search]);
+  const totalEnviadas = periodList.reduce((a, c) => a + c.enviadas, 0);
+  const totalReceita = periodList.reduce((a, c) => a + c.receita, 0);
+  const totalCusto = periodList.reduce((a, c) => a + c.custo, 0);
   const roas = totalCusto > 0 ? totalReceita / totalCusto : null;
 
   const handleRefresh = async () => {
@@ -238,7 +287,41 @@ function CampanhasWhatsapp() {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card p-1">
+            {PERIODS.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => setPeriod(p.key)}
+                className={cn(
+                  "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                  period === p.key ? "gradient-brand text-primary-foreground" : "text-muted-foreground hover:bg-accent",
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          {period === "personalizado" && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <CalendarIcon className="size-4" />
+                  {customRange?.from
+                    ? customRange.to
+                      ? `${format(customRange.from, "dd/MM", { locale: ptBR })} – ${format(customRange.to, "dd/MM", { locale: ptBR })}`
+                      : format(customRange.from, "dd/MM/yyyy", { locale: ptBR })
+                    : "Escolher datas"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar mode="range" selected={customRange} onSelect={setCustomRange} numberOfMonths={2} locale={ptBR} />
+              </PopoverContent>
+            </Popover>
+          )}
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Envios" value={String(totalEnviadas)} hint="Mensagens enviadas no total" />
           <StatCard label="Receita" value={brl(totalReceita)} hint="Valor de pedidos atribuídos" />
           <StatCard label="Custo estimado" value={brlCents(totalCusto)} hint="Enviadas × custo configurado por tipo" />

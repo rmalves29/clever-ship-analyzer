@@ -489,7 +489,7 @@ export async function processWhatsappQueueBatch(options?: {
         .from(QUEUE_TABLE)
         .update({ status: "queued" satisfies QueueStatus, attempts: Math.max(item.attempts - 1, 0), locked_by: null, locked_at: null })
         .eq("id", item.id);
-      continue;
+      return;
     }
     if (item.campaign_id) touchedCampaigns.add(item.campaign_id);
 

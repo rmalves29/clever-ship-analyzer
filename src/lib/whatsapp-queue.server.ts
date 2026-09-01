@@ -482,7 +482,7 @@ export async function processWhatsappQueueBatch(options?: {
     }
   }
 
-  for (const item of batch) {
+  const processItem = async (item: QueueRow) => {
     if (useMock && !isMockJob(item.dedup_key)) {
       skippedNonMock++;
       await supabaseAdmin

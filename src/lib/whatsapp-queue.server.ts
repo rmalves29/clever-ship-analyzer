@@ -482,14 +482,14 @@ export async function processWhatsappQueueBatch(options?: {
     }
   }
 
-  for (const item of batch) {
+  const processItem = async (item: QueueRow) => {
     if (useMock && !isMockJob(item.dedup_key)) {
       skippedNonMock++;
       await supabaseAdmin
         .from(QUEUE_TABLE)
         .update({ status: "queued" satisfies QueueStatus, attempts: Math.max(item.attempts - 1, 0), locked_by: null, locked_at: null })
         .eq("id", item.id);
-      continue;
+      return;
     }
     if (item.campaign_id) touchedCampaigns.add(item.campaign_id);
 
@@ -573,6 +573,14 @@ export async function processWhatsappQueueBatch(options?: {
         error: result.ok ? null : result.error,
       });
     }
+  };
+
+  // Processa o lote com concorrência limitada: a Cloud API da Meta tolera dezenas
+  // de mensagens/segundo, então o gargalo aqui é a latência de rede de cada envio,
+  // não a Meta. 10 envios simultâneos mantém margem segura e acelera ~10x.
+  const CONCURRENCY = 10;
+  for (let i = 0; i < batch.length; i += CONCURRENCY) {
+    await Promise.all(batch.slice(i, i + CONCURRENCY).map((item) => processItem(item)));
   }
 
   for (const campaignId of touchedCampaigns) await refreshCampaignStatus(campaignId);

@@ -470,6 +470,21 @@ export function WhatsappSendDialog({
                       )}
                     </div>
 
+                    <div className="space-y-2">
+                      <Label htmlFor="campaign-coupon" className="text-sm font-semibold">
+                        Cupom da Shopify (opcional)
+                      </Label>
+                      <Input
+                        id="campaign-coupon"
+                        value={coupon}
+                        placeholder="Ex: 12PIX"
+                        onChange={(event) => setCoupon(event.target.value.toUpperCase())}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        O telefone continua sendo a regra principal em até 72 horas; o cupom serve como confirmação da conversão.
+                      </p>
+                    </div>
+
                     {selectedTemplate && bodyVarCount > 0 && (
                       <div className="space-y-4 border-t pt-4">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Variáveis dinâmicas</p>
@@ -592,6 +607,7 @@ export function WhatsappSendDialog({
                       <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Conteúdo</span>
                       <p className="font-bold">{templateName || "Nenhum template"}</p>
                       {selectedTemplate && <p className="text-xs text-muted-foreground">{templateCategoryLabel(selectedTemplate.category)}</p>}
+                      {coupon.trim() && <p className="text-xs text-muted-foreground">Cupom: {coupon.trim()}</p>}
                     </div>
                     <div className="space-y-1 bg-background p-5">
                       <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Agendamento</span>

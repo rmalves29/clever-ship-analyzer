@@ -1,13 +1,7 @@
+import { getPrimaryShopifyOrderPhone, normalizeShopifyPhone } from "./shopify-order-phone";
+
 function normalizePhone(phone: string | null | undefined): string | null {
-  if (!phone) return null;
-  let cleaned = phone.replace(/\D/g, "");
-  if (cleaned.length === 10 || cleaned.length === 11) {
-    return `+55${cleaned}`;
-  }
-  if (cleaned.length > 11 && !phone.startsWith("+")) {
-    return `+${cleaned}`;
-  }
-  return phone.startsWith("+") ? phone : `+${cleaned}`;
+  return normalizeShopifyPhone(phone);
 }
 
 /** Resolve o id definitivo pra um upsert de shopify_customers. O sync sempre calcula um id
@@ -89,6 +83,7 @@ async function backfillTrackedCouponOrders(
           const { error: updateError } = await (supabaseAdmin.from("shopify_orders") as any)
             .update({
               raw_data: order,
+              phone: getPrimaryShopifyOrderPhone(order),
               total_discounts: parseFloat(order.totalDiscountsSet?.presentmentMoney?.amount ?? "0"),
               financial_status: order.displayFinancialStatus,
               cancelled_at: order.cancelledAt ?? null,
@@ -242,24 +237,15 @@ export async function runShopifySync(fullSync: boolean) {
         const rawCustomerId = email ? `email:${email.toLowerCase()}` : (order.customer?.id ? `id:${order.customer.id.split('/').pop()}` : null);
         let customerId = rawCustomerId;
 
+        // O telefone do endereço de entrega costuma ser o único preenchido na Shopify.
+        // Mantemos esse valor também no pedido, não apenas no cadastro do cliente.
+        const customerPhone = getPrimaryShopifyOrderPhone(order);
+
         if (rawCustomerId) {
           const fullName =
             addr?.name || [addr?.firstName, addr?.lastName].filter(Boolean).join(" ") ||
             [order.customer?.firstName, order.customer?.lastName].filter(Boolean).join(" ") || null;
 
-          // Prioridade máxima para o telefone:
-          // 1. Telefone do endereço de entrega (addr?.phone) - costuma ser o mais atual
-          // 2. Telefone do objeto principal do cliente (order.customer?.phone)
-          // 3. Telefone padrão do cliente (order.customer?.defaultAddress?.phone)
-          // 4. Telefone de qualquer endereço cadastrado
-          // 5. Telefone do pedido (order.phone)
-          const customerPhone = normalizePhone(
-            addr?.phone ??
-            order.customer?.phone ??
-            order.customer?.defaultAddress?.phone ??
-            order.customer?.addresses?.find((a: any) => a.phone)?.phone ??
-            order.phone
-          );
           customerId = await resolveCustomerRowId(supabaseAdmin, rawCustomerId, customerPhone);
 
           await supabaseAdmin.from("shopify_customers").upsert({
@@ -282,7 +268,7 @@ export async function runShopifySync(fullSync: boolean) {
           order_number: order.name,
           customer_id: customerId,
           email,
-          phone: order.phone,
+          phone: customerPhone,
           created_at: order.createdAt,
           processed_at: order.processedAt,
           updated_at: order.updatedAt,

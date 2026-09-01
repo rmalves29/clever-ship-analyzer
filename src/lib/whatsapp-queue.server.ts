@@ -94,12 +94,97 @@ function shippingTitle(rawData: any): string {
   return rawData?.shipping_lines?.[0]?.title || rawData?.shippingLine?.title || rawData?.shippingLines?.edges?.[0]?.node?.title || "—";
 }
 
+type OrderBundle = {
+  order: any;
+  items: any[];
+  fulfillment: any;
+  cashback: Awaited<ReturnType<typeof import("./cashback.server")["loadCashbackForOrder"]>>;
+};
+
+function chunk<T>(list: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
+/** Carrega em LOTE (poucas queries) o último pedido + itens + rastreio + cashback de todos os
+ *  destinatários. Sem isso, resolver tokens por destinatário faria 3–4 queries por pessoa e o
+ *  enfileiramento de campanhas grandes estourava o tempo da requisição — deixando a fila vazia. */
+async function preloadOrderBundles(customerIds: string[]): Promise<Map<string, OrderBundle>> {
+  const result = new Map<string, OrderBundle>();
+  const ids = [...new Set(customerIds.filter(Boolean))];
+  if (ids.length === 0) return result;
+  const supabaseAdmin = await admin();
+
+  const latestByCustomer = new Map<string, any>();
+  for (const part of chunk(ids, 200)) {
+    const { data } = await supabaseAdmin
+      .from("shopify_orders")
+      .select("id, customer_id, processed_at, order_number, name, total_price, fulfillment_status, raw_data")
+      .in("customer_id", part)
+      .order("processed_at", { ascending: false });
+    for (const row of (data ?? []) as any[]) {
+      if (!latestByCustomer.has(row.customer_id)) latestByCustomer.set(row.customer_id, row);
+    }
+  }
+
+  const orderIds = [...latestByCustomer.values()].map((o) => String(o.id));
+  const itemsByOrder = new Map<string, any[]>();
+  const fulfillmentByOrder = new Map<string, any>();
+  const cashbackByOrder = new Map<string, OrderBundle["cashback"]>();
+
+  for (const part of chunk(orderIds, 200)) {
+    const [{ data: itemRows }, { data: fulfillmentRows }, { data: cashbackRows }] = await Promise.all([
+      supabaseAdmin.from("shopify_order_items").select("order_id, title, variant_title, quantity").in("order_id", part),
+      supabaseAdmin
+        .from("shopify_fulfillments")
+        .select("order_id, tracking_number, tracking_url, tracking_company, status, updated_at")
+        .in("order_id", part)
+        .order("updated_at", { ascending: false }),
+      supabaseAdmin
+        .from("cashback_coupons")
+        .select("shopify_order_id, code, cashback_amount, minimum_purchase, starts_at, ends_at, status")
+        .in("shopify_order_id", part),
+    ]);
+    for (const row of (itemRows ?? []) as any[]) {
+      const list = itemsByOrder.get(String(row.order_id)) ?? [];
+      list.push(row);
+      itemsByOrder.set(String(row.order_id), list);
+    }
+    for (const row of (fulfillmentRows ?? []) as any[]) {
+      if (!fulfillmentByOrder.has(String(row.order_id))) fulfillmentByOrder.set(String(row.order_id), row);
+    }
+    for (const row of (cashbackRows ?? []) as any[]) {
+      if (row.status === "cancelled") continue;
+      cashbackByOrder.set(String(row.shopify_order_id), {
+        code: String(row.code),
+        amount: Number(row.cashback_amount ?? 0),
+        minimumPurchase: Number(row.minimum_purchase ?? 0),
+        startsAt: String(row.starts_at),
+        endsAt: String(row.ends_at),
+      });
+    }
+  }
+
+  for (const [customerId, order] of latestByCustomer) {
+    const key = String(order.id);
+    result.set(customerId, {
+      order,
+      items: itemsByOrder.get(key) ?? [],
+      fulfillment: fulfillmentByOrder.get(key) ?? null,
+      cashback: cashbackByOrder.get(key) ?? null,
+    });
+  }
+  return result;
+}
+
 /** Resolve os tokens dinâmicos no momento do enfileiramento. Em automações, o snapshot congelado
  * tem prioridade absoluta; campanhas avulsas continuam usando o estado mais recente do cliente. */
 async function resolveBodyParams(
   bodyParams: string[],
   recipient: { id: string; first_name?: string | null; checkout_url?: string | null },
   frozenContext?: AutomationEventContext,
+  bundle?: OrderBundle,
 ): Promise<string[]> {
   if (!bodyParams.some((p) => p.includes("{{"))) return [...bodyParams];
   if (frozenContext) {
@@ -109,44 +194,12 @@ async function resolveBodyParams(
     });
   }
 
-  const supabaseAdmin = await admin();
-  const { data: lastOrder } = await supabaseAdmin
-    .from("shopify_orders")
-    .select("*")
-    .eq("customer_id", recipient.id)
-    .order("processed_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const order = lastOrder as any;
+  const order = bundle?.order ?? null;
   const rawData = order?.raw_data as any;
-  let purchasedItems: any[] = [];
-  let fulfillment: any = null;
-  if (order?.id) {
-    const [{ data: itemRows }, { data: fulfillmentRow }] = await Promise.all([
-      supabaseAdmin.from("shopify_order_items").select("title, variant_title, quantity").eq("order_id", order.id),
-      supabaseAdmin
-        .from("shopify_fulfillments")
-        .select("tracking_number, tracking_url, tracking_company, status, updated_at")
-        .eq("order_id", order.id)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ]);
-    purchasedItems = itemRows ?? [];
-    fulfillment = fulfillmentRow;
-  }
+  const purchasedItems: any[] = bundle?.items ?? [];
+  const fulfillment: any = bundle?.fulfillment ?? null;
+  const cashback = bundle?.cashback ?? null;
 
-  // Cashback do último pedido (campanha avulsa, sem contexto congelado).
-  let cashback: Awaited<ReturnType<typeof import("./cashback.server")["loadCashbackForOrder"]>> = null;
-  if (order?.id) {
-    try {
-      const { loadCashbackForOrder } = await import("./cashback.server");
-      cashback = await loadCashbackForOrder(String(order.id));
-    } catch (error) {
-      console.error("Falha ao resolver cashback para tokens da campanha:", error);
-    }
-  }
   const brl = (value: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
 
@@ -234,9 +287,15 @@ export async function enqueueCampaign(
     frozenContexts = await loadAutomationContextsForCampaign(campaignId);
   }
 
+  const needsOrderTokens = bodyParams.some((p) => p.includes("{{"));
+  const bundles = needsOrderTokens
+    ? await preloadOrderBundles(recipients.filter((r) => !frozenContexts.has(r.id)).map((r) => r.id))
+    : new Map<string, OrderBundle>();
+
   const scheduledAt = schedule.iso;
   const rows: Record<string, unknown>[] = [];
   let skipped = 0;
+
   for (const recipient of recipients) {
     const to = toE164(recipient.phone);
     if (!to) {
@@ -258,7 +317,7 @@ export async function enqueueCampaign(
       origem: campaign.origem ?? "crm",
       template_name: campaign.template_name,
       template_language: campaign.template_language ?? settings.templateLanguage,
-      body_params: await resolveBodyParams(bodyParams, recipient, context),
+      body_params: await resolveBodyParams(bodyParams, recipient, context, bundles.get(recipient.id)),
       body_param_tokens: bodyParamTokens,
       header_media_url: isValidMediaUrl(recipient.video_url) ? recipient.video_url : null,
       status: "queued" satisfies QueueStatus,
@@ -273,11 +332,32 @@ export async function enqueueCampaign(
   }
 
   let queued = 0;
-  for (let i = 0; i < rows.length; i += 200) {
-    const chunk = rows.slice(i, i + 200);
-    const { error } = await supabaseAdmin.from(QUEUE_TABLE).upsert(chunk, { onConflict: "dedup_key", ignoreDuplicates: true });
-    if (error) return { success: false as const, error: error.message };
-    queued += chunk.length;
+  for (const part of chunk(rows, 200)) {
+    const { error } = await supabaseAdmin.from(QUEUE_TABLE).upsert(part, { onConflict: "dedup_key", ignoreDuplicates: true });
+    if (error) {
+      console.error("[enqueueCampaign] falha ao inserir lote na fila", { campaignId, queued, batch: part.length, error: error.message });
+      return { success: false as const, error: error.message };
+    }
+    queued += part.length;
+  }
+
+  if (queued === 0) {
+    console.error("[enqueueCampaign] nenhuma mensagem enfileirada", {
+      campaignId,
+      recipients: recipients.length,
+      skipped,
+    });
+    await supabaseAdmin
+      .from("whatsapp_campaigns")
+      .update({ status: "cancelada", total_destinatarios: 0 })
+      .eq("id", campaignId);
+    return {
+      success: false as const,
+      error:
+        recipients.length === 0
+          ? "Nenhum destinatário válido foi encontrado para esse público."
+          : `Nenhum telefone válido entre os ${recipients.length} destinatários (${skipped} descartados).`,
+    };
   }
 
   await supabaseAdmin
@@ -285,6 +365,7 @@ export async function enqueueCampaign(
     .update({ status: schedule.future ? "agendada" : "enviando", total_destinatarios: queued })
     .eq("id", campaignId);
   return { success: true as const, campaignId, queued, skipped, total: recipients.length, scheduledAt };
+
 }
 
 export async function cancelCampaignQueue(campaignId: string) {
@@ -347,6 +428,11 @@ export async function processWhatsappQueueBatch(options?: {
     return { success: false as const, error: "Credenciais do WhatsApp (Meta) não configuradas." };
   }
 
+  // Jobs que ficaram presos em "sending" (worker morreu no meio) mantêm a campanha eternamente
+  // em "enviando". Antes de cada lote, devolvemos os travados pra fila.
+  const { error: requeueError } = await supabaseAdmin.rpc("requeue_stale_whatsapp_queue", { p_stale_minutes: 15 });
+  if (requeueError) console.error("Falha ao recolocar jobs travados na fila:", requeueError.message);
+
   const { data: claimed, error: claimError } = await supabaseAdmin.rpc(QUEUE_CLAIM_RPC, { p_limit: limit, p_worker: workerId });
   if (claimError) return { success: false as const, error: claimError.message };
   const batch = (claimed ?? []) as QueueRow[];
@@ -396,14 +482,14 @@ export async function processWhatsappQueueBatch(options?: {
     }
   }
 
-  for (const item of batch) {
+  const processItem = async (item: QueueRow) => {
     if (useMock && !isMockJob(item.dedup_key)) {
       skippedNonMock++;
       await supabaseAdmin
         .from(QUEUE_TABLE)
         .update({ status: "queued" satisfies QueueStatus, attempts: Math.max(item.attempts - 1, 0), locked_by: null, locked_at: null })
         .eq("id", item.id);
-      continue;
+      return;
     }
     if (item.campaign_id) touchedCampaigns.add(item.campaign_id);
 
@@ -487,6 +573,14 @@ export async function processWhatsappQueueBatch(options?: {
         error: result.ok ? null : result.error,
       });
     }
+  };
+
+  // Processa o lote com concorrência limitada: a Cloud API da Meta tolera dezenas
+  // de mensagens/segundo, então o gargalo aqui é a latência de rede de cada envio,
+  // não a Meta. 10 envios simultâneos mantém margem segura e acelera ~10x.
+  const CONCURRENCY = 10;
+  for (let i = 0; i < batch.length; i += CONCURRENCY) {
+    await Promise.all(batch.slice(i, i + CONCURRENCY).map((item) => processItem(item)));
   }
 
   for (const campaignId of touchedCampaigns) await refreshCampaignStatus(campaignId);

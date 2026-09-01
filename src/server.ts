@@ -316,6 +316,7 @@ async function handleWhatsappQueueTick(request: Request): Promise<Response> {
     const { processWhatsappQueueBatch } = await import("./lib/whatsapp-queue.server");
     const url = new URL(request.url);
     const limitParam = Number(url.searchParams.get("limit"));
+    const batchLimit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 100;
     // `?dryRun=1` e `?provider=mock` são modos de TESTE — bloqueados em produção.
     const testModesAllowed =
       process.env["NODE_ENV"] !== "production" || process.env["ALLOW_QUEUE_TEST_MODES"] === "true";
@@ -326,13 +327,33 @@ async function handleWhatsappQueueTick(request: Request): Promise<Response> {
     }
     const dryRun = testModesAllowed && dryRunRequested;
     const useMock = testModesAllowed && mockRequested;
-    const result = await processWhatsappQueueBatch({
-      ...(Number.isFinite(limitParam) && limitParam > 0 ? { limit: limitParam } : {}),
-      ...(dryRun ? { dryRun: true } : {}),
-      ...(useMock ? { provider: "mock" as const } : {}),
-    });
 
-    return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json" } });
+    // Processa vários lotes em sequência no mesmo tick, até esvaziar a fila ou
+    // estourar o orçamento de tempo — o cron roda 1x/min, então sem isso a taxa
+    // ficava travada em ~20 msg/min.
+    const startedAt = Date.now();
+    const TIME_BUDGET_MS = 50_000;
+    const MAX_BATCHES_PER_TICK = 12;
+    const totals = { claimed: 0, sent: 0, failed: 0, retry: 0, batches: 0 };
+    for (let i = 0; i < MAX_BATCHES_PER_TICK; i++) {
+      const result = await processWhatsappQueueBatch({
+        limit: batchLimit,
+        ...(dryRun ? { dryRun: true } : {}),
+        ...(useMock ? { provider: "mock" as const } : {}),
+      });
+      if (!result.success) {
+        return new Response(JSON.stringify({ ...result, ...totals }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      totals.batches++;
+      totals.claimed += result.claimed;
+      totals.sent += result.sent;
+      totals.failed += result.failed;
+      totals.retry += result.retry;
+      if (result.claimed === 0 || result.claimed < batchLimit) break;
+      if (Date.now() - startedAt > TIME_BUDGET_MS) break;
+    }
+
+    return new Response(JSON.stringify({ success: true, dryRun, ...totals }), { status: 200, headers: { "content-type": "application/json" } });
 
   } catch (error) {
     console.error("Falha ao processar a fila do WhatsApp:", error);

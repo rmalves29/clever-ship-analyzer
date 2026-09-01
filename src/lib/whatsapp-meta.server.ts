@@ -2,6 +2,7 @@ import { GOALS, type SegmentType } from "./crm-mock";
 import { buildBodyParameters } from "./whatsapp-template-body-tokens";
 import { findFirstTouchCampaign } from "./whatsapp-attribution";
 import type { AutomationEventContext } from "./whatsapp-automation-context";
+import { extractShopifyOrderPhones, normalizeShopifyPhone } from "./shopify-order-phone";
 
 const DAY_MS = 86_400_000;
 
@@ -156,25 +157,7 @@ export async function exchangeEmbeddedSignupCode(params: { code: string; phoneNu
 
 /** Converte telefone para E.164, garantindo DDI 55 para números BR se necessário. */
 export function toE164(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  const digits = raw.replace(/\D/g, "");
-  if (!digits) return null;
-  
-  // Se já tem +, assumimos que está correto e apenas limpamos caracteres não-numéricos
-  if (raw.trim().startsWith("+")) return `+${digits}`;
-  
-  // Se começa com 55 e tem tamanho de DDI + DDD + Número (12 ou 13 dígitos)
-  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
-    return `+${digits}`;
-  }
-  
-  // Se tem 10 ou 11 dígitos (DDD + Número), adicionamos o DDI 55 do Brasil
-  if (digits.length === 10 || digits.length === 11) {
-    return `+55${digits}`;
-  }
-  
-  // Fallback: retorna com + se tiver comprimento mínimo razoável, senão null
-  return digits.length >= 8 ? `+${digits}` : null;
+  return normalizeShopifyPhone(raw);
 }
 
 /** IDs de clientes que batem com o segmento — calculado sobre o histórico completo, não o período do dashboard. */
@@ -377,8 +360,20 @@ export async function getSegmentCustomerIds(segmentType: SegmentType | string, s
 export async function getCustomersWithPhone(ids: string[]) {
   if (ids.length === 0) return [];
   const supabaseAdmin = await admin();
-  const { data } = await supabaseAdmin.from("shopify_customers").select("id, phone, first_name").in("id", ids);
-  return (data ?? []).filter((c) => Boolean(c.phone)) as { id: string; phone: string; first_name: string | null }[];
+  // Listas grandes (milhares de ids) estouram o tamanho da querystring do PostgREST e voltavam
+  // vazias silenciosamente — por isso a busca é feita em blocos.
+  const CHUNK = 200;
+  const rows: { id: string; phone: string; first_name: string | null }[] = [];
+  for (let start = 0; start < ids.length; start += CHUNK) {
+    const batch = ids.slice(start, start + CHUNK);
+    const { data, error } = await supabaseAdmin
+      .from("shopify_customers")
+      .select("id, phone, first_name")
+      .in("id", batch);
+    if (error) throw new Error(`Erro ao carregar destinatários: ${error.message}`);
+    rows.push(...((data ?? []) as typeof rows));
+  }
+  return rows.filter((c) => Boolean(c.phone));
 }
 
 export async function countSegmentRecipients(segmentType: SegmentType | string, segmentId?: string) {
@@ -1009,14 +1004,19 @@ export async function listCampaignsWithMetrics() {
     deliveriesByPhone.set(phone, list);
   }
 
-  // ---------- Atribuição de vendas: cupom (exato) tem prioridade; senão, primeiro contato em 72h ----------
+  // ---------- Atribuição de vendas: primeiro contato por telefone em 72h; cupom confirma a conversão ----------
   // Código atual + aliases históricos: trocar GANHE5 por POP5 não apaga a medição anterior.
-  const couponToCampaign = new Map<string, string>();
+  const couponCampaigns = new Map<string, Set<string>>();
   const trackedCodesByCampaign = new Map<string, Set<string>>();
+  const linkCouponToCampaign = (campaignId: string, code: string) => {
+    const campaigns = couponCampaigns.get(code) ?? new Set<string>();
+    campaigns.add(campaignId);
+    couponCampaigns.set(code, campaigns);
+  };
   const addTrackedCode = (campaignId: string, rawCode: unknown) => {
     const code = normalizeCouponCode(rawCode);
     if (!code) return;
-    couponToCampaign.set(code, campaignId);
+    linkCouponToCampaign(campaignId, code);
     const codes = trackedCodesByCampaign.get(campaignId) ?? new Set<string>();
     codes.add(code);
     trackedCodesByCampaign.set(campaignId, codes);
@@ -1049,14 +1049,13 @@ export async function listCampaignsWithMetrics() {
   for (const row of (cashbackRunRows ?? []) as { campaign_id: string; event_context: any }[]) {
     if (!cashbackCampaignIds.has(row.campaign_id)) continue;
     const code = String(row.event_context?.cashback?.code ?? "").trim();
-    if (code) couponToCampaign.set(code.toUpperCase(), row.campaign_id);
+    if (code) linkCouponToCampaign(row.campaign_id, code.toUpperCase());
   }
 
   const { data: orders } = await (supabaseAdmin.from("shopify_orders") as any)
     .select("id, customer_id, phone, total_price, processed_at, financial_status, cancelled_at, raw_data")
     .is("cancelled_at", null)
-    .neq("financial_status", "VOIDED")
-    .neq("financial_status", "REFUNDED");
+    .in("financial_status", ["PAID", "PARTIALLY_PAID"]);
 
   type SalesAggregate = {
     vendas: number;
@@ -1094,22 +1093,33 @@ export async function listCampaignsWithMetrics() {
   for (const o of orders ?? []) {
     if (!o.processed_at) continue;
     const total = Number(o.total_price ?? 0);
-
-    const couponMatch = extractOrderDiscountCodes(o.raw_data).find((code) => couponToCampaign.has(code));
-    if (couponMatch) {
-      addVenda(couponToCampaign.get(couponMatch)!, total, "coupon", o.customer_id);
+    const orderCoupons = extractOrderDiscountCodes(o.raw_data);
+    const couponCampaignIds = new Set(
+      orderCoupons.flatMap((code) => Array.from(couponCampaigns.get(code) ?? [])),
+    );
+    const orderPhones = extractShopifyOrderPhones(o.raw_data, o.phone);
+    const orderDeliveries = orderPhones.flatMap((phone) => deliveriesByPhone.get(phone) ?? []);
+    const firstTouchCampaignId = findFirstTouchCampaign({
+      orderPhones,
+      orderAt: o.processed_at,
+      deliveries: orderDeliveries,
+    });
+    if (firstTouchCampaignId) {
+      addVenda(
+        firstTouchCampaignId,
+        total,
+        couponCampaignIds.has(firstTouchCampaignId) ? "coupon" : "assisted",
+        o.customer_id,
+      );
       continue;
     }
 
-    if (!o.phone) continue;
-    const orderPhone = toE164(o.phone);
-    if (!orderPhone) continue;
-    const firstTouchCampaignId = findFirstTouchCampaign({
-      orderPhone,
-      orderAt: o.processed_at,
-      deliveries: deliveriesByPhone.get(orderPhone) ?? [],
-    });
-    if (firstTouchCampaignId) addVenda(firstTouchCampaignId, total, "assisted", o.customer_id);
+    // Sem contato elegível por telefone, um cupom só atribui a venda quando aponta
+    // inequivocamente para uma única campanha. Códigos compartilhados não podem escolher
+    // uma campanha arbitrariamente.
+    if (couponCampaignIds.size === 1) {
+      addVenda(Array.from(couponCampaignIds)[0]!, total, "coupon", o.customer_id);
+    }
   }
 
   const costMarketing = settings.costMarketing ?? 0;

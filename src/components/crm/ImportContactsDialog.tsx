@@ -1,202 +1,246 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { toast } from "sonner";
-import { Download } from "lucide-react";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useQueryClient } from "@tanstack/react-query";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { importContactsCsv } from "@/lib/crm-import.functions";
+import { Badge } from "@/components/ui/badge";
+import { Upload, FileText, AlertTriangle, CheckCircle2, Loader2, ClipboardPaste } from "lucide-react";
+import { toast } from "sonner";
+import { parseContactsCsv, type ContactsImportParseResult } from "@/lib/contacts-import-shared";
+import { importContacts } from "@/lib/contacts-import.functions";
+import { cn } from "@/lib/utils";
 
-type ParsedRow = { name: string | null; phone: string; email: string | null; tag: string | null };
-type ParsedCsv = { rows: ParsedRow[]; errors: string[] };
+export function ImportContactsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const [parsed, setParsed] = useState<ContactsImportParseResult | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [pasteMode, setPasteMode] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const runImport = useServerFn(importContacts);
+  const queryClient = useQueryClient();
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
 
-/** CSV bem simples (vírgula ou ponto-e-vírgula, campos entre aspas quando precisa) — cobre o
- *  modelo baixado aqui e a exportação padrão de Excel/Google Sheets em português. Nome, e-mail e
- *  tag são todos opcionais — só telefone é obrigatório. */
-function parseContactsCsv(text: string): ParsedCsv {
-  const cleaned = text.replace(/^﻿/, "").trim();
-  if (!cleaned) return { rows: [], errors: ["Arquivo vazio."] };
-  const lines = cleaned.split(/\r\n|\n|\r/).filter((l) => l.trim().length > 0);
-  const delimiter = lines[0]!.includes(";") && !lines[0]!.includes(",") ? ";" : ",";
+  const validRows = useMemo(() => parsed?.rows.filter((r) => r.errors.length === 0) ?? [], [parsed]);
+  const invalidRows = useMemo(() => parsed?.rows.filter((r) => r.errors.length > 0) ?? [], [parsed]);
 
-  function splitLine(line: string): string[] {
-    const cells: string[] = [];
-    let current = "";
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i]!;
-      if (inQuotes) {
-        if (char === '"') {
-          if (line[i + 1] === '"') { current += '"'; i++; }
-          else inQuotes = false;
-        } else current += char;
-      } else if (char === '"') inQuotes = true;
-      else if (char === delimiter) { cells.push(current); current = ""; }
-      else current += char;
-    }
-    cells.push(current);
-    return cells.map((c) => c.trim());
+  function reset() {
+    setParsed(null);
+    setFileName(null);
+    setPasteText("");
+    setPasteMode(false);
   }
 
-  const firstCells = splitLine(lines[0]!);
-  const header = firstCells.map((h) => h.toLowerCase());
-  const phoneIdx = header.findIndex((h) => h.includes("telefone") || h.includes("whatsapp") || h.includes("phone") || h.includes("celular"));
-  const nameIdx = header.findIndex((h) => h.includes("nome") || h.includes("name"));
-  const emailIdx = header.findIndex((h) => h.includes("email") || h.includes("e-mail"));
-  const tagIdx = header.findIndex((h) => h.includes("tag") || h.includes("etiqueta"));
-  const hasHeader = phoneIdx !== -1;
-
-  const dataLines = hasHeader ? lines.slice(1) : lines;
-  const resolvedPhoneIdx = hasHeader ? phoneIdx : firstCells.length > 1 ? 1 : 0;
-  const resolvedNameIdx = hasHeader ? nameIdx : firstCells.length > 1 ? 0 : -1;
-
-  const rows: ParsedRow[] = [];
-  const errors: string[] = [];
-  dataLines.forEach((line, i) => {
-    const cells = splitLine(line);
-    const phone = cells[resolvedPhoneIdx]?.trim();
-    const name = resolvedNameIdx >= 0 ? cells[resolvedNameIdx]?.trim() || null : null;
-    const email = hasHeader && emailIdx >= 0 ? cells[emailIdx]?.trim() || null : null;
-    const tag = hasHeader && tagIdx >= 0 ? cells[tagIdx]?.trim() || null : null;
-    if (!phone) {
-      errors.push(`Linha ${i + (hasHeader ? 2 : 1)}: sem telefone.`);
-      return;
-    }
-    rows.push({ name, phone, email, tag });
-  });
-  return { rows, errors };
-}
-
-function downloadTemplate() {
-  const csv = "Nome,Telefone,Email,Tag\nMaria Silva,+5511999999999,maria@email.com,VIP\nJoão Souza,11988887777,,\n";
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "modelo-importacao-contatos.csv";
-  link.style.visibility = "hidden";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-
-export function ImportContactsDialog({
-  open,
-  onOpenChange,
-  onImported,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  onImported: () => void;
-}) {
-  const runImport = useServerFn(importContactsCsv);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [parsed, setParsed] = useState<ParsedCsv | null>(null);
-  const [tag, setTag] = useState(() => `Importado ${new Date().toLocaleDateString("pt-BR")}`);
-  const [busy, setBusy] = useState(false);
-
-  const reset = () => {
-    setFileName(null);
-    setParsed(null);
-    setBusy(false);
-  };
-
-  const handleFile = async (file: File) => {
-    setFileName(file.name);
-    const text = await file.text();
-    setParsed(parseContactsCsv(text));
-  };
-
-  const handleImport = async () => {
-    if (!parsed || parsed.rows.length === 0) return;
-    if (!tag.trim()) {
-      toast.error("Dê um nome pra essa importação (vira uma tag pra usar em Segmentos).");
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await runImport({ data: { tag: tag.trim(), rows: parsed.rows } });
-      if (!res.success) {
-        toast.error("Falha ao importar.");
+  function handleFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const buffer = reader.result as ArrayBuffer;
+      let text = new TextDecoder("utf-8").decode(buffer);
+      // Arquivos exportados de sistemas legados costumam vir em Latin-1/Windows-1252.
+      if (text.includes("\uFFFD")) {
+        text = new TextDecoder("windows-1252").decode(buffer);
+      }
+      const result = parseContactsCsv(text);
+      if (result.rows.length === 0) {
+        toast.error("Nenhuma linha de contato encontrada no arquivo.");
         return;
       }
-      const errorCount = res.rows.filter((r) => r.status === "error").length;
-      toast.success(`${res.created} contato(s) novo(s), ${res.updated} atualizado(s)${errorCount ? `, ${errorCount} com erro` : ""}.`);
-      onImported();
+      setParsed(result);
+      setFileName(file.name);
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+
+  function handleParsePaste() {
+    const result = parseContactsCsv(pasteText);
+    if (result.rows.length === 0) {
+      toast.error("Nenhuma linha de contato encontrada.");
+      return;
+    }
+    setParsed(result);
+    setFileName("dados colados");
+  }
+
+  async function handleImport() {
+    if (validRows.length === 0) return;
+    setImporting(true);
+    const batches = Array.from(
+      { length: Math.ceil(validRows.length / 2000) },
+      (_, index) => validRows.slice(index * 2000, (index + 1) * 2000),
+    );
+    setImportProgress({ current: 0, total: batches.length });
+    try {
+      const totalSummary = { imported: 0, updated: 0, skipped: 0 };
+      for (let index = 0; index < batches.length; index++) {
+        const batch = batches[index];
+        if (!batch) continue;
+        setImportProgress({ current: index + 1, total: batches.length });
+        const summary = await runImport({
+          data: {
+            rows: batch.map((r) => ({
+              line: r.line,
+              nome: r.nome,
+              email: r.email,
+              phone: r.phone,
+              tags: r.tags,
+              lastPurchaseAt: r.lastPurchaseAt,
+            })),
+          },
+        });
+        totalSummary.imported += summary.imported;
+        totalSummary.updated += summary.updated;
+        totalSummary.skipped += summary.skipped;
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["crm-customers"] }),
+        queryClient.invalidateQueries({ queryKey: ["crm-stats"] }),
+      ]);
+      toast.success(
+        `Importação concluída: ${totalSummary.imported} novos, ${totalSummary.updated} atualizados` +
+          (totalSummary.skipped > 0 ? `, ${totalSummary.skipped} ignorados` : ""),
+      );
       onOpenChange(false);
       reset();
-    } catch (err) {
-      toast.error("Erro ao importar: " + (err instanceof Error ? err.message : "falha desconhecida"));
+    } catch (err: unknown) {
+      toast.error("Erro na importação: " + (err instanceof Error ? err.message : "falha inesperada"));
     } finally {
-      setBusy(false);
+      setImporting(false);
+      setImportProgress(null);
     }
-  };
+  }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset(); }}>
-      <DialogContent className="max-w-lg">
-        <DialogTitle>Importar contatos</DialogTitle>
-        <DialogDescription>
-          Suba uma lista de nome e telefone — cada contato entra (ou é atualizado, se já existir) na base com uma tag,
-          pra você montar um segmento e usar numa campanha de WhatsApp API depois.
-        </DialogDescription>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        onOpenChange(v);
+        if (!v) reset();
+      }}
+    >
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Importar contatos</DialogTitle>
+          <DialogDescription>
+            Envie um CSV ou cole os dados com as colunas: <strong>nome, email, telefone, tag, data da última compra</strong>.
+            Aceita separador por vírgula, ponto-e-vírgula ou tab; datas em dd/mm/aaaa ou ISO.
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="space-y-4">
-          <Button type="button" variant="outline" size="sm" className="gap-2" onClick={downloadTemplate}>
-            <Download className="size-3.5" /> Baixar modelo (.csv)
-          </Button>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs">Arquivo CSV</Label>
-            <Input
+        {!parsed && !pasteMode && (
+          <div className="space-y-4">
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="w-full rounded-xl border-2 border-dashed border-border p-10 text-center hover:border-brand/50 hover:bg-muted/30 transition-colors"
+            >
+              <Upload className="size-8 mx-auto mb-3 text-muted-foreground" />
+              <p className="font-medium">Clique para escolher o arquivo CSV</p>
+              <p className="text-xs text-muted-foreground mt-1">Listas grandes são processadas automaticamente em lotes seguros</p>
+            </button>
+            <input
+              ref={fileRef}
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.txt,.tsv"
+              className="hidden"
               onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleFile(file);
+                const f = e.target.files?.[0];
+                if (f) handleFile(f);
+                e.target.value = "";
               }}
             />
-            {fileName && <p className="text-xs text-muted-foreground">{fileName}</p>}
+            <Button variant="outline" className="w-full gap-2" onClick={() => setPasteMode(true)}>
+              <ClipboardPaste className="size-4" /> Colar dados manualmente
+            </Button>
           </div>
+        )}
 
-          <div className="space-y-1.5">
-            <Label className="text-xs">Tag desta leva (aplicada em todos — some com a tag da coluna "Tag" do CSV, se tiver)</Label>
-            <Input value={tag} onChange={(e) => setTag(e.target.value)} maxLength={60} />
+        {!parsed && pasteMode && (
+          <div className="space-y-3">
+            <textarea
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              rows={10}
+              placeholder={"nome;email;telefone;tag;data da ultima compra\nMaria;maria@ex.com;31999998888;VIP;15/08/2026"}
+              className="w-full rounded-lg border border-border bg-background p-3 text-sm font-mono"
+            />
+            <div className="flex gap-2 justify-end">
+              <Button variant="ghost" onClick={() => setPasteMode(false)}>Voltar</Button>
+              <Button onClick={handleParsePaste} disabled={!pasteText.trim()}>Pré-visualizar</Button>
+            </div>
           </div>
+        )}
 
-          {parsed && (
-            <div className="rounded-lg border border-border p-3 text-sm space-y-1">
-              <p className="font-medium">{parsed.rows.length} contato(s) prontos pra importar</p>
-              {parsed.errors.length > 0 && (
-                <div className="max-h-24 space-y-0.5 overflow-y-auto text-xs text-critical">
-                  {parsed.errors.slice(0, 10).map((e, i) => <p key={i}>{e}</p>)}
-                  {parsed.errors.length > 10 && <p>+ {parsed.errors.length - 10} outra(s) linha(s) com erro.</p>}
-                </div>
-              )}
-              {parsed.rows.length > 0 && (
-                <div className="mt-1 max-h-32 overflow-y-auto text-xs text-muted-foreground">
-                  {parsed.rows.slice(0, 5).map((r, i) => (
-                    <p key={i}>
-                      {r.name ? `${r.name} — ` : ""}{r.phone}
-                      {r.email ? ` · ${r.email}` : ""}
-                      {r.tag ? ` · tag: ${r.tag}` : ""}
-                    </p>
-                  ))}
-                  {parsed.rows.length > 5 && <p>+ {parsed.rows.length - 5} outro(s)...</p>}
-                </div>
+        {parsed && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <FileText className="size-4 text-muted-foreground" />
+              <span className="font-medium">{fileName}</span>
+              <Badge variant="secondary">{parsed.rows.length} linhas</Badge>
+              <Badge className="bg-success-soft text-success border-transparent">{validRows.length} válidas</Badge>
+              {invalidRows.length > 0 && (
+                <Badge className="bg-critical-soft text-critical border-transparent">{invalidRows.length} com erro</Badge>
               )}
             </div>
-          )}
-        </div>
 
-        <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button type="button" disabled={busy || !parsed || parsed.rows.length === 0} onClick={handleImport}>
-            {busy ? "Importando..." : parsed ? `Importar ${parsed.rows.length} contato(s)` : "Importar"}
-          </Button>
-        </div>
+            <div className="rounded-lg border border-border overflow-hidden">
+              <div className="max-h-72 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/40 sticky top-0">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium">#</th>
+                      <th className="text-left px-3 py-2 font-medium">Nome</th>
+                      <th className="text-left px-3 py-2 font-medium">Email</th>
+                      <th className="text-left px-3 py-2 font-medium">Telefone</th>
+                      <th className="text-left px-3 py-2 font-medium">Tags</th>
+                      <th className="text-left px-3 py-2 font-medium">Última compra</th>
+                      <th className="text-left px-3 py-2 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {parsed.rows.slice(0, 200).map((r) => (
+                      <tr key={r.line} className={cn(r.errors.length > 0 && "bg-critical-soft/40")}>
+                        <td className="px-3 py-1.5 text-muted-foreground">{r.line}</td>
+                        <td className="px-3 py-1.5">{r.nome ?? "—"}</td>
+                        <td className="px-3 py-1.5">{r.email ?? "—"}</td>
+                        <td className="px-3 py-1.5">{r.phone ?? "—"}</td>
+                        <td className="px-3 py-1.5">{r.tags.length > 0 ? r.tags.join(", ") : "—"}</td>
+                        <td className="px-3 py-1.5">
+                          {r.lastPurchaseAt ? new Date(r.lastPurchaseAt).toLocaleDateString("pt-BR") : "—"}
+                        </td>
+                        <td className="px-3 py-1.5">
+                          {r.errors.length === 0 ? (
+                            <CheckCircle2 className="size-3.5 text-success" />
+                          ) : (
+                            <span className="flex items-center gap-1 text-critical">
+                              <AlertTriangle className="size-3.5" /> {r.errors.join("; ")}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {parsed.rows.length > 200 && (
+                <p className="px-3 py-2 text-xs text-muted-foreground border-t border-border">
+                  Mostrando 200 de {parsed.rows.length} linhas na prévia.
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <Button variant="ghost" onClick={reset} disabled={importing}>
+                Escolher outro arquivo
+              </Button>
+              <Button onClick={handleImport} disabled={importing || validRows.length === 0} className="gap-2">
+                {importing && <Loader2 className="size-4 animate-spin" />}
+                {importing && importProgress
+                  ? `Importando lote ${importProgress.current} de ${importProgress.total}`
+                  : `Importar ${validRows.length} contatos`}
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

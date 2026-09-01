@@ -95,6 +95,7 @@ function CRMPage() {
   const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
   const [editingSegment, setEditingSegment] = useState<any>(null);
   const [showEditor, setShowEditor] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   
   const fetchList = useServerFn(getCustomersList);
   const fetchStats = useServerFn(getCRMStats);
@@ -108,7 +109,6 @@ function CRMPage() {
   const runIdentifyAbandoned = useServerFn(identifyAbandonedCheckouts);
   const runCheckSpecificAbandoned = useServerFn(checkSpecificAbandonedCheckout);
   const [isExporting, setIsExporting] = useState(false);
-  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   const handleExport = async () => {
     try {
@@ -329,6 +329,7 @@ function CRMPage() {
                 <DropdownMenuItem onClick={handleSync}>Sincronizar Shopify</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <ImportContactsDialog open={importDialogOpen} onOpenChange={setImportDialogOpen} />
           </div>
         </div>
 
@@ -695,14 +696,7 @@ function CRMPage() {
         </Tabs>
       </div>
 
-      <ImportContactsDialog
-        open={importDialogOpen}
-        onOpenChange={setImportDialogOpen}
-        onImported={() => {
-          queryClient.invalidateQueries({ queryKey: ["crm-customers"] });
-          queryClient.invalidateQueries({ queryKey: ["crm-stats"] });
-        }}
-      />
+      <ImportContactsDialog open={importDialogOpen} onOpenChange={setImportDialogOpen} />
     </div>
   );
 }

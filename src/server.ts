@@ -316,7 +316,7 @@ async function handleWhatsappQueueTick(request: Request): Promise<Response> {
     const { processWhatsappQueueBatch } = await import("./lib/whatsapp-queue.server");
     const url = new URL(request.url);
     const limitParam = Number(url.searchParams.get("limit"));
-    const batchLimit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 30;
+    const batchLimit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 100;
     // `?dryRun=1` e `?provider=mock` são modos de TESTE — bloqueados em produção.
     const testModesAllowed =
       process.env["NODE_ENV"] !== "production" || process.env["ALLOW_QUEUE_TEST_MODES"] === "true";

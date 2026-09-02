@@ -128,6 +128,7 @@ function CampanhasWhatsapp() {
   const [sendOpen, setSendOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("todas");
+  const [originFilter, setOriginFilter] = useState<"todas" | "crm" | "automacao">("todas");
   const [search, setSearch] = useState("");
   const [period, setPeriod] = useState<PeriodKey>("tudo");
   const [customRange, setCustomRange] = useState<DateRange | undefined>();
@@ -167,6 +168,12 @@ function CampanhasWhatsapp() {
     { value: "erro", label: "Erro" },
   ];
 
+  const ORIGIN_FILTERS: { value: "todas" | "crm" | "automacao"; label: string }[] = [
+    { value: "todas", label: "Tudo" },
+    { value: "crm", label: "Só campanhas" },
+    { value: "automacao", label: "Só automações" },
+  ];
+
   const { start: periodStart, end: periodEnd } = useMemo(() => resolvePeriodBounds(period, customRange), [period, customRange]);
   // Campanha ainda não enviada (agendada/aguardando aprovação) não tem sentAt — cai no createdAt,
   // senão sumiria da lista assim que qualquer período diferente de "Tudo" fosse escolhido.
@@ -180,16 +187,24 @@ function CampanhasWhatsapp() {
     });
   }, [list, periodStart, periodEnd]);
 
+  // Automações (ex.: "Pedido Pendente") e campanhas de disparo manual compartilham a mesma tabela
+  // por baixo (origem "automacao" vs "crm") — esse filtro deixa ver os totais de cada uma separado,
+  // em vez de sempre somados.
+  const originList = useMemo(() => {
+    if (originFilter === "todas") return periodList;
+    return periodList.filter((c) => (c.origem ?? "crm") === originFilter);
+  }, [periodList, originFilter]);
+
   const filteredList = useMemo(() => {
-    return periodList.filter((c) => {
+    return originList.filter((c) => {
       if (statusFilter !== "todas" && c.status !== statusFilter) return false;
       if (search.trim() && !c.nome.toLowerCase().includes(search.trim().toLowerCase())) return false;
       return true;
     });
-  }, [periodList, statusFilter, search]);
-  const totalEnviadas = periodList.reduce((a, c) => a + c.enviadas, 0);
-  const totalReceita = periodList.reduce((a, c) => a + c.receita, 0);
-  const totalCusto = periodList.reduce((a, c) => a + c.custo, 0);
+  }, [originList, statusFilter, search]);
+  const totalEnviadas = originList.reduce((a, c) => a + c.enviadas, 0);
+  const totalReceita = originList.reduce((a, c) => a + c.receita, 0);
+  const totalCusto = originList.reduce((a, c) => a + c.custo, 0);
   const roas = totalCusto > 0 ? totalReceita / totalCusto : null;
 
   const handleRefresh = async () => {
@@ -319,6 +334,21 @@ function CampanhasWhatsapp() {
               </PopoverContent>
             </Popover>
           )}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card p-1 w-fit">
+          {ORIGIN_FILTERS.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setOriginFilter(f.value)}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                originFilter === f.value ? "gradient-brand text-primary-foreground" : "text-muted-foreground hover:bg-accent",
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -471,9 +501,9 @@ function CampanhasWhatsapp() {
                 <Plus className="size-4" /> Nova automação
               </Button>
             </div>
-            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <div className="mt-4 flex flex-col gap-4">
               {(automations ?? []).length === 0 && (
-                <p className="rounded-xl border border-border px-4 py-8 text-center text-muted-foreground lg:col-span-2">
+                <p className="rounded-xl border border-border px-4 py-8 text-center text-muted-foreground">
                   Nenhuma automação ainda. Crie aqui ou instale uma direto das ações sugeridas do CRM.
                 </p>
               )}

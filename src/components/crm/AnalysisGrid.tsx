@@ -434,6 +434,7 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
                 <th className="px-3 py-2 font-medium">Produto</th>
                 <th className="px-3 py-2 font-medium">Variação</th>
                 <th className="px-3 py-2 text-right font-medium">Valor vendido</th>
+                <th className="px-3 py-2 text-right font-medium">Qtd. vendida</th>
                 <th className="px-3 py-2 text-center font-medium">Curva (receita)</th>
                 <th className="px-3 py-2 text-center font-medium">Curva (itens)</th>
               </tr>
@@ -449,6 +450,7 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
                   <td className="px-3 py-2 text-right font-semibold">
                     {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(p.valorVendido)}
                   </td>
+                  <td className="px-3 py-2 text-right text-muted-foreground">{p.quantidadeVendida}</td>
                   <td className="px-3 py-2 text-center">
                     <AbcBadge tier={p.curvaReceita} />
                   </td>
@@ -459,7 +461,7 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
               ))}
               {data.curvaAbcProdutos.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                     Nenhum produto vendido no período selecionado.
                   </td>
                 </tr>

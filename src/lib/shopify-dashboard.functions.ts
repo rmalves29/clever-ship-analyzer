@@ -26,6 +26,7 @@ import {
   computeValorAcumulado,
   filterValidOrders,
 } from "./dashboard-metrics";
+import { computeProductAbcCurve, type ProductAbcInput } from "./product-abc-curve-shared";
 
 const TZ = "America/Sao_Paulo";
 
@@ -102,6 +103,44 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
     const validOrders = filterValidOrders(orders as any[]);
     const { faturamento, numPedidos, ticketMedio, uniqueCustomers, receitaPorCliente } =
       computeCommercialKpis(validOrders);
+
+    // ---------- Curva ABC de produtos (por receita e por itens vendidos) ----------
+    const validOrderIds = validOrders.map((o: any) => o.id as string);
+    let curvaAbcProdutos: ReturnType<typeof computeProductAbcCurve> = [];
+    if (validOrderIds.length > 0) {
+      const { data: abcItems } = await supabaseAdmin
+        .from("shopify_order_items")
+        .select("product_id, variant_id, title, variant_title, sku, quantity, price")
+        .in("order_id", validOrderIds);
+
+      const abcByKey = new Map<string, ProductAbcInput>();
+      for (const item of (abcItems ?? []) as {
+        product_id: string | null;
+        variant_id: string | null;
+        title: string;
+        variant_title: string | null;
+        sku: string | null;
+        quantity: number | null;
+        price: number | null;
+      }[]) {
+        const key = item.variant_id ?? item.product_id ?? `title:${item.title}`;
+        const slot = abcByKey.get(key) ?? {
+          key,
+          productId: item.product_id,
+          variantId: item.variant_id,
+          sku: item.sku,
+          nome: item.title,
+          variacao: item.variant_title,
+          valorVendido: 0,
+          quantidadeVendida: 0,
+        };
+        const quantity = Number(item.quantity ?? 0);
+        slot.valorVendido += Number(item.price ?? 0) * quantity;
+        slot.quantidadeVendida += quantity;
+        abcByKey.set(key, slot);
+      }
+      curvaAbcProdutos = computeProductAbcCurve(Array.from(abcByKey.values()));
+    }
 
     // Envios: só de pedidos válidos (pedido reembolsado/cancelado não conta como operação boa).
     const validFulfillments = (fulfillments ?? []).filter((f: any) =>
@@ -232,6 +271,7 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
         quantidade: p.quantity,
         faturamento: p.revenue,
       })),
+      curvaAbcProdutos,
     };
 }
 

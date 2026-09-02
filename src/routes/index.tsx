@@ -262,6 +262,7 @@ function Index() {
       cohortData: s.cohortData ?? [],
       sessoes: s.sessoes ?? [],
       produtosMaisVendidos: s.produtosMaisVendidos ?? [],
+      curvaAbcProdutos: s.curvaAbcProdutos ?? [],
     } satisfies DashboardData;
   }, [base, shopifyData, aiAnalysis, aiIsFresh]);
 

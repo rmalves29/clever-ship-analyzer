@@ -414,6 +414,74 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
           )}
         </ul>
       </section>
+
+      <section className="surface-card p-5 lg:col-span-2">
+        <header className="flex items-start gap-3 border-b border-border pb-3">
+          <span className="mt-1 text-xs font-mono text-muted-foreground">13</span>
+          <div className="flex-1">
+            <h3 className="text-base font-semibold">Curva ABC de produtos</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Classificação por receita (A até 80% acumulado, B até 95%, C o resto) e por itens vendidos, cada uma com seu
+              próprio ranking. Ordenado por valor vendido, do maior pro menor.
+            </p>
+          </div>
+        </header>
+        <div className="mt-4 max-h-[420px] overflow-y-auto rounded-lg border border-border">
+          <table className="w-full min-w-[720px] text-xs">
+            <thead className="sticky top-0 bg-muted/90 text-left uppercase tracking-wider text-muted-foreground backdrop-blur">
+              <tr>
+                <th className="px-3 py-2 font-medium">Código</th>
+                <th className="px-3 py-2 font-medium">Produto</th>
+                <th className="px-3 py-2 font-medium">Variação</th>
+                <th className="px-3 py-2 text-right font-medium">Valor vendido</th>
+                <th className="px-3 py-2 text-center font-medium">Curva (receita)</th>
+                <th className="px-3 py-2 text-center font-medium">Curva (itens)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {data.curvaAbcProdutos.map((p) => (
+                <tr key={p.key} className="hover:bg-muted/50">
+                  <td className="px-3 py-2 font-mono text-muted-foreground">{p.sku ?? "—"}</td>
+                  <td className="max-w-[240px] truncate px-3 py-2" title={p.nome}>{p.nome}</td>
+                  <td className="max-w-[160px] truncate px-3 py-2 text-muted-foreground" title={p.variacao ?? undefined}>
+                    {p.variacao ?? "—"}
+                  </td>
+                  <td className="px-3 py-2 text-right font-semibold">
+                    {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(p.valorVendido)}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <AbcBadge tier={p.curvaReceita} />
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <AbcBadge tier={p.curvaItens} />
+                  </td>
+                </tr>
+              ))}
+              {data.curvaAbcProdutos.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                    Nenhum produto vendido no período selecionado.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
+  );
+}
+
+const ABC_TIER_CLASS: Record<"A" | "B" | "C", string> = {
+  A: "bg-success-soft text-success",
+  B: "bg-warning-soft text-warning",
+  C: "bg-muted text-muted-foreground",
+};
+
+function AbcBadge({ tier }: { tier: "A" | "B" | "C" }) {
+  return (
+    <span className={cn("inline-flex size-6 items-center justify-center rounded-full text-[11px] font-bold", ABC_TIER_CLASS[tier])}>
+      {tier}
+    </span>
   );
 }

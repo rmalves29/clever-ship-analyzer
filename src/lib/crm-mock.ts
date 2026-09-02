@@ -1,3 +1,5 @@
+import type { ProductAbcRow } from "./product-abc-curve-shared";
+
 export type PeriodKey = "diario" | "semanal" | "mensal" | "anual" | "tudo" | "personalizado";
 
 export type Status = "critico" | "regular" | "meta";
@@ -107,6 +109,7 @@ export type DashboardData = {
   cohortData: { month: string; size: number; retention: (number | null)[] }[];
   sessoes: { page: string; count: number; trend?: number }[];
   produtosMaisVendidos: { productId: string | null; nome: string; quantidade: number; faturamento: number }[];
+  curvaAbcProdutos: ProductAbcRow[];
 
   reguas: {
     titulo: string;
@@ -181,6 +184,7 @@ export function emptyDashboardData(period: PeriodKey, customLabel?: string): Das
     cohortData: [],
     sessoes: [],
     produtosMaisVendidos: [],
+    curvaAbcProdutos: [],
     reguas: [],
     acoes: [],
   };

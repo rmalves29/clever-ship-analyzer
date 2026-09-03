@@ -5,6 +5,7 @@
 
 import type { SegmentType } from "./crm-mock";
 import { resolveAutomationBodyParams, type AutomationEventContext } from "./whatsapp-automation-context";
+import { buildDirectCheckoutUrl } from "./shopify-cart-permalink";
 
 /** Substitui os tokens do corpo do template pelos valores reais enviados — pra registrar
  *  na caixa de entrada o texto de verdade que o cliente recebeu, não um resumo técnico. */
@@ -98,6 +99,7 @@ type OrderBundle = {
   order: any;
   items: any[];
   fulfillment: any;
+  storefrontDomain: string | null;
   cashback: Awaited<ReturnType<typeof import("./cashback.server")["loadCashbackForOrder"]>>;
 };
 
@@ -115,6 +117,14 @@ async function preloadOrderBundles(customerIds: string[]): Promise<Map<string, O
   const ids = [...new Set(customerIds.filter(Boolean))];
   if (ids.length === 0) return result;
   const supabaseAdmin = await admin();
+
+  const { data: settingsRow } = await supabaseAdmin
+    .from("store_settings")
+    .select("storefront_domain")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const storefrontDomain = (settingsRow as { storefront_domain: string | null } | null)?.storefront_domain ?? null;
 
   const latestByCustomer = new Map<string, any>();
   for (const part of chunk(ids, 200)) {
@@ -135,7 +145,7 @@ async function preloadOrderBundles(customerIds: string[]): Promise<Map<string, O
 
   for (const part of chunk(orderIds, 200)) {
     const [{ data: itemRows }, { data: fulfillmentRows }, { data: cashbackRows }] = await Promise.all([
-      supabaseAdmin.from("shopify_order_items").select("order_id, title, variant_title, quantity").in("order_id", part),
+      supabaseAdmin.from("shopify_order_items").select("order_id, title, variant_title, variant_id, quantity").in("order_id", part),
       supabaseAdmin
         .from("shopify_fulfillments")
         .select("order_id, tracking_number, tracking_url, tracking_company, status, updated_at")
@@ -172,6 +182,7 @@ async function preloadOrderBundles(customerIds: string[]): Promise<Map<string, O
       order,
       items: itemsByOrder.get(key) ?? [],
       fulfillment: fulfillmentByOrder.get(key) ?? null,
+      storefrontDomain,
       cashback: cashbackByOrder.get(key) ?? null,
     });
   }
@@ -220,7 +231,11 @@ async function resolveBodyParams(
     "{{LINK_RASTREIO}}": trackingUrl,
     "{{STATUS_PEDIDO}}": isSent ? "Enviado" : "Processando",
     "{{LINK_CHECKOUT}}": recipient.checkout_url || "—",
-    "{{LINK_PAGAMENTO}}": rawData?.statusPageUrl || "—",
+    "{{LINK_PAGAMENTO}}":
+      buildDirectCheckoutUrl(
+        bundle?.storefrontDomain,
+        purchasedItems.map((it: any) => ({ variantId: it.variant_id, quantity: Number(it.quantity ?? 1) })),
+      ) || "—",
     "{{CUPOM_CASHBACK}}": cashback?.code || "—",
     "{{VALOR_CASHBACK}}": cashback ? brl(cashback.amount) : "—",
     "{{COMPRA_MINIMA_CASHBACK}}": cashback ? brl(cashback.minimumPurchase) : "—",

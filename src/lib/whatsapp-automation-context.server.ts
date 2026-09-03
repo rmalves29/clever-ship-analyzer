@@ -2,6 +2,7 @@ import {
   buildAutomationContextKey,
   type AutomationEventContext,
 } from "./whatsapp-automation-context";
+import { buildDirectCheckoutUrl } from "./shopify-cart-permalink";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -34,7 +35,7 @@ export async function captureAutomationEventContext(customerId: string): Promise
   const db = await admin();
   const capturedAt = new Date().toISOString();
 
-  const [{ data: orderRow }, { data: checkoutRow }] = await Promise.all([
+  const [{ data: orderRow }, { data: checkoutRow }, { data: settingsRow }] = await Promise.all([
     db
       .from("shopify_orders")
       .select("id, order_number, total_price, financial_status, fulfillment_status, raw_data, processed_at, created_at")
@@ -50,15 +51,17 @@ export async function captureAutomationEventContext(customerId: string): Promise
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    db.from("store_settings").select("storefront_domain").order("created_at", { ascending: true }).limit(1).maybeSingle(),
   ]);
 
   let items: NonNullable<AutomationEventContext["items"]> = [];
   let fulfillment: NonNullable<AutomationEventContext["fulfillment"]> | null = null;
+  let paymentUrl: string | null = null;
   if (orderRow?.id) {
     const [{ data: itemRows }, { data: fulfillmentRow }] = await Promise.all([
       db
         .from("shopify_order_items")
-        .select("title, variant_title, quantity")
+        .select("title, variant_title, variant_id, quantity")
         .eq("order_id", orderRow.id),
       db
         .from("shopify_fulfillments")
@@ -73,6 +76,10 @@ export async function captureAutomationEventContext(customerId: string): Promise
       variantTitle: item.variant_title ? String(item.variant_title) : null,
       quantity: Math.max(1, Number(item.quantity ?? 1)),
     }));
+    paymentUrl = buildDirectCheckoutUrl(
+      (settingsRow as { storefront_domain: string | null } | null)?.storefront_domain,
+      (itemRows ?? []).map((item: any) => ({ variantId: item.variant_id, quantity: Number(item.quantity ?? 1) })),
+    );
     if (fulfillmentRow) {
       fulfillment = {
         trackingNumber: fulfillmentRow.tracking_number ?? null,
@@ -105,7 +112,7 @@ export async function captureAutomationEventContext(customerId: string): Promise
           fulfillmentStatus: orderRow.fulfillment_status ?? null,
           discountCode: discountCode(rawData),
           shippingTitle: shippingTitle(rawData),
-          paymentUrl: rawData?.statusPageUrl ?? null,
+          paymentUrl,
         }
       : null,
     items,

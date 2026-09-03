@@ -8,8 +8,9 @@ export type AutomationEventContext = {
     fulfillmentStatus?: string | null;
     discountCode?: string | null;
     shippingTitle?: string | null;
-    /** Página de status/pagamento do próprio pedido na Shopify (Order.statusPageUrl) — mostra
-     *  o botão "Pagar agora" quando o pedido está com saldo em aberto (ex.: Pix pendente). */
+    /** Link direto pro checkout com os mesmos itens do pedido (cart permalink da Shopify) — o
+     *  Order.statusPageUrl NÃO serve pra isso: pra pedido pendente ele só oferece "Comprar
+     *  novamente" (cria outro pedido), não retoma o pagamento em aberto. */
     paymentUrl?: string | null;
   } | null;
   items?: Array<{ title: string; variantTitle?: string | null; quantity: number }>;

@@ -490,10 +490,15 @@ export async function sendAutomationTestMessage(input: {
   if (!phone) return { success: false as const, error: "Telefone inválido." };
   if (!input.templateName.trim()) return { success: false as const, error: "Selecione um template aprovado antes de testar." };
 
-  const { data: customerRow } = await (supabaseAdmin.from("shopify_customers") as any)
+  // .maybeSingle() falha (silenciosamente, já que só o `data` é usado) quando há mais de 1
+  // cliente com o mesmo telefone — dado real que já vimos acontecer (cadastro duplicado). Pega o
+  // mais recente em vez de deixar o teste cair no fallback genérico "Teste" sem pedido nenhum.
+  const { data: customerRows } = await (supabaseAdmin.from("shopify_customers") as any)
     .select("id, first_name")
     .eq("phone", phone)
-    .maybeSingle();
+    .order("updated_at", { ascending: false })
+    .limit(1);
+  const customerRow = customerRows?.[0] ?? null;
 
   const { captureAutomationEventContext } = await import("./whatsapp-automation-context.server");
   const { resolveAutomationBodyParams } = await import("./whatsapp-automation-context");

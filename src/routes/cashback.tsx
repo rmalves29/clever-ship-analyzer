@@ -181,15 +181,7 @@ function CashbackPage() {
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
-            onClick={() => {
-              if (
-                window.confirm(
-                  "Isso vai antecipar a liberação de todos os cupons pendentes/ativos (não usados) para a data da própria compra, no banco e na Shopify. Confirma?",
-                )
-              ) {
-                backfillMutation.mutate();
-              }
-            }}
+            onClick={() => backfillMutation.mutate()}
             disabled={backfillMutation.isPending}
           >
             {backfillMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}

@@ -256,52 +256,64 @@ export async function backfillCashbackStartsAtToPurchaseDate(limit = 50): Promis
   errors: { code: string; error: string }[];
 }> {
   const db = await admin();
-  const { count: totalEligible } = await db
-    .from("cashback_coupons")
-    .select("id", { count: "exact", head: true })
-    .in("status", ["pending", "active"])
-    .not("shopify_discount_id", "is", null);
 
-  const { data: rows } = await db
+  // Busca tudo de uma vez (são poucas centenas) e filtra em memória quem realmente precisa
+  // mudar — só assim dá pra paginar sem repetir o mesmo lote a cada chamada (o "já ajustado"
+  // não dá pra filtrar direto na query porque starts_at e processed_at vivem em tabelas
+  // diferentes e o cliente do Supabase não faz join real).
+  const { data: allRowsRaw } = await db
     .from("cashback_coupons")
     .select("id, code, shopify_order_id, shopify_discount_id, starts_at")
     .in("status", ["pending", "active"])
     .not("shopify_discount_id", "is", null)
-    .order("created_at", { ascending: true })
-    .limit(limit);
+    .order("created_at", { ascending: true });
+  const allRows = (allRowsRaw ?? []) as {
+    id: number;
+    code: string;
+    shopify_order_id: string;
+    shopify_discount_id: string;
+    starts_at: string;
+  }[];
 
-  let updated = 0;
+  const orderIds = Array.from(new Set(allRows.map((r) => r.shopify_order_id)));
+  const { data: ordersRaw } = orderIds.length
+    ? await db.from("shopify_orders").select("id, processed_at").in("id", orderIds)
+    : { data: [] };
+  const orders = (ordersRaw ?? []) as { id: string; processed_at: string }[];
+  const purchasedAtByOrderId = new Map(orders.map((o) => [o.id, o.processed_at]));
+
   let skipped = 0;
   let failed = 0;
   const errors: { code: string; error: string }[] = [];
+  const pending: { id: number; code: string; shopify_discount_id: string; purchasedAt: string }[] = [];
 
-  for (const row of rows ?? []) {
+  for (const row of allRows) {
+    const purchasedAt = purchasedAtByOrderId.get(row.shopify_order_id);
+    if (!purchasedAt) {
+      failed++;
+      errors.push({ code: row.code, error: "Pedido de origem não encontrado." });
+      continue;
+    }
+    if (purchasedAt === row.starts_at) {
+      skipped++;
+      continue;
+    }
+    pending.push({ id: row.id, code: row.code, shopify_discount_id: row.shopify_discount_id, purchasedAt });
+  }
+
+  const batch = pending.slice(0, limit);
+  let updated = 0;
+
+  for (const row of batch) {
     try {
-      const { data: order } = await db
-        .from("shopify_orders")
-        .select("processed_at")
-        .eq("id", row.shopify_order_id)
-        .maybeSingle();
-      const purchasedAt = order?.processed_at;
-      if (!purchasedAt) {
-        failed++;
-        errors.push({ code: row.code, error: "Pedido de origem não encontrado." });
-        continue;
-      }
-      if (purchasedAt === row.starts_at) {
-        skipped++;
-        continue;
-      }
-
       const { updateShopifyDiscountStartsAt } = await import("./shopify.server");
-      const result = await updateShopifyDiscountStartsAt(row.shopify_discount_id, purchasedAt);
+      const result = await updateShopifyDiscountStartsAt(row.shopify_discount_id, row.purchasedAt);
       if (!result.success) {
         failed++;
         errors.push({ code: row.code, error: result.error });
         continue;
       }
-
-      await db.from("cashback_coupons").update({ starts_at: purchasedAt }).eq("id", row.id);
+      await db.from("cashback_coupons").update({ starts_at: row.purchasedAt }).eq("id", row.id);
       updated++;
     } catch (error) {
       failed++;
@@ -309,7 +321,7 @@ export async function backfillCashbackStartsAtToPurchaseDate(limit = 50): Promis
     }
   }
 
-  const remaining = Math.max(0, (totalEligible ?? 0) - (rows?.length ?? 0));
+  const remaining = Math.max(0, pending.length - batch.length);
   return { updated, skipped, failed, remaining, errors };
 }
 

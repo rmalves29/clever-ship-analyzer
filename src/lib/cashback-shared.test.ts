@@ -21,6 +21,7 @@ const settings: CashbackSettings = {
   percentage: 10,
   minimum_purchase_multiplier: 3,
   expiration_days: 30,
+  activation_delay_days: 3,
 };
 
 describe("cálculo monetário", () => {
@@ -52,6 +53,16 @@ describe("datas e limites", () => {
     expect(normalizeExpirationDays(1)).toBe(CASHBACK_MIN_EXPIRATION_DAYS);
     const { startsAt, endsAt } = buildCashbackDates("2026-03-01T00:00:00.000Z", 2);
     expect(new Date(endsAt).getTime()).toBeGreaterThan(new Date(startsAt).getTime());
+  });
+
+  it("respeita um prazo de liberação customizado", () => {
+    const { startsAt, endsAt } = buildCashbackDates("2026-03-01T12:00:00.000Z", 30, 7);
+    expect(startsAt).toBe("2026-03-08T12:00:00.000Z");
+    expect(endsAt).toBe("2026-03-31T12:00:00.000Z");
+  });
+
+  it("recalcula o mínimo de validade a partir do prazo de liberação customizado", () => {
+    expect(normalizeExpirationDays(5, 7)).toBe(8);
   });
 
   it("é determinístico: mesma entrada, mesmo resultado", () => {

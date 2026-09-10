@@ -2,8 +2,9 @@
  *  Toda a matemática monetária, a elegibilidade do pedido e a geração das datas
  *  do cupom vivem aqui; o lado servidor só orquestra Shopify + banco. */
 
-export const CASHBACK_ACTIVATION_DELAY_DAYS = 3;
-export const CASHBACK_MIN_EXPIRATION_DAYS = CASHBACK_ACTIVATION_DELAY_DAYS + 1; // 4
+/** Valor de fábrica — o prazo real é configurável por loja em `CashbackSettings.activation_delay_days`. */
+export const DEFAULT_CASHBACK_ACTIVATION_DELAY_DAYS = 3;
+export const CASHBACK_MIN_EXPIRATION_DAYS = DEFAULT_CASHBACK_ACTIVATION_DELAY_DAYS + 1; // 4
 
 export type CashbackSettings = {
   enabled: boolean;
@@ -11,6 +12,7 @@ export type CashbackSettings = {
   percentage: number;
   minimum_purchase_multiplier: number;
   expiration_days: number;
+  activation_delay_days: number;
 };
 
 export const DEFAULT_CASHBACK_SETTINGS: CashbackSettings = {
@@ -19,6 +21,7 @@ export const DEFAULT_CASHBACK_SETTINGS: CashbackSettings = {
   percentage: 10,
   minimum_purchase_multiplier: 3,
   expiration_days: 30,
+  activation_delay_days: DEFAULT_CASHBACK_ACTIVATION_DELAY_DAYS,
 };
 
 export type CashbackCouponStatus =
@@ -53,10 +56,26 @@ export type CashbackCalculation = {
   endsAt: string;
 };
 
-export function normalizeExpirationDays(days: number): number {
+/** Menor validade aceitável para um dado prazo de liberação — precisa vencer depois de liberar. */
+export function minExpirationDays(activationDelayDays: number): number {
+  const delay = Math.trunc(Number(activationDelayDays));
+  const safeDelay = Number.isFinite(delay) && delay >= 0 ? delay : DEFAULT_CASHBACK_ACTIVATION_DELAY_DAYS;
+  return safeDelay + 1;
+}
+
+export function normalizeExpirationDays(
+  days: number,
+  activationDelayDays: number = DEFAULT_CASHBACK_ACTIVATION_DELAY_DAYS,
+): number {
   const value = Math.trunc(Number(days));
   if (!Number.isFinite(value)) return DEFAULT_CASHBACK_SETTINGS.expiration_days;
-  return Math.min(365, Math.max(CASHBACK_MIN_EXPIRATION_DAYS, value));
+  return Math.min(365, Math.max(minExpirationDays(activationDelayDays), value));
+}
+
+export function normalizeActivationDelayDays(days: number): number {
+  const value = Math.trunc(Number(days));
+  if (!Number.isFinite(value)) return DEFAULT_CASHBACK_ACTIVATION_DELAY_DAYS;
+  return Math.min(30, Math.max(0, value));
 }
 
 function addDays(base: Date, days: number): Date {
@@ -67,12 +86,14 @@ function addDays(base: Date, days: number): Date {
 export function buildCashbackDates(
   purchasedAt: string | Date,
   expirationDays: number,
+  activationDelayDays: number = DEFAULT_CASHBACK_ACTIVATION_DELAY_DAYS,
 ): { startsAt: string; endsAt: string } {
   const base = purchasedAt instanceof Date ? purchasedAt : new Date(purchasedAt);
   const safeBase = Number.isFinite(base.getTime()) ? base : new Date();
-  const days = normalizeExpirationDays(expirationDays);
+  const delay = normalizeActivationDelayDays(activationDelayDays);
+  const days = normalizeExpirationDays(expirationDays, delay);
   return {
-    startsAt: addDays(safeBase, CASHBACK_ACTIVATION_DELAY_DAYS).toISOString(),
+    startsAt: addDays(safeBase, delay).toISOString(),
     endsAt: addDays(safeBase, days).toISOString(),
   };
 }
@@ -80,11 +101,14 @@ export function buildCashbackDates(
 export function calculateCashback(
   orderTotal: number,
   purchasedAt: string | Date,
-  settings: Pick<CashbackSettings, "percentage" | "minimum_purchase_multiplier" | "expiration_days">,
+  settings: Pick<
+    CashbackSettings,
+    "percentage" | "minimum_purchase_multiplier" | "expiration_days" | "activation_delay_days"
+  >,
 ): CashbackCalculation {
   const cashbackAmount = calculateCashbackAmount(orderTotal, settings.percentage);
   const minimumPurchase = calculateMinimumPurchase(cashbackAmount, settings.minimum_purchase_multiplier);
-  const { startsAt, endsAt } = buildCashbackDates(purchasedAt, settings.expiration_days);
+  const { startsAt, endsAt } = buildCashbackDates(purchasedAt, settings.expiration_days, settings.activation_delay_days);
   return { cashbackAmount, minimumPurchase, startsAt, endsAt };
 }
 

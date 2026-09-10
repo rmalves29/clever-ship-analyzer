@@ -29,6 +29,9 @@ export async function loadCashbackSettings(): Promise<CashbackSettings> {
       data.minimum_purchase_multiplier ?? DEFAULT_CASHBACK_SETTINGS.minimum_purchase_multiplier,
     ),
     expiration_days: Number(data.expiration_days ?? DEFAULT_CASHBACK_SETTINGS.expiration_days),
+    activation_delay_days: Number(
+      data.activation_delay_days ?? DEFAULT_CASHBACK_SETTINGS.activation_delay_days,
+    ),
   };
 }
 

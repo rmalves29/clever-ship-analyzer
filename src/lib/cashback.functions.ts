@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAppAuth } from "./app-auth";
-import { CASHBACK_MIN_EXPIRATION_DAYS } from "./cashback-shared";
+import { minExpirationDays } from "./cashback-shared";
 
 export const getCashbackSettings = createServerFn({ method: "GET" })
   .middleware([requireAppAuth])
@@ -10,12 +10,18 @@ export const getCashbackSettings = createServerFn({ method: "GET" })
     return loadCashbackSettings();
   });
 
-const settingsSchema = z.object({
-  enabled: z.boolean(),
-  percentage: z.number().min(0.01).max(100),
-  minimum_purchase_multiplier: z.number().min(1).max(50),
-  expiration_days: z.number().int().min(CASHBACK_MIN_EXPIRATION_DAYS).max(365),
-});
+const settingsSchema = z
+  .object({
+    enabled: z.boolean(),
+    percentage: z.number().min(0.01).max(100),
+    minimum_purchase_multiplier: z.number().min(1).max(50),
+    expiration_days: z.number().int().min(1).max(365),
+    activation_delay_days: z.number().int().min(0).max(30),
+  })
+  .refine((data) => data.expiration_days >= minExpirationDays(data.activation_delay_days), {
+    message: "A validade precisa ser maior que o prazo de liberação.",
+    path: ["expiration_days"],
+  });
 
 export const saveCashbackSettings = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
@@ -36,6 +42,7 @@ export const saveCashbackSettings = createServerFn({ method: "POST" })
         percentage: data.percentage,
         minimum_purchase_multiplier: data.minimum_purchase_multiplier,
         expiration_days: data.expiration_days,
+        activation_delay_days: data.activation_delay_days,
         updated_at: new Date().toISOString(),
       })
       .eq("id", 1);

@@ -19,13 +19,12 @@ import {
   saveCashbackSettings,
 } from "@/lib/cashback.functions";
 import {
-  CASHBACK_ACTIVATION_DELAY_DAYS,
-  CASHBACK_MIN_EXPIRATION_DAYS,
   CASHBACK_STATUS_LABEL,
   calculateCashbackAmount,
   calculateMinimumPurchase,
   deriveCashbackStatus,
   formatBRL,
+  minExpirationDays,
   type CashbackCouponStatus,
 } from "@/lib/cashback-shared";
 
@@ -79,6 +78,7 @@ function CashbackPage() {
   const [percentage, setPercentage] = useState("10");
   const [multiplier, setMultiplier] = useState("3");
   const [expirationDays, setExpirationDays] = useState("30");
+  const [activationDelayDays, setActivationDelayDays] = useState("3");
   const [previewTotal, setPreviewTotal] = useState("100");
 
   useEffect(() => {
@@ -88,6 +88,7 @@ function CashbackPage() {
     setPercentage(String(s.percentage));
     setMultiplier(String(s.minimum_purchase_multiplier));
     setExpirationDays(String(s.expiration_days));
+    setActivationDelayDays(String(s.activation_delay_days));
   }, [settingsQuery.data]);
 
   const saveMutation = useMutation({
@@ -98,6 +99,7 @@ function CashbackPage() {
           percentage: Number(percentage),
           minimum_purchase_multiplier: Number(multiplier),
           expiration_days: Number(expirationDays),
+          activation_delay_days: Number(activationDelayDays),
         },
       }),
     onSuccess: () => {
@@ -138,7 +140,8 @@ function CashbackPage() {
     return { total: derived.length, active: active.length, pending: pending.length, failed: failed.length, outstanding };
   }, [derived]);
 
-  const expirationInvalid = Number(expirationDays) < CASHBACK_MIN_EXPIRATION_DAYS;
+  const minExpiration = minExpirationDays(Number(activationDelayDays) || 0);
+  const expirationInvalid = Number(expirationDays) < minExpiration;
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-8 md:px-8">
@@ -170,7 +173,7 @@ function CashbackPage() {
               <Coins className="size-4" /> Configuração
             </CardTitle>
             <CardDescription>
-              O cupom é um valor fixo em dinheiro, libera {CASHBACK_ACTIVATION_DELAY_DAYS} dias após a compra e expira{" "}
+              O cupom é um valor fixo em dinheiro, libera {activationDelayDays || "X"} dias após a compra e expira{" "}
               {expirationDays || "X"} dias após a compra. Uso único, uma vez por cliente.
             </CardDescription>
           </CardHeader>
@@ -185,7 +188,7 @@ function CashbackPage() {
               <Switch checked={enabled} onCheckedChange={setEnabled} />
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1.5">
                 <Label htmlFor="percentage">Percentual do cashback (%)</Label>
                 <Input id="percentage" value={percentage} onChange={(e) => setPercentage(e.target.value)} inputMode="decimal" />
@@ -195,11 +198,23 @@ function CashbackPage() {
                 <Input id="multiplier" value={multiplier} onChange={(e) => setMultiplier(e.target.value)} inputMode="decimal" />
               </div>
               <div className="space-y-1.5">
+                <Label htmlFor="activationDelay">Dias até liberar</Label>
+                <Input
+                  id="activationDelay"
+                  value={activationDelayDays}
+                  onChange={(e) => setActivationDelayDays(e.target.value)}
+                  inputMode="numeric"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Tempo após a compra até o cupom ficar utilizável.
+                </p>
+              </div>
+              <div className="space-y-1.5">
                 <Label htmlFor="expiration">Dias até expirar</Label>
                 <Input id="expiration" value={expirationDays} onChange={(e) => setExpirationDays(e.target.value)} inputMode="numeric" />
                 {expirationInvalid ? (
                   <p className="text-xs text-destructive">
-                    Mínimo de {CASHBACK_MIN_EXPIRATION_DAYS} dias para não vencer antes da liberação.
+                    Mínimo de {minExpiration} dias para não vencer antes da liberação.
                   </p>
                 ) : null}
               </div>
@@ -219,7 +234,7 @@ function CashbackPage() {
                     Compra mínima para usar: <strong>{formatBRL(preview.minimum)}</strong>
                   </p>
                   <p className="text-muted-foreground">
-                    Liberação em {CASHBACK_ACTIVATION_DELAY_DAYS} dias · validade de {expirationDays || "—"} dias após a compra
+                    Liberação em {activationDelayDays || "—"} dias · validade de {expirationDays || "—"} dias após a compra
                   </p>
                 </div>
               </div>

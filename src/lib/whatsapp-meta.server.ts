@@ -991,7 +991,8 @@ export async function listCampaignsWithMetrics() {
     .in(
       "campaign_id",
       campaignList.map((c) => c.id),
-    );
+    )
+    .limit(10000);
 
   const recipientsByCampaign = new Map<string, { phone: string; status: string; sent_at: string | null }[]>();
   for (const r of recipients ?? []) {

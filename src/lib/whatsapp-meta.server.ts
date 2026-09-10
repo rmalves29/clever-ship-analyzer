@@ -1251,6 +1251,8 @@ export async function listCampaignsWithMetrics() {
       lidas,
       vendas,
       receita,
+      _debugRecipientsTotalAllCampaigns: recipients.length,
+      _debugRecipientsForThisCampaign: recips.length,
       couponOrders: aggregate?.couponOrders ?? 0,
       couponCustomers: aggregate?.couponCustomers.size ?? 0,
       couponRevenue: aggregate?.couponRevenue ?? 0,

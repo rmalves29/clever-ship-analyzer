@@ -438,7 +438,9 @@ function CampanhasWhatsapp() {
                         </Badge>
                       </td>
                       <td className="px-4 py-3">{c.enviadas}</td>
-                      <td className="px-4 py-3">{c.entregues}</td>
+                      <td className="px-4 py-3" title={`debug: total=${(c as any)._debugRecipientsTotalAllCampaigns} thisCampaign=${(c as any)._debugRecipientsForThisCampaign}`}>
+                        {c.entregues} <span className="text-[9px] text-muted-foreground">[{(c as any)._debugRecipientsForThisCampaign}/{(c as any)._debugRecipientsTotalAllCampaigns}]</span>
+                      </td>
                       <td className="px-4 py-3">{c.lidas}</td>
                       <td className="px-4 py-3">{c.vendas}</td>
                       <td className="px-4 py-3 font-semibold">{brl(c.receita)}</td>

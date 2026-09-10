@@ -947,7 +947,7 @@ export async function listCampaignsWithMetrics() {
     loadSettings(),
   ]);
 
-  const campaignList = (campaigns ?? []) as {
+  const campaignList = (campaigns ?? []) as unknown as {
     id: string;
     nome: string;
     status: string;
@@ -968,6 +968,8 @@ export async function listCampaignsWithMetrics() {
     reject_reason: string | null;
     automation_id: string | null;
     automation_step_id: string | null;
+    conversation_flow_id: string | null;
+    conversation_flow_step_id: string | null;
   }[];
 
   if (campaignList.length === 0) return [];
@@ -1250,6 +1252,8 @@ export async function listCampaignsWithMetrics() {
       origem: c.origem ?? "crm",
       automationId: c.automation_id,
       automationStepId: c.automation_step_id,
+      conversationFlowId: c.conversation_flow_id,
+      conversationFlowStepId: c.conversation_flow_step_id,
       enviadas: c.enviadas,
       falhas: c.falhas,
       totalDestinatarios: c.total_destinatarios ?? 0,

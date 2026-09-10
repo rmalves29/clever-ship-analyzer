@@ -580,6 +580,9 @@ function CampanhasWhatsapp() {
                                 <span>
                                   <strong>{campaign?.lidas ?? 0}</strong> lidas
                                 </span>
+                                <span>
+                                  <strong>{campaign?.vendas ?? 0}</strong> vendas
+                                </span>
                               </div>
                             </div>
                           );

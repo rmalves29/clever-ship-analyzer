@@ -11,6 +11,7 @@ import {
   deleteConversationalFlow,
   getConversationRunMetrics,
 } from "@/lib/conversational-flows.functions";
+import { getCampaigns } from "@/lib/whatsapp-meta.functions";
 import { ConversationalFlowDialog, type ConversationalFlowSeed } from "./ConversationalFlowDialog";
 
 type FlowRow = {
@@ -39,6 +40,12 @@ export function ConversationalFlowsTab() {
   const { data: metrics } = useQuery({
     queryKey: ["conversation-run-metrics"],
     queryFn: () => getConversationRunMetrics(),
+  });
+
+  // Mesma queryKey usada em campanhas-whatsapp.tsx — reaproveita o cache quando já carregado ali.
+  const { data: campanhas } = useQuery({
+    queryKey: ["whatsapp-campaigns"],
+    queryFn: () => getCampaigns(),
   });
 
   const runToggle = useServerFn(toggleConversationalFlow);
@@ -136,6 +143,42 @@ export function ConversationalFlowsTab() {
                   </span>
                 )}
               </div>
+
+              {(() => {
+                const sendSteps = (flow.steps as any[]).filter((s) => s.type === "send" || s.type === "menu");
+                if (sendSteps.length === 0) return null;
+                return (
+                  <div className="mt-3 space-y-1.5 rounded-lg border border-border p-3">
+                    <p className="text-xs font-medium text-muted-foreground">Funil por etapa</p>
+                    {sendSteps.map((s, idx) => {
+                      const campaign = (campanhas ?? []).find(
+                        (c: any) => c.conversationFlowId === flow.id && c.conversationFlowStepId === s.id,
+                      );
+                      return (
+                        <div key={s.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs">
+                          <span className="truncate text-muted-foreground">
+                            Etapa {idx + 1} · {String(s.text ?? "").slice(0, 30)}
+                          </span>
+                          <div className="flex shrink-0 gap-3">
+                            <span>
+                              <strong>{campaign?.enviadas ?? 0}</strong> enviadas
+                            </span>
+                            <span>
+                              <strong>{campaign?.entregues ?? 0}</strong> entregues
+                            </span>
+                            <span>
+                              <strong>{campaign?.lidas ?? 0}</strong> lidas
+                            </span>
+                            <span>
+                              <strong>{campaign?.vendas ?? 0}</strong> vendas
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
 
               {flow.trigger_type !== "unanswered_timeout" && (
                 <p className="mt-2 text-xs text-muted-foreground truncate">

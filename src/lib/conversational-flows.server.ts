@@ -190,9 +190,90 @@ async function sendConversationMessage(step: ConvSendStep | ConvMenuStep, phone:
   return { ok: true, waMessageId: json?.messages?.[0]?.id };
 }
 
+/** Acha (ou cria) a "campanha" que agrega métricas de entrega/leitura/venda dessa etapa do fluxo
+ *  — mesmo padrão usado pelas etapas de Automação (1 campanha por etapa, reaproveitada em
+ *  disparos sucessivos). Sem isso, as mensagens do fluxo conversacional ficam só no histórico da
+ *  conversa e nunca aparecem no sistema de métricas usado por Campanhas e Automações: o webhook
+ *  de status da Meta só atualiza `whatsapp_campaign_recipients` (por wa_message_id), então uma
+ *  mensagem que não tem uma linha lá nunca ganha status de entregue/lida. */
+async function ensureConversationStepCampaign(flowId: string, stepId: string): Promise<string | null> {
+  const supabaseAdmin = await admin();
+  const { data: existing } = await (supabaseAdmin.from("whatsapp_campaigns") as any)
+    .select("id")
+    .eq("conversation_flow_id", flowId)
+    .eq("conversation_flow_step_id", stepId)
+    .maybeSingle();
+  if (existing) return (existing as { id: string }).id;
+
+  const { data: flow } = await supabaseAdmin
+    .from("whatsapp_conversational_flows")
+    .select("nome")
+    .eq("id", flowId)
+    .maybeSingle();
+
+  const { data: created, error } = await supabaseAdmin
+    .from("whatsapp_campaigns")
+    .insert({
+      nome: (flow as { nome: string } | null)?.nome ?? "Fluxo conversacional",
+      status: "finalizada",
+      segment_type: "custom",
+      template_name: "(texto livre — fluxo conversacional)",
+      message_type: "utility",
+      body_params: [],
+      origem: "fluxo_conversacional",
+      conversation_flow_id: flowId,
+      conversation_flow_step_id: stepId,
+    } as never)
+    .select("id")
+    .single();
+  if (error || !created) {
+    console.error("Falha ao criar campanha-espelho do fluxo conversacional:", error?.message);
+    return null;
+  }
+  return (created as { id: string }).id;
+}
+
+/** Registra o envio na mesma tabela usada por Campanhas/Automações (wa_message_id é a chave que
+ *  o webhook da Meta usa pra atualizar status de entrega/leitura depois) e soma no contador da
+ *  campanha-espelho da etapa. */
+async function recordConversationDelivery(
+  flowId: string,
+  stepId: string,
+  run: { customer_id: string | null; phone: string },
+  waMessageId: string | undefined,
+) {
+  const supabaseAdmin = await admin();
+  const campaignId = await ensureConversationStepCampaign(flowId, stepId);
+  if (!campaignId) return;
+
+  await supabaseAdmin.from("whatsapp_campaign_recipients").insert({
+    campaign_id: campaignId,
+    customer_id: run.customer_id,
+    phone: run.phone,
+    wa_message_id: waMessageId ?? null,
+    status: "sent",
+    sent_at: new Date().toISOString(),
+  } as never);
+
+  const { data: campaignRow } = await supabaseAdmin
+    .from("whatsapp_campaigns")
+    .select("enviadas")
+    .eq("id", campaignId)
+    .maybeSingle();
+  const currentEnviadas = (campaignRow as { enviadas: number } | null)?.enviadas ?? 0;
+  await supabaseAdmin
+    .from("whatsapp_campaigns")
+    .update({ enviadas: currentEnviadas + 1 } as never)
+    .eq("id", campaignId);
+}
+
 /** Dispara a etapa atual do run e avança pra próxima (ou completa o fluxo). Reaproveitado tanto
  *  pelo tick agendado quanto pelo disparo imediato da 1ª etapa (`matchIncomingMessage`). */
-async function dispatchRunStep(run: { id: string; customer_id: string | null; phone: string; started_at: string }, step: ConvSendStep | ConvMenuStep, steps: ConvStep[]) {
+async function dispatchRunStep(
+  run: { id: string; flow_id: string; customer_id: string | null; phone: string; started_at: string },
+  step: ConvSendStep | ConvMenuStep,
+  steps: ConvStep[],
+) {
   const supabaseAdmin = await admin();
   const result = await sendConversationMessage(step, run.phone);
   if (!result.ok) {
@@ -202,6 +283,10 @@ async function dispatchRunStep(run: { id: string; customer_id: string | null; ph
       .eq("id", run.id);
     return;
   }
+
+  await recordConversationDelivery(run.flow_id, step.id, run, result.waMessageId).catch((error) =>
+    console.error("Falha ao registrar métricas de entrega do fluxo conversacional:", error),
+  );
 
   // Espelha na caixa de entrada (aba Conversas) — sem isso a mensagem do bot fica invisível ali,
   // e a resposta do cliente aparece "do nada", sem a mensagem original que ela está respondendo.

@@ -966,6 +966,8 @@ export async function listCampaignsWithMetrics() {
     approved_at: string | null;
     rejected_at: string | null;
     reject_reason: string | null;
+    automation_id: string | null;
+    automation_step_id: string | null;
   }[];
 
   if (campaignList.length === 0) return [];
@@ -1246,6 +1248,8 @@ export async function listCampaignsWithMetrics() {
       bodyParams: Array.isArray(c.body_params) ? (c.body_params as string[]) : [],
       couponCode: c.coupon_code,
       origem: c.origem ?? "crm",
+      automationId: c.automation_id,
+      automationStepId: c.automation_step_id,
       enviadas: c.enviadas,
       falhas: c.falhas,
       totalDestinatarios: c.total_destinatarios ?? 0,

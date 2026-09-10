@@ -555,6 +555,38 @@ function CampanhasWhatsapp() {
                       </div>
                     );
                   })()}
+                  {(() => {
+                    const sendSteps = a.steps.filter((s: any) => s.type === "send");
+                    if (sendSteps.length === 0) return null;
+                    return (
+                      <div className="space-y-1.5 rounded-lg border border-border p-3">
+                        <p className="text-xs font-medium text-muted-foreground">Funil por etapa</p>
+                        {sendSteps.map((s: any, idx: number) => {
+                          const campaign = (campanhas ?? []).find(
+                            (c: any) => c.automationId === a.id && c.automationStepId === s.id,
+                          );
+                          return (
+                            <div key={s.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs">
+                              <span className="text-muted-foreground">
+                                Etapa {idx + 1} · {s.templateName}
+                              </span>
+                              <div className="flex gap-3">
+                                <span>
+                                  <strong>{campaign?.enviadas ?? 0}</strong> enviadas
+                                </span>
+                                <span>
+                                  <strong>{campaign?.entregues ?? 0}</strong> entregues
+                                </span>
+                                <span>
+                                  <strong>{campaign?.lidas ?? 0}</strong> lidas
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                   <p className="text-xs text-muted-foreground">
                     {a.totalExecucoes} execuções ·{" "}
                     {a.lastRunAt ? `última em ${new Date(a.lastRunAt).toLocaleString("pt-BR")}` : "nunca executada"}

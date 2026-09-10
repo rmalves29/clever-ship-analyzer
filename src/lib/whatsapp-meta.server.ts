@@ -987,26 +987,29 @@ export async function listCampaignsWithMetrics() {
 
   // O PostgREST tem um teto de linhas por request (db-max-rows, tipicamente 1000)
   // que .limit() sozinho não consegue ultrapassar — por isso pagina explicitamente
-  // com .range() até a página vir incompleta.
-  const recipients: { campaign_id: string; phone: string; status: string; sent_at: string | null }[] = [];
+  // com .range(). Busca o total primeiro e dispara as páginas em paralelo (em vez de
+  // sequencial) para não deixar o dashboard lento com milhares de recipients.
+  let recipients: { campaign_id: string; phone: string; status: string; sent_at: string | null }[] = [];
   {
     const pageSize = 1000;
-    let from = 0;
-    while (true) {
-      const { data: page, error } = await supabaseAdmin
-        .from("whatsapp_campaign_recipients")
-        .select("campaign_id, phone, status, sent_at")
-        .in(
-          "campaign_id",
-          campaignList.map((c) => c.id),
-        )
-        .order("id", { ascending: true })
-        .range(from, from + pageSize - 1);
-      if (error || !page || page.length === 0) break;
-      recipients.push(...(page as typeof recipients));
-      if (page.length < pageSize) break;
-      from += pageSize;
-    }
+    const recipientIds = campaignList.map((c) => c.id);
+    const { count } = await supabaseAdmin
+      .from("whatsapp_campaign_recipients")
+      .select("id", { count: "exact", head: true })
+      .in("campaign_id", recipientIds);
+
+    const pageCount = Math.max(1, Math.ceil((count ?? 0) / pageSize));
+    const pages = await Promise.all(
+      Array.from({ length: pageCount }, (_, i) =>
+        supabaseAdmin
+          .from("whatsapp_campaign_recipients")
+          .select("campaign_id, phone, status, sent_at")
+          .in("campaign_id", recipientIds)
+          .order("id", { ascending: true })
+          .range(i * pageSize, i * pageSize + pageSize - 1),
+      ),
+    );
+    recipients = pages.flatMap((p) => (p.data ?? []) as typeof recipients);
   }
 
   const recipientsByCampaign = new Map<string, { phone: string; status: string; sent_at: string | null }[]>();
@@ -1251,8 +1254,6 @@ export async function listCampaignsWithMetrics() {
       lidas,
       vendas,
       receita,
-      _debugRecipientsTotalAllCampaigns: recipients.length,
-      _debugRecipientsForThisCampaign: recips.length,
       couponOrders: aggregate?.couponOrders ?? 0,
       couponCustomers: aggregate?.couponCustomers.size ?? 0,
       couponRevenue: aggregate?.couponRevenue ?? 0,

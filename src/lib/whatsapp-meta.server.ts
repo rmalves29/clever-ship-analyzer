@@ -1000,6 +1000,7 @@ export async function listCampaignsWithMetrics() {
           "campaign_id",
           campaignList.map((c) => c.id),
         )
+        .order("id", { ascending: true })
         .range(from, from + pageSize - 1);
       if (error || !page || page.length === 0) break;
       recipients.push(...(page as typeof recipients));

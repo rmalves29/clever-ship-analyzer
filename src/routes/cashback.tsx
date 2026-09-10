@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
+  backfillCashbackStartsAt,
   getCashbackSettings,
   listCashbackCoupons,
   reprocessCashbackFailures,
@@ -70,6 +71,7 @@ function CashbackPage() {
   const fetchCoupons = useServerFn(listCashbackCoupons);
   const persistSettings = useServerFn(saveCashbackSettings);
   const reprocess = useServerFn(reprocessCashbackFailures);
+  const backfillStartsAt = useServerFn(backfillCashbackStartsAt);
 
   const settingsQuery = useQuery({ queryKey: ["cashback", "settings"], queryFn: () => fetchSettings() });
   const couponsQuery = useQuery({ queryKey: ["cashback", "coupons"], queryFn: () => fetchCoupons() });
@@ -120,6 +122,30 @@ function CashbackPage() {
     onError: (error: unknown) => toast.error(error instanceof Error ? error.message : "Erro ao reprocessar."),
   });
 
+  const backfillMutation = useMutation({
+    mutationFn: async () => {
+      let updated = 0;
+      let skipped = 0;
+      let failed = 0;
+      // Cada chamada processa um lote (50) — repete até não sobrar nada, pra rodar tudo em 1 clique.
+      for (let i = 0; i < 50; i++) {
+        const result = await backfillStartsAt();
+        updated += result.updated;
+        skipped += result.skipped;
+        failed += result.failed;
+        if (result.remaining <= 0) break;
+      }
+      return { updated, skipped, failed };
+    },
+    onSuccess: (result) => {
+      toast.success(
+        `Liberação ajustada para a data da compra: ${result.updated} cupom(ns) atualizado(s), ${result.skipped} já estavam corretos, ${result.failed} com erro.`,
+      );
+      queryClient.invalidateQueries({ queryKey: ["cashback", "coupons"] });
+    },
+    onError: (error: unknown) => toast.error(error instanceof Error ? error.message : "Erro ao ajustar cupons."),
+  });
+
   const preview = useMemo(() => {
     const total = Number(previewTotal.replace(",", ".")) || 0;
     const amount = calculateCashbackAmount(total, Number(percentage) || 0);
@@ -152,10 +178,28 @@ function CashbackPage() {
             Toda compra paga gera automaticamente um cupom real de cashback na Shopify, restrito ao cliente que comprou.
           </p>
         </div>
-        <Button variant="outline" onClick={() => reprocessMutation.mutate()} disabled={reprocessMutation.isPending}>
-          {reprocessMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}
-          Atualizar e reprocessar falhas
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Isso vai antecipar a liberação de todos os cupons pendentes/ativos (não usados) para a data da própria compra, no banco e na Shopify. Confirma?",
+                )
+              ) {
+                backfillMutation.mutate();
+              }
+            }}
+            disabled={backfillMutation.isPending}
+          >
+            {backfillMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+            Liberar cupons pendentes na data da compra
+          </Button>
+          <Button variant="outline" onClick={() => reprocessMutation.mutate()} disabled={reprocessMutation.isPending}>
+            {reprocessMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}
+            Atualizar e reprocessar falhas
+          </Button>
+        </div>
       </div>
 
       <Alert className="mb-6">

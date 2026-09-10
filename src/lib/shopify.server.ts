@@ -591,3 +591,37 @@ export async function deleteShopifyDiscountCode(
     return { success: false, error: message };
   }
 }
+
+const DISCOUNT_CODE_BASIC_UPDATE_STARTS_AT_MUTATION = `
+  mutation discountCodeBasicUpdate($id: ID!, $basicCodeDiscount: DiscountCodeBasicInput!) {
+    discountCodeBasicUpdate(id: $id, basicCodeDiscount: $basicCodeDiscount) {
+      codeDiscountNode { id }
+      userErrors { field message code }
+    }
+  }
+`;
+
+/** Antecipa a data de liberação de um cupom já criado na Shopify — usado para reprocessar em
+ *  massa cupons de cashback gerados antes de uma mudança na regra de prazo. Só muda `startsAt`;
+ *  o resto do desconto fica como está. */
+export async function updateShopifyDiscountStartsAt(
+  discountId: string,
+  startsAt: string,
+): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    const data = await shopifyGraphQL(DISCOUNT_CODE_BASIC_UPDATE_STARTS_AT_MUTATION, {
+      id: discountId,
+      basicCodeDiscount: { startsAt },
+    });
+    const userErrors = data?.discountCodeBasicUpdate?.userErrors ?? [];
+    if (userErrors.length > 0) {
+      return { success: false, error: userErrors.map((e: any) => e.message).join("; ") };
+    }
+    if (!data?.discountCodeBasicUpdate?.codeDiscountNode?.id) {
+      return { success: false, error: "Shopify não retornou o cupom atualizado." };
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao atualizar cupom na Shopify." };
+  }
+}

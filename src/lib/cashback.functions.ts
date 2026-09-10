@@ -69,3 +69,12 @@ export const reprocessCashbackFailures = createServerFn({ method: "POST" })
     const { reprocessPendingCashback } = await import("./cashback.server");
     return reprocessPendingCashback();
   });
+
+/** Ajuste único (chamado manualmente da tela): antecipa a liberação dos cupons ainda não
+ *  usados para a data da própria compra, no banco e no cupom real da Shopify. */
+export const backfillCashbackStartsAt = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .handler(async () => {
+    const { backfillCashbackStartsAtToPurchaseDate } = await import("./cashback.server");
+    return backfillCashbackStartsAtToPurchaseDate(50);
+  });

@@ -243,6 +243,76 @@ export type CashbackContextSnapshot = {
   endsAt: string;
 } | null;
 
+/** Ajuste único: antecipa a liberação (starts_at) dos cupons ainda pendentes/ativos para a
+ *  data da própria compra — tanto no banco quanto no cupom real da Shopify, já que é lá que
+ *  o bloqueio de uso é aplicado de fato. Idempotente: cupom cujo starts_at já bate com a data
+ *  do pedido é pulado. Processa em lote (padrão 50) para não estourar tempo de execução nem
+ *  o rate limit da Shopify — chame de novo até `remaining` ser 0. */
+export async function backfillCashbackStartsAtToPurchaseDate(limit = 50): Promise<{
+  updated: number;
+  skipped: number;
+  failed: number;
+  remaining: number;
+  errors: { code: string; error: string }[];
+}> {
+  const db = await admin();
+  const { count: totalEligible } = await db
+    .from("cashback_coupons")
+    .select("id", { count: "exact", head: true })
+    .in("status", ["pending", "active"])
+    .not("shopify_discount_id", "is", null);
+
+  const { data: rows } = await db
+    .from("cashback_coupons")
+    .select("id, code, shopify_order_id, shopify_discount_id, starts_at")
+    .in("status", ["pending", "active"])
+    .not("shopify_discount_id", "is", null)
+    .order("created_at", { ascending: true })
+    .limit(limit);
+
+  let updated = 0;
+  let skipped = 0;
+  let failed = 0;
+  const errors: { code: string; error: string }[] = [];
+
+  for (const row of rows ?? []) {
+    try {
+      const { data: order } = await db
+        .from("shopify_orders")
+        .select("processed_at")
+        .eq("id", row.shopify_order_id)
+        .maybeSingle();
+      const purchasedAt = order?.processed_at;
+      if (!purchasedAt) {
+        failed++;
+        errors.push({ code: row.code, error: "Pedido de origem não encontrado." });
+        continue;
+      }
+      if (purchasedAt === row.starts_at) {
+        skipped++;
+        continue;
+      }
+
+      const { updateShopifyDiscountStartsAt } = await import("./shopify.server");
+      const result = await updateShopifyDiscountStartsAt(row.shopify_discount_id, purchasedAt);
+      if (!result.success) {
+        failed++;
+        errors.push({ code: row.code, error: result.error });
+        continue;
+      }
+
+      await db.from("cashback_coupons").update({ starts_at: purchasedAt }).eq("id", row.id);
+      updated++;
+    } catch (error) {
+      failed++;
+      errors.push({ code: row.code, error: error instanceof Error ? error.message : "Erro desconhecido." });
+    }
+  }
+
+  const remaining = Math.max(0, (totalEligible ?? 0) - (rows?.length ?? 0));
+  return { updated, skipped, failed, remaining, errors };
+}
+
 /** Cupom de cashback do pedido — usado para congelar os tokens no contexto da automação. */
 export async function loadCashbackForOrder(orderId: string): Promise<CashbackContextSnapshot> {
   if (!orderId) return null;

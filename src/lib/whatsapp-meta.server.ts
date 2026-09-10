@@ -985,14 +985,28 @@ export async function listCampaignsWithMetrics() {
     pendingApprovalByCampaign.set(row.campaign_id, (pendingApprovalByCampaign.get(row.campaign_id) ?? 0) + 1);
   }
 
-  const { data: recipients } = await supabaseAdmin
-    .from("whatsapp_campaign_recipients")
-    .select("campaign_id, phone, status, sent_at")
-    .in(
-      "campaign_id",
-      campaignList.map((c) => c.id),
-    )
-    .limit(10000);
+  // O PostgREST tem um teto de linhas por request (db-max-rows, tipicamente 1000)
+  // que .limit() sozinho não consegue ultrapassar — por isso pagina explicitamente
+  // com .range() até a página vir incompleta.
+  const recipients: { campaign_id: string; phone: string; status: string; sent_at: string | null }[] = [];
+  {
+    const pageSize = 1000;
+    let from = 0;
+    while (true) {
+      const { data: page, error } = await supabaseAdmin
+        .from("whatsapp_campaign_recipients")
+        .select("campaign_id, phone, status, sent_at")
+        .in(
+          "campaign_id",
+          campaignList.map((c) => c.id),
+        )
+        .range(from, from + pageSize - 1);
+      if (error || !page || page.length === 0) break;
+      recipients.push(...(page as typeof recipients));
+      if (page.length < pageSize) break;
+      from += pageSize;
+    }
+  }
 
   const recipientsByCampaign = new Map<string, { phone: string; status: string; sent_at: string | null }[]>();
   for (const r of recipients ?? []) {

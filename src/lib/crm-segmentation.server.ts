@@ -59,26 +59,61 @@ async function loadCustomers() {
   return rows;
 }
 
-/** customer_id -> tem cupom de cashback pendente/ativo agora (join cashback_coupons -> shopify_orders
- *  pelo pedido) — não é uma coluna de shopify_customers, então precisa ser mesclada depois de loadCustomers(). */
-async function loadActiveCashbackCustomerIds(): Promise<Set<string>> {
+export type CustomerCashbackCoupon = {
+  status: "pending" | "active";
+  startsAt: string;
+  endsAt: string;
+  createdAt: string;
+  amount: number;
+};
+
+/** customer_id -> cupons de cashback pendentes/ativos agora, com os dados usados pela
+ *  segmentação (status derivado, datas, valor). Join cashback_coupons -> shopify_orders pelo
+ *  pedido — não é uma coluna de shopify_customers, então precisa ser mesclada depois de
+ *  loadCustomers(). Um cliente pode ter mais de um cupom relevante ao mesmo tempo. */
+async function loadCashbackCouponsByCustomer(): Promise<Map<string, CustomerCashbackCoupon[]>> {
   const db = await admin();
+  const now = new Date();
   const { data, error } = await (db.from("cashback_coupons") as any)
-    .select("shopify_order_id, status, ends_at")
+    .select("shopify_order_id, starts_at, ends_at, created_at, cashback_amount")
     .not("status", "in", "(cancelled,cancel_pending,failed)")
-    .gt("ends_at", new Date().toISOString());
+    .gt("ends_at", now.toISOString());
   if (error) throw new Error(`Erro ao buscar cupons de cashback: ${error.message}`);
-  const orderIds = [...new Set((data ?? []).map((row: any) => String(row.shopify_order_id)))];
-  const result = new Set<string>();
-  if (orderIds.length === 0) return result;
+
+  const rows = (data ?? []) as {
+    shopify_order_id: string;
+    starts_at: string;
+    ends_at: string;
+    created_at: string;
+    cashback_amount: number;
+  }[];
+  const orderIds = [...new Set(rows.map((row) => String(row.shopify_order_id)))];
+  const customerIdByOrderId = new Map<string, string>();
   for (let i = 0; i < orderIds.length; i += ORDER_ID_BATCH) {
     const batch = orderIds.slice(i, i + ORDER_ID_BATCH);
     const { data: orderRows, error: orderError } = await (db.from("shopify_orders") as any)
-      .select("customer_id")
+      .select("id, customer_id")
       .in("id", batch)
       .not("customer_id", "is", null);
     if (orderError) throw new Error(`Erro ao buscar pedidos do cashback: ${orderError.message}`);
-    for (const row of (orderRows ?? []) as { customer_id: string }[]) result.add(String(row.customer_id));
+    for (const row of (orderRows ?? []) as { id: string; customer_id: string }[]) {
+      customerIdByOrderId.set(String(row.id), String(row.customer_id));
+    }
+  }
+
+  const result = new Map<string, CustomerCashbackCoupon[]>();
+  for (const row of rows) {
+    const customerId = customerIdByOrderId.get(String(row.shopify_order_id));
+    if (!customerId) continue;
+    const list = result.get(customerId) ?? [];
+    list.push({
+      status: now.getTime() < new Date(row.starts_at).getTime() ? "pending" : "active",
+      startsAt: row.starts_at,
+      endsAt: row.ends_at,
+      createdAt: row.created_at,
+      amount: Number(row.cashback_amount ?? 0),
+    });
+    result.set(customerId, list);
   }
   return result;
 }
@@ -484,20 +519,22 @@ export async function loadCRMProductFilterOptions(): Promise<CRMProductOption[]>
 }
 
 export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMAdvancedCustomerContext[]> {
-  const [customers, orders, abandonedCheckoutAtByCustomer, whatsappBehavior, popupVisitByPhone, activeCashbackCustomerIds, inboxLastInboundByPhone] = await Promise.all([
+  const [customers, orders, abandonedCheckoutAtByCustomer, whatsappBehavior, popupVisitByPhone, cashbackCouponsByCustomer, inboxLastInboundByPhone] = await Promise.all([
     loadCustomers(),
     loadOrders(),
     loadLatestAbandonedCheckoutByCustomer(),
     loadWhatsappBehaviorIndexes(),
     loadPopupVisitByPhone(),
-    loadActiveCashbackCustomerIds(),
+    loadCashbackCouponsByCustomer(),
     loadInboxLastInboundByPhone(),
   ]);
   for (const customer of customers) {
     if (customer.phone && popupVisitByPhone.has(customer.phone)) {
       customer.last_visit_at = popupVisitByPhone.get(customer.phone);
     }
-    customer.has_active_cashback = activeCashbackCustomerIds.has(customer.id);
+    const coupons = cashbackCouponsByCustomer.get(customer.id) ?? [];
+    customer.has_active_cashback = coupons.length > 0;
+    customer.cashback_coupons = coupons;
     if (customer.phone && inboxLastInboundByPhone.has(customer.phone)) {
       customer.last_inbound_at = inboxLastInboundByPhone.get(customer.phone);
     }

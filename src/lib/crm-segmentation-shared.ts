@@ -40,6 +40,17 @@ export type CRMCustomerForSegmentation = {
   /** Tem cupom de cashback pendente ou ativo agora (join com cashback_coupons via pedido,
    *  feito por quem carrega os clientes — não é uma coluna de shopify_customers). */
   has_active_cashback?: boolean;
+  /** Cupons de cashback do cliente ainda relevantes (pending ou active — não cancelado,
+   *  não expirado, não falho). Uma lista porque o cliente pode ter cashback de mais de um
+   *  pedido ao mesmo tempo. Join com cashback_coupons via pedido, feito por quem carrega os
+   *  clientes — não é uma coluna de shopify_customers. */
+  cashback_coupons?: {
+    status: "pending" | "active";
+    startsAt: string;
+    endsAt: string;
+    createdAt: string;
+    amount: number;
+  }[];
   /** Horário da última mensagem RECEBIDA desse telefone no WhatsApp (join por telefone com
    *  whatsapp_inbox_threads.last_inbound_at, feito por quem carrega os clientes — não é uma
    *  coluna de shopify_customers). Base pra saber se a janela de atendimento de 24h da Meta
@@ -388,6 +399,33 @@ function whatsappWindowOpen(context: CRMCustomerContext, now: Date): boolean {
   return Number.isFinite(time) && time >= now.getTime() - DAY_MS && time <= now.getTime();
 }
 
+/** Cashback liberado (já passou o prazo de carência) e ainda não expirado/cancelado —
+ *  é quem está pronto pra usar o cupom agora. */
+function cashbackReadyToUse(context: CRMCustomerContext): boolean {
+  return (context.customer.cashback_coupons ?? []).some((c) => c.status === "active");
+}
+
+/** Menor número de dias restantes entre os cupons já liberados do cliente — se ele tiver mais
+ *  de um cupom ativo, considera o mais urgente (o que vence primeiro). Null quando não há
+ *  nenhum cupom liberado (nesse caso a condição não deve casar, indiferente do operador). */
+function cashbackMinDaysUntilExpire(context: CRMCustomerContext, now: Date): number | null {
+  const active = (context.customer.cashback_coupons ?? []).filter((c) => c.status === "active");
+  if (active.length === 0) return null;
+  const days = active.map((c) => Math.ceil((new Date(c.endsAt).getTime() - now.getTime()) / DAY_MS));
+  return Math.min(...days);
+}
+
+/** Data de criação do cupom de cashback mais recente do cliente (pending ou active) — usada
+ *  para "gerado há X dias", reaproveitando os mesmos operadores de data do resto do CRM. */
+function cashbackLatestGeneratedAt(context: CRMCustomerContext): string | null {
+  const coupons = context.customer.cashback_coupons ?? [];
+  if (coupons.length === 0) return null;
+  return coupons.reduce<string | null>(
+    (latest, c) => (!latest || c.createdAt > latest ? c.createdAt : latest),
+    null,
+  );
+}
+
 function paymentStatusMatches(context: CRMCustomerContext, targetRaw: unknown): boolean {
   const target = normalizeStatus(targetRaw);
   if (!target) return false;
@@ -479,6 +517,12 @@ export function matchesSegmentCondition(context: CRMCustomerContext, condition: 
   if (field === "acesso_sem_compra") return compareBoolean(metrics.validOrderCount === 0, operator, value);
   if (field === "visitou_site") return compareDate(customer.last_visit_at ?? null, operator, value, now);
   if (field === "cashback_disponivel") return compareBoolean(Boolean(customer.has_active_cashback), operator, value);
+  if (field === "cashback_liberado_nao_usado") return compareBoolean(cashbackReadyToUse(context), operator, value);
+  if (field === "cashback_dias_para_expirar") {
+    const days = cashbackMinDaysUntilExpire(context, now);
+    return days === null ? false : compareNumber(days, operator, value);
+  }
+  if (field === "cashback_data_geracao") return compareDate(cashbackLatestGeneratedAt(context), operator, value, now);
   if (field === "janela_24h_aberta") return compareBoolean(whatsappWindowOpen(context, now), operator, value);
 
   return false;

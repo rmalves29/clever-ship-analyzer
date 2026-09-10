@@ -11,10 +11,31 @@ const NOW = new Date("2026-08-24T15:00:00-03:00");
 const isoDaysAgo = (days: number) => new Date(NOW.getTime() - days * 86_400_000).toISOString();
 
 const customers: CRMCustomerForSegmentation[] = [
-  { id: "c1", first_name: "Ana", city: "Belo Horizonte", province: "MG", tags: ["VIP", "Coleção Verão"], rfm_segment: "Nova compra", created_at: isoDaysAgo(10) },
+  {
+    id: "c1",
+    first_name: "Ana",
+    city: "Belo Horizonte",
+    province: "MG",
+    tags: ["VIP", "Coleção Verão"],
+    rfm_segment: "Nova compra",
+    created_at: isoDaysAgo(10),
+    cashback_coupons: [
+      { status: "active", startsAt: isoDaysAgo(1), endsAt: isoDaysAgo(-3), createdAt: isoDaysAgo(4), amount: 25 },
+    ],
+  },
   { id: "c2", first_name: "Bia", city: "São Paulo", province: "SP", rfm_segment: "Sem compra", created_at: isoDaysAgo(20) },
   { id: "c3", first_name: "Clara", city: "Curitiba", province: "PR", rfm_segment: "Sem compra", created_at: isoDaysAgo(40) },
-  { id: "c4", first_name: "Dani", city: "Recife", province: "PE", rfm_segment: "Nova compra", created_at: isoDaysAgo(5) },
+  {
+    id: "c4",
+    first_name: "Dani",
+    city: "Recife",
+    province: "PE",
+    rfm_segment: "Nova compra",
+    created_at: isoDaysAgo(5),
+    cashback_coupons: [
+      { status: "pending", startsAt: isoDaysAgo(-2), endsAt: isoDaysAgo(-30), createdAt: isoDaysAgo(0), amount: 40 },
+    ],
+  },
 ];
 
 const orders: CRMOrderForSegmentation[] = [
@@ -145,6 +166,32 @@ describe("filtros de comportamento", () => {
     expect(ctx("c1").abandonedCheckout).toBe(false);
     expect(ctx("c1").abandonedCheckoutRecovered).toBe(true);
     expect(matchesSegmentRules(ctx("c1"), rule("checkout_abandonado", "eq", "sim"), NOW)).toBe(false);
+  });
+});
+
+describe("filtros de cashback", () => {
+  it("liberado e não usado só é verdadeiro quando existe cupom com status active", () => {
+    expect(matchesSegmentRules(ctx("c1"), rule("cashback_liberado_nao_usado", "eq", "sim"), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c4"), rule("cashback_liberado_nao_usado", "eq", "sim"), NOW)).toBe(false);
+    expect(matchesSegmentRules(ctx("c2"), rule("cashback_liberado_nao_usado", "eq", "sim"), NOW)).toBe(false);
+  });
+
+  it("dias para expirar considera só cupons já liberados (active)", () => {
+    expect(matchesSegmentRules(ctx("c1"), rule("cashback_dias_para_expirar", "lte", 3), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c1"), rule("cashback_dias_para_expirar", "lte", 1), NOW)).toBe(false);
+    // c4 só tem cupom pending (ainda não liberado) — não entra em "dias para expirar".
+    expect(matchesSegmentRules(ctx("c4"), rule("cashback_dias_para_expirar", "lte", 30), NOW)).toBe(false);
+  });
+
+  it("data de geração aceita últimos dias, igual ao resto do CRM", () => {
+    expect(matchesSegmentRules(ctx("c1"), rule("cashback_data_geracao", "last_days", 4), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c1"), rule("cashback_data_geracao", "last_days", 1), NOW)).toBe(false);
+    expect(matchesSegmentRules(ctx("c4"), rule("cashback_data_geracao", "last_days", 0), NOW)).toBe(true);
+  });
+
+  it("sem nenhum cupom relevante, todos os filtros de cashback falham fechado", () => {
+    expect(matchesSegmentRules(ctx("c2"), rule("cashback_dias_para_expirar", "gte", 0), NOW)).toBe(false);
+    expect(matchesSegmentRules(ctx("c2"), rule("cashback_data_geracao", "last_days", 999), NOW)).toBe(false);
   });
 });
 

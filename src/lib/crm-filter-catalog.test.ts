@@ -20,6 +20,9 @@ const buyer: CRMAdvancedCustomerContext = {
     tags: ["VIP"], tags_custom: ["Teste"], rfm_segment: "Novos",
     last_visit_at: "2026-08-24T10:00:00-03:00",
     has_active_cashback: true,
+    cashback_coupons: [
+      { status: "active", startsAt: "2026-08-21T00:00:00-03:00", endsAt: "2026-08-27T00:00:00-03:00", createdAt: "2026-08-23T00:00:00-03:00", amount: 25 },
+    ],
     last_inbound_at: "2026-08-24T10:00:00-03:00",
   },
   metrics: {
@@ -115,6 +118,9 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
   { field: "acesso_sem_compra", operator: "eq", value: "sim", context: lead },
   { field: "visitou_site", operator: "on", value: "2026-08-24" },
   { field: "cashback_disponivel", operator: "eq", value: "sim" },
+  { field: "cashback_liberado_nao_usado", operator: "eq", value: "sim" },
+  { field: "cashback_dias_para_expirar", operator: "lte", value: 3 },
+  { field: "cashback_data_geracao", operator: "on", value: "2026-08-23" },
   { field: "janela_24h_aberta", operator: "eq", value: "sim" },
   { field: "produto", operator: "bought", value: "p-brinco" },
   { field: "categoria_produto", operator: "bought", value: "Brincos" },
@@ -137,8 +143,8 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
 ];
 
 describe("catálogo confiável de filtros do CRM", () => {
-  it("expõe somente os 40 filtros implementados no motor", () => {
-    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(40);
+  it("expõe somente os 43 filtros implementados no motor", () => {
+    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(43);
     expect(new Set(SUPPORTED_SEGMENT_FIELD_IDS)).toEqual(new Set(cases.map((item) => item.field)));
   });
 

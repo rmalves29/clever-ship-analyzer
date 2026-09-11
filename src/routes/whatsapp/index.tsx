@@ -59,6 +59,45 @@ const FILTERS = [
   { value: "erro", label: "Com erro" },
 ];
 
+const DATE_PERIODS = [
+  { key: "tudo", label: "Tudo" },
+  { key: "dia", label: "Hoje" },
+  { key: "7d", label: "Últimos 7 dias" },
+  { key: "mes", label: "Este mês" },
+  { key: "ano", label: "Este ano" },
+  { key: "personalizado", label: "Personalizado" },
+] as const;
+
+type DatePeriodKey = (typeof DATE_PERIODS)[number]["key"];
+
+function campaignDate(c: WaCampaignListRow): Date {
+  return new Date(c.sentAt ?? c.createdAt);
+}
+
+function inPeriod(c: WaCampaignListRow, period: DatePeriodKey, range: DateRange | undefined): boolean {
+  if (period === "tudo") return true;
+  const d = campaignDate(c);
+  const now = new Date();
+  if (period === "dia") {
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  }
+  if (period === "7d") {
+    const start = new Date(now);
+    start.setDate(start.getDate() - 6);
+    start.setHours(0, 0, 0, 0);
+    return d >= start;
+  }
+  if (period === "mes") return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  if (period === "ano") return d.getFullYear() === now.getFullYear();
+  if (range?.from) {
+    const end = range.to ?? range.from;
+    const endOfDay = new Date(end);
+    endOfDay.setHours(23, 59, 59, 999);
+    return d >= range.from && d <= endOfDay;
+  }
+  return true;
+}
+
 function money(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }

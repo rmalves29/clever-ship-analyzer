@@ -104,8 +104,10 @@ function CampaignsPage() {
           read: acc.read + c.read,
           failed: acc.failed + c.failed,
           pending: acc.pending + c.pending,
+          revenue: acc.revenue + c.revenue,
+          orders: acc.orders + c.orders,
         }),
-        { sent: 0, delivered: 0, read: 0, failed: 0, pending: 0 },
+        { sent: 0, delivered: 0, read: 0, failed: 0, pending: 0, revenue: 0, orders: 0 },
       ),
     [list],
   );

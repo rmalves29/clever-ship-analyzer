@@ -18,7 +18,8 @@ import {
   Trash2,
   X,
   Download,
-  BarChart3
+  BarChart3,
+  Pencil
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -636,47 +637,49 @@ function CRMPage() {
                       <Button variant="outline" className="mt-4" onClick={() => setShowEditor(true)}>Criar meu primeiro segmento</Button>
                     </div>
                   ) : (
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="space-y-2">
                       {segments?.map((seg: any) => (
-                        <div 
-                          key={seg.id} 
-                          className={`group relative rounded-xl border p-4 transition-all hover:border-brand/50 hover:shadow-md cursor-pointer ${selectedSegment === seg.id ? 'border-brand bg-brand/5 shadow-sm' : 'border-border bg-card'}`}
-                          onClick={() => {
-                            setSelectedSegment(seg.id);
-                            setTab("contatos");
-                          }}
+                        <div
+                          key={seg.id}
+                          className={`surface-card flex flex-wrap items-center gap-4 p-4 ${selectedSegment === seg.id ? 'border-brand bg-brand/5' : ''}`}
                         >
-                          <div className="mb-2 flex items-center justify-between">
-                            <Badge variant="outline" className="text-[10px] uppercase font-bold text-brand border-brand/20">DINÂMICO</Badge>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="size-8 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:bg-destructive/10"
-                              onClick={() => handleDeleteSegment(seg.id)}
-                            >
-                              <Trash2 className="size-4" />
-                            </Button>
+                          <div className="min-w-[200px] flex-1">
+                            <p className="font-semibold">{seg.nome}</p>
+                            <p className="text-xs text-muted-foreground line-clamp-1">{seg.descricao || "Sem descrição."}</p>
                           </div>
-                          <h4 className="font-bold text-lg">{seg.nome}</h4>
-                          <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{seg.descricao || "Sem descrição."}</p>
-                          
-                          <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Users className="size-3" /> {seg.memberCount !== undefined ? `${seg.memberCount} contatos` : "Calculando..."}
-                            </span>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-8 text-brand text-xs"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingSegment(seg);
-                                setShowEditor(true);
-                              }}
-                            >
-                              Editar Regras
-                            </Button>
-                          </div>
+                          <Badge variant="outline" className="text-[10px] uppercase font-bold text-brand border-brand/20">DINÂMICO</Badge>
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Users className="size-3" /> {seg.memberCount !== undefined ? `${seg.memberCount} contatos` : "Calculando..."}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={() => {
+                              setSelectedSegment(seg.id);
+                              setTab("contatos");
+                            }}
+                          >
+                            Ver Contatos
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={() => {
+                              setEditingSegment(seg);
+                              setShowEditor(true);
+                            }}
+                          >
+                            <Pencil className="size-3.5" /> Editar Regras
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteSegment(seg.id)}
+                          >
+                            <Trash2 className="size-4 text-critical" />
+                          </Button>
                         </div>
                       ))}
                     </div>

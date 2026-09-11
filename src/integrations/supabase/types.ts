@@ -2996,6 +2996,14 @@ export type Database = {
         Args: { p_stale_minutes?: number }
         Returns: number
       }
+      wa_campaign_revenue: {
+        Args: { p_window_days?: number }
+        Returns: {
+          campaign_id: string
+          orders: number
+          revenue: number
+        }[]
+      }
       wa_recalc_campaign_counters: {
         Args: { p_campaign_id: string }
         Returns: undefined

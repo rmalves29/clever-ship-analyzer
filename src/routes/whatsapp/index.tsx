@@ -163,22 +163,7 @@ function CampaignsPage() {
     [filtered],
   );
 
-  const totals = useMemo(
-    () =>
-      list.reduce(
-        (acc, c) => ({
-          sent: acc.sent + c.sent,
-          delivered: acc.delivered + c.delivered,
-          read: acc.read + c.read,
-          failed: acc.failed + c.failed,
-          pending: acc.pending + c.pending,
-          revenue: acc.revenue + c.revenue,
-          orders: acc.orders + c.orders,
-        }),
-        { sent: 0, delivered: 0, read: 0, failed: 0, pending: 0, revenue: 0, orders: 0 },
-      ),
-    [list],
-  );
+  const totals = filteredTotals;
 
   const approve = async (id: string) => {
     setBusyId(id);

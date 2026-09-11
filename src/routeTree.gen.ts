@@ -31,6 +31,7 @@ import { Route as FlowIdRouteImport } from './routes/flow/$id'
 import { Route as PerformanceMetaAdsRouteImport } from './routes/performance/meta-ads'
 import { Route as WhatsappIndexRouteImport } from './routes/whatsapp/index'
 import { Route as WhatsappCampaignIdRouteImport } from './routes/whatsapp/$campaignId'
+import { Route as WhatsappAutomacoesRouteImport } from './routes/whatsapp/automacoes'
 import { Route as WhatsappConversasRouteImport } from './routes/whatsapp/conversas'
 import { Route as WhatsappModelosRouteImport } from './routes/whatsapp/modelos'
 import { Route as WhatsappNovaRouteImport } from './routes/whatsapp/nova'
@@ -148,6 +149,11 @@ const WhatsappCampaignIdRoute = WhatsappCampaignIdRouteImport.update({
   path: '/$campaignId',
   getParentRoute: () => WhatsappRouteRoute,
 } as any)
+const WhatsappAutomacoesRoute = WhatsappAutomacoesRouteImport.update({
+  id: '/automacoes',
+  path: '/automacoes',
+  getParentRoute: () => WhatsappRouteRoute,
+} as any)
 const WhatsappConversasRoute = WhatsappConversasRouteImport.update({
   id: '/conversas',
   path: '/conversas',
@@ -200,6 +206,7 @@ export interface FileRoutesByFullPath {
   '/flow/$id': typeof FlowIdRoute
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/whatsapp/$campaignId': typeof WhatsappCampaignIdRoute
+  '/whatsapp/automacoes': typeof WhatsappAutomacoesRoute
   '/whatsapp/conversas': typeof WhatsappConversasRoute
   '/whatsapp/modelos': typeof WhatsappModelosRoute
   '/whatsapp/nova': typeof WhatsappNovaRoute
@@ -229,6 +236,7 @@ export interface FileRoutesByTo {
   '/flow/$id': typeof FlowIdRoute
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/whatsapp/$campaignId': typeof WhatsappCampaignIdRoute
+  '/whatsapp/automacoes': typeof WhatsappAutomacoesRoute
   '/whatsapp/conversas': typeof WhatsappConversasRoute
   '/whatsapp/modelos': typeof WhatsappModelosRoute
   '/whatsapp/nova': typeof WhatsappNovaRoute
@@ -260,6 +268,7 @@ export interface FileRoutesById {
   '/flow/$id': typeof FlowIdRoute
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/whatsapp/$campaignId': typeof WhatsappCampaignIdRoute
+  '/whatsapp/automacoes': typeof WhatsappAutomacoesRoute
   '/whatsapp/conversas': typeof WhatsappConversasRoute
   '/whatsapp/modelos': typeof WhatsappModelosRoute
   '/whatsapp/nova': typeof WhatsappNovaRoute
@@ -292,6 +301,7 @@ export interface FileRouteTypes {
     | '/flow/$id'
     | '/performance/meta-ads'
     | '/whatsapp/$campaignId'
+    | '/whatsapp/automacoes'
     | '/whatsapp/conversas'
     | '/whatsapp/modelos'
     | '/whatsapp/nova'
@@ -321,6 +331,7 @@ export interface FileRouteTypes {
     | '/flow/$id'
     | '/performance/meta-ads'
     | '/whatsapp/$campaignId'
+    | '/whatsapp/automacoes'
     | '/whatsapp/conversas'
     | '/whatsapp/modelos'
     | '/whatsapp/nova'
@@ -351,6 +362,7 @@ export interface FileRouteTypes {
     | '/flow/$id'
     | '/performance/meta-ads'
     | '/whatsapp/$campaignId'
+    | '/whatsapp/automacoes'
     | '/whatsapp/conversas'
     | '/whatsapp/modelos'
     | '/whatsapp/nova'
@@ -543,6 +555,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WhatsappCampaignIdRouteImport
       parentRoute: typeof WhatsappRouteRoute
     }
+    '/whatsapp/automacoes': {
+      id: '/whatsapp/automacoes'
+      path: '/automacoes'
+      fullPath: '/whatsapp/automacoes'
+      preLoaderRoute: typeof WhatsappAutomacoesRouteImport
+      parentRoute: typeof WhatsappRouteRoute
+    }
     '/whatsapp/conversas': {
       id: '/whatsapp/conversas'
       path: '/conversas'
@@ -590,6 +609,7 @@ declare module '@tanstack/react-router' {
 
 interface WhatsappRouteRouteChildren {
   WhatsappCampaignIdRoute: typeof WhatsappCampaignIdRoute
+  WhatsappAutomacoesRoute: typeof WhatsappAutomacoesRoute
   WhatsappConversasRoute: typeof WhatsappConversasRoute
   WhatsappModelosRoute: typeof WhatsappModelosRoute
   WhatsappNovaRoute: typeof WhatsappNovaRoute
@@ -599,6 +619,7 @@ interface WhatsappRouteRouteChildren {
 
 const WhatsappRouteRouteChildren: WhatsappRouteRouteChildren = {
   WhatsappCampaignIdRoute: WhatsappCampaignIdRoute,
+  WhatsappAutomacoesRoute: WhatsappAutomacoesRoute,
   WhatsappConversasRoute: WhatsappConversasRoute,
   WhatsappModelosRoute: WhatsappModelosRoute,
   WhatsappNovaRoute: WhatsappNovaRoute,

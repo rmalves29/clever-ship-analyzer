@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, MousePointerClick, Type, Clock } from "lucide-react";
+import { Plus, Pencil, Trash2, MousePointerClick, Type, Clock, Copy, Sparkles } from "lucide-react";
+import { CONVERSATION_RECIPES, type FlowRecipe } from "./flowRecipes";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -78,6 +79,25 @@ export function ConversationalFlowsTab() {
 
   const openNew = () => {
     setEditSeed(null);
+    setDialogOpen(true);
+  };
+
+  const openRecipe = (recipe: FlowRecipe) => {
+    setEditSeed(recipe.build());
+    setDialogOpen(true);
+  };
+
+  const openDuplicate = (flow: FlowRow) => {
+    setEditSeed({
+      nome: `${flow.nome} (cópia)`,
+      descricao: flow.descricao ?? undefined,
+      ativo: false,
+      triggerType: flow.trigger_type,
+      triggerTemplateName: flow.trigger_template_name ?? undefined,
+      triggerValues: flow.trigger_values,
+      triggerTimeoutMinutes: flow.trigger_timeout_minutes ?? undefined,
+      steps: flow.steps as ConversationalFlowSeed["steps"],
+    });
     setDialogOpen(true);
   };
 

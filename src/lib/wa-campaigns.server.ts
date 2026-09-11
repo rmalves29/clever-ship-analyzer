@@ -582,8 +582,30 @@ export async function refreshCampaignStatus(campaignId: string) {
     })
     .eq("id", campaignId);
 
+  await syncLegacyMirror(campaignId, { status, sent, failed, total });
   return { status, sent, failed, cancelled, pending: pendingJobs.length, total };
 }
+
+/** Espelha situação/contadores na tabela antiga `whatsapp_campaigns` (mesmo id).
+ *  A tabela antiga continua existindo por causa dos vínculos históricos (automações, cupons,
+ *  relatórios antigos); o motor novo é a fonte da verdade e só reflete o resultado nela. */
+export async function syncLegacyMirror(
+  campaignId: string,
+  counters: { status: string; sent: number; failed: number; total: number },
+): Promise<void> {
+  const supabaseAdmin = await admin();
+  const { error } = await supabaseAdmin
+    .from("whatsapp_campaigns")
+    .update({
+      status: counters.status,
+      enviadas: counters.sent,
+      falhas: counters.failed,
+      total_destinatarios: counters.total,
+    })
+    .eq("id", campaignId);
+  if (error) console.error("[syncLegacyMirror] falha ao espelhar campanha antiga", { campaignId, error: error.message });
+}
+
 
 // ---------------------------------------------------------------------------
 // Worker

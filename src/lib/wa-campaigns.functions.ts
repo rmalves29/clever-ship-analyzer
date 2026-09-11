@@ -70,6 +70,8 @@ function mapRow(row: any, pending: number, revenue?: { revenue: number; orders: 
     read: Number(row.read_count ?? 0),
     failed: Number(row.failed_count ?? 0),
     pending,
+    revenue: revenue?.revenue ?? 0,
+    orders: revenue?.orders ?? 0,
   };
 }
 
@@ -96,7 +98,8 @@ export const listWaCampaigns = createServerFn({ method: "GET" })
     for (const job of ((jobs ?? []) as any[])) {
       pendingByCampaign.set(job.campaign_id, (pendingByCampaign.get(job.campaign_id) ?? 0) + 1);
     }
-    return rows.map((row) => mapRow(row, pendingByCampaign.get(row.id) ?? 0));
+    const revenue = await revenueByCampaign(supabaseAdmin);
+    return rows.map((row) => mapRow(row, pendingByCampaign.get(row.id) ?? 0, revenue.get(row.id)));
   });
 
 /** Campanha aberta: cabeçalho + destinatários reais com motivo de falha. */
@@ -125,7 +128,7 @@ export const getWaCampaign = createServerFn({ method: "POST" })
       .in("status", ["queued", "retry_wait", "sending"]);
 
     return {
-      campaign: mapRow(row, pending ?? 0),
+      campaign: mapRow(row, pending ?? 0, (await revenueByCampaign(supabaseAdmin)).get(row.id)),
       bodyParams: ((row as any).body_params ?? []) as string[],
       bodyParamTokens: ((row as any).body_param_tokens ?? []) as string[],
       lastError: ((row as any).last_error ?? null) as string | null,

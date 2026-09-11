@@ -2,7 +2,12 @@ import { useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Plus, RefreshCw, Search, Check, X, ChevronRight } from "lucide-react";
+import { Plus, RefreshCw, Search, Check, X, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import type { DateRange } from "react-day-picker";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +59,45 @@ const FILTERS = [
   { value: "erro", label: "Com erro" },
 ];
 
+const DATE_PERIODS = [
+  { key: "tudo", label: "Tudo" },
+  { key: "dia", label: "Hoje" },
+  { key: "7d", label: "Últimos 7 dias" },
+  { key: "mes", label: "Este mês" },
+  { key: "ano", label: "Este ano" },
+  { key: "personalizado", label: "Personalizado" },
+] as const;
+
+type DatePeriodKey = (typeof DATE_PERIODS)[number]["key"];
+
+function campaignDate(c: WaCampaignListRow): Date {
+  return new Date(c.sentAt ?? c.createdAt);
+}
+
+function inPeriod(c: WaCampaignListRow, period: DatePeriodKey, range: DateRange | undefined): boolean {
+  if (period === "tudo") return true;
+  const d = campaignDate(c);
+  const now = new Date();
+  if (period === "dia") {
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  }
+  if (period === "7d") {
+    const start = new Date(now);
+    start.setDate(start.getDate() - 6);
+    start.setHours(0, 0, 0, 0);
+    return d >= start;
+  }
+  if (period === "mes") return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  if (period === "ano") return d.getFullYear() === now.getFullYear();
+  if (range?.from) {
+    const end = range.to ?? range.from;
+    const endOfDay = new Date(end);
+    endOfDay.setHours(23, 59, 59, 999);
+    return d >= range.from && d <= endOfDay;
+  }
+  return true;
+}
+
 function money(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
@@ -79,6 +123,8 @@ function CampaignsPage() {
   const runReject = useServerFn(rejectCampaign);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("todas");
+  const [datePeriod, setDatePeriod] = useState<DatePeriodKey>("tudo");
+  const [range, setRange] = useState<DateRange | undefined>(undefined);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const { data, isLoading, isFetching, refetch } = useQuery({
@@ -94,14 +140,15 @@ function CampaignsPage() {
       list.filter((c) => {
         if (filter !== "todas" && c.status !== filter) return false;
         if (search.trim() && !c.name.toLowerCase().includes(search.trim().toLowerCase())) return false;
+        if (!inPeriod(c, datePeriod, range)) return false;
         return true;
       }),
-    [list, filter, search],
+    [list, filter, search, datePeriod, range],
   );
 
-  const totals = useMemo(
+  const filteredTotals = useMemo(
     () =>
-      list.reduce(
+      filtered.reduce(
         (acc, c) => ({
           sent: acc.sent + c.sent,
           delivered: acc.delivered + c.delivered,
@@ -113,8 +160,10 @@ function CampaignsPage() {
         }),
         { sent: 0, delivered: 0, read: 0, failed: 0, pending: 0, revenue: 0, orders: 0 },
       ),
-    [list],
+    [filtered],
   );
+
+  const totals = filteredTotals;
 
   const approve = async (id: string) => {
     setBusyId(id);
@@ -184,6 +233,44 @@ function CampaignsPage() {
             </button>
           ))}
         </div>
+        <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card p-1">
+          {DATE_PERIODS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => setDatePeriod(p.key)}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                datePeriod === p.key ? "gradient-brand text-primary-foreground" : "text-muted-foreground hover:bg-accent",
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {datePeriod === "personalizado" && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <CalendarIcon className="size-4" />
+                {range?.from
+                  ? range.to
+                    ? `${format(range.from, "dd/MM", { locale: ptBR })} – ${format(range.to, "dd/MM", { locale: ptBR })}`
+                    : format(range.from, "dd/MM/yyyy", { locale: ptBR })
+                  : "Escolher datas"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="range"
+                selected={range}
+                onSelect={setRange}
+                numberOfMonths={2}
+                locale={ptBR}
+                className="pointer-events-auto"
+              />
+            </PopoverContent>
+          </Popover>
+        )}
         <Button variant="outline" onClick={() => refetch()} disabled={isFetching} className="gap-2">
           <RefreshCw className={cn("size-3.5", isFetching && "animate-spin")} /> Atualizar
         </Button>

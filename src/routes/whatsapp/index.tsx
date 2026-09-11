@@ -54,6 +54,10 @@ const FILTERS = [
   { value: "erro", label: "Com erro" },
 ];
 
+function money(value: number): string {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+}
+
 function pct(part: number, total: number): string {
   if (!total) return "—";
   return `${Math.round((part / total) * 100)}%`;

@@ -29,6 +29,7 @@ import { Route as CrmSegmentosRouteImport } from './routes/crm/segmentos'
 import { Route as FlowIndexRouteImport } from './routes/flow/index'
 import { Route as FlowIdRouteImport } from './routes/flow/$id'
 import { Route as PerformanceMetaAdsRouteImport } from './routes/performance/meta-ads'
+import { Route as WhatsappIndexRouteImport } from './routes/whatsapp/index'
 import { Route as CrmClienteCustomerIdRouteImport } from './routes/crm/cliente/$customerId'
 import { Route as CrmReguasPrimeiraSegundaRouteImport } from './routes/crm/reguas/primeira-segunda'
 
@@ -132,6 +133,11 @@ const PerformanceMetaAdsRoute = PerformanceMetaAdsRouteImport.update({
   path: '/performance/meta-ads',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WhatsappIndexRoute = WhatsappIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => WhatsappRouteRoute,
+} as any)
 const CrmClienteCustomerIdRoute = CrmClienteCustomerIdRouteImport.update({
   id: '/crm/cliente/$customerId',
   path: '/crm/cliente/$customerId',
@@ -146,7 +152,7 @@ const CrmReguasPrimeiraSegundaRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/whatsapp': typeof WhatsappRouteRoute
+  '/whatsapp': typeof WhatsappRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/cashback': typeof CashbackRoute
@@ -165,12 +171,12 @@ export interface FileRoutesByFullPath {
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/crm/': typeof CrmIndexRoute
   '/flow/': typeof FlowIndexRoute
+  '/whatsapp/': typeof WhatsappIndexRoute
   '/crm/cliente/$customerId': typeof CrmClienteCustomerIdRoute
   '/crm/reguas/primeira-segunda': typeof CrmReguasPrimeiraSegundaRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/whatsapp': typeof WhatsappRouteRoute
   '/auth': typeof AuthRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/cashback': typeof CashbackRoute
@@ -189,13 +195,14 @@ export interface FileRoutesByTo {
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/crm': typeof CrmIndexRoute
   '/flow': typeof FlowIndexRoute
+  '/whatsapp': typeof WhatsappIndexRoute
   '/crm/cliente/$customerId': typeof CrmClienteCustomerIdRoute
   '/crm/reguas/primeira-segunda': typeof CrmReguasPrimeiraSegundaRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/whatsapp': typeof WhatsappRouteRoute
+  '/whatsapp': typeof WhatsappRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/cashback': typeof CashbackRoute
@@ -214,6 +221,7 @@ export interface FileRoutesById {
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/crm/': typeof CrmIndexRoute
   '/flow/': typeof FlowIndexRoute
+  '/whatsapp/': typeof WhatsappIndexRoute
   '/crm/cliente/$customerId': typeof CrmClienteCustomerIdRoute
   '/crm/reguas/primeira-segunda': typeof CrmReguasPrimeiraSegundaRoute
 }
@@ -240,12 +248,12 @@ export interface FileRouteTypes {
     | '/performance/meta-ads'
     | '/crm/'
     | '/flow/'
+    | '/whatsapp/'
     | '/crm/cliente/$customerId'
     | '/crm/reguas/primeira-segunda'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/whatsapp'
     | '/auth'
     | '/campanhas-whatsapp'
     | '/cashback'
@@ -264,6 +272,7 @@ export interface FileRouteTypes {
     | '/performance/meta-ads'
     | '/crm'
     | '/flow'
+    | '/whatsapp'
     | '/crm/cliente/$customerId'
     | '/crm/reguas/primeira-segunda'
   id:
@@ -288,13 +297,14 @@ export interface FileRouteTypes {
     | '/performance/meta-ads'
     | '/crm/'
     | '/flow/'
+    | '/whatsapp/'
     | '/crm/cliente/$customerId'
     | '/crm/reguas/primeira-segunda'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  WhatsappRouteRoute: typeof WhatsappRouteRoute
+  WhatsappRouteRoute: typeof WhatsappRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   CampanhasWhatsappRoute: typeof CampanhasWhatsappRoute
   CashbackRoute: typeof CashbackRoute
@@ -459,6 +469,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PerformanceMetaAdsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/whatsapp/': {
+      id: '/whatsapp/'
+      path: '/'
+      fullPath: '/whatsapp/'
+      preLoaderRoute: typeof WhatsappIndexRouteImport
+      parentRoute: typeof WhatsappRouteRoute
+    }
     '/crm/cliente/$customerId': {
       id: '/crm/cliente/$customerId'
       path: '/crm/cliente/$customerId'
@@ -476,9 +493,21 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface WhatsappRouteRouteChildren {
+  WhatsappIndexRoute: typeof WhatsappIndexRoute
+}
+
+const WhatsappRouteRouteChildren: WhatsappRouteRouteChildren = {
+  WhatsappIndexRoute: WhatsappIndexRoute,
+}
+
+const WhatsappRouteRouteWithChildren = WhatsappRouteRoute._addFileChildren(
+  WhatsappRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  WhatsappRouteRoute: WhatsappRouteRoute,
+  WhatsappRouteRoute: WhatsappRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   CampanhasWhatsappRoute: CampanhasWhatsappRoute,
   CashbackRoute: CashbackRoute,

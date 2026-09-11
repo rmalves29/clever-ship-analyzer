@@ -123,6 +123,8 @@ function CampaignsPage() {
   const runReject = useServerFn(rejectCampaign);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("todas");
+  const [datePeriod, setDatePeriod] = useState<DatePeriodKey>("tudo");
+  const [range, setRange] = useState<DateRange | undefined>(undefined);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const { data, isLoading, isFetching, refetch } = useQuery({
@@ -138,9 +140,27 @@ function CampaignsPage() {
       list.filter((c) => {
         if (filter !== "todas" && c.status !== filter) return false;
         if (search.trim() && !c.name.toLowerCase().includes(search.trim().toLowerCase())) return false;
+        if (!inPeriod(c, datePeriod, range)) return false;
         return true;
       }),
-    [list, filter, search],
+    [list, filter, search, datePeriod, range],
+  );
+
+  const filteredTotals = useMemo(
+    () =>
+      filtered.reduce(
+        (acc, c) => ({
+          sent: acc.sent + c.sent,
+          delivered: acc.delivered + c.delivered,
+          read: acc.read + c.read,
+          failed: acc.failed + c.failed,
+          pending: acc.pending + c.pending,
+          revenue: acc.revenue + c.revenue,
+          orders: acc.orders + c.orders,
+        }),
+        { sent: 0, delivered: 0, read: 0, failed: 0, pending: 0, revenue: 0, orders: 0 },
+      ),
+    [filtered],
   );
 
   const totals = useMemo(

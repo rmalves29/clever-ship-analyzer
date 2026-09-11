@@ -257,7 +257,7 @@ function CampaignsPage() {
                   {c.orders > 0 && <p className="text-[11px] text-muted-foreground">{c.orders} pedidos</p>}
                 </div>
 
-                <div className="flex w-[120px] shrink-0 items-center justify-end gap-2">
+                <div className="flex min-w-[120px] shrink-0 items-center justify-end gap-2">
                   {c.status === "aguardando_aprovacao" && (
                     <>
                       <Button size="sm" className="gap-1.5" disabled={busyId === c.id} onClick={() => approve(c.id)}>

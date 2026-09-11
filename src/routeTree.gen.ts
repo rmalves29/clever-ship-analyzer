@@ -30,6 +30,7 @@ import { Route as FlowIndexRouteImport } from './routes/flow/index'
 import { Route as FlowIdRouteImport } from './routes/flow/$id'
 import { Route as PerformanceMetaAdsRouteImport } from './routes/performance/meta-ads'
 import { Route as WhatsappIndexRouteImport } from './routes/whatsapp/index'
+import { Route as WhatsappCampaignIdRouteImport } from './routes/whatsapp/$campaignId'
 import { Route as CrmClienteCustomerIdRouteImport } from './routes/crm/cliente/$customerId'
 import { Route as CrmReguasPrimeiraSegundaRouteImport } from './routes/crm/reguas/primeira-segunda'
 
@@ -138,6 +139,11 @@ const WhatsappIndexRoute = WhatsappIndexRouteImport.update({
   path: '/',
   getParentRoute: () => WhatsappRouteRoute,
 } as any)
+const WhatsappCampaignIdRoute = WhatsappCampaignIdRouteImport.update({
+  id: '/$campaignId',
+  path: '/$campaignId',
+  getParentRoute: () => WhatsappRouteRoute,
+} as any)
 const CrmClienteCustomerIdRoute = CrmClienteCustomerIdRouteImport.update({
   id: '/crm/cliente/$customerId',
   path: '/crm/cliente/$customerId',
@@ -169,6 +175,7 @@ export interface FileRoutesByFullPath {
   '/crm/segmentos': typeof CrmSegmentosRoute
   '/flow/$id': typeof FlowIdRoute
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
+  '/whatsapp/$campaignId': typeof WhatsappCampaignIdRoute
   '/crm/': typeof CrmIndexRoute
   '/flow/': typeof FlowIndexRoute
   '/whatsapp/': typeof WhatsappIndexRoute
@@ -193,6 +200,7 @@ export interface FileRoutesByTo {
   '/crm/segmentos': typeof CrmSegmentosRoute
   '/flow/$id': typeof FlowIdRoute
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
+  '/whatsapp/$campaignId': typeof WhatsappCampaignIdRoute
   '/crm': typeof CrmIndexRoute
   '/flow': typeof FlowIndexRoute
   '/whatsapp': typeof WhatsappIndexRoute
@@ -219,6 +227,7 @@ export interface FileRoutesById {
   '/crm/segmentos': typeof CrmSegmentosRoute
   '/flow/$id': typeof FlowIdRoute
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
+  '/whatsapp/$campaignId': typeof WhatsappCampaignIdRoute
   '/crm/': typeof CrmIndexRoute
   '/flow/': typeof FlowIndexRoute
   '/whatsapp/': typeof WhatsappIndexRoute
@@ -246,6 +255,7 @@ export interface FileRouteTypes {
     | '/crm/segmentos'
     | '/flow/$id'
     | '/performance/meta-ads'
+    | '/whatsapp/$campaignId'
     | '/crm/'
     | '/flow/'
     | '/whatsapp/'
@@ -270,6 +280,7 @@ export interface FileRouteTypes {
     | '/crm/segmentos'
     | '/flow/$id'
     | '/performance/meta-ads'
+    | '/whatsapp/$campaignId'
     | '/crm'
     | '/flow'
     | '/whatsapp'
@@ -295,6 +306,7 @@ export interface FileRouteTypes {
     | '/crm/segmentos'
     | '/flow/$id'
     | '/performance/meta-ads'
+    | '/whatsapp/$campaignId'
     | '/crm/'
     | '/flow/'
     | '/whatsapp/'
@@ -476,6 +488,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WhatsappIndexRouteImport
       parentRoute: typeof WhatsappRouteRoute
     }
+    '/whatsapp/$campaignId': {
+      id: '/whatsapp/$campaignId'
+      path: '/$campaignId'
+      fullPath: '/whatsapp/$campaignId'
+      preLoaderRoute: typeof WhatsappCampaignIdRouteImport
+      parentRoute: typeof WhatsappRouteRoute
+    }
     '/crm/cliente/$customerId': {
       id: '/crm/cliente/$customerId'
       path: '/crm/cliente/$customerId'
@@ -494,10 +513,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface WhatsappRouteRouteChildren {
+  WhatsappCampaignIdRoute: typeof WhatsappCampaignIdRoute
   WhatsappIndexRoute: typeof WhatsappIndexRoute
 }
 
 const WhatsappRouteRouteChildren: WhatsappRouteRouteChildren = {
+  WhatsappCampaignIdRoute: WhatsappCampaignIdRoute,
   WhatsappIndexRoute: WhatsappIndexRoute,
 }
 

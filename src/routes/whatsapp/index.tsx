@@ -65,8 +65,8 @@ function pct(part: number, total: number): string {
 
 function Metric({ label, value, hint }: { label: string; value: string; hint?: string | undefined }) {
   return (
-    <div className="min-w-[86px]">
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+    <div className="text-right">
+      <p className="text-[11px] uppercase tracking-wide text-muted-foreground xl:hidden">{label}</p>
       <p className="text-lg font-semibold leading-tight">{value}</p>
       {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
     </div>

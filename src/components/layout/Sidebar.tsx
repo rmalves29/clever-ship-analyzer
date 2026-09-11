@@ -23,6 +23,12 @@ type NavItem = {
     | "/"
     | "/configuracoes"
     | "/campanhas-whatsapp"
+    | "/whatsapp"
+    | "/whatsapp/nova"
+    | "/whatsapp/conversas"
+    | "/whatsapp/modelos"
+    | "/whatsapp/automacoes"
+    | "/whatsapp/relatorios"
     | "/crm"
     | "/crm/live-view"
     | "/crm/reguas/primeira-segunda"
@@ -78,24 +84,11 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "WhatsApp API",
     items: [
-      {
-        label: "Campanhas",
-        to: "/campanhas-whatsapp",
-        search: { tab: "campanhas" },
-        icon: Megaphone,
-      },
-      {
-        label: "Templates",
-        to: "/campanhas-whatsapp",
-        search: { tab: "templates" },
-        icon: FileText,
-      },
-      {
-        label: "Relatórios",
-        to: "/campanhas-whatsapp",
-        search: { tab: "relatorios" },
-        icon: BarChart3,
-      },
+      { label: "Campanhas", to: "/whatsapp", icon: Megaphone },
+      { label: "Conversas", to: "/whatsapp/conversas", icon: Send },
+      { label: "Modelos", to: "/whatsapp/modelos", icon: FileText },
+      { label: "Automações", to: "/whatsapp/automacoes", icon: Workflow },
+      { label: "Relatórios", to: "/whatsapp/relatorios", icon: BarChart3 },
     ],
   },
   {

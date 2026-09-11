@@ -805,40 +805,18 @@ export async function dispatchCampaign(campaignId: string, restrictToCustomerIds
 }
 
 
-const RANK: Record<string, number> = { sent: 0, delivered: 1, read: 2, failed: 3 };
-
-/** Chamado pelo webhook da Meta (ver src/server.ts) — atualiza status de entrega/leitura. */
+/** Chamado pelo webhook da Meta (ver src/server.ts) — atualiza status de entrega/leitura
+ *  no motor novo (wa_campaign_recipients). */
 export async function applyMetaStatusUpdate(status: {
   id: string;
   status: string;
   timestamp?: string;
   errors?: { code?: number; title?: string; message?: string }[];
 }): Promise<void> {
-  const supabaseAdmin = await admin();
-  const { data: recipient } = await supabaseAdmin
-    .from("whatsapp_campaign_recipients")
-    .select("id, status")
-    .eq("wa_message_id", status.id)
-    .maybeSingle();
-  if (!recipient) return;
-
-  const current = (recipient as { id: string; status: string }).status;
-  if (status.status !== "failed" && (RANK[status.status] ?? -1) <= (RANK[current] ?? -1)) return;
-
-  const at = status.timestamp ? new Date(Number(status.timestamp) * 1000).toISOString() : new Date().toISOString();
-  const patch: Record<string, unknown> = { status: status.status };
-  if (status.status === "delivered") patch["delivered_at"] = at;
-  if (status.status === "read") patch["read_at"] = at;
-  if (status.status === "failed" && status.errors?.[0]) {
-    const e = status.errors[0];
-    patch["error"] = [e.code, e.title ?? e.message].filter(Boolean).join(" — ");
-  }
-
-  await supabaseAdmin
-    .from("whatsapp_campaign_recipients")
-    .update(patch as never)
-    .eq("id", (recipient as { id: string }).id);
+  const { applyMetaStatusUpdate: apply } = await import("./wa-campaigns.server");
+  await apply(status);
 }
+
 
 /** Verify token guardado — usado pelo handshake GET do webhook em src/server.ts. */
 export async function getStoredVerifyToken(): Promise<string | null> {

@@ -970,6 +970,7 @@ export async function listCampaignsWithMetrics() {
     automation_step_id: string | null;
     conversation_flow_id: string | null;
     conversation_flow_step_id: string | null;
+    last_error: string | null;
   }[];
 
   if (campaignList.length === 0) return [];
@@ -1235,7 +1236,15 @@ export async function listCampaignsWithMetrics() {
         // aberta em cada envio, então mantém a estimativa simples de antes.
         custo = c.enviadas * costUtility;
       }
+    } else if (recips.length > 0) {
+      // Baseado nos recipients (não em c.enviadas) porque o status pode chegar tarde via webhook:
+      // a Meta às vezes aceita o envio na hora (fila marca "sent") e só depois informa, de forma
+      // assíncrona, que a entrega falhou de verdade (ex.: `131047 Re-engagement message`) — sem
+      // isso, mensagens que nunca chegaram ainda seriam contadas no custo.
+      const cobradas = recips.filter((r) => r.status === "sent" || r.status === "delivered" || r.status === "read").length;
+      custo = cobradas * costMarketing;
     } else {
+      // Sem linhas de destinatário (dado legado) — não dá pra separar sucesso de falha tardia.
       custo = c.enviadas * costMarketing;
     }
 
@@ -1243,6 +1252,7 @@ export async function listCampaignsWithMetrics() {
       id: c.id,
       nome: c.nome,
       status: c.status,
+      lastError: c.last_error,
       segmentType: c.segment_type,
       messageType: c.message_type,
       templateName: c.template_name,

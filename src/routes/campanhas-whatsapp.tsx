@@ -431,9 +431,14 @@ function CampanhasWhatsapp() {
                           {SEGMENT_LABEL[c.segmentType] ?? c.segmentType} ·{" "}
                           {c.messageType === "utility" ? "Utilidade" : "Marketing"} · {c.origem}
                         </p>
+                        {c.status === "erro" && c.lastError ? (
+                          <p className="mt-0.5 max-w-xs truncate text-xs text-critical" title={c.lastError}>
+                            {c.lastError}
+                          </p>
+                        ) : null}
                       </td>
                       <td className="px-4 py-3">
-                        <Badge className={STATUS_CLASS[c.status] ?? ""} variant="outline">
+                        <Badge className={STATUS_CLASS[c.status] ?? ""} variant="outline" title={c.lastError ?? undefined}>
                           {STATUS_LABEL[c.status] ?? c.status}
                         </Badge>
                       </td>

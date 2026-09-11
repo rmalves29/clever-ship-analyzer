@@ -398,8 +398,8 @@ export async function cancelCampaignQueue(campaignId: string) {
 
 export async function refreshCampaignStatus(campaignId: string) {
   const supabaseAdmin = await admin();
-  const { data } = await supabaseAdmin.from(QUEUE_TABLE).select("status, sent_at, scheduled_at").eq("campaign_id", campaignId);
-  const rows = (data ?? []) as { status: QueueStatus; sent_at: string | null; scheduled_at: string }[];
+  const { data } = await supabaseAdmin.from(QUEUE_TABLE).select("status, sent_at, scheduled_at, error").eq("campaign_id", campaignId);
+  const rows = (data ?? []) as { status: QueueStatus; sent_at: string | null; scheduled_at: string; error: string | null }[];
   if (rows.length === 0) return null;
 
   const count = (status: QueueStatus) => rows.filter((row) => row.status === status).length;
@@ -411,7 +411,36 @@ export async function refreshCampaignStatus(campaignId: string) {
   const lastSentAt = rows.map((r) => r.sent_at).filter((v): v is string => Boolean(v)).sort().pop();
   const pendingRows = rows.filter((row) => ["queued", "retry_wait"].includes(row.status));
   const stillScheduled = sent === 0 && pending > 0 && pendingRows.length === pending && pendingRows.every((r) => new Date(r.scheduled_at).getTime() > Date.now());
-  const status = stillScheduled ? "agendada" : pending > 0 ? "enviando" : cancelled > 0 && sent === 0 ? "cancelada" : "finalizada";
+  // Nenhuma mensagem chegou ao destino (todas falharam) — não é uma campanha "finalizada" com
+  // sucesso, é uma falha real de configuração (template desatualizado, parâmetro errado etc.) que
+  // precisa aparecer como erro, não sumir dentro de "finalizada" com uma contagem de falhas ao lado.
+  const allFailed = pending === 0 && sent === 0 && failed > 0;
+  const status = stillScheduled
+    ? "agendada"
+    : pending > 0
+      ? "enviando"
+      : allFailed
+        ? "erro"
+        : cancelled > 0 && sent === 0
+          ? "cancelada"
+          : "finalizada";
+
+  // Erro mais frequente entre as falhas — é o motivo mostrado na UI quando status = "erro".
+  let mostCommonError: string | null = null;
+  if (failed > 0) {
+    const errorCounts = new Map<string, number>();
+    for (const row of rows) {
+      if (row.status !== "failed" || !row.error) continue;
+      errorCounts.set(row.error, (errorCounts.get(row.error) ?? 0) + 1);
+    }
+    let topCount = 0;
+    for (const [error, errCount] of errorCounts) {
+      if (errCount > topCount) {
+        topCount = errCount;
+        mostCommonError = error;
+      }
+    }
+  }
 
   await supabaseAdmin
     .from("whatsapp_campaigns")
@@ -420,6 +449,7 @@ export async function refreshCampaignStatus(campaignId: string) {
       enviadas: sent,
       falhas: failed,
       total_destinatarios: rows.length,
+      last_error: status === "erro" ? mostCommonError : null,
       ...(pending === 0 && lastSentAt ? { sent_at: lastSentAt } : {}),
     })
     .eq("id", campaignId);

@@ -11,10 +11,12 @@ import { useEffect, useState, type ReactNode } from "react";
 import { CacheProvider } from "@emotion/react";
 import createCache from "@emotion/cache";
 import { ThemeProvider } from "@mui/material/styles";
+import Box from "@mui/material/Box";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Sidebar } from "../components/layout/Sidebar";
+import { Topbar } from "../components/layout/Topbar";
 import { Toaster } from "../components/ui/sonner";
 import { materioTheme } from "../theme/materio-theme";
 
@@ -143,18 +145,22 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={materioTheme}>
         <Toaster position="top-right" />
-        <div className="flex">
-          <Sidebar />
-          <div className="min-w-0 flex-1">
-            {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-            <Outlet />
-          </div>
-        </div>
+        <Box sx={{ display: "flex", minHeight: "100vh" }}>
+          <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
+          <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
+            <Topbar onMenuClick={() => setMobileOpen(true)} />
+            <Box component="main" sx={{ flex: 1, minWidth: 0 }}>
+              {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+              <Outlet />
+            </Box>
+          </Box>
+        </Box>
       </ThemeProvider>
     </QueryClientProvider>
   );

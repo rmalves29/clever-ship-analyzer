@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { createLink, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Settings,
@@ -15,7 +15,22 @@ import {
   LayoutTemplate,
   Coins,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import Box from "@mui/material/Box";
+import Drawer from "@mui/material/Drawer";
+import List from "@mui/material/List";
+import ListItemButton from "@mui/material/ListItemButton";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
+import Toolbar from "@mui/material/Toolbar";
+import Typography from "@mui/material/Typography";
+import { alpha } from "@mui/material/styles";
+
+export const SIDEBAR_WIDTH = 240;
+
+// `createLink` (oficial do TanStack Router) faz o ListItemButton entender `to`/`search`
+// tipados da rota, mantendo o botão como um <a> de verdade (funciona com ctrl+click,
+// abrir em nova aba, etc.) em vez de embrulhar um <Link> por fora.
+const NavListItemButton = createLink(ListItemButton);
 
 type NavItem = {
   label: string;
@@ -123,54 +138,123 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
 ];
 
-export function Sidebar() {
+type SidebarProps = {
+  mobileOpen: boolean;
+  onMobileClose: () => void;
+};
+
+export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const search = useRouterState({ select: (s) => s.location.search }) as Record<
     string,
     string | undefined
   >;
 
-  return (
-    <aside className="hidden min-h-screen w-60 shrink-0 flex-col border-r border-border bg-card md:flex">
-      <div className="flex items-center gap-2 px-5 py-5">
-        <span className="gradient-brand flex size-9 items-center justify-center rounded-xl text-primary-foreground">
-          <Sparkles className="size-4" />
-        </span>
-        <span className="font-bold tracking-tight">CRM Analytics</span>
-      </div>
-      <nav className="flex-1 space-y-6 px-3 pb-6">
+  const content = (
+    <>
+      <Toolbar sx={{ gap: 1.5 }}>
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 36,
+            height: 36,
+            borderRadius: 2,
+            background: "linear-gradient(135deg, #7367F0, #9C93F3)",
+            color: "#FFFFFF",
+            flexShrink: 0,
+          }}
+        >
+          <Sparkles size={16} />
+        </Box>
+        <Typography variant="subtitle1" noWrap sx={{ fontWeight: 700 }}>
+          CRM Analytics
+        </Typography>
+      </Toolbar>
+      <Box component="nav" sx={{ flex: 1, overflowY: "auto", px: 1.5, pb: 3 }}>
         {NAV_GROUPS.map((group) => (
-          <div key={group.label}>
-            <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <Box key={group.label} sx={{ mb: 3 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                display: "block",
+                px: 1,
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: 0.5,
+                textTransform: "uppercase",
+                color: "text.secondary",
+              }}
+            >
               {group.label}
-            </p>
-            <div className="mt-2 space-y-0.5">
+            </Typography>
+            <List dense disablePadding sx={{ mt: 0.5 }}>
               {group.items.map((item) => {
                 const active =
                   pathname === item.to &&
                   (!item.search || search["tab"] === item.search["tab"]);
                 const Icon = item.icon;
                 return (
-                  <Link
+                  <NavListItemButton
                     key={item.label}
                     to={item.to}
                     {...(item.search ? { search: item.search } : {})}
-                    className={cn(
-                      "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
-                      active
-                        ? "bg-brand-soft text-brand"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
+                    selected={active}
+                    onClick={onMobileClose}
+                    sx={{
+                      borderRadius: 2,
+                      mb: 0.25,
+                      color: active ? "primary.main" : "text.secondary",
+                      "&.Mui-selected": {
+                        backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+                        "&:hover": {
+                          backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12),
+                        },
+                      },
+                    }}
                   >
-                    <Icon className="size-4" />
-                    {item.label}
-                  </Link>
+                    <ListItemIcon sx={{ minWidth: 32, color: "inherit" }}>
+                      <Icon size={16} />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={item.label}
+                      slotProps={{ primary: { sx: { fontSize: 14, fontWeight: 500 } } }}
+                    />
+                  </NavListItemButton>
                 );
               })}
-            </div>
-          </div>
+            </List>
+          </Box>
         ))}
-      </nav>
-    </aside>
+      </Box>
+    </>
+  );
+
+  return (
+    <Box component="nav" sx={{ width: { md: SIDEBAR_WIDTH }, flexShrink: { md: 0 } }}>
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={onMobileClose}
+        ModalProps={{ keepMounted: true }}
+        sx={{
+          display: { xs: "block", md: "none" },
+          "& .MuiDrawer-paper": { boxSizing: "border-box", width: SIDEBAR_WIDTH },
+        }}
+      >
+        {content}
+      </Drawer>
+      <Drawer
+        variant="permanent"
+        open
+        sx={{
+          display: { xs: "none", md: "block" },
+          "& .MuiDrawer-paper": { boxSizing: "border-box", width: SIDEBAR_WIDTH },
+        }}
+      >
+        {content}
+      </Drawer>
+    </Box>
   );
 }

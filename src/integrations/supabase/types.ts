@@ -2046,6 +2046,251 @@ export type Database = {
         }
         Relationships: []
       }
+      wa_campaign_recipients: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          customer_id: string | null
+          delivered_at: string | null
+          error_code: string | null
+          error_message: string | null
+          event_key: string
+          id: string
+          name: string | null
+          params: Json
+          phone: string
+          read_at: string | null
+          sent_at: string | null
+          status: string
+          updated_at: string
+          wa_message_id: string | null
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          customer_id?: string | null
+          delivered_at?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          event_key?: string
+          id?: string
+          name?: string | null
+          params?: Json
+          phone: string
+          read_at?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+          wa_message_id?: string | null
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          customer_id?: string | null
+          delivered_at?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          event_key?: string
+          id?: string
+          name?: string | null
+          params?: Json
+          phone?: string
+          read_at?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+          wa_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wa_campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "wa_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wa_campaigns: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          audience_id: string | null
+          audience_kind: string
+          audience_label: string | null
+          automation_id: string | null
+          automation_step_id: string | null
+          body_param_tokens: Json | null
+          body_params: Json
+          campaign_tag: string | null
+          conversation_flow_id: string | null
+          conversation_flow_step_id: string | null
+          coupon_code: string | null
+          created_at: string
+          delivered_count: number
+          failed_count: number
+          header_media_url: string | null
+          id: string
+          last_error: string | null
+          legacy_campaign_id: string | null
+          message_type: string
+          name: string
+          origin: string
+          queue_paused: boolean
+          read_count: number
+          reject_reason: string | null
+          rejected_at: string | null
+          scheduled_at: string | null
+          sent_at: string | null
+          sent_count: number
+          status: string
+          template_language: string
+          template_name: string
+          total_recipients: number
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          audience_id?: string | null
+          audience_kind?: string
+          audience_label?: string | null
+          automation_id?: string | null
+          automation_step_id?: string | null
+          body_param_tokens?: Json | null
+          body_params?: Json
+          campaign_tag?: string | null
+          conversation_flow_id?: string | null
+          conversation_flow_step_id?: string | null
+          coupon_code?: string | null
+          created_at?: string
+          delivered_count?: number
+          failed_count?: number
+          header_media_url?: string | null
+          id?: string
+          last_error?: string | null
+          legacy_campaign_id?: string | null
+          message_type?: string
+          name: string
+          origin?: string
+          queue_paused?: boolean
+          read_count?: number
+          reject_reason?: string | null
+          rejected_at?: string | null
+          scheduled_at?: string | null
+          sent_at?: string | null
+          sent_count?: number
+          status?: string
+          template_language?: string
+          template_name: string
+          total_recipients?: number
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          audience_id?: string | null
+          audience_kind?: string
+          audience_label?: string | null
+          automation_id?: string | null
+          automation_step_id?: string | null
+          body_param_tokens?: Json | null
+          body_params?: Json
+          campaign_tag?: string | null
+          conversation_flow_id?: string | null
+          conversation_flow_step_id?: string | null
+          coupon_code?: string | null
+          created_at?: string
+          delivered_count?: number
+          failed_count?: number
+          header_media_url?: string | null
+          id?: string
+          last_error?: string | null
+          legacy_campaign_id?: string | null
+          message_type?: string
+          name?: string
+          origin?: string
+          queue_paused?: boolean
+          read_count?: number
+          reject_reason?: string | null
+          rejected_at?: string | null
+          scheduled_at?: string | null
+          sent_at?: string | null
+          sent_count?: number
+          status?: string
+          template_language?: string
+          template_name?: string
+          total_recipients?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      wa_jobs: {
+        Row: {
+          attempts: number
+          campaign_id: string
+          created_at: string
+          error: string | null
+          id: string
+          locked_at: string | null
+          locked_by: string | null
+          max_attempts: number
+          next_attempt_at: string | null
+          priority: number
+          recipient_id: string
+          scheduled_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          campaign_id: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
+          next_attempt_at?: string | null
+          priority?: number
+          recipient_id: string
+          scheduled_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          campaign_id?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
+          next_attempt_at?: string | null
+          priority?: number
+          recipient_id?: string
+          scheduled_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wa_jobs_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "wa_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wa_jobs_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: true
+            referencedRelation: "wa_campaign_recipients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_automation_runs: {
         Row: {
           automation_id: string
@@ -2107,13 +2352,6 @@ export type Database = {
             columns: ["automation_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_automations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "whatsapp_automation_runs_campaign_id_fkey"
-            columns: ["campaign_id"]
-            isOneToOne: false
-            referencedRelation: "whatsapp_campaigns"
             referencedColumns: ["id"]
           },
           {
@@ -2215,15 +2453,7 @@ export type Database = {
           is_current?: boolean
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "whatsapp_campaign_coupon_codes_campaign_id_fkey"
-            columns: ["campaign_id"]
-            isOneToOne: false
-            referencedRelation: "whatsapp_campaigns"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       whatsapp_campaign_recipients: {
         Row: {
@@ -2698,6 +2928,31 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_wa_jobs: {
+        Args: { p_limit: number; p_worker: string }
+        Returns: {
+          attempts: number
+          campaign_id: string
+          created_at: string
+          error: string | null
+          id: string
+          locked_at: string | null
+          locked_by: string | null
+          max_attempts: number
+          next_attempt_at: string | null
+          priority: number
+          recipient_id: string
+          scheduled_at: string
+          status: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "wa_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       claim_whatsapp_message_queue: {
         Args: { p_limit: number; p_worker: string }
         Returns: {
@@ -2733,9 +2988,17 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      requeue_stale_wa_jobs: {
+        Args: { p_stale_minutes?: number }
+        Returns: number
+      }
       requeue_stale_whatsapp_queue: {
         Args: { p_stale_minutes?: number }
         Returns: number
+      }
+      wa_recalc_campaign_counters: {
+        Args: { p_campaign_id: string }
+        Returns: undefined
       }
     }
     Enums: {

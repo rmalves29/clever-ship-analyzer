@@ -160,7 +160,7 @@ export const createAndSendCampaign = createServerFn({ method: "POST" })
       };
     }
 
-    const { enqueueCampaign } = await import("./whatsapp-queue.server");
+    const { enqueueCampaign } = await import("./wa-campaigns.server");
     const result = await enqueueCampaign(created.campaignId, audience.ids, {
       ...(schedule.value ? { scheduledAt: schedule.value } : {}),
     });
@@ -527,7 +527,7 @@ export const runWhatsappQueueTick = createServerFn({ method: "POST" })
     z.object({ limit: z.number().int().min(1).max(200).optional(), dryRun: z.boolean().optional() }).parse(data ?? {}),
   )
   .handler(async ({ data }) => {
-    const { processWhatsappQueueBatch } = await import("./whatsapp-queue.server");
+    const { processWhatsappQueueBatch } = await import("./wa-campaigns.server");
     return processWhatsappQueueBatch({
       ...(data.limit ? { limit: data.limit } : {}),
       ...(data.dryRun ? { dryRun: true } : {}),
@@ -558,7 +558,7 @@ export const cancelWhatsappCampaignQueue = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ campaignId: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
-    const { cancelCampaignQueue } = await import("./whatsapp-queue.server");
+    const { cancelCampaignQueue } = await import("./wa-campaigns.server");
     return cancelCampaignQueue(data.campaignId);
   });
 
@@ -567,6 +567,6 @@ export const getWhatsappCampaignQueueStatus = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ campaignId: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
-    const { refreshCampaignStatus } = await import("./whatsapp-queue.server");
+    const { refreshCampaignStatus } = await import("./wa-campaigns.server");
     return refreshCampaignStatus(data.campaignId);
   });

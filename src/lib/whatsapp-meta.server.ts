@@ -532,7 +532,7 @@ export async function sendAutomationTestMessage(input: {
   });
   if (insertError) return { success: false as const, error: insertError.message };
 
-  const { processWhatsappQueueBatch } = await import("./whatsapp-queue.server");
+  const { processWhatsappQueueBatch } = await import("./wa-campaigns.server");
   const processed = await processWhatsappQueueBatch({ limit: 5 });
   if (!processed.success) return { success: false as const, error: `Mensagem enfileirada, mas o processamento imediato falhou: ${processed.error}` };
   if (processed.failed > 0) return { success: false as const, error: "A Meta recusou o envio de teste. Confira o template e os parâmetros." };
@@ -630,15 +630,46 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
   const destinatarios =
     input.totalDestinatariosOverride ?? (await countSegmentRecipients(input.segmentType, segmentId)).destinatarios;
 
+  const templateLanguage = input.templateLanguage?.trim() || settings.templateLanguage;
+
+  // Fonte da verdade: wa_campaigns. A tabela antiga recebe um espelho com o MESMO id, porque
+  // o histórico (automações, cupons, relatórios antigos) ainda aponta pra ela por chave estrangeira.
   const { data: campaign, error } = await supabaseAdmin
+    .from("wa_campaigns" as any)
+    .insert({
+      name: input.nome,
+      status,
+      origin: input.origem ?? "crm",
+      audience_kind: input.segmentId ? "segmento" : "predefinido",
+      audience_id: segmentId || null,
+      audience_label: input.segmentType,
+      template_name: templateName,
+      template_language: templateLanguage,
+      message_type: input.messageType,
+      body_params: input.bodyParams,
+      body_param_tokens: input.bodyParamTokens ?? null,
+      coupon_code: normalizeCouponCode(input.couponCode) || null,
+      automation_id: input.automationId ?? null,
+      automation_step_id: input.automationStepId ?? null,
+      campaign_tag: input.campaignTag || null,
+      total_recipients: destinatarios,
+    } as any)
+    .select("id")
+    .single();
+
+  if (error || !campaign) return { success: false as const, error: error?.message ?? "Falha ao criar a campanha." };
+  const campaignId = (campaign as unknown as { id: string }).id;
+
+  const { error: mirrorError } = await supabaseAdmin
     .from("whatsapp_campaigns")
     .insert({
+      id: campaignId,
       nome: input.nome,
       status,
       segment_type: input.segmentType,
       segment_id: segmentId || null,
       template_name: templateName,
-      template_language: input.templateLanguage?.trim() || settings.templateLanguage,
+      template_language: templateLanguage,
       message_type: input.messageType,
       body_params: input.bodyParams,
       body_param_tokens: input.bodyParamTokens ?? null,
@@ -648,15 +679,13 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
       automation_step_id: input.automationStepId ?? null,
       total_destinatarios: destinatarios,
       campaign_tag: input.campaignTag || null,
-    } as any)
-    .select("id")
-    .single();
+    } as any);
+  if (mirrorError) console.error("[createCampaignRow] falha ao espelhar campanha antiga", mirrorError.message);
 
-  if (error || !campaign) return { success: false as const, error: error?.message ?? "Falha ao criar a campanha." };
-  const campaignId = (campaign as { id: string }).id;
   if (input.couponCode) await rememberCampaignCouponCode(supabaseAdmin, campaignId, input.couponCode);
   return { success: true as const, campaignId, destinatarios };
 }
+
 
 /** Campanha já existente pra essa etapa de automação (a mais antiga, se houver mais de uma
  *  de execuções antes desse reaproveitamento existir) — usada pra somar disparos sucessivos
@@ -758,7 +787,7 @@ export async function resolveSegmentRecipients(segmentType: string, ids: string[
  *  `restrictToCustomerIds`, quando informado, pula o recálculo do segmento inteiro e enfileira só
  *  pra essa lista — usado pelo motor de automação pra não reenviar pra quem já recebeu antes. */
 export async function dispatchCampaign(campaignId: string, restrictToCustomerIds?: string[]) {
-  const { enqueueCampaign } = await import("./whatsapp-queue.server");
+  const { enqueueCampaign } = await import("./wa-campaigns.server");
   const result = await enqueueCampaign(campaignId, restrictToCustomerIds);
   if (!result.success) return result;
 
@@ -776,40 +805,18 @@ export async function dispatchCampaign(campaignId: string, restrictToCustomerIds
 }
 
 
-const RANK: Record<string, number> = { sent: 0, delivered: 1, read: 2, failed: 3 };
-
-/** Chamado pelo webhook da Meta (ver src/server.ts) — atualiza status de entrega/leitura. */
+/** Chamado pelo webhook da Meta (ver src/server.ts) — atualiza status de entrega/leitura
+ *  no motor novo (wa_campaign_recipients). */
 export async function applyMetaStatusUpdate(status: {
   id: string;
   status: string;
   timestamp?: string;
   errors?: { code?: number; title?: string; message?: string }[];
 }): Promise<void> {
-  const supabaseAdmin = await admin();
-  const { data: recipient } = await supabaseAdmin
-    .from("whatsapp_campaign_recipients")
-    .select("id, status")
-    .eq("wa_message_id", status.id)
-    .maybeSingle();
-  if (!recipient) return;
-
-  const current = (recipient as { id: string; status: string }).status;
-  if (status.status !== "failed" && (RANK[status.status] ?? -1) <= (RANK[current] ?? -1)) return;
-
-  const at = status.timestamp ? new Date(Number(status.timestamp) * 1000).toISOString() : new Date().toISOString();
-  const patch: Record<string, unknown> = { status: status.status };
-  if (status.status === "delivered") patch["delivered_at"] = at;
-  if (status.status === "read") patch["read_at"] = at;
-  if (status.status === "failed" && status.errors?.[0]) {
-    const e = status.errors[0];
-    patch["error"] = [e.code, e.title ?? e.message].filter(Boolean).join(" — ");
-  }
-
-  await supabaseAdmin
-    .from("whatsapp_campaign_recipients")
-    .update(patch as never)
-    .eq("id", (recipient as { id: string }).id);
+  const { applyMetaStatusUpdate: apply } = await import("./wa-campaigns.server");
+  await apply(status);
 }
+
 
 /** Verify token guardado — usado pelo handshake GET do webhook em src/server.ts. */
 export async function getStoredVerifyToken(): Promise<string | null> {

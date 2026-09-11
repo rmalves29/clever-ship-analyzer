@@ -313,7 +313,7 @@ async function handleWhatsappQueueTick(request: Request): Promise<Response> {
   if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
   if (!(await checkAutomationSecret(request))) return new Response("Forbidden", { status: 401 });
   try {
-    const { processWhatsappQueueBatch } = await import("./lib/whatsapp-queue.server");
+    const { processWhatsappQueueBatch } = await import("./lib/wa-campaigns.server");
     const url = new URL(request.url);
     const limitParam = Number(url.searchParams.get("limit"));
     const batchLimit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 100;

@@ -141,13 +141,17 @@ function CampaignsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <div className="surface-card border-success/30 bg-success-soft/40 p-4 lg:col-span-2">
+          <p className="text-xs font-medium text-success">Valor vendido (30 dias após o envio)</p>
+          <p className="mt-1 text-2xl font-bold tracking-tight text-success">{money(totals.revenue)}</p>
+          <p className="text-[11px] text-muted-foreground">{totals.orders.toLocaleString("pt-BR")} pedidos atribuídos</p>
+        </div>
         {[
           { label: "Enviadas", value: totals.sent },
           { label: "Entregues", value: totals.delivered },
           { label: "Lidas", value: totals.read },
           { label: "Falhas", value: totals.failed },
-          { label: "Na fila", value: totals.pending },
         ].map((card) => (
           <div key={card.label} className="surface-card p-4">
             <p className="text-xs text-muted-foreground">{card.label}</p>
@@ -155,6 +159,7 @@ function CampaignsPage() {
           </div>
         ))}
       </div>
+
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[220px] flex-1">

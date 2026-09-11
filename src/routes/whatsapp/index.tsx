@@ -203,53 +203,80 @@ function CampaignsPage() {
           </Button>
         </div>
       ) : (
-        <div className="space-y-2">
-          {filtered.map((c) => (
-            <div key={c.id} className="surface-card flex flex-wrap items-center gap-4 p-4">
-              <div className="min-w-[220px] flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Link to="/whatsapp/$campaignId" params={{ campaignId: c.id }} className="font-semibold hover:underline">
-                    {c.name}
-                  </Link>
-                  <Badge className={cn("border-0", STATUS_CLASS[c.status] ?? "bg-muted text-muted-foreground")}>
-                    {STATUS_LABEL[c.status] ?? c.status}
-                  </Badge>
-                  {c.origin === "automacao" && <Badge variant="outline">Automação</Badge>}
-                  {c.queuePaused && <Badge variant="outline">Pausada</Badge>}
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {c.audienceLabel ?? "Público"} · modelo {c.templateName || "—"} ·{" "}
-                  {new Date(c.sentAt ?? c.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-5">
-                <Metric label="Destinatários" value={c.total.toLocaleString("pt-BR")} />
-                <Metric label="Enviadas" value={c.sent.toLocaleString("pt-BR")} hint={pct(c.sent, c.total)} />
-                <Metric label="Entregues" value={c.delivered.toLocaleString("pt-BR")} hint={pct(c.delivered, c.sent)} />
-                <Metric label="Lidas" value={c.read.toLocaleString("pt-BR")} hint={pct(c.read, c.delivered)} />
-                <Metric label="Falhas" value={c.failed.toLocaleString("pt-BR")} hint={c.pending ? `${c.pending} na fila` : undefined} />
-              </div>
-
-              <div className="flex items-center gap-2">
-                {c.status === "aguardando_aprovacao" && (
-                  <>
-                    <Button size="sm" className="gap-1.5" disabled={busyId === c.id} onClick={() => approve(c.id)}>
-                      <Check className="size-3.5" /> Aprovar
-                    </Button>
-                    <Button size="sm" variant="outline" className="gap-1.5" disabled={busyId === c.id} onClick={() => reject(c.id)}>
-                      <X className="size-3.5" /> Rejeitar
-                    </Button>
-                  </>
-                )}
-                <Button size="icon" variant="ghost" asChild>
-                  <Link to="/whatsapp/$campaignId" params={{ campaignId: c.id }}>
-                    <ChevronRight className="size-4" />
-                  </Link>
-                </Button>
-              </div>
+        <div className="surface-card overflow-hidden p-0">
+          <div className="hidden items-center gap-4 border-b border-border bg-muted/40 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground xl:flex">
+            <div className="min-w-[220px] flex-1">Campanha</div>
+            <div className="grid w-[560px] shrink-0 grid-cols-5 gap-3 text-right">
+              <span>Público</span>
+              <span>Enviadas</span>
+              <span>Entregues</span>
+              <span>Lidas</span>
+              <span>Falhas</span>
             </div>
-          ))}
+            <div className="w-[130px] shrink-0 text-right">Valor vendido</div>
+            <div className="w-[120px] shrink-0" />
+          </div>
+
+          <div className="divide-y divide-border">
+            {filtered.map((c) => (
+              <div key={c.id} className="flex flex-wrap items-center gap-4 px-4 py-3.5 transition-colors hover:bg-muted/40">
+                <div className="min-w-[220px] flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link to="/whatsapp/$campaignId" params={{ campaignId: c.id }} className="font-semibold hover:underline">
+                      {c.name}
+                    </Link>
+                    <Badge className={cn("border-0", STATUS_CLASS[c.status] ?? "bg-muted text-muted-foreground")}>
+                      {STATUS_LABEL[c.status] ?? c.status}
+                    </Badge>
+                    {c.origin === "automacao" && <Badge variant="outline">Automação</Badge>}
+                    {c.queuePaused && <Badge variant="outline">Pausada</Badge>}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {c.audienceLabel ?? "Público"} · modelo {c.templateName || "—"} ·{" "}
+                    {new Date(c.sentAt ?? c.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                  </p>
+                </div>
+
+                <div className="grid w-full shrink-0 grid-cols-5 gap-3 text-right xl:w-[560px]">
+                  <Metric label="Público" value={c.total.toLocaleString("pt-BR")} />
+                  <Metric label="Enviadas" value={c.sent.toLocaleString("pt-BR")} hint={pct(c.sent, c.total)} />
+                  <Metric label="Entregues" value={c.delivered.toLocaleString("pt-BR")} hint={pct(c.delivered, c.sent)} />
+                  <Metric label="Lidas" value={c.read.toLocaleString("pt-BR")} hint={pct(c.read, c.delivered)} />
+                  <Metric
+                    label="Falhas"
+                    value={c.failed.toLocaleString("pt-BR")}
+                    hint={c.pending ? `${c.pending} na fila` : undefined}
+                  />
+                </div>
+
+                <div className="w-[130px] shrink-0 text-right">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground xl:hidden">Valor vendido</p>
+                  <p className={cn("text-lg font-semibold leading-tight", c.revenue > 0 ? "text-success" : "text-muted-foreground")}>
+                    {c.revenue > 0 ? money(c.revenue) : "—"}
+                  </p>
+                  {c.orders > 0 && <p className="text-[11px] text-muted-foreground">{c.orders} pedidos</p>}
+                </div>
+
+                <div className="flex w-[120px] shrink-0 items-center justify-end gap-2">
+                  {c.status === "aguardando_aprovacao" && (
+                    <>
+                      <Button size="sm" className="gap-1.5" disabled={busyId === c.id} onClick={() => approve(c.id)}>
+                        <Check className="size-3.5" /> Aprovar
+                      </Button>
+                      <Button size="sm" variant="outline" className="gap-1.5" disabled={busyId === c.id} onClick={() => reject(c.id)}>
+                        <X className="size-3.5" /> Rejeitar
+                      </Button>
+                    </>
+                  )}
+                  <Button size="icon" variant="ghost" asChild>
+                    <Link to="/whatsapp/$campaignId" params={{ campaignId: c.id }}>
+                      <ChevronRight className="size-4" />
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

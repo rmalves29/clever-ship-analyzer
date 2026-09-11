@@ -1,0 +1,2 @@
+ALTER TABLE public.whatsapp_automation_runs DROP CONSTRAINT IF EXISTS whatsapp_automation_runs_campaign_id_fkey;
+ALTER TABLE public.whatsapp_campaign_coupon_codes DROP CONSTRAINT IF EXISTS whatsapp_campaign_coupon_codes_campaign_id_fkey;

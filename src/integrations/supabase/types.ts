@@ -2355,13 +2355,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "whatsapp_automation_runs_campaign_id_fkey"
-            columns: ["campaign_id"]
-            isOneToOne: false
-            referencedRelation: "whatsapp_campaigns"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "whatsapp_automation_runs_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
@@ -2460,15 +2453,7 @@ export type Database = {
           is_current?: boolean
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "whatsapp_campaign_coupon_codes_campaign_id_fkey"
-            columns: ["campaign_id"]
-            isOneToOne: false
-            referencedRelation: "whatsapp_campaigns"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       whatsapp_campaign_recipients: {
         Row: {

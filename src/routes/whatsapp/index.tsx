@@ -233,6 +233,44 @@ function CampaignsPage() {
             </button>
           ))}
         </div>
+        <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card p-1">
+          {DATE_PERIODS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => setDatePeriod(p.key)}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                datePeriod === p.key ? "gradient-brand text-primary-foreground" : "text-muted-foreground hover:bg-accent",
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {datePeriod === "personalizado" && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <CalendarIcon className="size-4" />
+                {range?.from
+                  ? range.to
+                    ? `${format(range.from, "dd/MM", { locale: ptBR })} – ${format(range.to, "dd/MM", { locale: ptBR })}`
+                    : format(range.from, "dd/MM/yyyy", { locale: ptBR })
+                  : "Escolher datas"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="range"
+                selected={range}
+                onSelect={setRange}
+                numberOfMonths={2}
+                locale={ptBR}
+                className="pointer-events-auto"
+              />
+            </PopoverContent>
+          </Popover>
+        )}
         <Button variant="outline" onClick={() => refetch()} disabled={isFetching} className="gap-2">
           <RefreshCw className={cn("size-3.5", isFetching && "animate-spin")} /> Atualizar
         </Button>

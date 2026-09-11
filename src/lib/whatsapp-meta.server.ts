@@ -630,15 +630,46 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
   const destinatarios =
     input.totalDestinatariosOverride ?? (await countSegmentRecipients(input.segmentType, segmentId)).destinatarios;
 
+  const templateLanguage = input.templateLanguage?.trim() || settings.templateLanguage;
+
+  // Fonte da verdade: wa_campaigns. A tabela antiga recebe um espelho com o MESMO id, porque
+  // o histórico (automações, cupons, relatórios antigos) ainda aponta pra ela por chave estrangeira.
   const { data: campaign, error } = await supabaseAdmin
+    .from("wa_campaigns" as any)
+    .insert({
+      name: input.nome,
+      status,
+      origin: input.origem ?? "crm",
+      audience_kind: input.segmentId ? "segmento" : "predefinido",
+      audience_id: segmentId || null,
+      audience_label: input.segmentType,
+      template_name: templateName,
+      template_language: templateLanguage,
+      message_type: input.messageType,
+      body_params: input.bodyParams,
+      body_param_tokens: input.bodyParamTokens ?? null,
+      coupon_code: normalizeCouponCode(input.couponCode) || null,
+      automation_id: input.automationId ?? null,
+      automation_step_id: input.automationStepId ?? null,
+      campaign_tag: input.campaignTag || null,
+      total_recipients: destinatarios,
+    } as any)
+    .select("id")
+    .single();
+
+  if (error || !campaign) return { success: false as const, error: error?.message ?? "Falha ao criar a campanha." };
+  const campaignId = (campaign as { id: string }).id;
+
+  const { error: mirrorError } = await supabaseAdmin
     .from("whatsapp_campaigns")
     .insert({
+      id: campaignId,
       nome: input.nome,
       status,
       segment_type: input.segmentType,
       segment_id: segmentId || null,
       template_name: templateName,
-      template_language: input.templateLanguage?.trim() || settings.templateLanguage,
+      template_language: templateLanguage,
       message_type: input.messageType,
       body_params: input.bodyParams,
       body_param_tokens: input.bodyParamTokens ?? null,
@@ -648,15 +679,13 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
       automation_step_id: input.automationStepId ?? null,
       total_destinatarios: destinatarios,
       campaign_tag: input.campaignTag || null,
-    } as any)
-    .select("id")
-    .single();
+    } as any);
+  if (mirrorError) console.error("[createCampaignRow] falha ao espelhar campanha antiga", mirrorError.message);
 
-  if (error || !campaign) return { success: false as const, error: error?.message ?? "Falha ao criar a campanha." };
-  const campaignId = (campaign as { id: string }).id;
   if (input.couponCode) await rememberCampaignCouponCode(supabaseAdmin, campaignId, input.couponCode);
   return { success: true as const, campaignId, destinatarios };
 }
+
 
 /** Campanha já existente pra essa etapa de automação (a mais antiga, se houver mais de uma
  *  de execuções antes desse reaproveitamento existir) — usada pra somar disparos sucessivos

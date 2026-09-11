@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, MousePointerClick, Type, Clock } from "lucide-react";
+import { Plus, Pencil, Trash2, MousePointerClick, Type, Clock, Copy, Sparkles } from "lucide-react";
+import { CONVERSATION_RECIPES, type FlowRecipe } from "./flowRecipes";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -81,6 +82,25 @@ export function ConversationalFlowsTab() {
     setDialogOpen(true);
   };
 
+  const openRecipe = (recipe: FlowRecipe) => {
+    setEditSeed(recipe.build());
+    setDialogOpen(true);
+  };
+
+  const openDuplicate = (flow: FlowRow) => {
+    setEditSeed({
+      nome: `${flow.nome} (cópia)`,
+      descricao: flow.descricao ?? undefined,
+      ativo: false,
+      triggerType: flow.trigger_type,
+      triggerTemplateName: flow.trigger_template_name ?? undefined,
+      triggerValues: flow.trigger_values,
+      triggerTimeoutMinutes: flow.trigger_timeout_minutes ?? undefined,
+      steps: flow.steps as ConversationalFlowSeed["steps"],
+    });
+    setDialogOpen(true);
+  };
+
   const openEdit = (flow: FlowRow) => {
     setEditSeed({
       id: flow.id,
@@ -105,9 +125,32 @@ export function ConversationalFlowsTab() {
           Dispara quando o <strong>cliente</strong> manda uma mensagem (clique em botão ou palavra-chave), ou quando ninguém responde por X minutos.
         </p>
         <Button size="sm" onClick={openNew} className="gap-2">
-          <Plus className="size-3.5" /> Criar fluxo
+          <Plus className="size-3.5" /> Criar do zero
         </Button>
       </div>
+
+      <div className="mt-4 rounded-xl border border-border bg-muted/30 p-4">
+        <p className="flex items-center gap-1.5 text-sm font-semibold">
+          <Sparkles className="size-3.5 text-brand" /> Começar de um modelo pronto
+        </p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          O fluxo abre montado e conectado — é só ajustar os textos e salvar.
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {CONVERSATION_RECIPES.map((recipe) => (
+            <button
+              key={recipe.key}
+              type="button"
+              onClick={() => openRecipe(recipe)}
+              className="rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-primary hover:bg-accent"
+            >
+              <p className="text-sm font-medium">{recipe.title}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{recipe.description}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
 
       {isLoading && <p className="mt-6 text-center text-muted-foreground">Carregando...</p>}
       {!isLoading && rows.length === 0 && (
@@ -189,6 +232,9 @@ export function ConversationalFlowsTab() {
               <div className="mt-3 flex items-center gap-2">
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openEdit(flow)}>
                   <Pencil className="size-3.5" /> Editar
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openDuplicate(flow)}>
+                  <Copy className="size-3.5" /> Duplicar
                 </Button>
                 <Button variant="ghost" size="sm" className="gap-1.5 text-critical" onClick={() => handleDelete(flow)}>
                   <Trash2 className="size-3.5" /> Excluir

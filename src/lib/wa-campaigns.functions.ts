@@ -26,14 +26,30 @@ export type WaCampaignListRow = {
   read: number;
   failed: number;
   pending: number;
+  /** Valor vendido atribuído (pedidos pagos até 30 dias após o envio). */
+  revenue: number;
+  orders: number;
 };
+
+/** Janela de atribuição de vendas, em dias. */
+export const WA_REVENUE_WINDOW_DAYS = 30;
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin as unknown as { from: (t: string) => any };
+  return supabaseAdmin as unknown as { from: (t: string) => any; rpc: (fn: string, args?: any) => any };
 }
 
-function mapRow(row: any, pending: number): WaCampaignListRow {
+async function revenueByCampaign(supabaseAdmin: { rpc: (fn: string, args?: any) => any }) {
+  const map = new Map<string, { revenue: number; orders: number }>();
+  const { data, error } = await supabaseAdmin.rpc("wa_campaign_revenue", { p_window_days: WA_REVENUE_WINDOW_DAYS });
+  if (error) return map;
+  for (const row of ((data ?? []) as any[])) {
+    map.set(row.campaign_id, { revenue: Number(row.revenue ?? 0), orders: Number(row.orders ?? 0) });
+  }
+  return map;
+}
+
+function mapRow(row: any, pending: number, revenue?: { revenue: number; orders: number }): WaCampaignListRow {
   return {
     id: row.id,
     name: row.name,
@@ -54,6 +70,8 @@ function mapRow(row: any, pending: number): WaCampaignListRow {
     read: Number(row.read_count ?? 0),
     failed: Number(row.failed_count ?? 0),
     pending,
+    revenue: revenue?.revenue ?? 0,
+    orders: revenue?.orders ?? 0,
   };
 }
 
@@ -80,7 +98,8 @@ export const listWaCampaigns = createServerFn({ method: "GET" })
     for (const job of ((jobs ?? []) as any[])) {
       pendingByCampaign.set(job.campaign_id, (pendingByCampaign.get(job.campaign_id) ?? 0) + 1);
     }
-    return rows.map((row) => mapRow(row, pendingByCampaign.get(row.id) ?? 0));
+    const revenue = await revenueByCampaign(supabaseAdmin);
+    return rows.map((row) => mapRow(row, pendingByCampaign.get(row.id) ?? 0, revenue.get(row.id)));
   });
 
 /** Campanha aberta: cabeçalho + destinatários reais com motivo de falha. */
@@ -109,7 +128,7 @@ export const getWaCampaign = createServerFn({ method: "POST" })
       .in("status", ["queued", "retry_wait", "sending"]);
 
     return {
-      campaign: mapRow(row, pending ?? 0),
+      campaign: mapRow(row, pending ?? 0, (await revenueByCampaign(supabaseAdmin)).get(row.id)),
       bodyParams: ((row as any).body_params ?? []) as string[],
       bodyParamTokens: ((row as any).body_param_tokens ?? []) as string[],
       lastError: ((row as any).last_error ?? null) as string | null,

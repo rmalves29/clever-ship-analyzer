@@ -19,6 +19,7 @@ import { Route as FluxoEnvioRouteImport } from './routes/fluxo-envio'
 import { Route as Ga4RouteImport } from './routes/ga4'
 import { Route as InstagramRouteImport } from './routes/instagram'
 import { Route as PopupsRouteImport } from './routes/popups'
+import { Route as WhatsappRouteRouteImport } from './routes/whatsapp/route'
 import { Route as CrmIndexRouteImport } from './routes/crm/index'
 import { Route as CrmContatosRouteImport } from './routes/crm/contatos'
 import { Route as CrmImportarTrayRouteImport } from './routes/crm/importar-tray'
@@ -81,6 +82,11 @@ const PopupsRoute = PopupsRouteImport.update({
   path: '/popups',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WhatsappRouteRoute = WhatsappRouteRouteImport.update({
+  id: '/whatsapp',
+  path: '/whatsapp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CrmIndexRoute = CrmIndexRouteImport.update({
   id: '/crm/',
   path: '/crm/',
@@ -140,6 +146,7 @@ const CrmReguasPrimeiraSegundaRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/whatsapp': typeof WhatsappRouteRoute
   '/auth': typeof AuthRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/cashback': typeof CashbackRoute
@@ -163,6 +170,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/whatsapp': typeof WhatsappRouteRoute
   '/auth': typeof AuthRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/cashback': typeof CashbackRoute
@@ -187,6 +195,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/whatsapp': typeof WhatsappRouteRoute
   '/auth': typeof AuthRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/cashback': typeof CashbackRoute
@@ -212,6 +221,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/whatsapp'
     | '/auth'
     | '/campanhas-whatsapp'
     | '/cashback'
@@ -235,6 +245,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/whatsapp'
     | '/auth'
     | '/campanhas-whatsapp'
     | '/cashback'
@@ -258,6 +269,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/whatsapp'
     | '/auth'
     | '/campanhas-whatsapp'
     | '/cashback'
@@ -282,6 +294,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  WhatsappRouteRoute: typeof WhatsappRouteRoute
   AuthRoute: typeof AuthRoute
   CampanhasWhatsappRoute: typeof CampanhasWhatsappRoute
   CashbackRoute: typeof CashbackRoute
@@ -376,6 +389,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PopupsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/whatsapp': {
+      id: '/whatsapp'
+      path: '/whatsapp'
+      fullPath: '/whatsapp'
+      preLoaderRoute: typeof WhatsappRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/crm/': {
       id: '/crm/'
       path: '/crm'
@@ -458,6 +478,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  WhatsappRouteRoute: WhatsappRouteRoute,
   AuthRoute: AuthRoute,
   CampanhasWhatsappRoute: CampanhasWhatsappRoute,
   CashbackRoute: CashbackRoute,

@@ -104,7 +104,6 @@ export async function resumeWhatsappCampaignQueue(campaignId: string) {
 export async function retryFailedWhatsappCampaignQueue(campaignId: string) {
   const { retryFailedRecipients } = await import("./wa-campaigns.server");
   const result = await retryFailedRecipients(campaignId);
-  if (!result.success) return result;
-  return { success: true as const, retried: result.requeued };
+  return { success: true as const, retried: result.requeued, error: undefined as string | undefined };
 }
 

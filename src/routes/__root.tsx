@@ -7,12 +7,23 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { CacheProvider } from "@emotion/react";
+import createCache from "@emotion/cache";
+import { ThemeProvider } from "@mui/material/styles";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Sidebar } from "../components/layout/Sidebar";
 import { Toaster } from "../components/ui/sonner";
+import { materioTheme } from "../theme/materio-theme";
+
+// Shared across SSR + hydration on the client (one per document); a fresh instance per render
+// would defeat class-name stability between server and client markup. Server-side, a brand new
+// module scope is created per request anyway, so this is never shared across users/requests.
+function createEmotionCache() {
+  return createCache({ key: "css" });
+}
 
 function NotFoundComponent() {
   return (
@@ -103,13 +114,26 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootShell({ children }: { children: ReactNode }) {
+  // Lazy initializer: one cache per render tree (one per SSR request, one per client mount),
+  // never recreated on re-render — recreating it would drop already-inserted Emotion styles.
+  const [cache] = useState(createEmotionCache);
+
   return (
     <html lang="en">
       <head>
         <HeadContent />
+        {/* Minimal inline mitigation for MUI/Emotion FOUC: production SSR streams over Web
+         *  Streams (Cloudflare Workers), where Emotion's official Node-stream critical-CSS
+         *  extraction doesn't run — so MUI styles only land once Emotion hydrates client-side.
+         *  This covers just enough (page background/text/font, and the future Drawer/AppBar
+         *  surface) to avoid the ugliest flash, not a full fix. */}
+        <style>{`
+          body { background-color: #F8F7FA; color: #2A2E42; font-family: "Plus Jakarta Sans", "Inter", system-ui, sans-serif; }
+          .MuiDrawer-paper, .MuiAppBar-root { background-color: #FFFFFF; }
+        `}</style>
       </head>
       <body>
-        {children}
+        <CacheProvider value={cache}>{children}</CacheProvider>
         <div id="fb-root"></div>
         <Scripts />
       </body>
@@ -122,14 +146,16 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Toaster position="top-right" />
-      <div className="flex">
-        <Sidebar />
-        <div className="min-w-0 flex-1">
-          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-          <Outlet />
+      <ThemeProvider theme={materioTheme}>
+        <Toaster position="top-right" />
+        <div className="flex">
+          <Sidebar />
+          <div className="min-w-0 flex-1">
+            {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+            <Outlet />
+          </div>
         </div>
-      </div>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

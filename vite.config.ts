@@ -12,4 +12,11 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // @emotion/babel-plugin: lets MUI's `sx` prop and styled() calls generate stable class names
+  // and better dev labels, needed as we bring MUI components into the app (migração Materio).
+  react: {
+    babel: {
+      plugins: ["@emotion/babel-plugin"],
+    },
+  },
 });

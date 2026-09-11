@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CampanhasWhatsappRouteImport } from './routes/campanhas-whatsapp'
 import { Route as CashbackRouteImport } from './routes/cashback'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
+import { Route as DevMuiSpikeRouteImport } from './routes/dev-mui-spike'
 import { Route as EventosRouteImport } from './routes/eventos'
 import { Route as FluxoEnvioRouteImport } from './routes/fluxo-envio'
 import { Route as Ga4RouteImport } from './routes/ga4'
@@ -62,6 +63,11 @@ const CashbackRoute = CashbackRouteImport.update({
 const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
   id: '/configuracoes',
   path: '/configuracoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevMuiSpikeRoute = DevMuiSpikeRouteImport.update({
+  id: '/dev-mui-spike',
+  path: '/dev-mui-spike',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EventosRoute = EventosRouteImport.update({
@@ -193,6 +199,7 @@ export interface FileRoutesByFullPath {
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/cashback': typeof CashbackRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/dev-mui-spike': typeof DevMuiSpikeRoute
   '/eventos': typeof EventosRoute
   '/fluxo-envio': typeof FluxoEnvioRoute
   '/ga4': typeof Ga4Route
@@ -223,6 +230,7 @@ export interface FileRoutesByTo {
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/cashback': typeof CashbackRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/dev-mui-spike': typeof DevMuiSpikeRoute
   '/eventos': typeof EventosRoute
   '/fluxo-envio': typeof FluxoEnvioRoute
   '/ga4': typeof Ga4Route
@@ -255,6 +263,7 @@ export interface FileRoutesById {
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/cashback': typeof CashbackRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/dev-mui-spike': typeof DevMuiSpikeRoute
   '/eventos': typeof EventosRoute
   '/fluxo-envio': typeof FluxoEnvioRoute
   '/ga4': typeof Ga4Route
@@ -288,6 +297,7 @@ export interface FileRouteTypes {
     | '/campanhas-whatsapp'
     | '/cashback'
     | '/configuracoes'
+    | '/dev-mui-spike'
     | '/eventos'
     | '/fluxo-envio'
     | '/ga4'
@@ -318,6 +328,7 @@ export interface FileRouteTypes {
     | '/campanhas-whatsapp'
     | '/cashback'
     | '/configuracoes'
+    | '/dev-mui-spike'
     | '/eventos'
     | '/fluxo-envio'
     | '/ga4'
@@ -349,6 +360,7 @@ export interface FileRouteTypes {
     | '/campanhas-whatsapp'
     | '/cashback'
     | '/configuracoes'
+    | '/dev-mui-spike'
     | '/eventos'
     | '/fluxo-envio'
     | '/ga4'
@@ -381,6 +393,7 @@ export interface RootRouteChildren {
   CampanhasWhatsappRoute: typeof CampanhasWhatsappRoute
   CashbackRoute: typeof CashbackRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
+  DevMuiSpikeRoute: typeof DevMuiSpikeRoute
   EventosRoute: typeof EventosRoute
   FluxoEnvioRoute: typeof FluxoEnvioRoute
   Ga4Route: typeof Ga4Route
@@ -434,6 +447,13 @@ declare module '@tanstack/react-router' {
       path: '/configuracoes'
       fullPath: '/configuracoes'
       preLoaderRoute: typeof ConfiguracoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev-mui-spike': {
+      id: '/dev-mui-spike'
+      path: '/dev-mui-spike'
+      fullPath: '/dev-mui-spike'
+      preLoaderRoute: typeof DevMuiSpikeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/eventos': {
@@ -638,6 +658,7 @@ const rootRouteChildren: RootRouteChildren = {
   CampanhasWhatsappRoute: CampanhasWhatsappRoute,
   CashbackRoute: CashbackRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
+  DevMuiSpikeRoute: DevMuiSpikeRoute,
   EventosRoute: EventosRoute,
   FluxoEnvioRoute: FluxoEnvioRoute,
   Ga4Route: Ga4Route,

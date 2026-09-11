@@ -7,13 +7,13 @@ export const Route = createFileRoute("/whatsapp")({
   component: WhatsappLayout,
 });
 
-const NAV = [
+const NAV: { to: any; label: string; icon: any; exact?: boolean }[] = [
   { to: "/whatsapp", label: "Campanhas", icon: Megaphone, exact: true },
   { to: "/whatsapp/conversas", label: "Conversas", icon: Inbox },
   { to: "/whatsapp/modelos", label: "Modelos", icon: FileText },
   { to: "/whatsapp/automacoes", label: "Automações", icon: Workflow },
   { to: "/whatsapp/relatorios", label: "Relatórios", icon: BarChart3 },
-] as const;
+];
 
 function WhatsappLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });

@@ -136,8 +136,8 @@ export const waCampaignAction = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const engine = await import("./wa-campaigns.server");
-    if (data.action === "retry") return { success: true as const, ...(await engine.retryFailedRecipients(data.campaignId)) };
-    if (data.action === "cancel") return { success: true as const, ...(await engine.cancelCampaignQueue(data.campaignId)) };
+    if (data.action === "retry") return { ...(await engine.retryFailedRecipients(data.campaignId)), success: true as const };
+    if (data.action === "cancel") return { ...(await engine.cancelCampaignQueue(data.campaignId)), success: true as const };
     if (data.action === "refresh") {
       await engine.refreshCampaignStatus(data.campaignId);
       return { success: true as const };

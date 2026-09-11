@@ -59,7 +59,7 @@ function pct(part: number, total: number): string {
   return `${Math.round((part / total) * 100)}%`;
 }
 
-function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Metric({ label, value, hint }: { label: string; value: string; hint?: string | undefined }) {
   return (
     <div className="min-w-[86px]">
       <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>

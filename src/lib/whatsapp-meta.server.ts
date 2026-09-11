@@ -658,7 +658,7 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
     .single();
 
   if (error || !campaign) return { success: false as const, error: error?.message ?? "Falha ao criar a campanha." };
-  const campaignId = (campaign as { id: string }).id;
+  const campaignId = (campaign as unknown as { id: string }).id;
 
   const { error: mirrorError } = await supabaseAdmin
     .from("whatsapp_campaigns")

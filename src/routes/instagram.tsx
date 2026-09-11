@@ -17,8 +17,17 @@ import {
   Bookmark,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Chip from "@mui/material/Chip";
+import Grid from "@mui/material/Grid";
+import Stack from "@mui/material/Stack";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
+import Typography from "@mui/material/Typography";
+import type { ChipProps } from "@mui/material/Chip";
 import { getInstagramConnectionStatus, connectInstagram, getInstagramOverview, getInstagramAudience, getInstagramTopContent } from "@/lib/instagram.functions";
 import { getLatestInstagramAnalysis, generateInstagramAnalysis } from "@/lib/instagram-ai.functions";
 import type { InstagramDatePreset } from "@/lib/instagram.server";
@@ -43,36 +52,53 @@ const DATE_PRESETS: { value: InstagramDatePreset; label: string }[] = [
   { value: "last_month", label: "Mês passado" },
 ];
 
-const TONE_CLASS: Record<string, string> = {
-  positivo: "bg-success-soft text-success",
-  atencao: "bg-warning-soft text-warning",
-  critico: "bg-critical-soft text-critical",
+const TONE_COLOR: Record<string, ChipProps["color"]> = {
+  positivo: "success",
+  atencao: "warning",
+  critico: "error",
 };
 
 function StatCard({ icon: Icon, label, value }: { icon: typeof Users; label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        <Icon className="size-3.5" /> {label}
-      </p>
-      <p className="mt-1 text-2xl font-bold">{value}</p>
-    </div>
+    <Card variant="outlined">
+      <CardContent>
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", color: "text.secondary" }}>
+          <Icon size={14} />
+          <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+            {label}
+          </Typography>
+        </Stack>
+        <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>
+          {value}
+        </Typography>
+      </CardContent>
+    </Card>
   );
 }
 
 function BarRow({ label, value, pct }: { label: string; value: number; pct: number }) {
   return (
-    <div>
-      <div className="flex items-center justify-between text-sm">
-        <span className="font-medium">{label}</span>
-        <span className="text-muted-foreground">
-          {value.toLocaleString("pt-BR")} <span className="text-xs">({(pct * 100).toFixed(1)}%)</span>
-        </span>
-      </div>
-      <div className="mt-1 h-2 rounded-full bg-muted">
-        <div className="h-2 rounded-full bg-primary" style={{ width: `${Math.max(2, pct * 100)}%` }} />
-      </div>
-    </div>
+    <Box>
+      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "baseline" }}>
+        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+          {label}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {value.toLocaleString("pt-BR")} <Box component="span" sx={{ fontSize: 11 }}>({(pct * 100).toFixed(1)}%)</Box>
+        </Typography>
+      </Stack>
+      <Box sx={{ mt: 0.5, height: 8, borderRadius: 999, bgcolor: "action.hover" }}>
+        <Box sx={{ height: 8, borderRadius: 999, bgcolor: "primary.main", width: `${Math.max(2, pct * 100)}%` }} />
+      </Box>
+    </Box>
+  );
+}
+
+function SectionCard({ children }: { children: React.ReactNode }) {
+  return (
+    <Card variant="outlined" sx={{ p: 2 }}>
+      {children}
+    </Card>
   );
 }
 
@@ -150,18 +176,20 @@ function InstagramPage() {
 
   if (!loadingConnection && !connection?.connected) {
     return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold">Instagram</h1>
-        <div className="mt-6 rounded-xl border border-border bg-card p-8 text-center">
-          <p className="font-medium">Instagram ainda não conectado.</p>
-          <p className="mt-1 text-sm text-muted-foreground">
+      <Box sx={{ p: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+          Instagram
+        </Typography>
+        <Card variant="outlined" sx={{ mt: 3, p: 4, textAlign: "center" }}>
+          <Typography sx={{ fontWeight: 500 }}>Instagram ainda não conectado.</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             {connection?.error || "Usa o mesmo token do Meta Ads — só precisa achar qual Página tem o Instagram profissional vinculado."}
-          </p>
-          <Button onClick={handleConnect} disabled={connecting} className="mt-4">
+          </Typography>
+          <Button variant="contained" onClick={handleConnect} disabled={connecting} sx={{ mt: 2 }}>
             {connecting ? "Conectando..." : "Conectar Instagram"}
           </Button>
-        </div>
-      </div>
+        </Card>
+      </Box>
     );
   }
 
@@ -172,136 +200,226 @@ function InstagramPage() {
   const analysis = latestAnalysis?.analysis ?? null;
 
   return (
-    <div className="p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Instagram</h1>
-          <p className="text-sm text-muted-foreground">
+    <Box sx={{ p: 3 }}>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>
+            Instagram
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
             {loadingConnection ? "Verificando conexão..." : connection?.username ? `@${connection.username}` : "Conectado"}
-          </p>
-        </div>
+          </Typography>
+        </Box>
         <Button
           variant="outline"
-          size="sm"
+          size="small"
+          startIcon={<RefreshCw size={14} />}
           onClick={() => {
             if (view === "geral") refetchOverview();
             else if (view === "ia") refetchAnalysis();
           }}
-          className="gap-2"
         >
-          <RefreshCw className="size-3.5" /> Atualizar
+          Atualizar
         </Button>
-      </div>
+      </Stack>
 
-      <div className="mt-4">
-        <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
-          <TabsList>
-            <TabsTrigger value="geral" className="gap-1.5">
-              <Eye className="size-3.5" /> Visão Geral
-            </TabsTrigger>
-            <TabsTrigger value="conteudo" className="gap-1.5">
-              <ImageIcon className="size-3.5" /> Conteúdo
-            </TabsTrigger>
-            <TabsTrigger value="publico" className="gap-1.5">
-              <Users className="size-3.5" /> Público
-            </TabsTrigger>
-            <TabsTrigger value="ia" className="gap-1.5">
-              <Sparkles className="size-3.5" /> Análise IA
-            </TabsTrigger>
-          </TabsList>
+      <Box sx={{ mt: 2, borderBottom: 1, borderColor: "divider" }}>
+        <Tabs value={view} onChange={(_, v) => setView(v)}>
+          <Tab value="geral" icon={<Eye size={14} />} iconPosition="start" label="Visão Geral" sx={{ minHeight: 40 }} />
+          <Tab value="conteudo" icon={<ImageIcon size={14} />} iconPosition="start" label="Conteúdo" sx={{ minHeight: 40 }} />
+          <Tab value="publico" icon={<Users size={14} />} iconPosition="start" label="Público" sx={{ minHeight: 40 }} />
+          <Tab value="ia" icon={<Sparkles size={14} />} iconPosition="start" label="Análise IA" sx={{ minHeight: 40 }} />
         </Tabs>
-      </div>
+      </Box>
 
       {(view === "geral" || view === "conteudo") && (
-        <div className="mt-4 flex flex-wrap gap-1.5">
+        <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
           {DATE_PRESETS.map((p) => (
-            <Button key={p.value} variant={datePreset === p.value ? "default" : "outline"} size="sm" onClick={() => setDatePreset(p.value)}>
+            <Button
+              key={p.value}
+              variant={datePreset === p.value ? "contained" : "outline"}
+              size="small"
+              onClick={() => setDatePreset(p.value)}
+            >
               {p.label}
             </Button>
           ))}
-        </div>
+        </Stack>
       )}
 
       {view === "geral" && (
         <>
-          {loadingOverview && <p className="mt-6 text-center text-muted-foreground">Carregando...</p>}
+          {loadingOverview && (
+            <Typography align="center" color="text.secondary" sx={{ mt: 3 }}>
+              Carregando...
+            </Typography>
+          )}
           {!loadingOverview && overviewResult && !overviewResult.success && (
-            <p className="mt-6 text-center text-muted-foreground">{overviewResult.error}</p>
+            <Typography align="center" color="text.secondary" sx={{ mt: 3 }}>
+              {overviewResult.error}
+            </Typography>
           )}
           {overview && (
             <>
-              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
-                <StatCard icon={Users} label="Seguidores" value={overview.followersCount.toLocaleString("pt-BR")} />
-                <StatCard icon={Grid3x3} label="Publicações" value={overview.mediaCount.toLocaleString("pt-BR")} />
-                <StatCard icon={Eye} label="Alcance" value={overview.reachTotal.toLocaleString("pt-BR")} />
-                <StatCard icon={UserCheck} label="Contas engajadas" value={overview.accountsEngaged.toLocaleString("pt-BR")} />
-                <StatCard icon={Heart} label="Interações" value={overview.totalInteractions.toLocaleString("pt-BR")} />
-                <StatCard icon={Eye} label="Visitas ao perfil" value={overview.profileViews.toLocaleString("pt-BR")} />
-                <StatCard icon={MousePointerClick} label="Cliques no link" value={overview.websiteClicks.toLocaleString("pt-BR")} />
-              </div>
+              <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
+                <Grid size={{ xs: 6, md: 3, lg: 12 / 7 }}>
+                  <StatCard icon={Users} label="Seguidores" value={overview.followersCount.toLocaleString("pt-BR")} />
+                </Grid>
+                <Grid size={{ xs: 6, md: 3, lg: 12 / 7 }}>
+                  <StatCard icon={Grid3x3} label="Publicações" value={overview.mediaCount.toLocaleString("pt-BR")} />
+                </Grid>
+                <Grid size={{ xs: 6, md: 3, lg: 12 / 7 }}>
+                  <StatCard icon={Eye} label="Alcance" value={overview.reachTotal.toLocaleString("pt-BR")} />
+                </Grid>
+                <Grid size={{ xs: 6, md: 3, lg: 12 / 7 }}>
+                  <StatCard icon={UserCheck} label="Contas engajadas" value={overview.accountsEngaged.toLocaleString("pt-BR")} />
+                </Grid>
+                <Grid size={{ xs: 6, md: 3, lg: 12 / 7 }}>
+                  <StatCard icon={Heart} label="Interações" value={overview.totalInteractions.toLocaleString("pt-BR")} />
+                </Grid>
+                <Grid size={{ xs: 6, md: 3, lg: 12 / 7 }}>
+                  <StatCard icon={Eye} label="Visitas ao perfil" value={overview.profileViews.toLocaleString("pt-BR")} />
+                </Grid>
+                <Grid size={{ xs: 6, md: 3, lg: 12 / 7 }}>
+                  <StatCard icon={MousePointerClick} label="Cliques no link" value={overview.websiteClicks.toLocaleString("pt-BR")} />
+                </Grid>
+              </Grid>
 
-              <div className="mt-6 rounded-xl border border-border bg-card p-4">
-                <p className="font-semibold">Alcance por dia</p>
-                {overview.reachByDay.length === 0 && <p className="mt-2 text-sm text-muted-foreground">Sem dados diários nesse período.</p>}
-                <div className="mt-3 space-y-1.5">
-                  {overview.reachByDay.map((d) => (
-                    <div key={d.date} className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="w-20 shrink-0">{new Date(d.date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</span>
-                      <div className="h-2 flex-1 rounded-full bg-muted">
-                        <div className="h-2 rounded-full bg-primary" style={{ width: `${Math.max(2, (d.value / maxReach) * 100)}%` }} />
-                      </div>
-                      <span className="w-16 shrink-0 text-right">{d.value.toLocaleString("pt-BR")}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-6 rounded-xl border border-border bg-card p-4">
-                <div className="flex items-center justify-between">
-                  <p className="font-semibold">Posts que mais engajaram no período</p>
-                  <button className="text-xs text-primary hover:underline" onClick={() => setView("conteudo")}>
-                    Ver todos
-                  </button>
-                </div>
-                {loadingTopContent && <p className="mt-2 text-sm text-muted-foreground">Carregando...</p>}
-                {!loadingTopContent && topContent.length === 0 && (
-                  <p className="mt-2 text-sm text-muted-foreground">Nenhuma publicação nesse período.</p>
+              <SectionCard>
+                <Typography sx={{ fontWeight: 600 }}>Alcance por dia</Typography>
+                {overview.reachByDay.length === 0 && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    Sem dados diários nesse período.
+                  </Typography>
                 )}
-                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  {topContent.slice(0, 3).map((m, i) => (
-                    <a
-                      key={m.id}
-                      href={m.permalink ?? undefined}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex gap-3 rounded-lg border border-border p-2.5 transition-colors hover:border-primary"
-                    >
-                      <div className="relative w-16 shrink-0">
-                        {m.thumbnailUrl ? (
-                          <img src={m.thumbnailUrl} alt="" className="aspect-square w-full rounded-md object-cover" />
-                        ) : (
-                          <div className="flex aspect-square items-center justify-center rounded-md bg-muted">
-                            <ImageIcon className="size-5 text-muted-foreground" />
-                          </div>
-                        )}
-                        <span className="absolute left-1 top-1 rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] font-semibold text-white">#{i + 1}</span>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="line-clamp-2 text-xs text-muted-foreground">{m.caption || "(sem legenda)"}</p>
-                        <p className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">{m.productType}</p>
-                        <p className="mt-1 text-xs font-semibold">{m.totalInteractions.toLocaleString("pt-BR")} interações</p>
-                      </div>
-                    </a>
+                <Stack spacing={0.75} sx={{ mt: 1.5 }}>
+                  {overview.reachByDay.map((d) => (
+                    <Stack key={d.date} direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ width: 80, flexShrink: 0 }}>
+                        {new Date(d.date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                      </Typography>
+                      <Box sx={{ height: 8, flex: 1, borderRadius: 999, bgcolor: "action.hover" }}>
+                        <Box
+                          sx={{
+                            height: 8,
+                            borderRadius: 999,
+                            bgcolor: "primary.main",
+                            width: `${Math.max(2, (d.value / maxReach) * 100)}%`,
+                          }}
+                        />
+                      </Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ width: 64, flexShrink: 0, textAlign: "right" }}>
+                        {d.value.toLocaleString("pt-BR")}
+                      </Typography>
+                    </Stack>
                   ))}
-                </div>
+                </Stack>
+              </SectionCard>
+
+              <SectionCard>
+                <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+                  <Typography sx={{ fontWeight: 600 }}>Posts que mais engajaram no período</Typography>
+                  <Button variant="link" size="small" onClick={() => setView("conteudo")}>
+                    Ver todos
+                  </Button>
+                </Stack>
+                {loadingTopContent && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    Carregando...
+                  </Typography>
+                )}
+                {!loadingTopContent && topContent.length === 0 && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    Nenhuma publicação nesse período.
+                  </Typography>
+                )}
+                <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
+                  {topContent.slice(0, 3).map((m, i) => (
+                    <Grid key={m.id} size={{ xs: 12, sm: 4 }}>
+                      <Box
+                        component="a"
+                        href={m.permalink ?? undefined}
+                        target="_blank"
+                        rel="noreferrer"
+                        sx={{
+                          display: "flex",
+                          gap: 1.5,
+                          border: "1px solid",
+                          borderColor: "divider",
+                          borderRadius: 2,
+                          p: 1.25,
+                          textDecoration: "none",
+                          color: "inherit",
+                          transition: "border-color 0.15s",
+                          "&:hover": { borderColor: "primary.main" },
+                        }}
+                      >
+                        <Box sx={{ position: "relative", width: 64, flexShrink: 0 }}>
+                          {m.thumbnailUrl ? (
+                            <Box
+                              component="img"
+                              src={m.thumbnailUrl}
+                              alt=""
+                              sx={{ aspectRatio: "1 / 1", width: "100%", borderRadius: 1.5, objectFit: "cover", display: "block" }}
+                            />
+                          ) : (
+                            <Box
+                              sx={{
+                                aspectRatio: "1 / 1",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                borderRadius: 1.5,
+                                bgcolor: "action.hover",
+                              }}
+                            >
+                              <ImageIcon size={20} color="var(--mui-palette-text-secondary)" />
+                            </Box>
+                          )}
+                          <Box
+                            sx={{
+                              position: "absolute",
+                              left: 4,
+                              top: 4,
+                              borderRadius: 999,
+                              bgcolor: "rgba(0,0,0,0.6)",
+                              color: "#fff",
+                              px: 0.75,
+                              py: 0.25,
+                              fontSize: 9,
+                              fontWeight: 600,
+                            }}
+                          >
+                            #{i + 1}
+                          </Box>
+                        </Box>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+                          >
+                            {m.caption || "(sem legenda)"}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5, textTransform: "uppercase", letterSpacing: 0.5, fontSize: 10 }}>
+                            {m.productType}
+                          </Typography>
+                          <Typography variant="caption" sx={{ display: "block", mt: 0.5, fontWeight: 600 }}>
+                            {m.totalInteractions.toLocaleString("pt-BR")} interações
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Grid>
+                  ))}
+                </Grid>
                 {topContent.length > 0 && (
-                  <p className="mt-3 text-xs text-muted-foreground">
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.5 }}>
                     O post #1 puxou o engajamento do período — {topContent[0]!.productType === "FEED" ? "um post de Feed" : topContent[0]!.productType === "REELS" ? "um Reel" : "uma publicação"}{" "}
                     com {topContent[0]!.likes.toLocaleString("pt-BR")} curtidas, {topContent[0]!.comments.toLocaleString("pt-BR")} comentários e{" "}
                     {topContent[0]!.shares.toLocaleString("pt-BR")} compartilhamentos.
-                  </p>
+                  </Typography>
                 )}
-              </div>
+              </SectionCard>
             </>
           )}
         </>
@@ -309,140 +427,259 @@ function InstagramPage() {
 
       {view === "conteudo" && (
         <>
-          {loadingTopContent && <p className="mt-6 text-center text-muted-foreground">Carregando...</p>}
+          {loadingTopContent && (
+            <Typography align="center" color="text.secondary" sx={{ mt: 3 }}>
+              Carregando...
+            </Typography>
+          )}
           {!loadingTopContent && topContentResult && !topContentResult.success && (
-            <p className="mt-6 text-center text-muted-foreground">{topContentResult.error}</p>
+            <Typography align="center" color="text.secondary" sx={{ mt: 3 }}>
+              {topContentResult.error}
+            </Typography>
           )}
           {!loadingTopContent && topContentResult?.success && topContent.length === 0 && (
-            <p className="mt-6 text-center text-muted-foreground">Nenhuma publicação nesse período.</p>
+            <Typography align="center" color="text.secondary" sx={{ mt: 3 }}>
+              Nenhuma publicação nesse período.
+            </Typography>
           )}
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
             {topContent.map((m, i) => (
-              <a
-                key={m.id}
-                href={m.permalink ?? undefined}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary"
-              >
-                <div className="relative">
-                  {m.thumbnailUrl ? (
-                    <img src={m.thumbnailUrl} alt="" className="aspect-square w-full rounded-lg object-cover" />
-                  ) : (
-                    <div className="flex aspect-square items-center justify-center rounded-lg bg-muted">
-                      <ImageIcon className="size-6 text-muted-foreground" />
-                    </div>
-                  )}
-                  <span className="absolute left-1.5 top-1.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold text-white">#{i + 1}</span>
-                </div>
-                <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{m.caption || "(sem legenda)"}</p>
-                <p className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">{m.productType}</p>
-                <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
-                  <span className="flex items-center gap-1 text-muted-foreground"><Eye className="size-3" /> {m.reach.toLocaleString("pt-BR")}</span>
-                  <span className="flex items-center gap-1 text-muted-foreground"><Heart className="size-3" /> {m.likes.toLocaleString("pt-BR")}</span>
-                  <span className="flex items-center gap-1 text-muted-foreground"><MessageCircle className="size-3" /> {m.comments.toLocaleString("pt-BR")}</span>
-                  <span className="flex items-center gap-1 text-muted-foreground"><Share2 className="size-3" /> {m.shares.toLocaleString("pt-BR")}</span>
-                  <span className="flex items-center gap-1 text-muted-foreground"><Bookmark className="size-3" /> {m.saved.toLocaleString("pt-BR")}</span>
-                  <span className="font-semibold">{m.totalInteractions.toLocaleString("pt-BR")} intr.</span>
-                </div>
-              </a>
+              <Grid key={m.id} size={{ xs: 12, sm: 6, lg: 4, xl: 12 / 5 }}>
+                <Box
+                  component="a"
+                  href={m.permalink ?? undefined}
+                  target="_blank"
+                  rel="noreferrer"
+                  sx={{
+                    display: "block",
+                    border: "1px solid",
+                    borderColor: "divider",
+                    borderRadius: 2,
+                    p: 1.5,
+                    textDecoration: "none",
+                    color: "inherit",
+                    transition: "border-color 0.15s",
+                    "&:hover": { borderColor: "primary.main" },
+                  }}
+                >
+                  <Box sx={{ position: "relative" }}>
+                    {m.thumbnailUrl ? (
+                      <Box
+                        component="img"
+                        src={m.thumbnailUrl}
+                        alt=""
+                        sx={{ aspectRatio: "1 / 1", width: "100%", borderRadius: 2, objectFit: "cover", display: "block" }}
+                      />
+                    ) : (
+                      <Box
+                        sx={{
+                          aspectRatio: "1 / 1",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderRadius: 2,
+                          bgcolor: "action.hover",
+                        }}
+                      >
+                        <ImageIcon size={24} color="var(--mui-palette-text-secondary)" />
+                      </Box>
+                    )}
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        left: 6,
+                        top: 6,
+                        borderRadius: 999,
+                        bgcolor: "rgba(0,0,0,0.6)",
+                        color: "#fff",
+                        px: 0.75,
+                        py: 0.25,
+                        fontSize: 10,
+                        fontWeight: 600,
+                      }}
+                    >
+                      #{i + 1}
+                    </Box>
+                  </Box>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", mt: 1 }}
+                  >
+                    {m.caption || "(sem legenda)"}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5, textTransform: "uppercase", letterSpacing: 0.5, fontSize: 10 }}>
+                    {m.productType}
+                  </Typography>
+                  <Grid container spacing={0.5} sx={{ mt: 1 }}>
+                    <Grid size={6}>
+                      <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", color: "text.secondary" }}>
+                        <Eye size={12} />
+                        <Typography variant="caption">{m.reach.toLocaleString("pt-BR")}</Typography>
+                      </Stack>
+                    </Grid>
+                    <Grid size={6}>
+                      <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", color: "text.secondary" }}>
+                        <Heart size={12} />
+                        <Typography variant="caption">{m.likes.toLocaleString("pt-BR")}</Typography>
+                      </Stack>
+                    </Grid>
+                    <Grid size={6}>
+                      <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", color: "text.secondary" }}>
+                        <MessageCircle size={12} />
+                        <Typography variant="caption">{m.comments.toLocaleString("pt-BR")}</Typography>
+                      </Stack>
+                    </Grid>
+                    <Grid size={6}>
+                      <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", color: "text.secondary" }}>
+                        <Share2 size={12} />
+                        <Typography variant="caption">{m.shares.toLocaleString("pt-BR")}</Typography>
+                      </Stack>
+                    </Grid>
+                    <Grid size={6}>
+                      <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", color: "text.secondary" }}>
+                        <Bookmark size={12} />
+                        <Typography variant="caption">{m.saved.toLocaleString("pt-BR")}</Typography>
+                      </Stack>
+                    </Grid>
+                    <Grid size={6}>
+                      <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                        {m.totalInteractions.toLocaleString("pt-BR")} intr.
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </Box>
+              </Grid>
             ))}
-          </div>
+          </Grid>
         </>
       )}
 
       {view === "publico" && (
         <>
-          {loadingAudience && <p className="mt-6 text-center text-muted-foreground">Carregando...</p>}
+          {loadingAudience && (
+            <Typography align="center" color="text.secondary" sx={{ mt: 3 }}>
+              Carregando...
+            </Typography>
+          )}
           {!loadingAudience && audienceResult && !audienceResult.success && (
-            <p className="mt-6 text-center text-muted-foreground">{audienceResult.error}</p>
+            <Typography align="center" color="text.secondary" sx={{ mt: 3 }}>
+              {audienceResult.error}
+            </Typography>
           )}
           {audience && (
-            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className="rounded-xl border border-border bg-card p-4">
-                <p className="font-semibold">Faixa etária</p>
-                <div className="mt-3 space-y-2.5">
-                  {audience.age.map((a) => <BarRow key={a.label} label={a.label} value={a.value} pct={a.pct} />)}
-                </div>
-              </div>
-              <div className="rounded-xl border border-border bg-card p-4">
-                <p className="font-semibold">Gênero</p>
-                <div className="mt-3 space-y-2.5">
-                  {audience.gender.map((g) => <BarRow key={g.label} label={g.label} value={g.value} pct={g.pct} />)}
-                </div>
-              </div>
-              <div className="rounded-xl border border-border bg-card p-4">
-                <p className="font-semibold">Top 10 países</p>
-                <div className="mt-3 space-y-2.5">
-                  {audience.topCountries.map((c) => <BarRow key={c.label} label={c.label} value={c.value} pct={c.pct} />)}
-                </div>
-              </div>
-              <div className="rounded-xl border border-border bg-card p-4">
-                <p className="font-semibold">Top 10 estados</p>
-                <div className="mt-3 space-y-2.5">
-                  {audience.topStates.map((c) => <BarRow key={c.label} label={c.label} value={c.value} pct={c.pct} />)}
-                </div>
-              </div>
-              <div className="rounded-xl border border-border bg-card p-4">
-                <p className="font-semibold">Top 10 cidades</p>
-                <div className="mt-3 space-y-2.5">
-                  {audience.topCities.map((c) => <BarRow key={c.label} label={c.label} value={c.value} pct={c.pct} />)}
-                </div>
-              </div>
-            </div>
+            <Grid container spacing={2} sx={{ mt: 0.5 }}>
+              <Grid size={{ xs: 12, lg: 6 }}>
+                <SectionCard>
+                  <Typography sx={{ fontWeight: 600 }}>Faixa etária</Typography>
+                  <Stack spacing={1.25} sx={{ mt: 1.5 }}>
+                    {audience.age.map((a) => (
+                      <BarRow key={a.label} label={a.label} value={a.value} pct={a.pct} />
+                    ))}
+                  </Stack>
+                </SectionCard>
+              </Grid>
+              <Grid size={{ xs: 12, lg: 6 }}>
+                <SectionCard>
+                  <Typography sx={{ fontWeight: 600 }}>Gênero</Typography>
+                  <Stack spacing={1.25} sx={{ mt: 1.5 }}>
+                    {audience.gender.map((g) => (
+                      <BarRow key={g.label} label={g.label} value={g.value} pct={g.pct} />
+                    ))}
+                  </Stack>
+                </SectionCard>
+              </Grid>
+              <Grid size={{ xs: 12, lg: 6 }}>
+                <SectionCard>
+                  <Typography sx={{ fontWeight: 600 }}>Top 10 países</Typography>
+                  <Stack spacing={1.25} sx={{ mt: 1.5 }}>
+                    {audience.topCountries.map((c) => (
+                      <BarRow key={c.label} label={c.label} value={c.value} pct={c.pct} />
+                    ))}
+                  </Stack>
+                </SectionCard>
+              </Grid>
+              <Grid size={{ xs: 12, lg: 6 }}>
+                <SectionCard>
+                  <Typography sx={{ fontWeight: 600 }}>Top 10 estados</Typography>
+                  <Stack spacing={1.25} sx={{ mt: 1.5 }}>
+                    {audience.topStates.map((c) => (
+                      <BarRow key={c.label} label={c.label} value={c.value} pct={c.pct} />
+                    ))}
+                  </Stack>
+                </SectionCard>
+              </Grid>
+              <Grid size={{ xs: 12, lg: 6 }}>
+                <SectionCard>
+                  <Typography sx={{ fontWeight: 600 }}>Top 10 cidades</Typography>
+                  <Stack spacing={1.25} sx={{ mt: 1.5 }}>
+                    {audience.topCities.map((c) => (
+                      <BarRow key={c.label} label={c.label} value={c.value} pct={c.pct} />
+                    ))}
+                  </Stack>
+                </SectionCard>
+              </Grid>
+            </Grid>
           )}
         </>
       )}
 
       {view === "ia" && (
-        <div className="mt-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
-            <div>
-              <p className="font-semibold">Análise gerada por IA</p>
-              <p className="text-xs text-muted-foreground">
-                {latestAnalysis?.generatedAt
-                  ? `Última análise: ${new Date(latestAnalysis.generatedAt).toLocaleString("pt-BR")} (${latestAnalysis.period})`
-                  : "Nenhuma análise gerada ainda."}
-              </p>
-            </div>
-            <Button onClick={handleGenerateAnalysis} disabled={generating} className="gap-2">
-              <Sparkles className="size-4" />
-              {generating ? "Analisando..." : "Gerar análise"}
-            </Button>
-          </div>
+        <Box sx={{ mt: 2 }}>
+          <Card variant="outlined" sx={{ p: 2 }}>
+            <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+              <Box>
+                <Typography sx={{ fontWeight: 600 }}>Análise gerada por IA</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {latestAnalysis?.generatedAt
+                    ? `Última análise: ${new Date(latestAnalysis.generatedAt).toLocaleString("pt-BR")} (${latestAnalysis.period})`
+                    : "Nenhuma análise gerada ainda."}
+                </Typography>
+              </Box>
+              <Button variant="contained" startIcon={<Sparkles size={16} />} onClick={handleGenerateAnalysis} disabled={generating}>
+                {generating ? "Analisando..." : "Gerar análise"}
+              </Button>
+            </Stack>
+          </Card>
 
           {analysis && (
-            <div className="mt-4 space-y-4">
-              <div className="rounded-xl border border-border bg-card p-4">
-                <p className="font-semibold">Resumo</p>
-                <p className="mt-1 text-sm text-muted-foreground">{analysis.resumo}</p>
-              </div>
+            <Stack spacing={2} sx={{ mt: 2 }}>
+              <SectionCard>
+                <Typography sx={{ fontWeight: 600 }}>Resumo</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  {analysis.resumo}
+                </Typography>
+              </SectionCard>
 
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Grid container spacing={1.5}>
                 {analysis.insights.map((ins, i) => (
-                  <div key={i} className="rounded-xl border border-border bg-card p-4">
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONE_CLASS[ins.tone] ?? "bg-muted text-muted-foreground"}`}>
-                      {ins.title}
-                    </span>
-                    <p className="mt-2 text-sm text-muted-foreground">{ins.text}</p>
-                  </div>
+                  <Grid key={i} size={{ xs: 12, md: 6 }}>
+                    <SectionCard>
+                      <Chip size="small" color={TONE_COLOR[ins.tone] ?? "default"} label={ins.title} />
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        {ins.text}
+                      </Typography>
+                    </SectionCard>
+                  </Grid>
                 ))}
-              </div>
+              </Grid>
 
               {analysis.recomendacoes.length > 0 && (
-                <div className="rounded-xl border border-border bg-card p-4">
-                  <p className="font-semibold">Recomendações</p>
-                  <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
+                <SectionCard>
+                  <Typography sx={{ fontWeight: 600 }}>Recomendações</Typography>
+                  <Box component="ul" sx={{ mt: 1, pl: 2.5, mb: 0 }}>
                     {analysis.recomendacoes.map((r, i) => (
-                      <li key={i}>{r}</li>
+                      <Typography key={i} component="li" variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                        {r}
+                      </Typography>
                     ))}
-                  </ul>
-                </div>
+                  </Box>
+                </SectionCard>
               )}
-            </div>
+            </Stack>
           )}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }

@@ -66,6 +66,32 @@ function AutomacoesPage() {
           </Button>
         </div>
 
+        <div className="rounded-xl border border-border bg-muted/30 p-4">
+          <p className="flex items-center gap-1.5 text-sm font-semibold">
+            <Sparkles className="size-3.5 text-brand" /> Começar de um modelo pronto
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            A régua abre com público e etapas já montados — escolha os modelos de mensagem e salve.
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {AUTOMATION_RECIPES.map((recipe) => (
+              <button
+                key={recipe.key}
+                type="button"
+                onClick={() => {
+                  setSeed(recipe.build());
+                  setOpen(true);
+                }}
+                className="rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-primary hover:bg-accent"
+              >
+                <p className="text-sm font-medium">{recipe.title}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{recipe.description}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+
         <div className="space-y-2">
           {(automations ?? []).map((a: any) => (
             <div key={a.id} className="surface-card flex flex-wrap items-center gap-4 p-4">

@@ -125,9 +125,32 @@ export function ConversationalFlowsTab() {
           Dispara quando o <strong>cliente</strong> manda uma mensagem (clique em botão ou palavra-chave), ou quando ninguém responde por X minutos.
         </p>
         <Button size="sm" onClick={openNew} className="gap-2">
-          <Plus className="size-3.5" /> Criar fluxo
+          <Plus className="size-3.5" /> Criar do zero
         </Button>
       </div>
+
+      <div className="mt-4 rounded-xl border border-border bg-muted/30 p-4">
+        <p className="flex items-center gap-1.5 text-sm font-semibold">
+          <Sparkles className="size-3.5 text-brand" /> Começar de um modelo pronto
+        </p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          O fluxo abre montado e conectado — é só ajustar os textos e salvar.
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {CONVERSATION_RECIPES.map((recipe) => (
+            <button
+              key={recipe.key}
+              type="button"
+              onClick={() => openRecipe(recipe)}
+              className="rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-primary hover:bg-accent"
+            >
+              <p className="text-sm font-medium">{recipe.title}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{recipe.description}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
 
       {isLoading && <p className="mt-6 text-center text-muted-foreground">Carregando...</p>}
       {!isLoading && rows.length === 0 && (

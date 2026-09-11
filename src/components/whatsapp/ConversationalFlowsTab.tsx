@@ -233,6 +233,9 @@ export function ConversationalFlowsTab() {
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openEdit(flow)}>
                   <Pencil className="size-3.5" /> Editar
                 </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openDuplicate(flow)}>
+                  <Copy className="size-3.5" /> Duplicar
+                </Button>
                 <Button variant="ghost" size="sm" className="gap-1.5 text-critical" onClick={() => handleDelete(flow)}>
                   <Trash2 className="size-3.5" /> Excluir
                 </Button>

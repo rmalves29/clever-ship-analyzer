@@ -532,7 +532,7 @@ export async function sendAutomationTestMessage(input: {
   });
   if (insertError) return { success: false as const, error: insertError.message };
 
-  const { processWhatsappQueueBatch } = await import("./whatsapp-queue.server");
+  const { processWhatsappQueueBatch } = await import("./wa-campaigns.server");
   const processed = await processWhatsappQueueBatch({ limit: 5 });
   if (!processed.success) return { success: false as const, error: `Mensagem enfileirada, mas o processamento imediato falhou: ${processed.error}` };
   if (processed.failed > 0) return { success: false as const, error: "A Meta recusou o envio de teste. Confira o template e os parâmetros." };
@@ -787,7 +787,7 @@ export async function resolveSegmentRecipients(segmentType: string, ids: string[
  *  `restrictToCustomerIds`, quando informado, pula o recálculo do segmento inteiro e enfileira só
  *  pra essa lista — usado pelo motor de automação pra não reenviar pra quem já recebeu antes. */
 export async function dispatchCampaign(campaignId: string, restrictToCustomerIds?: string[]) {
-  const { enqueueCampaign } = await import("./whatsapp-queue.server");
+  const { enqueueCampaign } = await import("./wa-campaigns.server");
   const result = await enqueueCampaign(campaignId, restrictToCustomerIds);
   if (!result.success) return result;
 

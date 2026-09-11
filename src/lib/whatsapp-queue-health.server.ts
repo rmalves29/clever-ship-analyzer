@@ -94,7 +94,7 @@ export async function resumeWhatsappCampaignQueue(campaignId: string) {
     .eq("id", campaignId);
   if (error) return { success: false as const, error: error.message };
 
-  const { refreshCampaignStatus } = await import("./whatsapp-queue.server");
+  const { refreshCampaignStatus } = await import("./wa-campaigns.server");
   const status = await refreshCampaignStatus(campaignId);
   return { success: true as const, status };
 }
@@ -118,7 +118,7 @@ export async function retryFailedWhatsappCampaignQueue(campaignId: string) {
     .select("id, status");
   if (error) return { success: false as const, error: error.message };
 
-  const { refreshCampaignStatus } = await import("./whatsapp-queue.server");
+  const { refreshCampaignStatus } = await import("./wa-campaigns.server");
   await refreshCampaignStatus(campaignId);
   return { success: true as const, retried: (data ?? []).filter((row: any) => row.status === "retry_wait").length };
 }

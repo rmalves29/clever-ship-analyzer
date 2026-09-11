@@ -2054,6 +2054,7 @@ export type Database = {
           delivered_at: string | null
           error_code: string | null
           error_message: string | null
+          event_key: string
           id: string
           name: string | null
           params: Json
@@ -2071,6 +2072,7 @@ export type Database = {
           delivered_at?: string | null
           error_code?: string | null
           error_message?: string | null
+          event_key?: string
           id?: string
           name?: string | null
           params?: Json
@@ -2088,6 +2090,7 @@ export type Database = {
           delivered_at?: string | null
           error_code?: string | null
           error_message?: string | null
+          event_key?: string
           id?: string
           name?: string | null
           params?: Json
@@ -2116,10 +2119,12 @@ export type Database = {
           audience_kind: string
           audience_label: string | null
           automation_id: string | null
+          automation_step_id: string | null
           body_param_tokens: Json | null
           body_params: Json
           campaign_tag: string | null
           conversation_flow_id: string | null
+          conversation_flow_step_id: string | null
           coupon_code: string | null
           created_at: string
           delivered_count: number
@@ -2131,6 +2136,7 @@ export type Database = {
           message_type: string
           name: string
           origin: string
+          queue_paused: boolean
           read_count: number
           reject_reason: string | null
           rejected_at: string | null
@@ -2150,10 +2156,12 @@ export type Database = {
           audience_kind?: string
           audience_label?: string | null
           automation_id?: string | null
+          automation_step_id?: string | null
           body_param_tokens?: Json | null
           body_params?: Json
           campaign_tag?: string | null
           conversation_flow_id?: string | null
+          conversation_flow_step_id?: string | null
           coupon_code?: string | null
           created_at?: string
           delivered_count?: number
@@ -2165,6 +2173,7 @@ export type Database = {
           message_type?: string
           name: string
           origin?: string
+          queue_paused?: boolean
           read_count?: number
           reject_reason?: string | null
           rejected_at?: string | null
@@ -2184,10 +2193,12 @@ export type Database = {
           audience_kind?: string
           audience_label?: string | null
           automation_id?: string | null
+          automation_step_id?: string | null
           body_param_tokens?: Json | null
           body_params?: Json
           campaign_tag?: string | null
           conversation_flow_id?: string | null
+          conversation_flow_step_id?: string | null
           coupon_code?: string | null
           created_at?: string
           delivered_count?: number
@@ -2199,6 +2210,7 @@ export type Database = {
           message_type?: string
           name?: string
           origin?: string
+          queue_paused?: boolean
           read_count?: number
           reject_reason?: string | null
           rejected_at?: string | null

@@ -26,14 +26,30 @@ export type WaCampaignListRow = {
   read: number;
   failed: number;
   pending: number;
+  /** Valor vendido atribuído (pedidos pagos até 30 dias após o envio). */
+  revenue: number;
+  orders: number;
 };
+
+/** Janela de atribuição de vendas, em dias. */
+export const WA_REVENUE_WINDOW_DAYS = 30;
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin as unknown as { from: (t: string) => any };
+  return supabaseAdmin as unknown as { from: (t: string) => any; rpc: (fn: string, args?: any) => any };
 }
 
-function mapRow(row: any, pending: number): WaCampaignListRow {
+async function revenueByCampaign(supabaseAdmin: { rpc: (fn: string, args?: any) => any }) {
+  const map = new Map<string, { revenue: number; orders: number }>();
+  const { data, error } = await supabaseAdmin.rpc("wa_campaign_revenue", { p_window_days: WA_REVENUE_WINDOW_DAYS });
+  if (error) return map;
+  for (const row of ((data ?? []) as any[])) {
+    map.set(row.campaign_id, { revenue: Number(row.revenue ?? 0), orders: Number(row.orders ?? 0) });
+  }
+  return map;
+}
+
+function mapRow(row: any, pending: number, revenue?: { revenue: number; orders: number }): WaCampaignListRow {
   return {
     id: row.id,
     name: row.name,

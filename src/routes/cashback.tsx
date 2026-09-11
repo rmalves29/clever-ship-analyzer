@@ -3,15 +3,28 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { AlertCircle, Coins, Loader2, RefreshCw, Ticket, Wallet } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AlertCircle, Coins, RefreshCw, Ticket, Wallet } from "lucide-react";
+import Alert from "@mui/material/Alert";
+import AlertTitle from "@mui/material/AlertTitle";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Grid from "@mui/material/Grid";
+import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import type { ChipProps } from "@mui/material/Chip";
 import {
   backfillCashbackStartsAt,
   getCashbackSettings,
@@ -49,13 +62,13 @@ export const Route = createFileRoute("/cashback")({
   component: CashbackPage,
 });
 
-const STATUS_VARIANT: Record<CashbackCouponStatus, string> = {
-  pending: "bg-amber-500/15 text-amber-500",
-  active: "bg-emerald-500/15 text-emerald-500",
-  expired: "bg-muted text-muted-foreground",
-  cancel_pending: "bg-amber-500/15 text-amber-500",
-  cancelled: "bg-muted text-muted-foreground",
-  failed: "bg-destructive/15 text-destructive",
+const STATUS_CHIP_COLOR: Record<CashbackCouponStatus, ChipProps["color"]> = {
+  pending: "warning",
+  active: "success",
+  expired: "default",
+  cancel_pending: "warning",
+  cancelled: "default",
+  failed: "error",
 };
 
 function formatDate(value: string | null | undefined) {
@@ -63,6 +76,21 @@ function formatDate(value: string | null | undefined) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "—";
   return date.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
+
+function StatCard({ label, value, valueColor }: { label: string; value: React.ReactNode; valueColor?: string }) {
+  return (
+    <Card>
+      <CardContent>
+        <Typography variant="body2" color="text.secondary">
+          {label}
+        </Typography>
+        <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5, color: valueColor }}>
+          {value}
+        </Typography>
+      </CardContent>
+    </Card>
+  );
 }
 
 function CashbackPage() {
@@ -170,219 +198,288 @@ function CashbackPage() {
   const expirationInvalid = Number(expirationDays) < minExpiration;
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-8 md:px-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Cashback</h1>
-          <p className="text-sm text-muted-foreground">
+    <Box sx={{ maxWidth: 1600, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={2}
+        sx={{
+          mb: 3,
+          justifyContent: "space-between",
+          alignItems: { xs: "flex-start", sm: "center" },
+        }}
+      >
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>
+            Cashback
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
             Toda compra paga gera automaticamente um cupom real de cashback na Shopify, restrito ao cliente que comprou.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap" }}>
           <Button
             variant="outline"
             onClick={() => backfillMutation.mutate()}
             disabled={backfillMutation.isPending}
+            startIcon={backfillMutation.isPending ? <CircularProgress size={16} color="inherit" /> : null}
           >
-            {backfillMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
             Liberar cupons pendentes na data da compra
           </Button>
-          <Button variant="outline" onClick={() => reprocessMutation.mutate()} disabled={reprocessMutation.isPending}>
-            {reprocessMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}
+          <Button
+            variant="outline"
+            onClick={() => reprocessMutation.mutate()}
+            disabled={reprocessMutation.isPending}
+            startIcon={
+              reprocessMutation.isPending ? <CircularProgress size={16} color="inherit" /> : <RefreshCw size={16} />
+            }
+          >
             Atualizar e reprocessar falhas
           </Button>
-        </div>
-      </div>
+        </Stack>
+      </Stack>
 
-      <Alert className="mb-6">
-        <AlertCircle className="size-4" />
+      <Alert severity="info" icon={<AlertCircle size={18} />} sx={{ mb: 3 }}>
         <AlertTitle>Permissão necessária na Shopify</AlertTitle>
-        <AlertDescription>
-          O app da Shopify precisa do escopo <code>write_discounts</code> para criar e remover os cupons de cashback.
-        </AlertDescription>
+        O app da Shopify precisa do escopo <code>write_discounts</code> para criar e remover os cupons de cashback.
       </Alert>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Coins className="size-4" /> Configuração
-            </CardTitle>
-            <CardDescription>
-              O cupom é um valor fixo em dinheiro, libera {activationDelayDays || "X"} dias após a compra e expira{" "}
-              {expirationDays || "X"} dias após a compra. Uso único, uma vez por cliente.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="flex items-center justify-between rounded-lg border border-border p-3">
-              <div>
-                <p className="text-sm font-medium">Ativar Cashback</p>
-                <p className="text-xs text-muted-foreground">
-                  Ao ativar, apenas compras feitas a partir de agora geram cupom. Nenhum pedido antigo é processado.
-                </p>
-              </div>
-              <Switch checked={enabled} onCheckedChange={setEnabled} />
-            </div>
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, lg: 8 }}>
+          <Card sx={{ height: "100%" }}>
+            <CardContent>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                <Coins size={16} />
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Configuração
+                </Typography>
+              </Stack>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2.5 }}>
+                O cupom é um valor fixo em dinheiro, libera {activationDelayDays || "X"} dias após a compra e expira{" "}
+                {expirationDays || "X"} dias após a compra. Uso único, uma vez por cliente.
+              </Typography>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="percentage">Percentual do cashback (%)</Label>
-                <Input id="percentage" value={percentage} onChange={(e) => setPercentage(e.target.value)} inputMode="decimal" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="multiplier">Multiplicador da compra mínima</Label>
-                <Input id="multiplier" value={multiplier} onChange={(e) => setMultiplier(e.target.value)} inputMode="decimal" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="activationDelay">Dias até liberar</Label>
-                <Input
-                  id="activationDelay"
-                  value={activationDelayDays}
-                  onChange={(e) => setActivationDelayDays(e.target.value)}
-                  inputMode="numeric"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Tempo após a compra até o cupom ficar utilizável.
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="expiration">Dias até expirar</Label>
-                <Input id="expiration" value={expirationDays} onChange={(e) => setExpirationDays(e.target.value)} inputMode="numeric" />
-                {expirationInvalid ? (
-                  <p className="text-xs text-destructive">
-                    Mínimo de {minExpiration} dias para não vencer antes da liberação.
-                  </p>
-                ) : null}
-              </div>
-            </div>
+              <Stack spacing={2.5}>
+                <Stack
+                  direction="row"
+                  sx={{
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    border: "1px solid",
+                    borderColor: "divider",
+                    borderRadius: 2,
+                    p: 1.5,
+                  }}
+                >
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      Ativar Cashback
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Ao ativar, apenas compras feitas a partir de agora geram cupom. Nenhum pedido antigo é processado.
+                    </Typography>
+                  </Box>
+                  <FormControlLabel
+                    sx={{ m: 0 }}
+                    control={<Switch checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />}
+                    label=""
+                  />
+                </Stack>
 
-            <div className="rounded-lg border border-border bg-muted/40 p-4">
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="preview">Prévia para uma compra de</Label>
-                  <Input id="preview" className="w-40" value={previewTotal} onChange={(e) => setPreviewTotal(e.target.value)} inputMode="decimal" />
-                </div>
-                <div className="text-sm">
-                  <p>
-                    Cashback gerado: <strong>{formatBRL(preview.amount)}</strong>
-                  </p>
-                  <p>
-                    Compra mínima para usar: <strong>{formatBRL(preview.minimum)}</strong>
-                  </p>
-                  <p className="text-muted-foreground">
-                    Liberação em {activationDelayDays || "—"} dias · validade de {expirationDays || "—"} dias após a compra
-                  </p>
-                </div>
-              </div>
-            </div>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                    <TextField
+                      label="Percentual do cashback (%)"
+                      value={percentage}
+                      onChange={(e) => setPercentage(e.target.value)}
+                      inputMode="decimal"
+                      fullWidth
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                    <TextField
+                      label="Multiplicador da compra mínima"
+                      value={multiplier}
+                      onChange={(e) => setMultiplier(e.target.value)}
+                      inputMode="decimal"
+                      fullWidth
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                    <TextField
+                      label="Dias até liberar"
+                      value={activationDelayDays}
+                      onChange={(e) => setActivationDelayDays(e.target.value)}
+                      inputMode="numeric"
+                      fullWidth
+                      helperText="Tempo após a compra até o cupom ficar utilizável."
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                    <TextField
+                      label="Dias até expirar"
+                      value={expirationDays}
+                      onChange={(e) => setExpirationDays(e.target.value)}
+                      inputMode="numeric"
+                      fullWidth
+                      error={expirationInvalid}
+                      helperText={expirationInvalid ? `Mínimo de ${minExpiration} dias para não vencer antes da liberação.` : " "}
+                    />
+                  </Grid>
+                </Grid>
 
-            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || expirationInvalid}>
-              {saveMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-              Salvar configuração
-            </Button>
-          </CardContent>
-        </Card>
+                <Box sx={{ border: "1px solid", borderColor: "divider", bgcolor: "action.hover", borderRadius: 2, p: 2 }}>
+                  <Stack direction="row" spacing={2} sx={{ alignItems: "flex-end", flexWrap: "wrap" }}>
+                    <TextField
+                      label="Prévia para uma compra de"
+                      value={previewTotal}
+                      onChange={(e) => setPreviewTotal(e.target.value)}
+                      inputMode="decimal"
+                      sx={{ width: 160 }}
+                    />
+                    <Box sx={{ fontSize: 14 }}>
+                      <Typography variant="body2">
+                        Cashback gerado: <strong>{formatBRL(preview.amount)}</strong>
+                      </Typography>
+                      <Typography variant="body2">
+                        Compra mínima para usar: <strong>{formatBRL(preview.minimum)}</strong>
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Liberação em {activationDelayDays || "—"} dias · validade de {expirationDays || "—"} dias após a compra
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Box>
 
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Cashback em aberto</CardDescription>
-              <CardTitle className="flex items-center gap-2 text-2xl">
-                <Wallet className="size-5 text-brand" /> {formatBRL(summary.outstanding)}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground">Soma dos cupons aguardando liberação e ativos.</CardContent>
+                <Box>
+                  <Button
+                    variant="contained"
+                    onClick={() => saveMutation.mutate()}
+                    disabled={saveMutation.isPending || expirationInvalid}
+                    startIcon={saveMutation.isPending ? <CircularProgress size={16} color="inherit" /> : null}
+                  >
+                    Salvar configuração
+                  </Button>
+                </Box>
+              </Stack>
+            </CardContent>
           </Card>
-          <div className="grid grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Ativos</CardDescription>
-                <CardTitle className="text-2xl">{summary.active}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Aguardando</CardDescription>
-                <CardTitle className="text-2xl">{summary.pending}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Com erro</CardDescription>
-                <CardTitle className="text-2xl text-destructive">{summary.failed}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Total</CardDescription>
-                <CardTitle className="text-2xl">{summary.total}</CardTitle>
-              </CardHeader>
-            </Card>
-          </div>
-        </div>
-      </div>
+        </Grid>
 
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Ticket className="size-4" /> Cupons gerados
-          </CardTitle>
-          <CardDescription>
+        <Grid size={{ xs: 12, lg: 4 }}>
+          <Stack spacing={2}>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Cashback em aberto
+                </Typography>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center", mt: 0.5 }}>
+                  <Wallet size={20} color="var(--mui-palette-primary-main, #7367F0)" />
+                  <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                    {formatBRL(summary.outstanding)}
+                  </Typography>
+                </Stack>
+                <Typography variant="caption" color="text.secondary">
+                  Soma dos cupons aguardando liberação e ativos.
+                </Typography>
+              </CardContent>
+            </Card>
+            <Grid container spacing={2}>
+              <Grid size={6}>
+                <StatCard label="Ativos" value={summary.active} />
+              </Grid>
+              <Grid size={6}>
+                <StatCard label="Aguardando" value={summary.pending} />
+              </Grid>
+              <Grid size={6}>
+                <StatCard label="Com erro" value={summary.failed} valueColor="error.main" />
+              </Grid>
+              <Grid size={6}>
+                <StatCard label="Total" value={summary.total} />
+              </Grid>
+            </Grid>
+          </Stack>
+        </Grid>
+      </Grid>
+
+      <Card sx={{ mt: 3 }}>
+        <CardContent>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <Ticket size={16} />
+            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+              Cupons gerados
+            </Typography>
+          </Stack>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
             Use os tokens {"{{CUPOM_CASHBACK}}"}, {"{{VALOR_CASHBACK}}"}, {"{{COMPRA_MINIMA_CASHBACK}}"} e{" "}
             {"{{VALIDADE_CASHBACK}}"} nas campanhas e automações de WhatsApp.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          </Typography>
+
           {couponsQuery.isLoading ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">Carregando cupons…</p>
+            <Typography align="center" color="text.secondary" sx={{ py: 4 }}>
+              Carregando cupons…
+            </Typography>
           ) : derived.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
+            <Typography align="center" color="text.secondary" sx={{ py: 4 }}>
               Nenhum cupom gerado ainda. Ative o cashback e sincronize a Shopify.
-            </p>
+            </Typography>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
+            <TableContainer sx={{ overflowX: "auto" }}>
+              <Table size="small">
+                <TableHead>
                   <TableRow>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Pedido</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead className="text-right">Compra</TableHead>
-                    <TableHead className="text-right">Cashback</TableHead>
-                    <TableHead className="text-right">Mínimo</TableHead>
-                    <TableHead>Liberação</TableHead>
-                    <TableHead>Validade</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Erro</TableHead>
+                    <TableCell>Código</TableCell>
+                    <TableCell>Pedido</TableCell>
+                    <TableCell>Cliente</TableCell>
+                    <TableCell align="right">Compra</TableCell>
+                    <TableCell align="right">Cashback</TableCell>
+                    <TableCell align="right">Mínimo</TableCell>
+                    <TableCell>Liberação</TableCell>
+                    <TableCell>Validade</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Erro</TableCell>
                   </TableRow>
-                </TableHeader>
+                </TableHead>
                 <TableBody>
                   {derived.map((row) => (
                     <TableRow key={row.id}>
-                      <TableCell className="font-mono text-xs">{row.code}</TableCell>
+                      <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>{row.code}</TableCell>
                       <TableCell>{row.order_number ?? "—"}</TableCell>
                       <TableCell>{row.customer_name ?? "—"}</TableCell>
-                      <TableCell className="text-right">{formatBRL(Number(row.order_total ?? 0))}</TableCell>
-                      <TableCell className="text-right font-medium">{formatBRL(Number(row.cashback_amount ?? 0))}</TableCell>
-                      <TableCell className="text-right">{formatBRL(Number(row.minimum_purchase ?? 0))}</TableCell>
+                      <TableCell align="right">{formatBRL(Number(row.order_total ?? 0))}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 500 }}>
+                        {formatBRL(Number(row.cashback_amount ?? 0))}
+                      </TableCell>
+                      <TableCell align="right">{formatBRL(Number(row.minimum_purchase ?? 0))}</TableCell>
                       <TableCell>{formatDate(row.starts_at)}</TableCell>
                       <TableCell>{formatDate(row.ends_at)}</TableCell>
                       <TableCell>
-                        <Badge className={STATUS_VARIANT[row.derivedStatus as CashbackCouponStatus]} variant="secondary">
-                          {CASHBACK_STATUS_LABEL[row.derivedStatus as CashbackCouponStatus]}
-                        </Badge>
+                        <Chip
+                          size="small"
+                          color={STATUS_CHIP_COLOR[row.derivedStatus as CashbackCouponStatus]}
+                          label={CASHBACK_STATUS_LABEL[row.derivedStatus as CashbackCouponStatus]}
+                        />
                       </TableCell>
-                      <TableCell className="max-w-[220px] truncate text-xs text-destructive" title={row.last_error ?? ""}>
+                      <TableCell
+                        sx={{
+                          maxWidth: 220,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          fontSize: 12,
+                          color: "error.main",
+                        }}
+                        title={row.last_error ?? ""}
+                      >
                         {row.last_error ?? ""}
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-            </div>
+            </TableContainer>
           )}
         </CardContent>
       </Card>
-    </div>
+    </Box>
   );
 }

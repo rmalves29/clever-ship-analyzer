@@ -3,11 +3,26 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertTriangle, Play, Pause, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Dialog from "@mui/material/Dialog";
+import DialogContent from "@mui/material/DialogContent";
+import Grid from "@mui/material/Grid";
+import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import type { ChipProps } from "@mui/material/Chip";
 import {
   getMetaAdsPulse,
   listMetaAdsRules,
@@ -20,18 +35,18 @@ import { brl } from "@/lib/crm-mock";
 import type { MetaAdsDatePreset, MetaAdsRule, AdPulseRow } from "@/lib/meta-ads.server";
 
 const pct = (v: number) => `${(v * 100).toFixed(2)}%`;
-const STATUS_CLASS: Record<string, string> = {
-  ACTIVE: "bg-success-soft text-success",
-  PAUSED: "bg-muted text-muted-foreground",
-  ARCHIVED: "bg-muted text-muted-foreground",
-  DELETED: "bg-critical-soft text-critical",
+const STATUS_COLOR: Record<string, ChipProps["color"]> = {
+  ACTIVE: "success",
+  PAUSED: "default",
+  ARCHIVED: "default",
+  DELETED: "error",
 };
 
 type Tone = "good" | "mid" | "bad";
-const TONE_CLASS: Record<Tone, string> = {
-  good: "bg-success-soft text-success",
-  mid: "bg-warning-soft text-warning",
-  bad: "bg-critical-soft text-critical",
+const TONE_SX: Record<Tone, string> = {
+  good: "success.main",
+  mid: "warning.main",
+  bad: "error.main",
 };
 
 /** Compara o valor do anúncio com a média do que está sendo exibido na tabela (não um benchmark
@@ -150,94 +165,127 @@ export function AdPulseTab({ datePreset }: { datePreset: MetaAdsDatePreset }) {
   }, [rows]);
 
   return (
-    <div className="mt-4">
-      <p className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+    <Box sx={{ mt: 2 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", borderRadius: 2, bgcolor: "action.hover", p: 1.5 }}>
         Sugestões baseadas em CPA, ROAS e volume de conversões — a decisão final é sua. Nenhuma ação é tomada
         automaticamente; pausar, reativar ou escalar é sempre um clique seu.
-      </p>
+      </Typography>
 
-      {isLoading && <p className="mt-4 text-center text-muted-foreground">Carregando...</p>}
+      {isLoading && (
+        <Typography align="center" color="text.secondary" sx={{ mt: 2 }}>
+          Carregando...
+        </Typography>
+      )}
       {!isLoading && pulseResult && !pulseResult.success && (
-        <p className="mt-4 text-center text-muted-foreground">{pulseResult.error}</p>
+        <Typography align="center" color="text.secondary" sx={{ mt: 2 }}>
+          {pulseResult.error}
+        </Typography>
       )}
 
       {result && (
-        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
-          <div className="rounded-xl border border-border bg-card p-4">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Sem retorno</p>
-            <p className="mt-1 text-2xl font-bold text-critical">{brl(result.noReturnSpend)}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">{result.noReturnCount} anúncio(s) com gasto e 0 compras</p>
-          </div>
-          <div className="rounded-xl border border-border bg-card p-4">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Upside estimado ao escalar</p>
-            <p className="mt-1 text-2xl font-bold text-success">{brl(result.upsideEstimate)}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">Estimativa a partir do ROAS acima da média — não é previsão</p>
-          </div>
-          <div className="rounded-xl border border-border bg-card p-4">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Investimento total</p>
-            <p className="mt-1 text-2xl font-bold">{brl(result.totalSpend)}</p>
-          </div>
-        </div>
+        <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
+          <Grid size={{ xs: 6, md: 4 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+                Sem retorno
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5, color: "error.main" }}>
+                {brl(result.noReturnSpend)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {result.noReturnCount} anúncio(s) com gasto e 0 compras
+              </Typography>
+            </Box>
+          </Grid>
+          <Grid size={{ xs: 6, md: 4 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+                Upside estimado ao escalar
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5, color: "success.main" }}>
+                {brl(result.upsideEstimate)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Estimativa a partir do ROAS acima da média — não é previsão
+              </Typography>
+            </Box>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+                Investimento total
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>
+                {brl(result.totalSpend)}
+              </Typography>
+            </Box>
+          </Grid>
+        </Grid>
       )}
 
-      <div className="mt-4 rounded-xl border border-border bg-card p-4">
-        <div className="flex items-center justify-between">
-          <p className="font-semibold">Regras automatizadas</p>
-          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setRuleOpen(true)}>
-            <Plus className="size-3.5" /> Criar regra
+      <Box sx={{ mt: 2, border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+        <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+          <Typography sx={{ fontWeight: 600 }}>Regras automatizadas</Typography>
+          <Button size="small" variant="outline" startIcon={<Plus size={14} />} onClick={() => setRuleOpen(true)}>
+            Criar regra
           </Button>
-        </div>
+        </Stack>
         {(!rules || rules.length === 0) && (
-          <p className="mt-2 text-sm text-muted-foreground">Nenhuma regra ativa — crie uma regra de CPA ou ROAS pra vigiar os anúncios.</p>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Nenhuma regra ativa — crie uma regra de CPA ou ROAS pra vigiar os anúncios.
+          </Typography>
         )}
         {rules && rules.length > 0 && (
-          <ul className="mt-2 space-y-1.5">
+          <Stack spacing={1} sx={{ mt: 1 }}>
             {rules.map((r) => (
-              <li key={r.id} className="flex items-center justify-between text-sm">
-                <span className={r.ativa ? "" : "text-muted-foreground line-through"}>{ruleLabel(r)}</span>
-                <div className="flex items-center gap-2">
-                  <Switch checked={r.ativa} onCheckedChange={(v) => handleToggleRule(r.id, v)} />
-                  <Button variant="ghost" size="icon" className="size-7" onClick={() => handleDeleteRule(r.id)}>
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-              </li>
+              <Stack key={r.id} direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+                <Typography variant="body2" sx={{ color: r.ativa ? "text.primary" : "text.secondary", textDecoration: r.ativa ? "none" : "line-through" }}>
+                  {ruleLabel(r)}
+                </Typography>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <Switch size="small" checked={r.ativa} onChange={(e) => handleToggleRule(r.id, e.target.checked)} />
+                  <IconButton size="small" onClick={() => handleDeleteRule(r.id)}>
+                    <Trash2 size={14} />
+                  </IconButton>
+                </Stack>
+              </Stack>
             ))}
-          </ul>
+          </Stack>
         )}
-      </div>
+      </Box>
 
-      <div className="mt-4 flex items-center justify-end">
-        <label className="flex items-center gap-2 text-sm">
-          <Switch checked={onlyActive} onCheckedChange={setOnlyActive} /> Só ativas
-        </label>
-      </div>
+      <Stack direction="row" sx={{ justifyContent: "flex-end", alignItems: "center", mt: 2 }} spacing={1}>
+        <Typography variant="body2">Só ativas</Typography>
+        <Switch checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} />
+      </Stack>
 
-      <div className="mt-2 overflow-x-auto rounded-xl border border-border">
-        <table className="w-full min-w-[1100px] text-sm">
-          <thead className="bg-muted/60 text-left text-xs uppercase tracking-wider text-muted-foreground">
-            <tr>
-              <th className="px-4 py-3 font-medium">Anúncio</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 text-right font-medium">Gasto</th>
-              <th className="px-4 py-3 text-right font-medium">% Conta</th>
-              <th className="px-4 py-3 text-right font-medium">CPM</th>
-              <th className="px-4 py-3 text-right font-medium">ThumbStop</th>
-              <th className="px-4 py-3 text-right font-medium">CTR</th>
-              <th className="px-4 py-3 text-right font-medium">CPS</th>
-              <th className="px-4 py-3 text-right font-medium">CVR</th>
-              <th className="px-4 py-3 text-right font-medium">Ticket</th>
-              <th className="px-4 py-3 text-right font-medium">CPA</th>
-              <th className="px-4 py-3 text-right font-medium">Compras</th>
-              <th className="px-4 py-3 text-right font-medium">ROAS</th>
-              <th className="px-4 py-3 text-right font-medium">Ação</th>
-            </tr>
-          </thead>
-          <tbody>
+      <TableContainer sx={{ mt: 1, border: "1px solid", borderColor: "divider", borderRadius: 2, overflowX: "auto" }}>
+        <Table size="small" sx={{ minWidth: 1100 }}>
+          <TableHead>
+            <TableRow>
+              <TableCell>Anúncio</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="right">Gasto</TableCell>
+              <TableCell align="right">% Conta</TableCell>
+              <TableCell align="right">CPM</TableCell>
+              <TableCell align="right">ThumbStop</TableCell>
+              <TableCell align="right">CTR</TableCell>
+              <TableCell align="right">CPS</TableCell>
+              <TableCell align="right">CVR</TableCell>
+              <TableCell align="right">Ticket</TableCell>
+              <TableCell align="right">CPA</TableCell>
+              <TableCell align="right">Compras</TableCell>
+              <TableCell align="right">ROAS</TableCell>
+              <TableCell align="right">Ação</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {rows.length === 0 && (
-              <tr>
-                <td colSpan={14} className="px-4 py-8 text-center text-muted-foreground">Nenhum anúncio nesse período.</td>
-              </tr>
+              <TableRow>
+                <TableCell colSpan={14} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                  Nenhum anúncio nesse período.
+                </TableCell>
+              </TableRow>
             )}
             {rows.map((r) => {
               const cpsTone = metricTone(r.cps, averages.cps, true);
@@ -245,86 +293,87 @@ export function AdPulseTab({ datePreset }: { datePreset: MetaAdsDatePreset }) {
               const ticketTone = metricTone(r.ticket, averages.ticket, false);
               const roasTone = metricTone(r.roas, averages.roas, false);
               return (
-                <tr key={r.id} className={`border-t border-border ${r.brokenRules.length > 0 ? "bg-critical-soft/30" : ""}`}>
-                  <td className="max-w-[260px] px-4 py-3 font-medium">
-                    <div className="flex items-center gap-1.5">
-                      {r.brokenRules.length > 0 && (
-                        <AlertTriangle className="size-3.5 shrink-0 text-critical" />
-                      )}
-                      <span className="truncate" title={r.brokenRules.length > 0 ? r.brokenRules.map(ruleLabel).join(" · ") : r.name}>
+                <TableRow key={r.id} sx={r.brokenRules.length > 0 ? { bgcolor: "error.50" } : undefined}>
+                  <TableCell sx={{ maxWidth: 260, fontWeight: 500 }}>
+                    <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+                      {r.brokenRules.length > 0 && <AlertTriangle size={14} color="var(--mui-palette-error-main, #EA5455)" style={{ flexShrink: 0 }} />}
+                      <Typography
+                        variant="body2"
+                        sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        title={r.brokenRules.length > 0 ? r.brokenRules.map(ruleLabel).join(" · ") : r.name}
+                      >
                         {r.name}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_CLASS[r.status] ?? "bg-muted text-muted-foreground"}`}>
-                      {r.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">{brl(r.spend)}</td>
-                  <td className="px-4 py-3 text-right">{pct(r.pctAccount)}</td>
-                  <td className="px-4 py-3 text-right">{brl(r.cpm)}</td>
-                  <td className="px-4 py-3 text-right">{pct(r.thumbstop)}</td>
-                  <td className="px-4 py-3 text-right">{pct(r.ctr / 100)}</td>
-                  <td className={`px-4 py-3 text-right font-medium ${TONE_CLASS[cpsTone]}`}>{brl(r.cps)}</td>
-                  <td className={`px-4 py-3 text-right font-medium ${TONE_CLASS[cvrTone]}`}>{pct(r.cvr)}</td>
-                  <td className={`px-4 py-3 text-right font-medium ${TONE_CLASS[ticketTone]}`}>{brl(r.ticket)}</td>
-                  <td className="px-4 py-3 text-right">{brl(r.cpa)}</td>
-                  <td className="px-4 py-3 text-right">{r.purchases}</td>
-                  <td className={`px-4 py-3 text-right font-semibold ${TONE_CLASS[roasTone]}`}>{r.roas.toFixed(2)}x</td>
-                  <td className="px-4 py-3 text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8"
-                      title={r.status === "ACTIVE" ? "Pausar" : "Ativar"}
-                      onClick={() => handleToggleStatus(r)}
-                    >
-                      {r.status === "ACTIVE" ? <Pause className="size-4" /> : <Play className="size-4" />}
-                    </Button>
-                  </td>
-                </tr>
+                      </Typography>
+                    </Stack>
+                  </TableCell>
+                  <TableCell>
+                    <Chip size="small" color={STATUS_COLOR[r.status] ?? "default"} label={r.status} />
+                  </TableCell>
+                  <TableCell align="right">{brl(r.spend)}</TableCell>
+                  <TableCell align="right">{pct(r.pctAccount)}</TableCell>
+                  <TableCell align="right">{brl(r.cpm)}</TableCell>
+                  <TableCell align="right">{pct(r.thumbstop)}</TableCell>
+                  <TableCell align="right">{pct(r.ctr / 100)}</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 600, color: TONE_SX[cpsTone] }}>{brl(r.cps)}</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 600, color: TONE_SX[cvrTone] }}>{pct(r.cvr)}</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 600, color: TONE_SX[ticketTone] }}>{brl(r.ticket)}</TableCell>
+                  <TableCell align="right">{brl(r.cpa)}</TableCell>
+                  <TableCell align="right">{r.purchases}</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700, color: TONE_SX[roasTone] }}>{r.roas.toFixed(2)}x</TableCell>
+                  <TableCell align="right">
+                    <IconButton size="small" title={r.status === "ACTIVE" ? "Pausar" : "Ativar"} onClick={() => handleToggleStatus(r)}>
+                      {r.status === "ACTIVE" ? <Pause size={16} /> : <Play size={16} />}
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </TableContainer>
 
-      <Dialog open={ruleOpen} onOpenChange={setRuleOpen}>
-        <DialogContent className="max-w-sm">
-          <h2 className="text-lg font-semibold">Nova regra</h2>
-          <p className="text-sm text-muted-foreground">Anúncios que baterem essa condição ficam destacados na tabela.</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Métrica</label>
-              <Select value={ruleMetric} onValueChange={(v) => setRuleMetric(v as typeof ruleMetric)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="roas">ROAS</SelectItem>
-                  <SelectItem value="cpa">CPA</SelectItem>
-                </SelectContent>
+      <Dialog open={ruleOpen} onClose={() => setRuleOpen(false)} maxWidth="xs" fullWidth>
+        <DialogContent>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Nova regra
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Anúncios que baterem essa condição ficam destacados na tabela.
+          </Typography>
+          <Grid container spacing={1.5}>
+            <Grid size={6}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                Métrica
+              </Typography>
+              <Select size="small" fullWidth value={ruleMetric} onChange={(e) => setRuleMetric(e.target.value as typeof ruleMetric)}>
+                <MenuItem value="roas">ROAS</MenuItem>
+                <MenuItem value="cpa">CPA</MenuItem>
               </Select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Condição</label>
-              <Select value={ruleOperator} onValueChange={(v) => setRuleOperator(v as typeof ruleOperator)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="lt">Abaixo de</SelectItem>
-                  <SelectItem value="gt">Acima de</SelectItem>
-                </SelectContent>
+            </Grid>
+            <Grid size={6}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                Condição
+              </Typography>
+              <Select size="small" fullWidth value={ruleOperator} onChange={(e) => setRuleOperator(e.target.value as typeof ruleOperator)}>
+                <MenuItem value="lt">Abaixo de</MenuItem>
+                <MenuItem value="gt">Acima de</MenuItem>
               </Select>
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Valor {ruleMetric === "roas" ? "(x)" : "(R$)"}</label>
-            <Input value={ruleValue} onChange={(e) => setRuleValue(e.target.value)} placeholder={ruleMetric === "roas" ? "ex: 2" : "ex: 50"} />
-          </div>
-          <Button onClick={handleCreateRule} disabled={creating} className="w-full">
+            </Grid>
+          </Grid>
+          <TextField
+            fullWidth
+            size="small"
+            sx={{ mt: 1.5 }}
+            label={`Valor ${ruleMetric === "roas" ? "(x)" : "(R$)"}`}
+            value={ruleValue}
+            onChange={(e) => setRuleValue(e.target.value)}
+            placeholder={ruleMetric === "roas" ? "ex: 2" : "ex: 50"}
+          />
+          <Button variant="contained" fullWidth sx={{ mt: 2 }} onClick={handleCreateRule} disabled={creating}>
             {creating ? "Criando..." : "Criar regra"}
           </Button>
         </DialogContent>
       </Dialog>
-    </div>
+    </Box>
   );
 }

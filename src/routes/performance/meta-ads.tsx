@@ -4,9 +4,25 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { RefreshCw, Megaphone, Layers, Image as ImageIcon, Play, Pause, Clock, TrendingUp, Activity, Sparkles, Calculator, Bot } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Chip from "@mui/material/Chip";
+import Grid from "@mui/material/Grid";
+import IconButton from "@mui/material/IconButton";
+import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
+import Tab from "@mui/material/Tab";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Tabs from "@mui/material/Tabs";
+import Typography from "@mui/material/Typography";
+import type { ChipProps } from "@mui/material/Chip";
 import {
   getMetaAdsConnectionStatus,
   getMetaAdsSummary,
@@ -42,11 +58,11 @@ const DATE_PRESETS: { value: MetaAdsDatePreset; label: string }[] = [
   { value: "last_month", label: "Mês passado" },
 ];
 
-const STATUS_CLASS: Record<string, string> = {
-  ACTIVE: "bg-success-soft text-success",
-  PAUSED: "bg-muted text-muted-foreground",
-  ARCHIVED: "bg-muted text-muted-foreground",
-  DELETED: "bg-critical-soft text-critical",
+const STATUS_COLOR: Record<string, ChipProps["color"]> = {
+  ACTIVE: "success",
+  PAUSED: "default",
+  ARCHIVED: "default",
+  DELETED: "error",
 };
 
 const ACTION_LABEL: Record<DaypartAction, string> = {
@@ -56,11 +72,11 @@ const ACTION_LABEL: Record<DaypartAction, string> = {
   zero_venda: "Zero venda",
 };
 
-const ACTION_CLASS: Record<DaypartAction, string> = {
-  escalar: "bg-success-soft text-success",
-  reduzir: "bg-warning-soft text-warning",
-  cortar: "bg-critical-soft text-critical",
-  zero_venda: "bg-critical-soft text-critical",
+const ACTION_COLOR: Record<DaypartAction, ChipProps["color"]> = {
+  escalar: "success",
+  reduzir: "warning",
+  cortar: "error",
+  zero_venda: "error",
 };
 
 const pct = (v: number) => `${(v * 100).toFixed(2)}%`;
@@ -68,11 +84,21 @@ const hourLabel = (h: number) => `${String(h).padStart(2, "0")}h`;
 
 function StatCard({ label, value, hint }: { label: string; value: string; hint?: string | undefined }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-bold">{value}</p>
-      {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
-    </div>
+    <Card variant="outlined">
+      <CardContent>
+        <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+          {label}
+        </Typography>
+        <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>
+          {value}
+        </Typography>
+        {hint && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
+            {hint}
+          </Typography>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -134,15 +160,17 @@ function MetaAdsPage() {
 
   if (!loadingConnection && !connection?.connected) {
     return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold">Meta Ads</h1>
-        <div className="mt-6 rounded-xl border border-border bg-card p-8 text-center">
-          <p className="font-medium">Meta Ads ainda não conectado.</p>
-          <p className="mt-1 text-sm text-muted-foreground">
+      <Box sx={{ p: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+          Meta Ads
+        </Typography>
+        <Card variant="outlined" sx={{ mt: 3, p: 4, textAlign: "center" }}>
+          <Typography sx={{ fontWeight: 500 }}>Meta Ads ainda não conectado.</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             {connection?.error || "Configure o token de acesso e a conta de anúncios em Configurações."}
-          </p>
-        </div>
-      </div>
+          </Typography>
+        </Card>
+      </Box>
     );
   }
 
@@ -151,21 +179,24 @@ function MetaAdsPage() {
   const maxBlockSpend = daypart ? Math.max(...daypart.blocks.map((b) => b.spend), 1) : 1;
 
   return (
-    <div className="p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Meta Ads</h1>
-          <p className="text-sm text-muted-foreground">
+    <Box sx={{ p: 3 }}>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>
+            Meta Ads
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
             {loadingConnection
               ? "Verificando conexão..."
               : connection?.accountName
                 ? `${connection.accountName} · ${connection.accountId}`
                 : "Conectado"}
-          </p>
-        </div>
+          </Typography>
+        </Box>
         <Button
           variant="outline"
-          size="sm"
+          size="small"
+          startIcon={<RefreshCw size={14} />}
           onClick={() => {
             if (view === "gestao") refetchRows();
             else if (view === "dayparting") refetchDaypart();
@@ -174,154 +205,144 @@ function MetaAdsPage() {
             else if (view === "ia") queryClient.invalidateQueries({ queryKey: ["meta-ads-analysis"] });
             else queryClient.invalidateQueries({ queryKey: ["meta-ads-planning-baseline"] });
           }}
-          className="gap-2"
         >
-          <RefreshCw className="size-3.5" /> Atualizar
+          Atualizar
         </Button>
-      </div>
+      </Stack>
 
-      <div className="mt-4">
-        <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
-          <TabsList>
-            <TabsTrigger value="gestao" className="gap-1.5">
-              <Megaphone className="size-3.5" /> Gestão
-            </TabsTrigger>
-            <TabsTrigger value="dayparting" className="gap-1.5">
-              <Clock className="size-3.5" /> Dayparting
-            </TabsTrigger>
-            <TabsTrigger value="adpulse" className="gap-1.5">
-              <Activity className="size-3.5" /> Ad Pulse
-            </TabsTrigger>
-            <TabsTrigger value="criativos" className="gap-1.5">
-              <Sparkles className="size-3.5" /> Insights Criativos
-            </TabsTrigger>
-            <TabsTrigger value="planejamento" className="gap-1.5">
-              <Calculator className="size-3.5" /> Planejamento
-            </TabsTrigger>
-            <TabsTrigger value="ia" className="gap-1.5">
-              <Bot className="size-3.5" /> Análise IA
-            </TabsTrigger>
-          </TabsList>
+      <Box sx={{ mt: 2, borderBottom: 1, borderColor: "divider" }}>
+        <Tabs value={view} onChange={(_, v) => setView(v)} variant="scrollable" scrollButtons="auto">
+          <Tab value="gestao" icon={<Megaphone size={14} />} iconPosition="start" label="Gestão" sx={{ minHeight: 40, minWidth: "auto" }} />
+          <Tab value="dayparting" icon={<Clock size={14} />} iconPosition="start" label="Dayparting" sx={{ minHeight: 40, minWidth: "auto" }} />
+          <Tab value="adpulse" icon={<Activity size={14} />} iconPosition="start" label="Ad Pulse" sx={{ minHeight: 40, minWidth: "auto" }} />
+          <Tab value="criativos" icon={<Sparkles size={14} />} iconPosition="start" label="Insights Criativos" sx={{ minHeight: 40, minWidth: "auto" }} />
+          <Tab value="planejamento" icon={<Calculator size={14} />} iconPosition="start" label="Planejamento" sx={{ minHeight: 40, minWidth: "auto" }} />
+          <Tab value="ia" icon={<Bot size={14} />} iconPosition="start" label="Análise IA" sx={{ minHeight: 40, minWidth: "auto" }} />
         </Tabs>
-      </div>
+      </Box>
 
       {view !== "planejamento" && (
-      <div className="mt-4 flex flex-wrap gap-1.5">
-        {DATE_PRESETS.map((p) => (
-          <Button
-            key={p.value}
-            variant={datePreset === p.value ? "default" : "outline"}
-            size="sm"
-            onClick={() => setDatePreset(p.value)}
-          >
-            {p.label}
-          </Button>
-        ))}
-      </div>
+        <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
+          {DATE_PRESETS.map((p) => (
+            <Button key={p.value} variant={datePreset === p.value ? "contained" : "outline"} size="small" onClick={() => setDatePreset(p.value)}>
+              {p.label}
+            </Button>
+          ))}
+        </Stack>
       )}
 
       {view === "gestao" && (
         <>
-          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
-            <StatCard label="Investimento" value={loadingSummary ? "…" : brl(summary?.spend ?? 0)} />
-            <StatCard label="Faturado" value={loadingSummary ? "…" : brl(summary?.revenue ?? 0)} />
-            <StatCard label="ROAS" value={loadingSummary ? "…" : `${(summary?.roas ?? 0).toFixed(2)}x`} />
-            <StatCard label="Compras" value={loadingSummary ? "…" : String(summary?.purchases ?? 0)} />
-            <StatCard label="CVR" value={loadingSummary ? "…" : pct(summary?.cvr ?? 0)} hint="Compras ÷ cliques no link" />
-            <StatCard label="Ticket médio" value={loadingSummary ? "…" : brl(summary?.ticket ?? 0)} />
-            <StatCard label="CPA" value={loadingSummary ? "…" : brl(summary?.cpa ?? 0)} />
-          </div>
+          <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
+            <Grid size={{ xs: 6, md: 3, lg: 12 / 7 }}>
+              <StatCard label="Investimento" value={loadingSummary ? "…" : brl(summary?.spend ?? 0)} />
+            </Grid>
+            <Grid size={{ xs: 6, md: 3, lg: 12 / 7 }}>
+              <StatCard label="Faturado" value={loadingSummary ? "…" : brl(summary?.revenue ?? 0)} />
+            </Grid>
+            <Grid size={{ xs: 6, md: 3, lg: 12 / 7 }}>
+              <StatCard label="ROAS" value={loadingSummary ? "…" : `${(summary?.roas ?? 0).toFixed(2)}x`} />
+            </Grid>
+            <Grid size={{ xs: 6, md: 3, lg: 12 / 7 }}>
+              <StatCard label="Compras" value={loadingSummary ? "…" : String(summary?.purchases ?? 0)} />
+            </Grid>
+            <Grid size={{ xs: 6, md: 3, lg: 12 / 7 }}>
+              <StatCard label="CVR" value={loadingSummary ? "…" : pct(summary?.cvr ?? 0)} hint="Compras ÷ cliques no link" />
+            </Grid>
+            <Grid size={{ xs: 6, md: 3, lg: 12 / 7 }}>
+              <StatCard label="Ticket médio" value={loadingSummary ? "…" : brl(summary?.ticket ?? 0)} />
+            </Grid>
+            <Grid size={{ xs: 6, md: 3, lg: 12 / 7 }}>
+              <StatCard label="CPA" value={loadingSummary ? "…" : brl(summary?.cpa ?? 0)} />
+            </Grid>
+          </Grid>
 
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-            <Tabs value={level} onValueChange={(v) => setLevel(v as MetaAdsLevel)}>
-              <TabsList>
-                <TabsTrigger value="campaign" className="gap-1.5">
-                  <Megaphone className="size-3.5" /> Campanhas
-                </TabsTrigger>
-                <TabsTrigger value="adset" className="gap-1.5">
-                  <Layers className="size-3.5" /> Conjuntos
-                </TabsTrigger>
-                <TabsTrigger value="ad" className="gap-1.5">
-                  <ImageIcon className="size-3.5" /> Anúncios
-                </TabsTrigger>
-              </TabsList>
+          <Stack direction="row" spacing={2} sx={{ mt: 3, flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+            <Tabs value={level} onChange={(_, v) => setLevel(v)} sx={{ minHeight: 36 }}>
+              <Tab value="campaign" icon={<Megaphone size={14} />} iconPosition="start" label="Campanhas" sx={{ minHeight: 36, minWidth: "auto" }} />
+              <Tab value="adset" icon={<Layers size={14} />} iconPosition="start" label="Conjuntos" sx={{ minHeight: 36, minWidth: "auto" }} />
+              <Tab value="ad" icon={<ImageIcon size={14} />} iconPosition="start" label="Anúncios" sx={{ minHeight: 36, minWidth: "auto" }} />
             </Tabs>
-            <label className="flex items-center gap-2 text-sm">
-              <Switch checked={onlyActive} onCheckedChange={setOnlyActive} /> Só ativas
-            </label>
-          </div>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+              <Typography variant="body2">Só ativas</Typography>
+              <Switch checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} />
+            </Stack>
+          </Stack>
 
-          <div className="mt-3 overflow-x-auto rounded-xl border border-border">
-            <table className="w-full min-w-[1000px] text-sm">
-              <thead className="bg-muted/60 text-left text-xs uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Nome</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 text-right font-medium">Gasto</th>
-                  <th className="px-4 py-3 text-right font-medium">Impr.</th>
-                  <th className="px-4 py-3 text-right font-medium">CTR</th>
-                  <th className="px-4 py-3 text-right font-medium">CPM</th>
-                  <th className="px-4 py-3 text-right font-medium">CPS</th>
-                  <th className="px-4 py-3 text-right font-medium">CVR</th>
-                  <th className="px-4 py-3 text-right font-medium">Ticket</th>
-                  <th className="px-4 py-3 text-right font-medium">CPA</th>
-                  <th className="px-4 py-3 text-right font-medium">Compras</th>
-                  <th className="px-4 py-3 text-right font-medium">ROAS</th>
-                  <th className="px-4 py-3 text-right font-medium">Ação</th>
-                </tr>
-              </thead>
-              <tbody>
+          <TableContainer sx={{ mt: 1.5, border: "1px solid", borderColor: "divider", borderRadius: 2, overflowX: "auto" }}>
+            <Table size="small" sx={{ minWidth: 1000 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Nome</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Gasto</TableCell>
+                  <TableCell align="right">Impr.</TableCell>
+                  <TableCell align="right">CTR</TableCell>
+                  <TableCell align="right">CPM</TableCell>
+                  <TableCell align="right">CPS</TableCell>
+                  <TableCell align="right">CVR</TableCell>
+                  <TableCell align="right">Ticket</TableCell>
+                  <TableCell align="right">CPA</TableCell>
+                  <TableCell align="right">Compras</TableCell>
+                  <TableCell align="right">ROAS</TableCell>
+                  <TableCell align="right">Ação</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {loadingRows && (
-                  <tr>
-                    <td colSpan={13} className="px-4 py-8 text-center text-muted-foreground">Carregando...</td>
-                  </tr>
+                  <TableRow>
+                    <TableCell colSpan={13} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                      Carregando...
+                    </TableCell>
+                  </TableRow>
                 )}
                 {!loadingRows && rowsResult && !rowsResult.success && (
-                  <tr>
-                    <td colSpan={13} className="px-4 py-8 text-center text-muted-foreground">{rowsResult.error}</td>
-                  </tr>
+                  <TableRow>
+                    <TableCell colSpan={13} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                      {rowsResult.error}
+                    </TableCell>
+                  </TableRow>
                 )}
                 {!loadingRows && rowsResult?.success && rows.length === 0 && (
-                  <tr>
-                    <td colSpan={13} className="px-4 py-8 text-center text-muted-foreground">Nenhum resultado nesse período.</td>
-                  </tr>
+                  <TableRow>
+                    <TableCell colSpan={13} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                      Nenhum resultado nesse período.
+                    </TableCell>
+                  </TableRow>
                 )}
                 {rows.map((r) => (
-                  <tr key={r.id} className="border-t border-border">
-                    <td className="max-w-[280px] truncate px-4 py-3 font-medium" title={r.name}>{r.name}</td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_CLASS[r.status] ?? "bg-muted text-muted-foreground"}`}>
-                        {r.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">{brl(r.spend)}</td>
-                    <td className="px-4 py-3 text-right">{r.impressions.toLocaleString("pt-BR")}</td>
-                    <td className="px-4 py-3 text-right">{pct(r.ctr / 100)}</td>
-                    <td className="px-4 py-3 text-right">{brl(r.cpm)}</td>
-                    <td className="px-4 py-3 text-right">{brl(r.cps)}</td>
-                    <td className="px-4 py-3 text-right">{pct(r.cvr)}</td>
-                    <td className="px-4 py-3 text-right">{brl(r.ticket)}</td>
-                    <td className="px-4 py-3 text-right">{brl(r.cpa)}</td>
-                    <td className="px-4 py-3 text-right">{r.purchases}</td>
-                    <td className={`px-4 py-3 text-right font-semibold ${r.roas >= 2 ? "text-success" : r.roas > 0 ? "text-warning" : "text-critical"}`}>
+                  <TableRow key={r.id}>
+                    <TableCell sx={{ maxWidth: 280, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.name}>
+                      {r.name}
+                    </TableCell>
+                    <TableCell>
+                      <Chip size="small" color={STATUS_COLOR[r.status] ?? "default"} label={r.status} />
+                    </TableCell>
+                    <TableCell align="right">{brl(r.spend)}</TableCell>
+                    <TableCell align="right">{r.impressions.toLocaleString("pt-BR")}</TableCell>
+                    <TableCell align="right">{pct(r.ctr / 100)}</TableCell>
+                    <TableCell align="right">{brl(r.cpm)}</TableCell>
+                    <TableCell align="right">{brl(r.cps)}</TableCell>
+                    <TableCell align="right">{pct(r.cvr)}</TableCell>
+                    <TableCell align="right">{brl(r.ticket)}</TableCell>
+                    <TableCell align="right">{brl(r.cpa)}</TableCell>
+                    <TableCell align="right">{r.purchases}</TableCell>
+                    <TableCell
+                      align="right"
+                      sx={{ fontWeight: 700, color: r.roas >= 2 ? "success.main" : r.roas > 0 ? "warning.main" : "error.main" }}
+                    >
                       {r.roas.toFixed(2)}x
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8"
-                        title={r.status === "ACTIVE" ? "Pausar" : "Ativar"}
-                        onClick={() => handleToggleStatus(r)}
-                      >
-                        {r.status === "ACTIVE" ? <Pause className="size-4" /> : <Play className="size-4" />}
-                      </Button>
-                    </td>
-                  </tr>
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton size="small" title={r.status === "ACTIVE" ? "Pausar" : "Ativar"} onClick={() => handleToggleStatus(r)}>
+                        {r.status === "ACTIVE" ? <Pause size={16} /> : <Play size={16} />}
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+            </Table>
+          </TableContainer>
 
           <GestaoInsights datePreset={datePreset} summary={summary} />
         </>
@@ -329,112 +350,137 @@ function MetaAdsPage() {
 
       {view === "dayparting" && (
         <>
-          {loadingDaypart && <p className="mt-6 text-center text-muted-foreground">Carregando...</p>}
+          {loadingDaypart && (
+            <Typography align="center" color="text.secondary" sx={{ mt: 3 }}>
+              Carregando...
+            </Typography>
+          )}
           {!loadingDaypart && daypartResult && !daypartResult.success && (
-            <p className="mt-6 text-center text-muted-foreground">{daypartResult.error}</p>
+            <Typography align="center" color="text.secondary" sx={{ mt: 3 }}>
+              {daypartResult.error}
+            </Typography>
           )}
           {daypart && (
             <>
-              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-                <StatCard label="Investimento no período" value={brl(daypart.totalSpend)} />
-                <StatCard label="ROAS da conta" value={`${daypart.accountRoas.toFixed(2)}x`} />
-                <StatCard
-                  label="Melhor horário"
-                  value={daypart.bestHour ? hourLabel(daypart.bestHour.hour) : "—"}
-                  hint={daypart.bestHour ? `${daypart.bestHour.roas.toFixed(2)}x` : undefined}
-                />
-                <StatCard
-                  label="Verba em horas sem venda"
-                  value={brl(daypart.wasteSpend)}
-                  hint={daypart.worstHour ? `Pior: ${hourLabel(daypart.worstHour.hour)}` : undefined}
-                />
-              </div>
+              <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
+                <Grid size={{ xs: 6, md: 3 }}>
+                  <StatCard label="Investimento no período" value={brl(daypart.totalSpend)} />
+                </Grid>
+                <Grid size={{ xs: 6, md: 3 }}>
+                  <StatCard label="ROAS da conta" value={`${daypart.accountRoas.toFixed(2)}x`} />
+                </Grid>
+                <Grid size={{ xs: 6, md: 3 }}>
+                  <StatCard
+                    label="Melhor horário"
+                    value={daypart.bestHour ? hourLabel(daypart.bestHour.hour) : "—"}
+                    hint={daypart.bestHour ? `${daypart.bestHour.roas.toFixed(2)}x` : undefined}
+                  />
+                </Grid>
+                <Grid size={{ xs: 6, md: 3 }}>
+                  <StatCard
+                    label="Verba em horas sem venda"
+                    value={brl(daypart.wasteSpend)}
+                    hint={daypart.worstHour ? `Pior: ${hourLabel(daypart.worstHour.hour)}` : undefined}
+                  />
+                </Grid>
+              </Grid>
 
-              <div className="mt-6 rounded-xl border border-border bg-card p-4">
-                <p className="flex items-center gap-1.5 font-semibold">
-                  <TrendingUp className="size-4" /> Eficiência por bloco do dia
-                </p>
-                <p className="text-xs text-muted-foreground">Onde a verba está indo e onde ela realmente converte.</p>
-                <div className="mt-3 overflow-x-auto">
-                  <table className="w-full min-w-[600px] text-sm">
-                    <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground">
-                      <tr>
-                        <th className="py-2 pr-4 font-medium">Bloco do dia</th>
-                        <th className="py-2 pr-4 text-right font-medium">Gasto</th>
-                        <th className="py-2 pr-4 text-right font-medium">% Verba</th>
-                        <th className="py-2 pr-4 text-right font-medium">Compras</th>
-                        <th className="py-2 pr-4 text-right font-medium">CPA</th>
-                        <th className="py-2 text-right font-medium">ROAS</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+              <Box sx={{ mt: 3, border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+                <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+                  <TrendingUp size={16} />
+                  <Typography sx={{ fontWeight: 600 }}>Eficiência por bloco do dia</Typography>
+                </Stack>
+                <Typography variant="caption" color="text.secondary">
+                  Onde a verba está indo e onde ela realmente converte.
+                </Typography>
+                <TableContainer sx={{ mt: 1.5, overflowX: "auto" }}>
+                  <Table size="small" sx={{ minWidth: 600 }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Bloco do dia</TableCell>
+                        <TableCell align="right">Gasto</TableCell>
+                        <TableCell align="right">% Verba</TableCell>
+                        <TableCell align="right">Compras</TableCell>
+                        <TableCell align="right">CPA</TableCell>
+                        <TableCell align="right">ROAS</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
                       {daypart.blocks.map((b) => (
-                        <tr key={b.label} className="border-t border-border">
-                          <td className="py-2 pr-4 font-medium">{b.label}</td>
-                          <td className="py-2 pr-4 text-right">{brl(b.spend)}</td>
-                          <td className="py-2 pr-4 text-right">{pct(b.pctSpend)}</td>
-                          <td className="py-2 pr-4 text-right">{b.purchases}</td>
-                          <td className="py-2 pr-4 text-right">{brl(b.cpa)}</td>
-                          <td className={`py-2 text-right font-semibold ${b.roas >= daypart.accountRoas ? "text-success" : "text-warning"}`}>
+                        <TableRow key={b.label}>
+                          <TableCell sx={{ fontWeight: 500 }}>{b.label}</TableCell>
+                          <TableCell align="right">{brl(b.spend)}</TableCell>
+                          <TableCell align="right">{pct(b.pctSpend)}</TableCell>
+                          <TableCell align="right">{b.purchases}</TableCell>
+                          <TableCell align="right">{brl(b.cpa)}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700, color: b.roas >= daypart.accountRoas ? "success.main" : "warning.main" }}>
                             {b.roas.toFixed(2)}x
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="mt-3 space-y-1.5">
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+                <Stack spacing={1} sx={{ mt: 1.5 }}>
                   {daypart.blocks.map((b) => (
-                    <div key={b.label} className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="w-28 shrink-0">{b.label}</span>
-                      <div className="h-2 flex-1 rounded-full bg-muted">
-                        <div
-                          className={`h-2 rounded-full ${b.roas >= daypart.accountRoas ? "bg-success" : "bg-warning"}`}
-                          style={{ width: `${Math.max(2, (b.spend / maxBlockSpend) * 100)}%` }}
+                    <Stack key={b.label} direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ width: 112, flexShrink: 0 }}>
+                        {b.label}
+                      </Typography>
+                      <Box sx={{ height: 6, flex: 1, borderRadius: 999, bgcolor: "action.hover" }}>
+                        <Box
+                          sx={{
+                            height: 6,
+                            borderRadius: 999,
+                            bgcolor: b.roas >= daypart.accountRoas ? "success.main" : "warning.main",
+                            width: `${Math.max(2, (b.spend / maxBlockSpend) * 100)}%`,
+                          }}
                         />
-                      </div>
-                      <span className="w-24 shrink-0 text-right">{pct(b.pctSpend)} · {b.roas.toFixed(2)}x</span>
-                    </div>
+                      </Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ width: 96, flexShrink: 0, textAlign: "right" }}>
+                        {pct(b.pctSpend)} · {b.roas.toFixed(2)}x
+                      </Typography>
+                    </Stack>
                   ))}
-                </div>
-              </div>
+                </Stack>
+              </Box>
 
-              <div className="mt-6 rounded-xl border border-border bg-card p-4">
-                <p className="font-semibold">Hora a hora</p>
-                <p className="text-xs text-muted-foreground">Ações sugeridas comparando o ROAS da hora com o ROAS da conta ({daypart.accountRoas.toFixed(2)}x).</p>
-                <div className="mt-3 overflow-x-auto">
-                  <table className="w-full min-w-[640px] text-sm">
-                    <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground">
-                      <tr>
-                        <th className="py-2 pr-4 font-medium">Hora</th>
-                        <th className="py-2 pr-4 text-right font-medium">Gasto</th>
-                        <th className="py-2 pr-4 text-right font-medium">% Verba</th>
-                        <th className="py-2 pr-4 text-right font-medium">Compras</th>
-                        <th className="py-2 pr-4 text-right font-medium">CPA</th>
-                        <th className="py-2 pr-4 text-right font-medium">ROAS</th>
-                        <th className="py-2 text-right font-medium">Ação</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+              <Box sx={{ mt: 3, border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+                <Typography sx={{ fontWeight: 600 }}>Hora a hora</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Ações sugeridas comparando o ROAS da hora com o ROAS da conta ({daypart.accountRoas.toFixed(2)}x).
+                </Typography>
+                <TableContainer sx={{ mt: 1.5, overflowX: "auto" }}>
+                  <Table size="small" sx={{ minWidth: 640 }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Hora</TableCell>
+                        <TableCell align="right">Gasto</TableCell>
+                        <TableCell align="right">% Verba</TableCell>
+                        <TableCell align="right">Compras</TableCell>
+                        <TableCell align="right">CPA</TableCell>
+                        <TableCell align="right">ROAS</TableCell>
+                        <TableCell align="right">Ação</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
                       {daypart.hours.map((h) => (
-                        <tr key={h.hour} className="border-t border-border">
-                          <td className="py-2 pr-4">{hourLabel(h.hour)}</td>
-                          <td className="py-2 pr-4 text-right">{brl(h.spend)}</td>
-                          <td className="py-2 pr-4 text-right">{pct(h.pctSpend)}</td>
-                          <td className="py-2 pr-4 text-right">{h.purchases}</td>
-                          <td className="py-2 pr-4 text-right">{h.cpa > 0 ? brl(h.cpa) : "—"}</td>
-                          <td className="py-2 pr-4 text-right">{h.roas > 0 ? `${h.roas.toFixed(2)}x` : "—"}</td>
-                          <td className="py-2 text-right">
-                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ACTION_CLASS[h.action]}`}>
-                              {ACTION_LABEL[h.action]}
-                            </span>
-                          </td>
-                        </tr>
+                        <TableRow key={h.hour}>
+                          <TableCell>{hourLabel(h.hour)}</TableCell>
+                          <TableCell align="right">{brl(h.spend)}</TableCell>
+                          <TableCell align="right">{pct(h.pctSpend)}</TableCell>
+                          <TableCell align="right">{h.purchases}</TableCell>
+                          <TableCell align="right">{h.cpa > 0 ? brl(h.cpa) : "—"}</TableCell>
+                          <TableCell align="right">{h.roas > 0 ? `${h.roas.toFixed(2)}x` : "—"}</TableCell>
+                          <TableCell align="right">
+                            <Chip size="small" color={ACTION_COLOR[h.action]} label={ACTION_LABEL[h.action]} />
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
             </>
           )}
         </>
@@ -444,6 +490,6 @@ function MetaAdsPage() {
       {view === "criativos" && <InsightsCriativosTab datePreset={datePreset} />}
       {view === "planejamento" && <PlanejamentoTab />}
       {view === "ia" && <MetaAdsAiTab datePreset={datePreset} />}
-    </div>
+    </Box>
   );
 }

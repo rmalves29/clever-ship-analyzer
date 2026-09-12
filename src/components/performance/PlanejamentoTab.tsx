@@ -3,8 +3,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Activity, CheckCircle2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Grid from "@mui/material/Grid";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import { getMetaAdsPlanningBaseline, getMetaAdsPlanningRanges, getMetaAdsPlan, saveMetaAdsPlan } from "@/lib/meta-ads.functions";
 import { brl } from "@/lib/crm-mock";
 import type { PlanBaseline, PlanRanges, PlanRange } from "@/lib/meta-ads.server";
@@ -39,11 +43,9 @@ function RangeBar({ range, value }: { range: PlanRange; value: number }) {
   const clamped = Math.min(range.max, Math.max(range.min, value));
   const posPct = ((clamped - range.min) / (range.max - range.min)) * 100;
   return (
-    <div className="mt-2">
-      <div className="relative h-1.5 rounded-full bg-muted">
-        <div className="absolute -top-0.5 h-2.5 w-0.5 rounded-full bg-foreground" style={{ left: `${posPct}%` }} />
-      </div>
-    </div>
+    <Box sx={{ mt: 1, position: "relative", height: 6, borderRadius: 999, bgcolor: "action.hover" }}>
+      <Box sx={{ position: "absolute", top: -2, height: 10, width: 2, borderRadius: 999, bgcolor: "text.primary", left: `${posPct}%` }} />
+    </Box>
   );
 }
 
@@ -180,140 +182,179 @@ export function PlanejamentoTab() {
     }
   };
 
-  if (loadingBaseline || loadingPlan) return <p className="mt-6 text-center text-muted-foreground">Carregando...</p>;
+  if (loadingBaseline || loadingPlan) {
+    return (
+      <Typography align="center" color="text.secondary" sx={{ mt: 3 }}>
+        Carregando...
+      </Typography>
+    );
+  }
+
+  const scoreColor = planScore >= 70 ? "success.main" : planScore >= 40 ? "warning.main" : "error.main";
 
   return (
-    <div className="mt-4 space-y-4">
-      <div className="rounded-xl border border-border bg-card p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-14 shrink-0 flex-col items-center justify-center rounded-xl border border-border">
-            <Activity className="size-4 text-muted-foreground" />
-            <span className={`text-lg font-bold ${planScore >= 70 ? "text-success" : planScore >= 40 ? "text-warning" : "text-critical"}`}>
-              {planScore}
-            </span>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Saúde do plano</p>
-            <p className="text-sm text-muted-foreground">
+    <Stack spacing={2} sx={{ mt: 2 }}>
+      <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+          <Stack
+            sx={{ width: 56, height: 56, flexShrink: 0, alignItems: "center", justifyContent: "center", borderRadius: 3, border: "1px solid", borderColor: "divider" }}
+          >
+            <Activity size={16} color="var(--mui-palette-text-secondary)" />
+            <Typography sx={{ fontWeight: 700, color: scoreColor }}>{planScore}</Typography>
+          </Stack>
+          <Box>
+            <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+              Saúde do plano
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
               {planScore >= 70 ? "Plano coerente com o histórico real da conta." : planScore >= 40 ? "Plano com pontos de atenção." : "Plano com risco — revise as premissas."}
-            </p>
-          </div>
-        </div>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            </Typography>
+          </Box>
+        </Stack>
+        <Grid container spacing={1.5} sx={{ mt: 1 }}>
           {planChecklist.map((c) => (
-            <div key={c.label} className="flex items-start gap-1.5 text-xs">
-              {c.ok ? (
-                <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-success" />
-              ) : (
-                <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning" />
-              )}
-              <div>
-                <p className="font-medium">{c.label}</p>
-                <p className="text-muted-foreground">{c.detail}</p>
-              </div>
-            </div>
+            <Grid key={c.label} size={{ xs: 12, sm: 4 }}>
+              <Stack direction="row" spacing={0.75} sx={{ alignItems: "flex-start" }}>
+                {c.ok ? (
+                  <CheckCircle2 size={14} color="var(--mui-palette-success-main, #28C76F)" style={{ marginTop: 2, flexShrink: 0 }} />
+                ) : (
+                  <AlertTriangle size={14} color="var(--mui-palette-warning-main, #FF9F43)" style={{ marginTop: 2, flexShrink: 0 }} />
+                )}
+                <Box>
+                  <Typography variant="caption" sx={{ fontWeight: 600, display: "block" }}>
+                    {c.label}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {c.detail}
+                  </Typography>
+                </Box>
+              </Stack>
+            </Grid>
           ))}
-        </div>
-      </div>
+        </Grid>
+      </Box>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-border bg-card p-4">
-          <p className="font-semibold">Etapa 1 — Orçamento</p>
-          <p className="text-xs text-muted-foreground">
-            Ticket, taxa de conversão e CPS já vêm pré-preenchidos com a média real dos últimos 30 dias — ajuste se quiser planejar diferente.
-          </p>
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2, height: "100%" }}>
+            <Typography sx={{ fontWeight: 600 }}>Etapa 1 — Orçamento</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Ticket, taxa de conversão e CPS já vêm pré-preenchidos com a média real dos últimos 30 dias — ajuste se quiser planejar diferente.
+            </Typography>
 
-          <div className="mt-3 space-y-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Investimento mensal (R$)</label>
-              <Input value={investimento} onChange={(e) => setInvestimento(e.target.value)} placeholder="ex: 10000" />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Meta de receita (R$, opcional)</label>
-              <Input value={metaReceita} onChange={(e) => setMetaReceita(e.target.value)} placeholder="ex: 50000" />
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Ticket médio (R$)</label>
-                <Input value={ticket} onChange={(e) => setTicket(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Conversão (%)</label>
-                <Input value={cvr} onChange={(e) => setCvr(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">CPS (R$)</label>
-                <Input value={cps} onChange={(e) => setCps(e.target.value)} />
-              </div>
-            </div>
-          </div>
+            <Stack spacing={1.5} sx={{ mt: 1.5 }}>
+              <TextField size="small" fullWidth label="Investimento mensal (R$)" value={investimento} onChange={(e) => setInvestimento(e.target.value)} placeholder="ex: 10000" />
+              <TextField size="small" fullWidth label="Meta de receita (R$, opcional)" value={metaReceita} onChange={(e) => setMetaReceita(e.target.value)} placeholder="ex: 50000" />
+              <Grid container spacing={1}>
+                <Grid size={4}>
+                  <TextField size="small" fullWidth label="Ticket médio (R$)" value={ticket} onChange={(e) => setTicket(e.target.value)} />
+                </Grid>
+                <Grid size={4}>
+                  <TextField size="small" fullWidth label="Conversão (%)" value={cvr} onChange={(e) => setCvr(e.target.value)} />
+                </Grid>
+                <Grid size={4}>
+                  <TextField size="small" fullWidth label="CPS (R$)" value={cps} onChange={(e) => setCps(e.target.value)} />
+                </Grid>
+              </Grid>
+            </Stack>
 
-          <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-3 text-sm sm:grid-cols-3">
-            <div><p className="text-xs text-muted-foreground">Investimento diário</p><p className="font-semibold">{brl(projection.diario)}</p></div>
-            <div><p className="text-xs text-muted-foreground">Pedidos projetados</p><p className="font-semibold">{Math.round(projection.pedidos)}</p></div>
-            <div><p className="text-xs text-muted-foreground">Receita projetada</p><p className="font-semibold">{brl(projection.receita)}</p></div>
-            <div><p className="text-xs text-muted-foreground">CPA implícito</p><p className="font-semibold">{brl(projection.cpa)}</p></div>
-            <div><p className="text-xs text-muted-foreground">ROAS planejado</p><p className="font-semibold">{projection.roas.toFixed(2)}x</p></div>
-            {projection.cobertura !== null && (
-              <div><p className="text-xs text-muted-foreground">Cobertura da meta</p><p className="font-semibold">{pct(projection.cobertura)}</p></div>
+            <Grid container spacing={1} sx={{ mt: 1.5, borderRadius: 2, bgcolor: "action.hover", p: 1.5 }}>
+              <Grid size={{ xs: 6, sm: 4 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>Investimento diário</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>{brl(projection.diario)}</Typography>
+              </Grid>
+              <Grid size={{ xs: 6, sm: 4 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>Pedidos projetados</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>{Math.round(projection.pedidos)}</Typography>
+              </Grid>
+              <Grid size={{ xs: 6, sm: 4 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>Receita projetada</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>{brl(projection.receita)}</Typography>
+              </Grid>
+              <Grid size={{ xs: 6, sm: 4 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>CPA implícito</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>{brl(projection.cpa)}</Typography>
+              </Grid>
+              <Grid size={{ xs: 6, sm: 4 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>ROAS planejado</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>{projection.roas.toFixed(2)}x</Typography>
+              </Grid>
+              {projection.cobertura !== null && (
+                <Grid size={{ xs: 6, sm: 4 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>Cobertura da meta</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{pct(projection.cobertura)}</Typography>
+                </Grid>
+              )}
+            </Grid>
+
+            <Button variant="contained" fullWidth sx={{ mt: 2 }} onClick={handleSave} disabled={saving}>
+              {saving ? "Salvando..." : "Salvar plano"}
+            </Button>
+            {plan && (
+              <Typography variant="caption" color="text.secondary" align="center" sx={{ display: "block", mt: 0.5 }}>
+                Última atualização: {new Date(plan.updatedAt).toLocaleString("pt-BR")}
+              </Typography>
             )}
-          </div>
+          </Box>
+        </Grid>
 
-          <Button onClick={handleSave} disabled={saving} className="mt-4 w-full">
-            {saving ? "Salvando..." : "Salvar plano"}
-          </Button>
-          {plan && <p className="mt-1 text-center text-xs text-muted-foreground">Última atualização: {new Date(plan.updatedAt).toLocaleString("pt-BR")}</p>}
-        </div>
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2, height: "100%" }}>
+            <Typography sx={{ fontWeight: 600 }}>Etapa 2 — Validação Matemática</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Compara o plano com a faixa real (mín-máx diário) da conta nos últimos 30 dias.
+            </Typography>
 
-        <div className="rounded-xl border border-border bg-card p-4">
-          <p className="font-semibold">Etapa 2 — Validação Matemática</p>
-          <p className="text-xs text-muted-foreground">Compara o plano com a faixa real (mín-máx diário) da conta nos últimos 30 dias.</p>
-
-          {!baseline || baseline.roas === 0 ? (
-            <p className="mt-3 text-sm text-muted-foreground">Sem histórico suficiente nos últimos 30 dias pra validar contra dado real.</p>
-          ) : (
-            <>
-              <p className="mt-3 text-sm font-medium">
-                {healthyCount} de 5 métricas saudáveis —{" "}
-                {healthyCount >= 4 ? "plano coerente com o histórico real" : healthyCount >= 2 ? "plano com pontos de atenção" : "plano com risco — metas distantes do real"}
-              </p>
-              <div className="mt-2 space-y-2">
-                {healthChecks!.map((h) => {
-                  const meta = METRIC_META[h.key];
-                  const delta = h.real > 0 ? (h.planned / h.real - 1) * 100 : 0;
-                  const range = ranges?.[h.key];
-                  return (
-                    <div key={h.key} className="rounded-lg border border-border p-2.5">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="flex items-center gap-1.5 font-medium">
-                          <span className={`size-2 rounded-full ${h.ok ? "bg-success" : "bg-critical"}`} />
-                          {meta.label}
-                        </span>
-                        <span className={h.ok ? "text-success" : "text-critical"}>
-                          {delta >= 0 ? "+" : ""}
-                          {delta.toFixed(0)}% vs. real
-                        </span>
-                      </div>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        Planejado {meta.format(h.planned)} · Média (30d) {meta.format(h.real)}
-                      </p>
-                      {range && range.max > range.min && (
-                        <>
-                          <RangeBar range={range} value={h.planned} />
-                          <p className="mt-0.5 flex justify-between text-[11px] text-muted-foreground">
-                            <span>{meta.format(range.min)}</span>
-                            <span>{meta.format(range.max)}</span>
-                          </p>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+            {!baseline || baseline.roas === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+                Sem histórico suficiente nos últimos 30 dias pra validar contra dado real.
+              </Typography>
+            ) : (
+              <>
+                <Typography variant="body2" sx={{ fontWeight: 500, mt: 1.5 }}>
+                  {healthyCount} de 5 métricas saudáveis —{" "}
+                  {healthyCount >= 4 ? "plano coerente com o histórico real" : healthyCount >= 2 ? "plano com pontos de atenção" : "plano com risco — metas distantes do real"}
+                </Typography>
+                <Stack spacing={1} sx={{ mt: 1 }}>
+                  {healthChecks!.map((h) => {
+                    const meta = METRIC_META[h.key];
+                    const delta = h.real > 0 ? (h.planned / h.real - 1) * 100 : 0;
+                    const range = ranges?.[h.key];
+                    return (
+                      <Box key={h.key} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.25 }}>
+                        <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+                          <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+                            <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: h.ok ? "success.main" : "error.main" }} />
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                              {meta.label}
+                            </Typography>
+                          </Stack>
+                          <Typography variant="body2" sx={{ color: h.ok ? "success.main" : "error.main" }}>
+                            {delta >= 0 ? "+" : ""}
+                            {delta.toFixed(0)}% vs. real
+                          </Typography>
+                        </Stack>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
+                          Planejado {meta.format(h.planned)} · Média (30d) {meta.format(h.real)}
+                        </Typography>
+                        {range && range.max > range.min && (
+                          <>
+                            <RangeBar range={range} value={h.planned} />
+                            <Stack direction="row" sx={{ justifyContent: "space-between", mt: 0.25 }}>
+                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>{meta.format(range.min)}</Typography>
+                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>{meta.format(range.max)}</Typography>
+                            </Stack>
+                          </>
+                        )}
+                      </Box>
+                    );
+                  })}
+                </Stack>
+              </>
+            )}
+          </Box>
+        </Grid>
+      </Grid>
+    </Stack>
   );
 }

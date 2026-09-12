@@ -3,8 +3,16 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ImageOff, Target, MousePointerClick, ShoppingCart, TrendingUp, PlayCircle } from "lucide-react";
 import { toast } from "sonner";
-import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
+import Dialog from "@mui/material/Dialog";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import Grid from "@mui/material/Grid";
+import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
+import Typography from "@mui/material/Typography";
+import type { ChipProps } from "@mui/material/Chip";
 import { getMetaAdsCreatives, getMetaAdsPreview } from "@/lib/meta-ads.functions";
 import { brl } from "@/lib/crm-mock";
 import type { MetaAdsDatePreset, CreativeInsight, CreativeFreshness } from "@/lib/meta-ads.server";
@@ -16,26 +24,26 @@ const FRESHNESS_LABEL: Record<CreativeFreshness, string> = {
   maduro: "Maduro",
   fadigado: "Fadigado",
 };
-const FRESHNESS_CLASS: Record<CreativeFreshness, string> = {
-  fresco: "bg-success-soft text-success",
-  maduro: "bg-warning-soft text-warning",
-  fadigado: "bg-critical-soft text-critical",
+const FRESHNESS_COLOR: Record<CreativeFreshness, ChipProps["color"]> = {
+  fresco: "success",
+  maduro: "warning",
+  fadigado: "error",
 };
 
-const STATUS_CLASS: Record<string, string> = {
-  ACTIVE: "bg-success-soft text-success",
-  PAUSED: "bg-muted text-muted-foreground",
-  ARCHIVED: "bg-muted text-muted-foreground",
-  DELETED: "bg-critical-soft text-critical",
-  CAMPAIGN_PAUSED: "bg-muted text-muted-foreground",
-  ADSET_PAUSED: "bg-muted text-muted-foreground",
+const STATUS_COLOR: Record<string, ChipProps["color"]> = {
+  ACTIVE: "success",
+  PAUSED: "default",
+  ARCHIVED: "default",
+  DELETED: "error",
+  CAMPAIGN_PAUSED: "default",
+  ADSET_PAUSED: "default",
 };
 
 type Tone = "good" | "mid" | "bad";
-const TONE_CLASS: Record<Tone, string> = {
-  good: "text-success",
-  mid: "text-warning",
-  bad: "text-critical",
+const TONE_SX: Record<Tone, string> = {
+  good: "success.main",
+  mid: "warning.main",
+  bad: "error.main",
 };
 
 /** Farol comparando o criativo com a média dos criativos exibidos no período (não um benchmark
@@ -69,20 +77,22 @@ function ageLabel(days: number | null): string {
 function Thumb({ url, name }: { url: string | null; name: string }) {
   if (!url) {
     return (
-      <div className="flex aspect-square items-center justify-center rounded-lg bg-muted">
-        <ImageOff className="size-6 text-muted-foreground" />
-      </div>
+      <Box sx={{ display: "flex", aspectRatio: "1 / 1", alignItems: "center", justifyContent: "center", borderRadius: 2, bgcolor: "action.hover" }}>
+        <ImageOff size={24} color="var(--mui-palette-text-secondary)" />
+      </Box>
     );
   }
-  return <img src={url} alt={name} className="aspect-square w-full rounded-lg object-cover" />;
+  return <Box component="img" src={url} alt={name} sx={{ aspectRatio: "1 / 1", width: "100%", borderRadius: 2, objectFit: "cover", display: "block" }} />;
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-3">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="mt-1 text-lg font-bold">{value}</p>
-    </div>
+    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 1.5 }}>
+      <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary", fontSize: 11 }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontWeight: 700, mt: 0.5 }}>{value}</Typography>
+    </Box>
   );
 }
 
@@ -98,24 +108,33 @@ function TopPerformerCard({
   metric: string;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-3">
-      <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        <Icon className="size-3.5" /> {label}
-      </p>
+    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 1.5 }}>
+      <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", color: "text.secondary" }}>
+        <Icon size={14} />
+        <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+          {label}
+        </Typography>
+      </Stack>
       {creative ? (
-        <div className="mt-2 flex items-center gap-3">
-          <div className="w-14 shrink-0">
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", mt: 1 }}>
+          <Box sx={{ width: 56, flexShrink: 0 }}>
             <Thumb url={creative.thumbnailUrl} name={creative.name} />
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium" title={creative.name}>{creative.name}</p>
-            <p className="text-sm font-bold text-success">{metric}</p>
-          </div>
-        </div>
+          </Box>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="body2" sx={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={creative.name}>
+              {creative.name}
+            </Typography>
+            <Typography variant="body2" sx={{ fontWeight: 700, color: "success.main" }}>
+              {metric}
+            </Typography>
+          </Box>
+        </Stack>
       ) : (
-        <p className="mt-2 text-sm text-muted-foreground">Sem dado no período</p>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          Sem dado no período
+        </Typography>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -168,40 +187,87 @@ export function InsightsCriativosTab({ datePreset }: { datePreset: MetaAdsDatePr
     };
   }, [creatives]);
 
-  if (isLoading) return <p className="mt-6 text-center text-muted-foreground">Carregando...</p>;
-  if (result && !result.success) return <p className="mt-6 text-center text-muted-foreground">{result.error}</p>;
+  if (isLoading) {
+    return (
+      <Typography align="center" color="text.secondary" sx={{ mt: 3 }}>
+        Carregando...
+      </Typography>
+    );
+  }
+  if (result && !result.success) {
+    return (
+      <Typography align="center" color="text.secondary" sx={{ mt: 3 }}>
+        {result.error}
+      </Typography>
+    );
+  }
   if (!data) return null;
 
   return (
-    <div className="mt-4">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-8">
-        <StatCard label="CPM" value={brl(data.summary.cpm)} />
-        <StatCard label="Thumb Stop Rate" value={pct(data.summary.thumbstop)} />
-        <StatCard label="CTR (Todos)" value={pct(data.summary.ctrAll)} />
-        <StatCard label="CTR (Link)" value={pct(data.summary.ctrLink)} />
-        <StatCard label="Compras" value={String(data.summary.purchases)} />
-        <StatCard label="CPA" value={brl(data.summary.cpa)} />
-        <StatCard label="ROAS" value={`${data.summary.roas.toFixed(2)}x`} />
-        <StatCard label="Valor Gasto" value={brl(data.summary.spend)} />
-      </div>
+    <Box sx={{ mt: 2 }}>
+      <Grid container spacing={1.5}>
+        <Grid size={{ xs: 6, md: 3, lg: 12 / 8 }}>
+          <StatCard label="CPM" value={brl(data.summary.cpm)} />
+        </Grid>
+        <Grid size={{ xs: 6, md: 3, lg: 12 / 8 }}>
+          <StatCard label="Thumb Stop Rate" value={pct(data.summary.thumbstop)} />
+        </Grid>
+        <Grid size={{ xs: 6, md: 3, lg: 12 / 8 }}>
+          <StatCard label="CTR (Todos)" value={pct(data.summary.ctrAll)} />
+        </Grid>
+        <Grid size={{ xs: 6, md: 3, lg: 12 / 8 }}>
+          <StatCard label="CTR (Link)" value={pct(data.summary.ctrLink)} />
+        </Grid>
+        <Grid size={{ xs: 6, md: 3, lg: 12 / 8 }}>
+          <StatCard label="Compras" value={String(data.summary.purchases)} />
+        </Grid>
+        <Grid size={{ xs: 6, md: 3, lg: 12 / 8 }}>
+          <StatCard label="CPA" value={brl(data.summary.cpa)} />
+        </Grid>
+        <Grid size={{ xs: 6, md: 3, lg: 12 / 8 }}>
+          <StatCard label="ROAS" value={`${data.summary.roas.toFixed(2)}x`} />
+        </Grid>
+        <Grid size={{ xs: 6, md: 3, lg: 12 / 8 }}>
+          <StatCard label="Valor Gasto" value={brl(data.summary.spend)} />
+        </Grid>
+      </Grid>
 
-      <p className="mt-6 text-xs font-medium uppercase tracking-wider text-muted-foreground">Top Performers</p>
-      <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <TopPerformerCard icon={Target} label="Melhor Gancho" creative={data.topGancho} metric={data.topGancho ? pct(data.topGancho.thumbstop) : ""} />
-        <TopPerformerCard icon={MousePointerClick} label="Melhor CTR" creative={data.topCtr} metric={data.topCtr ? pct(data.topCtr.ctrAll) : ""} />
-        <TopPerformerCard icon={ShoppingCart} label="Mais Compras" creative={data.topCompras} metric={data.topCompras ? String(data.topCompras.purchases) : ""} />
-        <TopPerformerCard icon={TrendingUp} label="Maior ROAS" creative={data.topRoas} metric={data.topRoas ? `${data.topRoas.roas.toFixed(2)}x` : ""} />
-      </div>
+      <Typography variant="caption" sx={{ display: "block", mt: 3, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+        Top Performers
+      </Typography>
+      <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <TopPerformerCard icon={Target} label="Melhor Gancho" creative={data.topGancho} metric={data.topGancho ? pct(data.topGancho.thumbstop) : ""} />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <TopPerformerCard icon={MousePointerClick} label="Melhor CTR" creative={data.topCtr} metric={data.topCtr ? pct(data.topCtr.ctrAll) : ""} />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <TopPerformerCard icon={ShoppingCart} label="Mais Compras" creative={data.topCompras} metric={data.topCompras ? String(data.topCompras.purchases) : ""} />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <TopPerformerCard icon={TrendingUp} label="Maior ROAS" creative={data.topRoas} metric={data.topRoas ? `${data.topRoas.roas.toFixed(2)}x` : ""} />
+        </Grid>
+      </Grid>
 
-      <div className="mt-6 flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Todos os criativos ({creatives.length})</p>
-        <label className="flex items-center gap-2 text-sm">
-          <Switch checked={onlyActive} onCheckedChange={setOnlyActive} /> Só ativas
-        </label>
-      </div>
+      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mt: 3 }}>
+        <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+          Todos os criativos ({creatives.length})
+        </Typography>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <Typography variant="body2">Só ativas</Typography>
+          <Switch checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} />
+        </Stack>
+      </Stack>
 
-      <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-        {creatives.length === 0 && <p className="col-span-full py-8 text-center text-muted-foreground">Nenhum criativo nesse período.</p>}
+      <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
+        {creatives.length === 0 && (
+          <Grid size={12}>
+            <Typography align="center" color="text.secondary" sx={{ py: 4 }}>
+              Nenhum criativo nesse período.
+            </Typography>
+          </Grid>
+        )}
         {creatives.map((c) => {
           const cpmTone = metricTone(c.cpm, averages.cpm, true);
           const thumbstopTone = metricTone(c.thumbstop, averages.thumbstop, false);
@@ -212,82 +278,109 @@ export function InsightsCriativosTab({ datePreset }: { datePreset: MetaAdsDatePr
           const cpaTone = c.purchases > 0 ? metricTone(c.cpa, averages.cpa, true) : "mid";
           const roasTone = metricTone(c.roas, averages.roas, false);
           return (
-          <div key={c.id} className="rounded-xl border border-border bg-card p-3">
-            <Thumb url={c.thumbnailUrl} name={c.name} />
-            <p className="mt-2 truncate text-sm font-medium" title={c.name}>{c.name}</p>
-            <div className="mt-1 flex flex-wrap gap-1">
-              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${STATUS_CLASS[c.status] ?? "bg-muted text-muted-foreground"}`}>
-                {c.status}
-              </span>
-              {c.freshness && (
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${FRESHNESS_CLASS[c.freshness]}`}>
-                  {FRESHNESS_LABEL[c.freshness]} · Freq {c.frequency.toFixed(1)}x · {ageLabel(c.ageDays)}
-                </span>
-              )}
-            </div>
-            <div className="mt-2 space-y-1 text-xs">
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span>CPM</span><span className={`font-bold ${TONE_CLASS[cpmTone]}`}>{brl(c.cpm)}</span>
-              </div>
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span>Thumb Stop Rate</span><span className={`font-bold ${TONE_CLASS[thumbstopTone]}`}>{pct(c.thumbstop)}</span>
-              </div>
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span>CTR (Todos)</span><span className={`font-bold ${TONE_CLASS[ctrAllTone]}`}>{pct(c.ctrAll)}</span>
-              </div>
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span>CTR (Link)</span><span className={`font-bold ${TONE_CLASS[ctrLinkTone]}`}>{pct(c.ctrLink)}</span>
-              </div>
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span>CPS</span><span className={`font-bold ${TONE_CLASS[cpsTone]}`}>{brl(c.cps)}</span>
-              </div>
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span>Taxa de Conversão</span><span className={`font-bold ${c.purchases > 0 ? TONE_CLASS[cvrTone] : "text-foreground"}`}>{c.purchases > 0 ? pct(c.cvr) : "—"}</span>
-              </div>
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span>Compras</span><span className="font-bold text-foreground">{c.purchases}</span>
-              </div>
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span>CPA</span><span className={`font-bold ${c.purchases > 0 ? TONE_CLASS[cpaTone] : "text-foreground"}`}>{c.purchases > 0 ? brl(c.cpa) : brl(0)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">ROAS</span><span className={`font-bold ${TONE_CLASS[roasTone]}`}>{c.roas.toFixed(2)}x</span>
-              </div>
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span>Valor Gasto</span><span className="font-bold text-foreground">{brl(c.spend)}</span>
-              </div>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span
-                className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                  c.suggestion === "escalar" ? "bg-success-soft text-success" : "bg-muted text-muted-foreground"
-                }`}
-              >
-                {c.suggestion === "escalar" ? "Escalar" : "Testar mais"}
-              </span>
-              <button
-                type="button"
-                onClick={() => handleViewAd(c.id)}
-                disabled={loadingPreviewId === c.id}
-                className="flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand hover:underline disabled:opacity-60"
-              >
-                <PlayCircle className="size-3" /> {loadingPreviewId === c.id ? "Carregando..." : "Ver anúncio"}
-              </button>
-            </div>
-          </div>
+            <Grid key={c.id} size={{ xs: 6, sm: 4, lg: 3, xl: 12 / 5 }}>
+              <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 1.5, height: "100%" }}>
+                <Thumb url={c.thumbnailUrl} name={c.name} />
+                <Typography variant="body2" sx={{ fontWeight: 500, mt: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={c.name}>
+                  {c.name}
+                </Typography>
+                <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", mt: 0.5 }}>
+                  <Chip size="small" color={STATUS_COLOR[c.status] ?? "default"} label={c.status} sx={{ fontSize: 10, height: 20 }} />
+                  {c.freshness && (
+                    <Chip
+                      size="small"
+                      color={FRESHNESS_COLOR[c.freshness]}
+                      label={`${FRESHNESS_LABEL[c.freshness]} · Freq ${c.frequency.toFixed(1)}x · ${ageLabel(c.ageDays)}`}
+                      sx={{ fontSize: 10, height: 20 }}
+                    />
+                  )}
+                </Stack>
+                <Stack spacing={0.5} sx={{ mt: 1 }}>
+                  <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                    <Typography variant="caption" color="text.secondary">CPM</Typography>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: TONE_SX[cpmTone] }}>{brl(c.cpm)}</Typography>
+                  </Stack>
+                  <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                    <Typography variant="caption" color="text.secondary">Thumb Stop Rate</Typography>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: TONE_SX[thumbstopTone] }}>{pct(c.thumbstop)}</Typography>
+                  </Stack>
+                  <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                    <Typography variant="caption" color="text.secondary">CTR (Todos)</Typography>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: TONE_SX[ctrAllTone] }}>{pct(c.ctrAll)}</Typography>
+                  </Stack>
+                  <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                    <Typography variant="caption" color="text.secondary">CTR (Link)</Typography>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: TONE_SX[ctrLinkTone] }}>{pct(c.ctrLink)}</Typography>
+                  </Stack>
+                  <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                    <Typography variant="caption" color="text.secondary">CPS</Typography>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: TONE_SX[cpsTone] }}>{brl(c.cps)}</Typography>
+                  </Stack>
+                  <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                    <Typography variant="caption" color="text.secondary">Taxa de Conversão</Typography>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: c.purchases > 0 ? TONE_SX[cvrTone] : "text.primary" }}>
+                      {c.purchases > 0 ? pct(c.cvr) : "—"}
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                    <Typography variant="caption" color="text.secondary">Compras</Typography>
+                    <Typography variant="caption" sx={{ fontWeight: 700 }}>{c.purchases}</Typography>
+                  </Stack>
+                  <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                    <Typography variant="caption" color="text.secondary">CPA</Typography>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: c.purchases > 0 ? TONE_SX[cpaTone] : "text.primary" }}>
+                      {c.purchases > 0 ? brl(c.cpa) : brl(0)}
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                    <Typography variant="caption" color="text.secondary">ROAS</Typography>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: TONE_SX[roasTone] }}>{c.roas.toFixed(2)}x</Typography>
+                  </Stack>
+                  <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                    <Typography variant="caption" color="text.secondary">Valor Gasto</Typography>
+                    <Typography variant="caption" sx={{ fontWeight: 700 }}>{brl(c.spend)}</Typography>
+                  </Stack>
+                </Stack>
+                <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", alignItems: "center", mt: 1 }}>
+                  <Chip
+                    size="small"
+                    color={c.suggestion === "escalar" ? "success" : "default"}
+                    label={c.suggestion === "escalar" ? "Escalar" : "Testar mais"}
+                    sx={{ fontSize: 11, height: 22 }}
+                  />
+                  <Chip
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                    icon={<PlayCircle size={12} />}
+                    label={loadingPreviewId === c.id ? "Carregando..." : "Ver anúncio"}
+                    onClick={() => handleViewAd(c.id)}
+                    disabled={loadingPreviewId === c.id}
+                    sx={{ fontSize: 11, height: 22 }}
+                  />
+                </Stack>
+              </Box>
+            </Grid>
           );
         })}
-      </div>
+      </Grid>
 
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogTitle>Prévia do anúncio</DialogTitle>
-          <DialogDescription>Prévia oficial da Meta — mostra o criativo real, sem precisar de login na conta de anúncios.</DialogDescription>
+      <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Prévia do anúncio</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            Prévia oficial da Meta — mostra o criativo real, sem precisar de login na conta de anúncios.
+          </Typography>
           {previewUrl && (
-            <iframe src={previewUrl} className="h-[600px] w-full rounded-lg border border-border" title="Prévia do anúncio" />
+            <Box
+              component="iframe"
+              src={previewUrl}
+              title="Prévia do anúncio"
+              sx={{ height: 600, width: "100%", borderRadius: 2, border: "1px solid", borderColor: "divider" }}
+            />
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </Box>
   );
 }

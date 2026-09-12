@@ -1,25 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from "recharts";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { BarChart } from "@mui/x-charts/BarChart";
+import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
+import Grid from "@mui/material/Grid";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Typography from "@mui/material/Typography";
+import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import {
   RefreshCw,
   Info,
@@ -56,6 +50,31 @@ function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === "string") return error;
   return "Falha desconhecida ao carregar os dados RFM.";
+}
+
+function StatCard({ icon: Icon, iconColor, iconBg, label, value, hint }: any) {
+  return (
+    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+      <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+        <Box sx={{ borderRadius: 2, bgcolor: iconBg, color: iconColor, p: 1, display: "flex" }}>
+          <Icon size={20} />
+        </Box>
+        <Box>
+          <Typography variant="caption" sx={{ fontWeight: 500, textTransform: "uppercase", color: "text.secondary" }}>
+            {label}
+          </Typography>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>
+            {value}
+          </Typography>
+          {hint && (
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
+              {hint}
+            </Typography>
+          )}
+        </Box>
+      </Stack>
+    </Box>
+  );
 }
 
 export function RFMAnalysis() {
@@ -100,32 +119,34 @@ export function RFMAnalysis() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <RefreshCw className="size-8 animate-spin text-brand" />
-          <p className="text-sm text-muted-foreground">Processando análise RFM...</p>
-        </div>
-      </div>
+      <Stack spacing={2} sx={{ minHeight: 400, alignItems: "center", justifyContent: "center" }}>
+        <CircularProgress size={32} />
+        <Typography variant="body2" color="text.secondary">Processando análise RFM...</Typography>
+      </Stack>
     );
   }
 
   if (isError) {
     return (
-      <div className="surface-card mx-auto max-w-2xl border-l-4 border-l-destructive p-6">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
-          <div className="flex-1">
-            <h3 className="font-semibold">Não foi possível calcular a análise RFM</h3>
-            <p className="mt-1 text-sm text-muted-foreground">{errorMessage(error)}</p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              A tela não vai mais esconder falhas como se fossem valores zerados. Corrija a origem indicada acima e tente novamente.
-            </p>
-            <Button variant="outline" className="mt-4 gap-2" onClick={() => refetch()} disabled={isFetching}>
-              <RefreshCw className={`size-4 ${isFetching ? "animate-spin" : ""}`} /> Tentar novamente
-            </Button>
-          </div>
-        </div>
-      </div>
+      <Stack direction="row" spacing={1.5} sx={{ mx: "auto", maxWidth: 640, border: "1px solid", borderColor: "divider", borderLeft: "4px solid", borderLeftColor: "error.main", borderRadius: 2, p: 3, alignItems: "flex-start" }}>
+        <AlertTriangle size={20} style={{ marginTop: 2, flexShrink: 0 }} color="var(--mui-palette-error-main, #EA5455)" />
+        <Box sx={{ flex: 1 }}>
+          <Typography sx={{ fontWeight: 600 }}>Não foi possível calcular a análise RFM</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{errorMessage(error)}</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+            A tela não vai mais esconder falhas como se fossem valores zerados. Corrija a origem indicada acima e tente novamente.
+          </Typography>
+          <Button
+            variant="outline"
+            startIcon={<RefreshCw size={16} className={isFetching ? "animate-spin" : undefined} />}
+            sx={{ mt: 2 }}
+            onClick={() => refetch()}
+            disabled={isFetching}
+          >
+            Tentar novamente
+          </Button>
+        </Box>
+      </Stack>
     );
   }
 
@@ -142,197 +163,204 @@ export function RFMAnalysis() {
   const hasValidOrders = (data?.validOrders ?? 0) > 0;
 
   return (
-    <div className="space-y-8 pb-12">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight">Análise RFM</h2>
-          <p className="text-sm text-muted-foreground">
+    <Stack spacing={4} sx={{ pb: 6 }}>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>Análise RFM</Typography>
+          <Typography variant="body2" color="text.secondary">
             Recência, Frequência e Valor — considerando apenas pedidos pagos (reembolsados, expirados,
             anulados e não pagos ficam de fora).
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
             Fonte lida: {new Intl.NumberFormat().format(data?.sourceCustomers ?? 0)} clientes · {new Intl.NumberFormat().format(data?.sourceOrders ?? 0)} pedidos importados · {new Intl.NumberFormat().format(data?.validOrders ?? 0)} pedidos válidos para RFM
-          </p>
-        </div>
+          </Typography>
+        </Box>
         <Button
+          variant="contained"
+          startIcon={calculateMutation.isPending ? <CircularProgress size={16} color="inherit" /> : <Sparkles size={16} />}
           onClick={() => calculateMutation.mutate()}
           disabled={calculateMutation.isPending}
-          className="gap-2 bg-brand hover:bg-brand/90 text-white"
         >
-          {calculateMutation.isPending ? (
-            <RefreshCw className="size-4 animate-spin" />
-          ) : (
-            <Sparkles className="size-4" />
-          )}
           {calculateMutation.isPending ? "Recalculando..." : "Recalcular Análise RFM"}
         </Button>
-      </div>
+      </Stack>
 
       {!hasSourceCustomers && (
-        <div className="surface-card flex items-start gap-3 border-l-4 border-l-destructive p-4">
-          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-destructive" />
-          <div className="text-sm">
-            <p className="font-semibold">Nenhum cliente da Shopify disponível para o RFM</p>
-            <p className="text-muted-foreground">Sincronize a Shopify antes de recalcular. Sem clientes importados não existe base para classificar.</p>
-          </div>
-        </div>
+        <Stack direction="row" spacing={1.5} sx={{ border: "1px solid", borderColor: "divider", borderLeft: "4px solid", borderLeftColor: "error.main", borderRadius: 2, p: 2 }}>
+          <AlertTriangle size={20} style={{ marginTop: 2, flexShrink: 0 }} color="var(--mui-palette-error-main, #EA5455)" />
+          <Box>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>Nenhum cliente da Shopify disponível para o RFM</Typography>
+            <Typography variant="body2" color="text.secondary">Sincronize a Shopify antes de recalcular. Sem clientes importados não existe base para classificar.</Typography>
+          </Box>
+        </Stack>
       )}
 
       {hasSourceCustomers && hasSourceOrders && !hasValidOrders && (
-        <div className="surface-card flex items-start gap-3 border-l-4 border-l-amber-500 p-4">
-          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-500" />
-          <div className="text-sm">
-            <p className="font-semibold">Há pedidos importados, mas nenhum pedido válido para o RFM</p>
-            <p className="text-muted-foreground">Confira os status financeiros sincronizados. O RFM considera PAID e PARTIALLY_PAID sem cancelamento.</p>
-          </div>
-        </div>
+        <Stack direction="row" spacing={1.5} sx={{ border: "1px solid", borderColor: "divider", borderLeft: "4px solid", borderLeftColor: "warning.main", borderRadius: 2, p: 2 }}>
+          <AlertTriangle size={20} style={{ marginTop: 2, flexShrink: 0 }} color="var(--mui-palette-warning-main, #FF9F43)" />
+          <Box>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>Há pedidos importados, mas nenhum pedido válido para o RFM</Typography>
+            <Typography variant="body2" color="text.secondary">Confira os status financeiros sincronizados. O RFM considera PAID e PARTIALLY_PAID sem cancelamento.</Typography>
+          </Box>
+        </Stack>
       )}
 
-      <div className="surface-card flex items-start gap-3 border-l-4 border-l-brand p-4">
-        <Sparkles className="mt-0.5 size-5 shrink-0 text-brand" />
-        <div className="text-sm">
-          <p className="font-semibold">Matriz RFM completa ativa</p>
-          <p className="text-muted-foreground">
+      <Stack direction="row" spacing={1.5} sx={{ border: "1px solid", borderColor: "divider", borderLeft: "4px solid", borderLeftColor: "primary.main", borderRadius: 2, p: 2 }}>
+        <Sparkles size={20} style={{ marginTop: 2, flexShrink: 0 }} color="var(--mui-palette-primary-main, #7367F0)" />
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>Matriz RFM completa ativa</Typography>
+          <Typography variant="body2" color="text.secondary">
             Todos os segmentos são avaliados desde já, sem bloqueio por idade da base. Há {data?.historyDays ?? 0} dias
             de histórico pago; as faixas de recência usam o ciclo real de recompra da loja.{" "}
             {!data?.ltvDisponivel && <><strong>LTV projetado continua indisponível</strong> até completar {CLASSIC_MODE_MIN_HISTORY_DAYS} dias.</>}
-          </p>
-        </div>
-      </div>
+          </Typography>
+        </Box>
+      </Stack>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="surface-card p-5">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-blue-500/10 p-2 text-blue-500"><Users className="size-5" /></div>
-            <div>
-              <p className="text-xs font-medium uppercase text-muted-foreground">Base Total</p>
-              <h3 className="text-2xl font-bold">{new Intl.NumberFormat().format(data?.totalClientes ?? 0)}</h3>
-              <p className="text-[11px] text-muted-foreground">{new Intl.NumberFormat().format(data?.compradores ?? 0)} com compra paga</p>
-            </div>
-          </div>
-        </div>
-        <div className="surface-card p-5">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-emerald-500/10 p-2 text-emerald-500"><ShoppingBag className="size-5" /></div>
-            <div>
-              <p className="text-xs font-medium uppercase text-muted-foreground">Receita Válida</p>
-              <h3 className="text-2xl font-bold">{brl(data?.totalReceita ?? 0)}</h3>
-              <p className="text-[11px] text-muted-foreground">{new Intl.NumberFormat().format(data?.totalPedidos ?? 0)} pedidos pagos</p>
-            </div>
-          </div>
-        </div>
-        <div className="surface-card p-5">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-brand/10 p-2 text-brand"><TrendingUp className="size-5" /></div>
-            <div>
-              <p className="text-xs font-medium uppercase text-muted-foreground">AOV Real</p>
-              <h3 className="text-2xl font-bold">{brl(data?.aovGeral ?? 0)}</h3>
-            </div>
-          </div>
-        </div>
-        <div className="surface-card p-5">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-amber-500/10 p-2 text-amber-500"><AlertTriangle className="size-5" /></div>
-            <div>
-              <p className="text-xs font-medium uppercase text-muted-foreground">Excluído do RFM</p>
-              <h3 className="text-2xl font-bold">{brl(data?.receitaExcluida ?? 0)}</h3>
-              <p className="text-[11px] text-muted-foreground">{data?.pedidosExcluidos ?? 0} pedidos não pagos/reembolsados</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <StatCard
+            icon={Users}
+            iconColor="#3b82f6"
+            iconBg="rgba(59,130,246,0.1)"
+            label="Base Total"
+            value={new Intl.NumberFormat().format(data?.totalClientes ?? 0)}
+            hint={`${new Intl.NumberFormat().format(data?.compradores ?? 0)} com compra paga`}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <StatCard
+            icon={ShoppingBag}
+            iconColor="#10b981"
+            iconBg="rgba(16,185,129,0.1)"
+            label="Receita Válida"
+            value={brl(data?.totalReceita ?? 0)}
+            hint={`${new Intl.NumberFormat().format(data?.totalPedidos ?? 0)} pedidos pagos`}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <StatCard icon={TrendingUp} iconColor="#7367F0" iconBg="rgba(115,103,240,0.1)" label="AOV Real" value={brl(data?.aovGeral ?? 0)} />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <StatCard
+            icon={AlertTriangle}
+            iconColor="#f59e0b"
+            iconBg="rgba(245,158,11,0.1)"
+            label="Excluído do RFM"
+            value={brl(data?.receitaExcluida ?? 0)}
+            hint={`${data?.pedidosExcluidos ?? 0} pedidos não pagos/reembolsados`}
+          />
+        </Grid>
+      </Grid>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="surface-card p-6">
-          <h3 className="mb-6 text-lg font-bold">Clientes por Segmento</h3>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} stroke="rgba(255,255,255,0.05)" />
-                <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" width={150} axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "currentColor", opacity: 0.7 }} />
-                <Tooltip cursor={{ fill: "rgba(255,255,255,0.05)" }} contentStyle={{ backgroundColor: "white", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "8px", color: "#333" }} itemStyle={{ color: "#333" }} />
-                <Bar dataKey="clientes" radius={[0, 4, 4, 0]}>
-                  {chartData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+      <Grid container spacing={3}>
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 3 }}>Clientes por Segmento</Typography>
+            <BarChart
+              height={300}
+              layout="horizontal"
+              yAxis={[{
+                scaleType: "band",
+                data: chartData.map((d) => d.name),
+                colorMap: { type: "ordinal", values: chartData.map((d) => d.name), colors: chartData.map((d) => d.color) },
+              }]}
+              series={[{ data: chartData.map((d) => d.clientes) }]}
+              grid={{ vertical: true }}
+              margin={{ left: 140 }}
+            />
+          </Box>
+        </Grid>
 
-        <div className="surface-card p-6">
-          <h3 className="mb-6 text-lg font-bold">Clientes por Frequência de Compra</h3>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={freqData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="faixa" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "currentColor", opacity: 0.7 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "currentColor", opacity: 0.7 }} />
-                <Tooltip cursor={{ fill: "rgba(255,255,255,0.05)" }} contentStyle={{ backgroundColor: "white", border: "1px solid rgba(0,0,0,0.1)", borderRadius: "8px", color: "#333" }} itemStyle={{ color: "#333" }} />
-                <Bar dataKey="clientes" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 3 }}>Clientes por Frequência de Compra</Typography>
+            <BarChart
+              height={300}
+              xAxis={[{ scaleType: "band", data: freqData.map((f) => f.faixa) }]}
+              series={[{ data: freqData.map((f) => f.clientes), color: "#3b82f6" }]}
+              grid={{ horizontal: true }}
+            />
+          </Box>
+        </Grid>
+      </Grid>
 
-      <div className="surface-card overflow-hidden">
-        <div className="border-b border-border p-6">
-          <h3 className="text-lg font-bold">Resumo dos Segmentos</h3>
-          <p className="text-sm text-muted-foreground">Métricas reais observadas. Sem projeção de LTV — {data?.ltvDisponivel ? "histórico suficiente" : "LTV indisponível por histórico insuficiente"}.</p>
-        </div>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader className="bg-muted/30">
+      <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, overflow: "hidden" }}>
+        <Box sx={{ borderBottom: "1px solid", borderColor: "divider", p: 3 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Resumo dos Segmentos</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Métricas reais observadas. Sem projeção de LTV — {data?.ltvDisponivel ? "histórico suficiente" : "LTV indisponível por histórico insuficiente"}.
+          </Typography>
+        </Box>
+        <TableContainer sx={{ overflowX: "auto" }}>
+          <Table size="small">
+            <TableHead>
               <TableRow>
-                <TableHead className="w-[200px]">Segmento</TableHead>
-                <TableHead className="text-right">Clientes</TableHead>
-                <TableHead className="text-right">% Base</TableHead>
-                <TableHead className="text-right">Pedidos Pagos</TableHead>
-                <TableHead className="text-right">Freq. Média</TableHead>
-                <TableHead className="text-right">Receita Válida</TableHead>
-                <TableHead className="text-right">% Receita</TableHead>
-                <TableHead className="text-right">AOV</TableHead>
-                <TableHead className="text-right">Receita / Cliente</TableHead>
-                <TableHead className="text-right">Tempo de Base</TableHead>
+                <TableCell sx={{ width: 200 }}>Segmento</TableCell>
+                <TableCell align="right">Clientes</TableCell>
+                <TableCell align="right">% Base</TableCell>
+                <TableCell align="right">Pedidos Pagos</TableCell>
+                <TableCell align="right">Freq. Média</TableCell>
+                <TableCell align="right">Receita Válida</TableCell>
+                <TableCell align="right">% Receita</TableCell>
+                <TableCell align="right">AOV</TableCell>
+                <TableCell align="right">Receita / Cliente</TableCell>
+                <TableCell align="right">Tempo de Base</TableCell>
               </TableRow>
-            </TableHeader>
+            </TableHead>
             <TableBody>
               {(data?.totalClientes ?? 0) === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="h-32 text-center text-muted-foreground">Nenhum cliente disponível para análise RFM.</TableCell>
+                  <TableCell colSpan={10} align="center" sx={{ py: 4, color: "text.secondary" }}>Nenhum cliente disponível para análise RFM.</TableCell>
                 </TableRow>
               ) : (
                 [...summary]
                   .sort((a, b) => segmentOrder(a.name) - segmentOrder(b.name))
                   .map((s) => (
-                    <TableRow key={s.name} className="group transition-colors hover:bg-muted/20">
-                      <TableCell className="font-medium"><div className="flex items-center gap-2"><div className="size-2 rounded-full" style={{ backgroundColor: segColor(s.name) }} />{s.name}</div></TableCell>
-                      <TableCell className="text-right">{new Intl.NumberFormat().format(s.clientes)}</TableCell>
-                      <TableCell className="text-right"><Badge variant="secondary" className="font-normal">{s.pctBase.toFixed(1)}%</Badge></TableCell>
-                      <TableCell className="text-right">{new Intl.NumberFormat().format(s.pedidos)}</TableCell>
-                      <TableCell className="text-right">{s.frequenciaMedia.toFixed(2)}x</TableCell>
-                      <TableCell className="text-right font-bold text-emerald-500">{brl(s.receita)}</TableCell>
-                      <TableCell className="text-right"><div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted/50"><div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${s.pctReceita}%` }} /></div><span className="mt-1 block text-[10px] text-muted-foreground">{s.pctReceita.toFixed(1)}%</span></TableCell>
-                      <TableCell className="text-right">{brl(s.aov)}</TableCell>
-                      <TableCell className="text-right text-blue-400">{brl(s.receitaPorCliente)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{s.tenureMedioDias === null ? "—" : `${Math.round(s.tenureMedioDias)}d`}</TableCell>
+                    <TableRow key={s.name} hover>
+                      <TableCell sx={{ fontWeight: 500 }}>
+                        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                          <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: segColor(s.name) }} />
+                          {s.name}
+                        </Stack>
+                      </TableCell>
+                      <TableCell align="right">{new Intl.NumberFormat().format(s.clientes)}</TableCell>
+                      <TableCell align="right"><Chip size="small" label={`${s.pctBase.toFixed(1)}%`} /></TableCell>
+                      <TableCell align="right">{new Intl.NumberFormat().format(s.pedidos)}</TableCell>
+                      <TableCell align="right">{s.frequenciaMedia.toFixed(2)}x</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, color: "success.main" }}>{brl(s.receita)}</TableCell>
+                      <TableCell align="right">
+                        <Box sx={{ mt: 0.5, height: 6, width: "100%", overflow: "hidden", borderRadius: 999, bgcolor: "action.hover" }}>
+                          <Box sx={{ height: "100%", bgcolor: "success.main", width: `${s.pctReceita}%` }} />
+                        </Box>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5, fontSize: 10 }}>{s.pctReceita.toFixed(1)}%</Typography>
+                      </TableCell>
+                      <TableCell align="right">{brl(s.aov)}</TableCell>
+                      <TableCell align="right" sx={{ color: "info.main" }}>{brl(s.receitaPorCliente)}</TableCell>
+                      <TableCell align="right" sx={{ color: "text.secondary" }}>{s.tenureMedioDias === null ? "—" : `${Math.round(s.tenureMedioDias)}d`}</TableCell>
                     </TableRow>
                   ))
               )}
             </TableBody>
           </Table>
-        </div>
-      </div>
+        </TableContainer>
+      </Box>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <Grid container spacing={2}>
         {activeSegments.map((name) => (
-          <div key={name} className="surface-card border-l-4 p-5" style={{ borderLeftColor: RFM_SEGMENTS_CONFIG[name].color }}>
-            <h4 className="flex items-center justify-between font-bold">{name}<Info className="size-4 text-muted-foreground" /></h4>
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{RFM_SEGMENTS_CONFIG[name].description}</p>
-          </div>
+          <Grid key={name} size={{ xs: 12, md: 6, lg: 4 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderLeft: "4px solid", borderLeftColor: RFM_SEGMENTS_CONFIG[name].color, borderRadius: 3, p: 2.5 }}>
+              <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+                <Typography sx={{ fontWeight: 700 }}>{name}</Typography>
+                <Info size={16} color="var(--mui-palette-text-secondary)" />
+              </Stack>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1, lineHeight: 1.6 }}>
+                {RFM_SEGMENTS_CONFIG[name].description}
+              </Typography>
+            </Box>
+          </Grid>
         ))}
-      </div>
-    </div>
+      </Grid>
+    </Stack>
   );
 }

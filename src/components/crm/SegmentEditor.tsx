@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
+  ChevronRight,
   MessageSquare,
   Plus,
   Save,
@@ -25,21 +26,16 @@ import {
   type CRMFilterField,
 } from "@/lib/crm-filter-catalog";
 import { CRM_SEGMENT_TEMPLATES } from "@/lib/crm-segment-templates";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuPortal,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import IconButton from "@mui/material/IconButton";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import Chip from "@mui/material/Chip";
+import MenuItem from "@mui/material/MenuItem";
+import Menu from "@mui/material/Menu";
+import Select from "@mui/material/Select";
+import Stack from "@mui/material/Stack";
 import { useServerFn } from "@tanstack/react-start";
 import { getCRMFilterOptions, previewSegmentAudience, saveSegment } from "@/lib/crm-segmentation.functions";
 import { toast } from "sonner";
@@ -272,8 +268,11 @@ function isMoneyField(field: CRMFilterField) {
 }
 
 function normalizeSearch(value: string) {
-  return value.trim().toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return value.trim().toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
+
+// Estilo compacto reaproveitado em todos os inputs/selects de valor de condição.
+const compactFieldSx = { "& .MuiInputBase-root": { height: 32, fontSize: 12, bgcolor: "action.hover" }, "& fieldset": { border: "none" } };
 
 export function SegmentEditor({ onCancel, onSave, initialData }: {
   onCancel: () => void;
@@ -292,6 +291,8 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
   const [preview, setPreview] = useState<AudiencePreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewMessage, setPreviewMessage] = useState("Adicione filtros válidos para calcular a audiência.");
+  const [addFilterAnchor, setAddFilterAnchor] = useState<{ el: HTMLElement; groupId: string } | null>(null);
+  const [menuCategory, setMenuCategory] = useState<CRMFilterCategory | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -341,6 +342,12 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
     };
   }, [groups]);
 
+  const closeAddFilterMenu = () => {
+    setAddFilterAnchor(null);
+    setFilterSearch("");
+    setMenuCategory(null);
+  };
+
   const addCondition = (groupId: string, category: CRMFilterCategory, field: CRMFilterField) => {
     setGroups((prev) => prev.map((group) => group.id !== groupId ? group : ({
       ...group,
@@ -353,7 +360,7 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
         value: initialValueForField(field),
       }],
     })));
-    setFilterSearch("");
+    closeAddFilterMenu();
   };
 
   const removeCondition = (groupId: string, conditionId: string) => setGroups((prev) => prev.map((group) =>
@@ -409,44 +416,39 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
     }
   };
 
-  const renderNumericInputs = (
-    value: { amount?: string | number; min?: string | number; max?: string | number },
-    setValue: (next: any) => void,
-    money: boolean,
-  ) => conditionNumericControls(value, setValue, money);
-
   const conditionNumericControls = (
     value: { amount?: string | number; min?: string | number; max?: string | number },
     setValue: (next: any) => void,
     money: boolean,
+    operator: string,
   ) => {
-    const activeOperator = currentRenderingCondition?.operator ?? "eq";
-    if (activeOperator === "between") {
-      return <>
-        {money && <span className="text-[11px] text-muted-foreground">R$</span>}
-        <Input type="number" min={0} step={money ? "0.01" : "1"} className="h-8 w-24 border-none bg-muted/50 text-xs" placeholder="Mínimo" value={String(value.min ?? "")} onChange={(event) => setValue({ ...value, min: event.target.value })} />
-        <span className="text-[11px] text-muted-foreground">até</span>
-        {money && <span className="text-[11px] text-muted-foreground">R$</span>}
-        <Input type="number" min={0} step={money ? "0.01" : "1"} className="h-8 w-24 border-none bg-muted/50 text-xs" placeholder="Máximo" value={String(value.max ?? "")} onChange={(event) => setValue({ ...value, max: event.target.value })} />
-      </>;
+    if (operator === "between") {
+      return (
+        <>
+          {money && <Typography variant="caption" color="text.secondary">R$</Typography>}
+          <TextField type="number" size="small" sx={{ ...compactFieldSx, width: 96 }} slotProps={{ htmlInput: { min: 0, step: money ? "0.01" : "1" } }} placeholder="Mínimo" value={String(value.min ?? "")} onChange={(event) => setValue({ ...value, min: event.target.value })} />
+          <Typography variant="caption" color="text.secondary">até</Typography>
+          {money && <Typography variant="caption" color="text.secondary">R$</Typography>}
+          <TextField type="number" size="small" sx={{ ...compactFieldSx, width: 96 }} slotProps={{ htmlInput: { min: 0, step: money ? "0.01" : "1" } }} placeholder="Máximo" value={String(value.max ?? "")} onChange={(event) => setValue({ ...value, max: event.target.value })} />
+        </>
+      );
     }
-    return <>
-      {money && <span className="text-[11px] text-muted-foreground">R$</span>}
-      <Input type="number" min={0} step={money ? "0.01" : "1"} className="h-8 w-28 border-none bg-muted/50 text-xs" placeholder={money ? "0,00" : "Quantidade"} value={String(value.amount ?? "")} onChange={(event) => setValue({ ...value, amount: event.target.value })} />
-    </>;
+    return (
+      <>
+        {money && <Typography variant="caption" color="text.secondary">R$</Typography>}
+        <TextField type="number" size="small" sx={{ ...compactFieldSx, width: 112 }} slotProps={{ htmlInput: { min: 0, step: money ? "0.01" : "1" } }} placeholder={money ? "0,00" : "Quantidade"} value={String(value.amount ?? "")} onChange={(event) => setValue({ ...value, amount: event.target.value })} />
+      </>
+    );
   };
 
-  let currentRenderingCondition: RuleCondition | null = null;
-
   const renderValueControl = (groupId: string, condition: RuleCondition, field: CRMFilterField) => {
-    currentRenderingCondition = condition;
     const setValue = (value: RuleValue) => updateCondition(groupId, condition.id, { value });
     const productSelect = (selectedProductId: string, onSelect: (productId: string) => void) => (
-      <Select value={selectedProductId} onValueChange={onSelect}>
-        <SelectTrigger className="h-8 min-w-[260px] flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar produto..." /></SelectTrigger>
-        <SelectContent className="max-h-[360px]">
-          {filterOptions.products.map((product) => <SelectItem key={product.id} value={product.id}>{product.title}{product.skus.length ? ` · SKU ${product.skus.slice(0, 2).join(", ")}` : ""}</SelectItem>)}
-        </SelectContent>
+      <Select size="small" displayEmpty sx={{ ...compactFieldSx, minWidth: 260, flex: 1 }} value={selectedProductId} onChange={(e) => onSelect(e.target.value)}>
+        <MenuItem value=""><em>Selecionar produto...</em></MenuItem>
+        {filterOptions.products.map((product) => (
+          <MenuItem key={product.id} value={product.id}>{product.title}{product.skus.length ? ` · SKU ${product.skus.slice(0, 2).join(", ")}` : ""}</MenuItem>
+        ))}
       </Select>
     );
     const taxonomyOptions = (fieldId: string) => fieldId.startsWith("categoria_")
@@ -455,187 +457,270 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
     const taxonomySelect = (fieldId: string, selected: string, onSelect: (value: string) => void) => {
       const options = taxonomyOptions(fieldId);
       const category = fieldId.startsWith("categoria_");
-      return <Select value={selected} onValueChange={onSelect}>
-        <SelectTrigger className="h-8 min-w-[280px] flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder={category ? "Selecionar categoria/tipo..." : "Selecionar coleção..."} /></SelectTrigger>
-        <SelectContent className="max-h-[360px]">{options.map((option) => <SelectItem key={option.id} value={option.id}>{option.title}</SelectItem>)}</SelectContent>
-      </Select>;
+      return (
+        <Select size="small" displayEmpty sx={{ ...compactFieldSx, minWidth: 280, flex: 1 }} value={selected} onChange={(e) => onSelect(e.target.value)}>
+          <MenuItem value=""><em>{category ? "Selecionar categoria/tipo..." : "Selecionar coleção..."}</em></MenuItem>
+          {options.map((option) => <MenuItem key={option.id} value={option.id}>{option.title}</MenuItem>)}
+        </Select>
+      );
     };
 
     if (field.id === "estado") return (
-      <Select value={String(condition.value || "")} onValueChange={setValue}>
-        <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar UF..." /></SelectTrigger>
-        <SelectContent>{BRAZIL_STATES.map((uf) => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}</SelectContent>
+      <Select size="small" displayEmpty sx={{ ...compactFieldSx, flex: 1 }} value={String(condition.value || "")} onChange={(e) => setValue(e.target.value)}>
+        <MenuItem value=""><em>Selecionar UF...</em></MenuItem>
+        {BRAZIL_STATES.map((uf) => <MenuItem key={uf} value={uf}>{uf}</MenuItem>)}
       </Select>
     );
 
     if (field.kind === "campaign_behavior") return (
-      <Select value={String(condition.value || "")} onValueChange={setValue}>
-        <SelectTrigger className="h-8 min-w-[300px] flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar campanha..." /></SelectTrigger>
-        <SelectContent className="max-h-[360px]">{filterOptions.campaigns.map((option) => <SelectItem key={option.id} value={option.id}>{option.name}</SelectItem>)}</SelectContent>
+      <Select size="small" displayEmpty sx={{ ...compactFieldSx, minWidth: 300, flex: 1 }} value={String(condition.value || "")} onChange={(e) => setValue(e.target.value)}>
+        <MenuItem value=""><em>Selecionar campanha...</em></MenuItem>
+        {filterOptions.campaigns.map((option) => <MenuItem key={option.id} value={option.id}>{option.name}</MenuItem>)}
       </Select>
     );
 
     if (field.kind === "automation_behavior") return (
-      <Select value={String(condition.value || "")} onValueChange={setValue}>
-        <SelectTrigger className="h-8 min-w-[300px] flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar automação..." /></SelectTrigger>
-        <SelectContent className="max-h-[360px]">{filterOptions.automations.map((option) => <SelectItem key={option.id} value={option.id}>{option.name}</SelectItem>)}</SelectContent>
+      <Select size="small" displayEmpty sx={{ ...compactFieldSx, minWidth: 300, flex: 1 }} value={String(condition.value || "")} onChange={(e) => setValue(e.target.value)}>
+        <MenuItem value=""><em>Selecionar automação...</em></MenuItem>
+        {filterOptions.automations.map((option) => <MenuItem key={option.id} value={option.id}>{option.name}</MenuItem>)}
       </Select>
     );
 
     if (field.kind === "period_number" || field.kind === "period_money") {
       const value = periodMetricValue(condition.value);
-      return <div className="flex min-w-[470px] flex-1 items-center gap-2">
-        <span className="text-[11px] text-muted-foreground">últimos</span>
-        <Input type="number" min={0} className="h-8 w-20 border-none bg-muted/50 text-xs" placeholder="Dias" value={String(value.days ?? "")} onChange={(event) => setValue({ ...value, days: event.target.value })} />
-        <span className="text-[11px] text-muted-foreground">dias</span>
-        {renderNumericInputs(value, setValue, field.kind === "period_money")}
-      </div>;
+      return (
+        <Stack direction="row" spacing={1} sx={{ minWidth: 470, flex: 1, alignItems: "center" }}>
+          <Typography variant="caption" color="text.secondary">últimos</Typography>
+          <TextField type="number" size="small" sx={{ ...compactFieldSx, width: 80 }} slotProps={{ htmlInput: { min: 0 } }} placeholder="Dias" value={String(value.days ?? "")} onChange={(event) => setValue({ ...value, days: event.target.value })} />
+          <Typography variant="caption" color="text.secondary">dias</Typography>
+          {conditionNumericControls(value, setValue, field.kind === "period_money", condition.operator)}
+        </Stack>
+      );
     }
 
     if (field.kind === "product_taxonomy") return taxonomySelect(field.id, String(condition.value || ""), setValue);
 
     if (field.kind === "product_taxonomy_date") {
       const value = taxonomyMetricValue(condition.value);
-      return <div className="flex min-w-[500px] flex-1 items-center gap-2">
-        {taxonomySelect(field.id, value.taxonomyValue, (taxonomyValue) => setValue({ ...value, taxonomyValue }))}
-        {condition.operator === "between_days" ? <>
-          <Input type="number" min={0} className="h-8 w-24 border-none bg-muted/50 text-xs" placeholder="Mín. dias" value={String(value.min ?? "")} onChange={(event) => setValue({ ...value, min: event.target.value })} />
-          <span className="text-[11px] text-muted-foreground">até</span>
-          <Input type="number" min={0} className="h-8 w-24 border-none bg-muted/50 text-xs" placeholder="Máx. dias" value={String(value.max ?? "")} onChange={(event) => setValue({ ...value, max: event.target.value })} />
-        </> : <Input type="number" min={0} className="h-8 w-28 border-none bg-muted/50 text-xs" placeholder="Dias" value={String(value.days ?? "")} onChange={(event) => setValue({ ...value, days: event.target.value })} />}
-      </div>;
+      return (
+        <Stack direction="row" spacing={1} sx={{ minWidth: 500, flex: 1, alignItems: "center" }}>
+          {taxonomySelect(field.id, value.taxonomyValue, (taxonomyValue) => setValue({ ...value, taxonomyValue }))}
+          {condition.operator === "between_days" ? (
+            <>
+              <TextField type="number" size="small" sx={{ ...compactFieldSx, width: 96 }} slotProps={{ htmlInput: { min: 0 } }} placeholder="Mín. dias" value={String(value.min ?? "")} onChange={(event) => setValue({ ...value, min: event.target.value })} />
+              <Typography variant="caption" color="text.secondary">até</Typography>
+              <TextField type="number" size="small" sx={{ ...compactFieldSx, width: 96 }} slotProps={{ htmlInput: { min: 0 } }} placeholder="Máx. dias" value={String(value.max ?? "")} onChange={(event) => setValue({ ...value, max: event.target.value })} />
+            </>
+          ) : (
+            <TextField type="number" size="small" sx={{ ...compactFieldSx, width: 112 }} slotProps={{ htmlInput: { min: 0 } }} placeholder="Dias" value={String(value.days ?? "")} onChange={(event) => setValue({ ...value, days: event.target.value })} />
+          )}
+        </Stack>
+      );
     }
 
     if (field.kind === "product_taxonomy_number" || field.kind === "product_taxonomy_money") {
       const value = taxonomyMetricValue(condition.value);
-      return <div className="flex min-w-[520px] flex-1 items-center gap-2">
-        {taxonomySelect(field.id, value.taxonomyValue, (taxonomyValue) => setValue({ ...value, taxonomyValue }))}
-        {renderNumericInputs(value, setValue, field.kind === "product_taxonomy_money")}
-      </div>;
+      return (
+        <Stack direction="row" spacing={1} sx={{ minWidth: 520, flex: 1, alignItems: "center" }}>
+          {taxonomySelect(field.id, value.taxonomyValue, (taxonomyValue) => setValue({ ...value, taxonomyValue }))}
+          {conditionNumericControls(value, setValue, field.kind === "product_taxonomy_money", condition.operator)}
+        </Stack>
+      );
     }
 
     if (field.kind === "product") return productSelect(String(condition.value || ""), setValue);
 
     if (field.kind === "product_date") {
       const value = productMetricValue(condition.value);
-      return <div className="flex min-w-[480px] flex-1 items-center gap-2">
-        {productSelect(value.productId, (productId) => setValue({ ...value, productId }))}
-        {condition.operator === "between_days" ? <>
-          <Input type="number" min={0} className="h-8 w-24 border-none bg-muted/50 text-xs" placeholder="Mín. dias" value={String(value.min ?? "")} onChange={(event) => setValue({ ...value, min: event.target.value })} />
-          <span className="text-[11px] text-muted-foreground">até</span>
-          <Input type="number" min={0} className="h-8 w-24 border-none bg-muted/50 text-xs" placeholder="Máx. dias" value={String(value.max ?? "")} onChange={(event) => setValue({ ...value, max: event.target.value })} />
-        </> : <Input type="number" min={0} className="h-8 w-28 border-none bg-muted/50 text-xs" placeholder="Dias" value={String(value.days ?? "")} onChange={(event) => setValue({ ...value, days: event.target.value })} />}
-      </div>;
+      return (
+        <Stack direction="row" spacing={1} sx={{ minWidth: 480, flex: 1, alignItems: "center" }}>
+          {productSelect(value.productId, (productId) => setValue({ ...value, productId }))}
+          {condition.operator === "between_days" ? (
+            <>
+              <TextField type="number" size="small" sx={{ ...compactFieldSx, width: 96 }} slotProps={{ htmlInput: { min: 0 } }} placeholder="Mín. dias" value={String(value.min ?? "")} onChange={(event) => setValue({ ...value, min: event.target.value })} />
+              <Typography variant="caption" color="text.secondary">até</Typography>
+              <TextField type="number" size="small" sx={{ ...compactFieldSx, width: 96 }} slotProps={{ htmlInput: { min: 0 } }} placeholder="Máx. dias" value={String(value.max ?? "")} onChange={(event) => setValue({ ...value, max: event.target.value })} />
+            </>
+          ) : (
+            <TextField type="number" size="small" sx={{ ...compactFieldSx, width: 112 }} slotProps={{ htmlInput: { min: 0 } }} placeholder="Dias" value={String(value.days ?? "")} onChange={(event) => setValue({ ...value, days: event.target.value })} />
+          )}
+        </Stack>
+      );
     }
 
     if (field.kind === "product_number" || field.kind === "product_money") {
       const value = productMetricValue(condition.value);
-      return <div className="flex min-w-[520px] flex-1 items-center gap-2">
-        {productSelect(value.productId, (productId) => setValue({ ...value, productId }))}
-        {renderNumericInputs(value, setValue, field.kind === "product_money")}
-      </div>;
+      return (
+        <Stack direction="row" spacing={1} sx={{ minWidth: 520, flex: 1, alignItems: "center" }}>
+          {productSelect(value.productId, (productId) => setValue({ ...value, productId }))}
+          {conditionNumericControls(value, setValue, field.kind === "product_money", condition.operator)}
+        </Stack>
+      );
     }
 
     if (field.kind === "product_sku") {
       const value = productMetricValue(condition.value);
       const options = filterOptions.products.flatMap((product) => product.skus.map((sku) => ({ productId: product.id, title: product.title, sku })));
       const encoded = value.productId && value.sku ? `${value.productId}::${value.sku}` : "";
-      return <Select value={encoded} onValueChange={(selected) => {
-        const separator = selected.indexOf("::");
-        setValue({ productId: selected.slice(0, separator), sku: selected.slice(separator + 2) });
-      }}>
-        <SelectTrigger className="h-8 min-w-[360px] flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar SKU / variação..." /></SelectTrigger>
-        <SelectContent className="max-h-[360px]">{options.map((option) => <SelectItem key={`${option.productId}:${option.sku}`} value={`${option.productId}::${option.sku}`}>{option.title} · SKU {option.sku}</SelectItem>)}</SelectContent>
-      </Select>;
+      return (
+        <Select
+          size="small"
+          displayEmpty
+          sx={{ ...compactFieldSx, minWidth: 360, flex: 1 }}
+          value={encoded}
+          onChange={(e) => {
+            const selected = e.target.value;
+            const separator = selected.indexOf("::");
+            setValue({ productId: selected.slice(0, separator), sku: selected.slice(separator + 2) });
+          }}
+        >
+          <MenuItem value=""><em>Selecionar SKU / variação...</em></MenuItem>
+          {options.map((option) => (
+            <MenuItem key={`${option.productId}:${option.sku}`} value={`${option.productId}::${option.sku}`}>{option.title} · SKU {option.sku}</MenuItem>
+          ))}
+        </Select>
+      );
     }
 
-    if (field.kind === "status") return <Select value={String(condition.value || "")} onValueChange={setValue}>
-      <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar status..." /></SelectTrigger>
-      <SelectContent>
-        <SelectItem value="paid">Pago</SelectItem>
-        <SelectItem value="partially_paid">Parcialmente Pago</SelectItem>
-        <SelectItem value="pending">Pendente</SelectItem>
-        <SelectItem value="authorized">Autorizado</SelectItem>
-        <SelectItem value="refunded">Reembolsado</SelectItem>
-        <SelectItem value="partially_refunded">Parcialmente Reembolsado</SelectItem>
-        <SelectItem value="voided">Anulado</SelectItem>
-        <SelectItem value="expired">Expirado</SelectItem>
-        <SelectItem value="unpaid">Não Pago</SelectItem>
-        <SelectItem value="cancelled">Cancelado</SelectItem>
-      </SelectContent>
-    </Select>;
+    if (field.kind === "status") return (
+      <Select size="small" displayEmpty sx={{ ...compactFieldSx, flex: 1 }} value={String(condition.value || "")} onChange={(e) => setValue(e.target.value)}>
+        <MenuItem value=""><em>Selecionar status...</em></MenuItem>
+        <MenuItem value="paid">Pago</MenuItem>
+        <MenuItem value="partially_paid">Parcialmente Pago</MenuItem>
+        <MenuItem value="pending">Pendente</MenuItem>
+        <MenuItem value="authorized">Autorizado</MenuItem>
+        <MenuItem value="refunded">Reembolsado</MenuItem>
+        <MenuItem value="partially_refunded">Parcialmente Reembolsado</MenuItem>
+        <MenuItem value="voided">Anulado</MenuItem>
+        <MenuItem value="expired">Expirado</MenuItem>
+        <MenuItem value="unpaid">Não Pago</MenuItem>
+        <MenuItem value="cancelled">Cancelado</MenuItem>
+      </Select>
+    );
 
-    if (field.kind === "fulfillment_status") return <Select value={String(condition.value || "")} onValueChange={setValue}>
-      <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar status de entrega..." /></SelectTrigger>
-      <SelectContent>
-        <SelectItem value="fulfilled">Rastreamento Adicionado</SelectItem>
-        <SelectItem value="in_transit">Em Trânsito</SelectItem>
-        <SelectItem value="out_for_delivery">Saiu para Entrega</SelectItem>
-        <SelectItem value="attempted_delivery">Tentativa de Entrega</SelectItem>
-        <SelectItem value="delivered">Entregue</SelectItem>
-        <SelectItem value="canceled">Cancelado</SelectItem>
-      </SelectContent>
-    </Select>;
+    if (field.kind === "fulfillment_status") return (
+      <Select size="small" displayEmpty sx={{ ...compactFieldSx, flex: 1 }} value={String(condition.value || "")} onChange={(e) => setValue(e.target.value)}>
+        <MenuItem value=""><em>Selecionar status de entrega...</em></MenuItem>
+        <MenuItem value="fulfilled">Rastreamento Adicionado</MenuItem>
+        <MenuItem value="in_transit">Em Trânsito</MenuItem>
+        <MenuItem value="out_for_delivery">Saiu para Entrega</MenuItem>
+        <MenuItem value="attempted_delivery">Tentativa de Entrega</MenuItem>
+        <MenuItem value="delivered">Entregue</MenuItem>
+        <MenuItem value="canceled">Cancelado</MenuItem>
+      </Select>
+    );
 
     if (field.kind === "rfm") {
       if (condition.operator === "in" || condition.operator === "not_in") {
         const selected = Array.isArray(condition.value) ? condition.value : [];
-        return <div className="flex min-w-[320px] flex-1 flex-wrap gap-1 rounded-md bg-muted/30 p-1.5">{Object.keys(RFM_SEGMENTS_CONFIG).map((segment) => <button key={segment} type="button" onClick={() => setValue(selected.includes(segment) ? selected.filter((item) => item !== segment) : [...selected, segment])} className={`rounded border px-2 py-1 text-[10px] ${selected.includes(segment) ? "border-brand bg-brand/10 text-brand" : "border-border bg-background text-muted-foreground"}`}>{segment}</button>)}</div>;
+        return (
+          <Stack direction="row" spacing={0.5} sx={{ minWidth: 320, flex: 1, flexWrap: "wrap", borderRadius: 1.5, bgcolor: "action.hover", p: 0.75 }}>
+            {Object.keys(RFM_SEGMENTS_CONFIG).map((segment) => (
+              <Chip
+                key={segment}
+                size="small"
+                label={segment}
+                variant={selected.includes(segment) ? "filled" : "outlined"}
+                color={selected.includes(segment) ? "primary" : "default"}
+                onClick={() => setValue(selected.includes(segment) ? selected.filter((item) => item !== segment) : [...selected, segment])}
+                sx={{ fontSize: 10 }}
+              />
+            ))}
+          </Stack>
+        );
       }
-      return <Select value={String(condition.value || "")} onValueChange={setValue}>
-        <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar segmento..." /></SelectTrigger>
-        <SelectContent>{Object.keys(RFM_SEGMENTS_CONFIG).map((segment) => <SelectItem key={segment} value={segment}>{segment}</SelectItem>)}</SelectContent>
-      </Select>;
+      return (
+        <Select size="small" displayEmpty sx={{ ...compactFieldSx, flex: 1 }} value={String(condition.value || "")} onChange={(e) => setValue(e.target.value)}>
+          <MenuItem value=""><em>Selecionar segmento...</em></MenuItem>
+          {Object.keys(RFM_SEGMENTS_CONFIG).map((segment) => <MenuItem key={segment} value={segment}>{segment}</MenuItem>)}
+        </Select>
+      );
     }
 
-    if (field.kind === "profile") return <Select value={String(condition.value || "")} onValueChange={setValue}>
-      <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar perfil..." /></SelectTrigger>
-      <SelectContent>
-        <SelectItem value="carrinho">Checkout Abandonado Ativo</SelectItem>
-        <SelectItem value="primeira_compra">Exatamente 1 Compra Válida</SelectItem>
-        <SelectItem value="sem_compra">Sem Compra Válida</SelectItem>
-      </SelectContent>
-    </Select>;
+    if (field.kind === "profile") return (
+      <Select size="small" displayEmpty sx={{ ...compactFieldSx, flex: 1 }} value={String(condition.value || "")} onChange={(e) => setValue(e.target.value)}>
+        <MenuItem value=""><em>Selecionar perfil...</em></MenuItem>
+        <MenuItem value="carrinho">Checkout Abandonado Ativo</MenuItem>
+        <MenuItem value="primeira_compra">Exatamente 1 Compra Válida</MenuItem>
+        <MenuItem value="sem_compra">Sem Compra Válida</MenuItem>
+      </Select>
+    );
 
-    if (field.kind === "boolean") return <Select value={String(condition.value || "")} onValueChange={setValue}>
-      <SelectTrigger className="h-8 flex-1 border-none bg-muted/50 text-xs"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-      <SelectContent><SelectItem value="sim">Sim</SelectItem><SelectItem value="nao">Não</SelectItem></SelectContent>
-    </Select>;
+    if (field.kind === "boolean") return (
+      <Select size="small" displayEmpty sx={{ ...compactFieldSx, flex: 1 }} value={String(condition.value || "")} onChange={(e) => setValue(e.target.value)}>
+        <MenuItem value=""><em>Selecionar...</em></MenuItem>
+        <MenuItem value="sim">Sim</MenuItem>
+        <MenuItem value="nao">Não</MenuItem>
+      </Select>
+    );
 
     if (field.kind === "date") {
       if (condition.operator === "between_days") {
         const range = rangeValue(condition.value);
-        return <div className="flex flex-1 items-center gap-2">
-          <Input type="number" min={0} className="h-8 border-none bg-muted/50 text-xs" placeholder="Mín. dias" value={String(range.min)} onChange={(event) => setValue({ ...range, min: event.target.value })} />
-          <span className="text-[11px] text-muted-foreground">até</span>
-          <Input type="number" min={0} className="h-8 border-none bg-muted/50 text-xs" placeholder="Máx. dias" value={String(range.max)} onChange={(event) => setValue({ ...range, max: event.target.value })} />
-        </div>;
+        return (
+          <Stack direction="row" spacing={1} sx={{ flex: 1, alignItems: "center" }}>
+            <TextField type="number" size="small" sx={compactFieldSx} slotProps={{ htmlInput: { min: 0 } }} placeholder="Mín. dias" value={String(range.min)} onChange={(event) => setValue({ ...range, min: event.target.value })} />
+            <Typography variant="caption" color="text.secondary">até</Typography>
+            <TextField type="number" size="small" sx={compactFieldSx} slotProps={{ htmlInput: { min: 0 } }} placeholder="Máx. dias" value={String(range.max)} onChange={(event) => setValue({ ...range, max: event.target.value })} />
+          </Stack>
+        );
       }
       const relative = condition.operator === "last_days" || condition.operator === "older_than_days";
-      return <Input type={relative ? "number" : "date"} min={relative ? 0 : undefined} className="h-8 flex-1 border-none bg-muted/50 text-xs" value={String(condition.value ?? "")} onChange={(event) => setValue(event.target.value)} />;
+      return (
+        <TextField
+          type={relative ? "number" : "date"}
+          size="small"
+          sx={{ ...compactFieldSx, flex: 1 }}
+          slotProps={{ htmlInput: { min: relative ? 0 : undefined } }}
+          value={String(condition.value ?? "")}
+          onChange={(event) => setValue(event.target.value)}
+        />
+      );
     }
 
     if (field.kind === "number") {
       const money = isMoneyField(field);
       if (condition.operator === "between") {
         const range = rangeValue(condition.value);
-        return <div className="flex flex-1 items-center gap-2">
-          {money && <span className="text-[11px] text-muted-foreground">R$</span>}
-          <Input type="number" step={money ? "0.01" : "1"} className="h-8 border-none bg-muted/50 text-xs" placeholder="Mínimo" value={String(range.min)} onChange={(event) => setValue({ ...range, min: event.target.value })} />
-          <span className="text-[11px] text-muted-foreground">até</span>
-          {money && <span className="text-[11px] text-muted-foreground">R$</span>}
-          <Input type="number" step={money ? "0.01" : "1"} className="h-8 border-none bg-muted/50 text-xs" placeholder="Máximo" value={String(range.max)} onChange={(event) => setValue({ ...range, max: event.target.value })} />
-        </div>;
+        return (
+          <Stack direction="row" spacing={1} sx={{ flex: 1, alignItems: "center" }}>
+            {money && <Typography variant="caption" color="text.secondary">R$</Typography>}
+            <TextField type="number" size="small" sx={compactFieldSx} slotProps={{ htmlInput: { step: money ? "0.01" : "1" } }} placeholder="Mínimo" value={String(range.min)} onChange={(event) => setValue({ ...range, min: event.target.value })} />
+            <Typography variant="caption" color="text.secondary">até</Typography>
+            {money && <Typography variant="caption" color="text.secondary">R$</Typography>}
+            <TextField type="number" size="small" sx={compactFieldSx} slotProps={{ htmlInput: { step: money ? "0.01" : "1" } }} placeholder="Máximo" value={String(range.max)} onChange={(event) => setValue({ ...range, max: event.target.value })} />
+          </Stack>
+        );
       }
-      return <Input type="number" step={money ? "0.01" : "1"} className="h-8 flex-1 border-none bg-muted/50 text-xs" placeholder={money ? "R$ 0,00" : "Valor numérico..."} value={String(condition.value ?? "")} onChange={(event) => setValue(event.target.value)} />;
+      return (
+        <TextField
+          type="number"
+          size="small"
+          sx={{ ...compactFieldSx, flex: 1 }}
+          slotProps={{ htmlInput: { step: money ? "0.01" : "1" } }}
+          placeholder={money ? "R$ 0,00" : "Valor numérico..."}
+          value={String(condition.value ?? "")}
+          onChange={(event) => setValue(event.target.value)}
+        />
+      );
     }
 
     const suggestions = field.id === "cidade" ? filterOptions.cities : field.id === "customer_tag" ? filterOptions.customerTags : field.id === "tags_custom" ? filterOptions.customTags : [];
     const listId = suggestions.length ? `crm-filter-options-${condition.id}` : undefined;
-    return <div className="flex-1">
-      <Input list={listId} className="h-8 border-none bg-muted/50 text-xs" placeholder={suggestions.length ? "Digite ou escolha uma opção..." : "Valor..."} value={String(condition.value ?? "")} onChange={(event) => setValue(event.target.value)} />
-      {listId && <datalist id={listId}>{suggestions.map((option) => <option key={option} value={option} />)}</datalist>}
-    </div>;
+    return (
+      <Box sx={{ flex: 1 }}>
+        <TextField
+          size="small"
+          fullWidth
+          sx={compactFieldSx}
+          slotProps={{ htmlInput: { list: listId } }}
+          placeholder={suggestions.length ? "Digite ou escolha uma opção..." : "Valor..."}
+          value={String(condition.value ?? "")}
+          onChange={(event) => setValue(event.target.value)}
+        />
+        {listId && <datalist id={listId}>{suggestions.map((option) => <option key={option} value={option} />)}</datalist>}
+      </Box>
+    );
   };
 
   const searchTerm = normalizeSearch(filterSearch);
@@ -644,92 +729,252 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
         .filter(({ category, field }) => normalizeSearch(`${category.label} ${field.label} ${field.description ?? ""} ${field.id}`).includes(searchTerm))
     : [];
 
-  return <div className="space-y-6">
-    <div className="flex items-center justify-between gap-4">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={onCancel}><ArrowLeft className="size-5" /></Button>
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight">{initialData?.id ? "Editar Segmento" : "Criar Segmento"}</h2>
-          <p className="text-sm text-muted-foreground">Defina regras reais para agrupar seus clientes automaticamente.</p>
-        </div>
-      </div>
-      <div className="flex gap-2">
-        <Button variant="outline" onClick={onCancel}>Cancelar</Button>
-        <Button onClick={handleSave} disabled={isSaving} className="gap-2 bg-brand text-white hover:bg-brand/90">{isSaving ? "Salvando..." : <><Save className="size-4" /> Salvar Segmento</>}</Button>
-      </div>
-    </div>
+  return (
+    <Stack spacing={3}>
+      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }} spacing={2}>
+        <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+          <IconButton onClick={onCancel}>
+            <ArrowLeft size={20} />
+          </IconButton>
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              {initialData?.id ? "Editar Segmento" : "Criar Segmento"}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Defina regras reais para agrupar seus clientes automaticamente.
+            </Typography>
+          </Box>
+        </Stack>
+        <Stack direction="row" spacing={1}>
+          <Button variant="outline" onClick={onCancel}>Cancelar</Button>
+          <Button variant="contained" startIcon={<Save size={16} />} onClick={handleSave} disabled={isSaving}>
+            {isSaving ? "Salvando..." : "Salvar Segmento"}
+          </Button>
+        </Stack>
+      </Stack>
 
-    <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-muted-foreground">
-      <div className="flex items-start gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" /><p><strong className="text-foreground">Filtros validados:</strong> compras, produtos, categorias, coleções, campanhas e automações usam fontes reais do CRM. Métricas de compra seguem somente pedidos válidos.</p></div>
-    </div>
+      <Stack direction="row" spacing={1.5} sx={{ border: "1px solid", borderColor: "success.main", bgcolor: "success.50", borderRadius: 2, p: 1.5 }}>
+        <ShieldCheck size={16} style={{ marginTop: 2, flexShrink: 0 }} color="var(--mui-palette-success-main, #28C76F)" />
+        <Typography variant="body2" color="text.secondary">
+          <strong style={{ color: "inherit" }}>Filtros validados:</strong> compras, produtos, categorias, coleções, campanhas e automações usam fontes reais do CRM. Métricas de compra seguem somente pedidos válidos.
+        </Typography>
+      </Stack>
 
-    <div className="grid gap-4 sm:grid-cols-2">
-      <div className="space-y-2"><Label htmlFor="nome">Nome do Segmento</Label><Input id="nome" placeholder="Ex: 3+ compras nos últimos 60 dias" value={nome} onChange={(event) => setNome(event.target.value)} /></div>
-      <div className="space-y-2"><Label htmlFor="desc">Descrição (opcional)</Label><Input id="desc" value={descricao} onChange={(event) => setDescricao(event.target.value)} /></div>
-    </div>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+        <TextField fullWidth label="Nome do Segmento" placeholder="Ex: 3+ compras nos últimos 60 dias" value={nome} onChange={(event) => setNome(event.target.value)} />
+        <TextField fullWidth label="Descrição (opcional)" value={descricao} onChange={(event) => setDescricao(event.target.value)} />
+      </Stack>
 
-    {!initialData?.id && <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <div className="mb-3 flex items-center gap-2"><Sparkles className="size-4 text-brand" /><div><h3 className="text-sm font-semibold">Modelos rápidos</h3><p className="text-xs text-muted-foreground">Comece com um segmento pronto e ajuste se quiser.</p></div></div>
-      <div className="flex flex-wrap gap-2">{CRM_SEGMENT_TEMPLATES.map((template) => <Button key={template.id} type="button" variant="outline" size="sm" className="h-auto whitespace-normal py-2 text-left" onClick={() => applyTemplate(template.id)}>{template.name}</Button>)}</div>
-    </div>}
+      {!initialData?.id && (
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1.5 }}>
+            <Sparkles size={16} />
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>Modelos rápidos</Typography>
+              <Typography variant="caption" color="text.secondary">Comece com um segmento pronto e ajuste se quiser.</Typography>
+            </Box>
+          </Stack>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+            {CRM_SEGMENT_TEMPLATES.map((template) => (
+              <Button key={template.id} variant="outline" size="small" sx={{ height: "auto", py: 1, textAlign: "left" }} onClick={() => applyTemplate(template.id)}>
+                {template.name}
+              </Button>
+            ))}
+          </Stack>
+        </Box>
+      )}
 
-    <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div><h3 className="flex items-center gap-2 text-lg font-medium">Regras de Segmentação <Badge variant="secondary">Dinâmico</Badge></h3><p className="mt-1 text-xs text-muted-foreground">Dentro de cada grupo usamos E. Entre grupos usamos OU.</p></div>
-        <div className="min-w-[260px] rounded-lg border bg-muted/20 px-3 py-2 text-right">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Prévia da audiência</p>
-          {previewLoading ? <p className="text-sm font-semibold">Calculando...</p> : preview ? <><p className="text-lg font-semibold">{preview.count.toLocaleString("pt-BR")} clientes</p><p className="text-[10px] text-muted-foreground">de {preview.totalContacts.toLocaleString("pt-BR")} contatos</p></> : <p className="max-w-[260px] text-xs text-muted-foreground">{previewMessage}</p>}
-        </div>
-      </div>
-      {preview?.sample?.length ? <div className="mb-4 rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground"><strong className="text-foreground">Exemplos:</strong> {preview.sample.map((item) => item.name).join(", ")}</div> : null}
+      <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+        <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", mb: 2 }}>
+          <Box>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>Regras de Segmentação</Typography>
+              <Chip size="small" label="Dinâmico" />
+            </Stack>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+              Dentro de cada grupo usamos E. Entre grupos usamos OU.
+            </Typography>
+          </Box>
+          <Box sx={{ minWidth: 260, border: "1px solid", borderColor: "divider", borderRadius: 2, bgcolor: "action.hover", px: 1.5, py: 1, textAlign: "right" }}>
+            <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+              Prévia da audiência
+            </Typography>
+            {previewLoading ? (
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>Calculando...</Typography>
+            ) : preview ? (
+              <>
+                <Typography sx={{ fontWeight: 600 }}>{preview.count.toLocaleString("pt-BR")} clientes</Typography>
+                <Typography variant="caption" color="text.secondary">de {preview.totalContacts.toLocaleString("pt-BR")} contatos</Typography>
+              </>
+            ) : (
+              <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 260, display: "block" }}>{previewMessage}</Typography>
+            )}
+          </Box>
+        </Stack>
+        {preview?.sample?.length ? (
+          <Box sx={{ mb: 2, borderRadius: 2, bgcolor: "action.hover", px: 1.5, py: 1 }}>
+            <Typography variant="caption" color="text.secondary">
+              <strong style={{ color: "inherit" }}>Exemplos:</strong> {preview.sample.map((item) => item.name).join(", ")}
+            </Typography>
+          </Box>
+        ) : null}
 
-      <div className="space-y-6">
-        {groups.map((group, groupIndex) => <div key={group.id} className="relative space-y-4">
-          {groupIndex > 0 && <div className="relative flex justify-center"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div><Badge className="relative z-10 bg-brand px-4 text-white">OU</Badge></div>}
-          <div className="rounded-lg border border-border bg-muted/20 p-4">
-            <div className="mb-4"><Badge variant="outline" className="border-brand/20 text-[10px] font-normal uppercase tracking-wider text-brand">Corresponder a TODAS as regras (E)</Badge></div>
-            <div className="space-y-3">
-              {group.conditions.map((condition) => {
-                const field = getCRMFilterField(condition.field);
-                if (!field) return <div key={condition.id} className="flex items-center gap-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3"><AlertTriangle className="size-4 text-amber-600" /><div className="flex-1"><p className="text-xs font-medium">Filtro antigo sem suporte: {condition.label || condition.field}</p></div><Button variant="ghost" size="icon" onClick={() => removeCondition(group.id, condition.id)}><Trash2 className="size-4" /></Button></div>;
-                const category = CRM_FILTER_CATEGORIES.find((item) => item.id === condition.category) ?? CRM_FILTER_CATEGORIES.find((item) => item.fields.some((candidate) => candidate.id === field.id));
-                const Icon = category ? CATEGORY_ICONS[category.id] : Users;
-                return <div key={condition.id} className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-background p-2 pr-3 shadow-sm lg:flex-nowrap">
-                  <div className="flex w-full items-center gap-2 lg:w-[250px]"><div className="rounded bg-muted p-1"><Icon className="size-3 text-muted-foreground" /></div><div className="min-w-0"><p className="truncate text-xs font-medium">{field.label}</p>{field.description && <p className="truncate text-[10px] text-muted-foreground" title={field.description}>{field.description}</p>}</div></div>
-                  <Select value={condition.operator} onValueChange={(operator) => updateCondition(group.id, condition.id, { operator, value: nextValueForOperator(field, operator, condition.value) })}>
-                    <SelectTrigger className="h-8 w-[185px] border-none bg-muted/50 text-xs font-medium"><SelectValue /></SelectTrigger>
-                    <SelectContent>{operatorsForField(field).map((operator) => <SelectItem key={operator.value} value={operator.value}>{operator.label}</SelectItem>)}</SelectContent>
-                  </Select>
-                  {renderValueControl(group.id, condition, field)}
-                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => removeCondition(group.id, condition.id)}><Trash2 className="size-4" /></Button>
-                </div>;
-              })}
-
-              <DropdownMenu onOpenChange={(open) => { if (!open) setFilterSearch(""); }}>
-                <DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="w-full gap-2 border-2 border-dashed text-muted-foreground"><Plus className="size-4" /> Adicionar Filtro</Button></DropdownMenuTrigger>
-                <DropdownMenuContent className="w-[360px]" align="start">
-                  <div className="p-2" onKeyDown={(event) => event.stopPropagation()}>
-                    <div className="relative"><Search className="absolute left-2 top-2.5 size-3.5 text-muted-foreground" /><Input autoFocus className="h-8 pl-7 text-xs" placeholder="Buscar filtro: produto, RFM, campanha..." value={filterSearch} onChange={(event) => setFilterSearch(event.target.value)} /></div>
-                  </div>
-                  {searchTerm ? (
-                    searchResults.length ? searchResults.map(({ category, field }) => {
-                      const Icon = CATEGORY_ICONS[category.id];
-                      return <DropdownMenuItem key={`${category.id}-${field.id}`} onClick={() => addCondition(group.id, category, field)}><Icon className="mr-2 size-4 text-muted-foreground" /><div><p>{field.label}</p><p className="text-[10px] text-muted-foreground">{category.label}</p></div></DropdownMenuItem>;
-                    }) : <div className="px-3 py-4 text-center text-xs text-muted-foreground">Nenhum filtro encontrado.</div>
-                  ) : CRM_FILTER_CATEGORIES.map((category) => {
-                    const Icon = CATEGORY_ICONS[category.id];
-                    return <DropdownMenuSub key={category.id}>
-                      <DropdownMenuSubTrigger className="gap-2"><Icon className="size-4" /><span>{category.label}</span></DropdownMenuSubTrigger>
-                      <DropdownMenuPortal><DropdownMenuSubContent className="w-80">{category.fields.map((field) => <DropdownMenuItem key={field.id} onClick={() => addCondition(group.id, category, field)}><div><p>{field.label}</p>{field.description && <p className="max-w-72 text-[10px] text-muted-foreground">{field.description}</p>}</div></DropdownMenuItem>)}</DropdownMenuSubContent></DropdownMenuPortal>
-                    </DropdownMenuSub>;
+        <Stack spacing={3}>
+          {groups.map((group, groupIndex) => (
+            <Box key={group.id} sx={{ position: "relative" }}>
+              {groupIndex > 0 && (
+                <Stack direction="row" sx={{ justifyContent: "center", position: "relative", mb: 2 }}>
+                  <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center" }}>
+                    <Box sx={{ width: "100%", borderTop: "1px solid", borderColor: "divider" }} />
+                  </Box>
+                  <Chip label="OU" color="primary" sx={{ position: "relative", zIndex: 1, px: 1.5 }} />
+                </Stack>
+              )}
+              <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, bgcolor: "action.hover", p: 2 }}>
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  color="primary"
+                  label="Corresponder a TODAS as regras (E)"
+                  sx={{ mb: 1.5, fontSize: 10, textTransform: "uppercase", fontWeight: 400 }}
+                />
+                <Stack spacing={1.5}>
+                  {group.conditions.map((condition) => {
+                    const field = getCRMFilterField(condition.field);
+                    if (!field) return (
+                      <Stack key={condition.id} direction="row" spacing={1.5} sx={{ alignItems: "center", border: "1px solid", borderColor: "warning.main", bgcolor: "warning.50", borderRadius: 2, p: 1.5 }}>
+                        <AlertTriangle size={16} color="var(--mui-palette-warning-main, #FF9F43)" />
+                        <Typography variant="caption" sx={{ flex: 1, fontWeight: 500 }}>Filtro antigo sem suporte: {condition.label || condition.field}</Typography>
+                        <IconButton size="small" onClick={() => removeCondition(group.id, condition.id)}>
+                          <Trash2 size={16} />
+                        </IconButton>
+                      </Stack>
+                    );
+                    const category = CRM_FILTER_CATEGORIES.find((item) => item.id === condition.category) ?? CRM_FILTER_CATEGORIES.find((item) => item.fields.some((candidate) => candidate.id === field.id));
+                    const Icon = category ? CATEGORY_ICONS[category.id] : Users;
+                    return (
+                      <Stack key={condition.id} direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: { xs: "wrap", lg: "nowrap" }, border: "1px solid", borderColor: "divider", bgcolor: "background.paper", borderRadius: 2, p: 1, pr: 1.5, boxShadow: 1 }}>
+                        <Stack direction="row" spacing={1} sx={{ alignItems: "center", width: { xs: "100%", lg: 250 } }}>
+                          <Box sx={{ borderRadius: 1, bgcolor: "action.hover", p: 0.5 }}>
+                            <Icon size={12} />
+                          </Box>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 500, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{field.label}</Typography>
+                            {field.description && (
+                              <Typography variant="caption" color="text.secondary" title={field.description} sx={{ fontSize: 10, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {field.description}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Stack>
+                        <Select
+                          size="small"
+                          sx={{ ...compactFieldSx, width: 185, fontWeight: 500 }}
+                          value={condition.operator}
+                          onChange={(e) => updateCondition(group.id, condition.id, { operator: e.target.value, value: nextValueForOperator(field, e.target.value, condition.value) })}
+                        >
+                          {operatorsForField(field).map((operator) => <MenuItem key={operator.value} value={operator.value}>{operator.label}</MenuItem>)}
+                        </Select>
+                        {renderValueControl(group.id, condition, field)}
+                        <IconButton size="small" sx={{ flexShrink: 0, color: "text.secondary", "&:hover": { color: "error.main" } }} onClick={() => removeCondition(group.id, condition.id)}>
+                          <Trash2 size={16} />
+                        </IconButton>
+                      </Stack>
+                    );
                   })}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        </div>)}
-        <Button variant="ghost" className="w-full gap-2 border border-dashed border-brand/30 text-brand" onClick={() => setGroups((prev) => [...prev, { id: crypto.randomUUID(), type: "OR", conditions: [] }])}><Plus className="size-4" /> Adicionar novo grupo de regras (OU)</Button>
-      </div>
-    </div>
-  </div>;
+
+                  <Button
+                    variant="outline"
+                    fullWidth
+                    startIcon={<Plus size={16} />}
+                    sx={{ borderStyle: "dashed", borderWidth: 2, color: "text.secondary" }}
+                    onClick={(e) => setAddFilterAnchor({ el: e.currentTarget, groupId: group.id })}
+                  >
+                    Adicionar Filtro
+                  </Button>
+                </Stack>
+              </Box>
+            </Box>
+          ))}
+          <Button
+            variant="ghost"
+            fullWidth
+            startIcon={<Plus size={16} />}
+            sx={{ border: "1px dashed", borderColor: "primary.main", color: "primary.main" }}
+            onClick={() => setGroups((prev) => [...prev, { id: crypto.randomUUID(), type: "OR", conditions: [] }])}
+          >
+            Adicionar novo grupo de regras (OU)
+          </Button>
+        </Stack>
+      </Box>
+
+      <Menu
+        anchorEl={addFilterAnchor?.el}
+        open={Boolean(addFilterAnchor)}
+        onClose={closeAddFilterMenu}
+        slotProps={{ paper: { sx: { width: 360, maxHeight: 420 } } }}
+      >
+        <Box sx={{ p: 1 }} onKeyDown={(event) => event.stopPropagation()}>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            placeholder="Buscar filtro: produto, RFM, campanha..."
+            value={filterSearch}
+            onChange={(event) => { setFilterSearch(event.target.value); setMenuCategory(null); }}
+            slotProps={{ input: { startAdornment: <Search size={14} style={{ marginRight: 6, opacity: 0.6 }} /> } }}
+          />
+        </Box>
+        {searchTerm ? (
+          searchResults.length ? (
+            searchResults.map(({ category, field }) => {
+              const Icon = CATEGORY_ICONS[category.id];
+              return (
+                <MenuItem key={`${category.id}-${field.id}`} onClick={() => addCondition(addFilterAnchor!.groupId, category, field)}>
+                  <Icon size={16} style={{ marginRight: 8, opacity: 0.6 }} />
+                  <Box>
+                    <Typography variant="body2">{field.label}</Typography>
+                    <Typography variant="caption" color="text.secondary">{category.label}</Typography>
+                  </Box>
+                </MenuItem>
+              );
+            })
+          ) : (
+            <Typography variant="caption" color="text.secondary" align="center" sx={{ display: "block", py: 2 }}>
+              Nenhum filtro encontrado.
+            </Typography>
+          )
+        ) : menuCategory ? (
+          <>
+            <MenuItem onClick={() => setMenuCategory(null)} sx={{ color: "text.secondary" }}>
+              <ArrowLeft size={14} style={{ marginRight: 8 }} /> Voltar
+            </MenuItem>
+            {menuCategory.fields.map((field) => (
+              <MenuItem key={field.id} onClick={() => addCondition(addFilterAnchor!.groupId, menuCategory, field)}>
+                <Box>
+                  <Typography variant="body2">{field.label}</Typography>
+                  {field.description && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", maxWidth: 288 }}>
+                      {field.description}
+                    </Typography>
+                  )}
+                </Box>
+              </MenuItem>
+            ))}
+          </>
+        ) : (
+          CRM_FILTER_CATEGORIES.map((category) => {
+            const Icon = CATEGORY_ICONS[category.id];
+            return (
+              <MenuItem key={category.id} onClick={() => setMenuCategory(category)}>
+                <Icon size={16} style={{ marginRight: 8 }} />
+                <Typography variant="body2" sx={{ flex: 1 }}>{category.label}</Typography>
+                <ChevronRight size={14} style={{ opacity: 0.5 }} />
+              </MenuItem>
+            );
+          })
+        )}
+      </Menu>
+    </Stack>
+  );
 }

@@ -2,43 +2,43 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { 
-  Users, 
-  Search, 
-  Filter, 
-  Plus, 
-  MoreHorizontal, 
-  UserPlus, 
+import {
+  Users,
+  Search,
+  Filter,
+  Plus,
+  MoreHorizontal,
+  UserPlus,
   ArrowUpRight,
   RefreshCw,
   Mail,
   Phone,
-  LayoutDashboard,
   Sparkles,
   Trash2,
   X,
   Download,
   BarChart3,
-  Pencil
+  Pencil,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "@/components/ui/table";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Checkbox from "@mui/material/Checkbox";
+import CircularProgress from "@mui/material/CircularProgress";
+import IconButton from "@mui/material/IconButton";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import Stack from "@mui/material/Stack";
+import Tab from "@mui/material/Tab";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Tabs from "@mui/material/Tabs";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment, exportSegmentCustomers, saveSegment } from "@/lib/crm-segmentation.functions";
 import { syncShopifyData } from "@/lib/crm-sync.functions";
 import { RFMAnalysis } from "@/components/crm/RFMAnalysis";
@@ -67,22 +67,30 @@ export const Route = createFileRoute("/crm/")({
   component: CRMPage,
 });
 
-function StatCard({ label, value, hint, trend, icon: Icon }: any) {
+function StatCard({ label, value, hint, trend }: any) {
   return (
-    <div className="surface-card p-5">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
+    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+        <Typography variant="caption" sx={{ fontWeight: 500, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+          {label}
+        </Typography>
         {trend && (
-          <div className="flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-[10px] font-bold text-success">
-            <ArrowUpRight className="size-3" /> {trend}
-          </div>
+          <Chip
+            size="small"
+            color="success"
+            icon={<ArrowUpRight size={12} />}
+            label={trend}
+            sx={{ height: 20, fontSize: 10, fontWeight: 700 }}
+          />
         )}
-      </div>
-      <div className="mt-3 flex items-baseline gap-2">
-        <p className="text-3xl font-bold tracking-tight">{value}</p>
-      </div>
-      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
-    </div>
+      </Stack>
+      <Typography variant="h4" sx={{ fontWeight: 700, mt: 1.5 }}>
+        {value}
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+        {hint}
+      </Typography>
+    </Box>
   );
 }
 
@@ -97,7 +105,9 @@ function CRMPage() {
   const [editingSegment, setEditingSegment] = useState<any>(null);
   const [showEditor, setShowEditor] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
-  
+  const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement | null>(null);
+  const [rowMenu, setRowMenu] = useState<{ el: HTMLElement; customer: any } | null>(null);
+
   const fetchList = useServerFn(getCustomersList);
   const fetchStats = useServerFn(getCRMStats);
   const fetchSegments = useServerFn(getSegmentsList);
@@ -114,11 +124,11 @@ function CRMPage() {
   const handleExport = async () => {
     try {
       setIsExporting(true);
-      const { csv } = await runExport({ 
-        data: { 
+      const { csv } = await runExport({
+        data: {
           segmentId: selectedSegment || undefined,
-          search: search || undefined
-        } 
+          search: search || undefined,
+        },
       });
 
       if (!csv) {
@@ -126,15 +136,15 @@ function CRMPage() {
         return;
       }
 
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.setAttribute("href", url);
-      const filename = selectedSegment 
-        ? `segmento-${segments?.find(s => s.id === selectedSegment)?.nome.toLowerCase().replace(/\s+/g, '-')}.csv`
-        : `contatos-crm-${new Date().toISOString().split('T')[0]}.csv`;
+      const filename = selectedSegment
+        ? `segmento-${segments?.find((s) => s.id === selectedSegment)?.nome.toLowerCase().replace(/\s+/g, "-")}.csv`
+        : `contatos-crm-${new Date().toISOString().split("T")[0]}.csv`;
       link.setAttribute("download", filename);
-      link.style.visibility = 'hidden';
+      link.style.visibility = "hidden";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -172,14 +182,14 @@ function CRMPage() {
       toast.error("Erro ao excluir: " + err.message);
     }
   };
-  
+
   const runUpdateTags = useServerFn(updateCustomerTags);
   const handleEditTags = async (customerId: string, currentTags: string[]) => {
     const newTagsStr = prompt("Gerenciar Tags (separadas por vírgula):", currentTags.join(", "));
     if (newTagsStr === null) return;
-    
-    const tags = newTagsStr.split(",").map(t => t.trim()).filter(t => t.length > 0);
-    
+
+    const tags = newTagsStr.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+
     const promise = runUpdateTags({ data: { customerId, tags } });
     toast.promise(promise, {
       loading: "Atualizando tags...",
@@ -187,7 +197,7 @@ function CRMPage() {
         queryClient.invalidateQueries({ queryKey: ["crm-customers"] });
         return "Tags atualizadas!";
       },
-      error: (err) => "Erro: " + err.message
+      error: (err) => "Erro: " + err.message,
     });
   };
 
@@ -209,7 +219,7 @@ function CRMPage() {
   const handleFixPhone = async (email: string) => {
     const phone = prompt("Digite o telefone correto para " + email + " (formato: +55...):");
     if (!phone) return;
-    
+
     const promise = runFixPhone({ data: { email, phone } });
     toast.promise(promise, {
       loading: "Corrigindo telefone...",
@@ -217,10 +227,10 @@ function CRMPage() {
         queryClient.refetchQueries({ queryKey: ["crm-customers"] });
         return "Telefone atualizado com sucesso!";
       },
-      error: (err) => "Erro ao atualizar: " + err.message
+      error: (err) => "Erro ao atualizar: " + err.message,
     });
   };
-  
+
   const handleDeepSync = async (customerId: string) => {
     const promise = runDeepSync({ data: { customerId } });
     toast.promise(promise, {
@@ -232,54 +242,64 @@ function CRMPage() {
         }
         return "Cliente não encontrado na Shopify.";
       },
-      error: (err) => "Erro ao sincronizar: " + err.message
+      error: (err) => "Erro ao sincronizar: " + err.message,
     });
   };
 
   if (showEditor) {
     return (
-      <div className="min-h-screen bg-background p-8">
-        <div className="mx-auto max-w-4xl">
-          <SegmentEditor 
+      <Box sx={{ minHeight: "100vh", p: 4 }}>
+        <Box sx={{ maxWidth: 960, mx: "auto" }}>
+          <SegmentEditor
             initialData={editingSegment}
             onCancel={() => {
               setShowEditor(false);
               setEditingSegment(null);
-            }} 
+            }}
             onSave={() => {
               setShowEditor(false);
               setEditingSegment(null);
               refetchSegments();
-            }} 
+            }}
           />
-        </div>
-      </div>
+        </Box>
+      </Box>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-[1400px] px-4 py-8 md:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <span className="gradient-brand flex size-11 items-center justify-center rounded-2xl text-primary-foreground">
-              <Users className="size-5" />
-            </span>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Contatos</h1>
-              <p className="text-sm text-muted-foreground">Base completa de clientes e leads.</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button className="gap-2 bg-brand hover:bg-brand/90 text-white">
-                  <UserPlus className="size-4" /> Adicionar contatos
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setImportDialogOpen(true)}>Importar CSV</DropdownMenuItem>
-                <DropdownMenuItem onClick={async () => {
+    <Box sx={{ minHeight: "100vh" }}>
+      <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
+        <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+          <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 44,
+                height: 44,
+                borderRadius: 4,
+                background: "linear-gradient(135deg, #7367F0, #9C93F3)",
+                color: "#fff",
+              }}
+            >
+              <Users size={20} />
+            </Box>
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>Contatos</Typography>
+              <Typography variant="body2" color="text.secondary">Base completa de clientes e leads.</Typography>
+            </Box>
+          </Stack>
+          <Box>
+            <Button variant="contained" startIcon={<UserPlus size={16} />} onClick={(e) => setAddMenuAnchor(e.currentTarget)}>
+              Adicionar contatos
+            </Button>
+            <Menu anchorEl={addMenuAnchor} open={Boolean(addMenuAnchor)} onClose={() => setAddMenuAnchor(null)}>
+              <MenuItem onClick={() => { setAddMenuAnchor(null); setImportDialogOpen(true); }}>Importar CSV</MenuItem>
+              <MenuItem
+                onClick={() => {
+                  setAddMenuAnchor(null);
                   const promise = runNormalizePhones();
                   toast.promise(promise, {
                     loading: "Normalizando e recuperando telefones...",
@@ -288,12 +308,15 @@ function CRMPage() {
                       queryClient.invalidateQueries({ queryKey: ["crm-stats"] });
                       return `${res.fixedCount} telefones ajustados/recuperados!`;
                     },
-                    error: "Erro na normalização."
+                    error: "Erro na normalização.",
                   });
-                }}>
-                  Ajustar todos os telefones
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={async () => {
+                }}
+              >
+                Ajustar todos os telefones
+              </MenuItem>
+              <MenuItem
+                onClick={() => {
+                  setAddMenuAnchor(null);
                   const promise = runIdentifyAbandoned();
                   toast.promise(promise, {
                     loading: "Analisando checkouts abandonados...",
@@ -302,15 +325,18 @@ function CRMPage() {
                       queryClient.invalidateQueries({ queryKey: ["crm-stats"] });
                       return res.message;
                     },
-                    error: "Erro na análise de abandono."
+                    error: "Erro na análise de abandono.",
                   });
-                }}>
-                  Identificar Checkouts Abandonados
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={async () => {
+                }}
+              >
+                Identificar Checkouts Abandonados
+              </MenuItem>
+              <MenuItem
+                onClick={() => {
+                  setAddMenuAnchor(null);
                   const query = prompt("Digite o nome ou e-mail da cliente para buscar na Shopify:");
                   if (!query) return;
-                  
+
                   const promise = runCheckSpecificAbandoned({ data: { query } });
                   toast.promise(promise, {
                     loading: `Buscando '${query}' na Shopify...`,
@@ -322,286 +348,240 @@ function CRMPage() {
                       }
                       return res.message || "Não encontrado.";
                     },
-                    error: (err) => "Erro na busca: " + err.message
+                    error: (err) => "Erro na busca: " + err.message,
                   });
-                }}>
-                  Localizar Cliente Específico (Shopify)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleSync}>Sincronizar Shopify</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <ImportContactsDialog open={importDialogOpen} onOpenChange={setImportDialogOpen} />
-          </div>
-        </div>
+                }}
+              >
+                Localizar Cliente Específico (Shopify)
+              </MenuItem>
+              <MenuItem onClick={() => { setAddMenuAnchor(null); handleSync(); }} disabled={isSyncing}>
+                Sincronizar Shopify
+              </MenuItem>
+            </Menu>
+          </Box>
+        </Stack>
 
-        <Tabs value={tab} onValueChange={setTab} className="mt-8">
-          <div className="flex justify-center">
-            <TabsList className="bg-muted/50 p-1">
-              <TabsTrigger value="contatos" className="px-6">Contatos</TabsTrigger>
-              <TabsTrigger value="segmentos" className="px-6">Segmentos</TabsTrigger>
-              <TabsTrigger value="listas" className="px-6">Listas Estáticas</TabsTrigger>
-              <TabsTrigger value="rfm" className="px-6 flex gap-2 items-center">
-                <BarChart3 className="size-4" /> Análise RFM
-              </TabsTrigger>
-            </TabsList>
-          </div>
+        <Box sx={{ mt: 4 }}>
+          <Stack direction="row" sx={{ justifyContent: "center" }}>
+            <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+              <Tab value="contatos" label="Contatos" sx={{ px: 3 }} />
+              <Tab value="segmentos" label="Segmentos" sx={{ px: 3 }} />
+              <Tab value="listas" label="Listas Estáticas" sx={{ px: 3 }} />
+              <Tab value="rfm" icon={<BarChart3 size={16} />} iconPosition="start" label="Análise RFM" sx={{ px: 3 }} />
+            </Tabs>
+          </Stack>
 
-          <TabsContent value="contatos" className="mt-8 space-y-8">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard 
-                label="Total de Contatos" 
-                value={new Intl.NumberFormat().format(stats?.total || 0)} 
-                hint="Todos os contatos da base." 
-                trend="+42%" 
-              />
-              <StatCard 
-                label="Checkouts Abandonados" 
-                value={new Intl.NumberFormat().format(stats?.abandoned || 0)} 
-                hint="Identificados por pedidos expirados" 
-                trend="+15%" 
-              />
-              <StatCard 
-                label="Clientes" 
-                value={new Intl.NumberFormat().format(stats?.customers || 0)} 
-                hint="Contatos com compras" 
-                trend="+32%" 
-              />
-              <StatCard 
-                label="Novos Contatos" 
-                value={new Intl.NumberFormat().format(stats?.newContacts || 0)} 
-                hint="Cadastrados nos últimos 30 dias." 
-                trend="+42%" 
-              />
-            </div>
+          {tab === "contatos" && (
+            <Stack spacing={4} sx={{ mt: 4 }}>
+              <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "repeat(4, 1fr)" } }}>
+                <StatCard label="Total de Contatos" value={new Intl.NumberFormat().format(stats?.total || 0)} hint="Todos os contatos da base." trend="+42%" />
+                <StatCard label="Checkouts Abandonados" value={new Intl.NumberFormat().format(stats?.abandoned || 0)} hint="Identificados por pedidos expirados" trend="+15%" />
+                <StatCard label="Clientes" value={new Intl.NumberFormat().format(stats?.customers || 0)} hint="Contatos com compras" trend="+32%" />
+                <StatCard label="Novos Contatos" value={new Intl.NumberFormat().format(stats?.newContacts || 0)} hint="Cadastrados nos últimos 30 dias." trend="+42%" />
+              </Box>
 
-            <div className="surface-card overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border p-4">
-                <div className="relative w-full max-w-sm">
-                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input 
-                    placeholder="Nome, e-mail ou telefone..." 
-                    className="pl-9" 
+              <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, overflow: "hidden" }}>
+                <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid", borderColor: "divider", p: 2 }}>
+                  <TextField
+                    size="small"
+                    placeholder="Nome, e-mail ou telefone..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
+                    sx={{ width: "100%", maxWidth: 384 }}
+                    slotProps={{ input: { startAdornment: <Search size={16} style={{ marginRight: 8, opacity: 0.5 }} /> } }}
                   />
-                </div>
-                <div className="flex items-center gap-2">
-                  {selectedSegment && (
-                    <Badge variant="secondary" className="bg-brand/10 text-brand border-brand/20 gap-1 pr-1">
-                      Segmento: {segments?.find(s => s.id === selectedSegment)?.nome}
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="size-4 hover:bg-transparent" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedSegment(null);
-                        }}
-                      >
-                        <X className="size-3" />
-                      </Button>
-                    </Badge>
-                  )}
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="gap-2"
-                    onClick={handleExport}
-                    disabled={isExporting}
-                  >
-                    {isExporting ? (
-                      <RefreshCw className="size-3.5 animate-spin" />
-                    ) : (
-                      <Download className="size-3.5" />
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    {selectedSegment && (
+                      <Chip
+                        color="primary"
+                        variant="outlined"
+                        label={`Segmento: ${segments?.find((s) => s.id === selectedSegment)?.nome}`}
+                        onDelete={() => setSelectedSegment(null)}
+                        deleteIcon={<X size={12} />}
+                      />
                     )}
-                    Exportar Lista
-                  </Button>
-                  <Button variant="outline" size="sm" className="gap-2">
-                    Todos os status <Filter className="size-3.5" />
-                  </Button>
-                  <p className="text-xs text-muted-foreground">{listData?.total || 0} contatos</p>
-                </div>
-              </div>
+                    <Button
+                      variant="outline"
+                      size="small"
+                      startIcon={isExporting ? <CircularProgress size={14} /> : <Download size={14} />}
+                      onClick={handleExport}
+                      disabled={isExporting}
+                    >
+                      Exportar Lista
+                    </Button>
+                    <Button variant="outline" size="small" endIcon={<Filter size={14} />}>
+                      Todos os status
+                    </Button>
+                    <Typography variant="caption" color="text.secondary">{listData?.total || 0} contatos</Typography>
+                  </Stack>
+                </Stack>
 
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/30">
-                      <TableHead className="w-12"></TableHead>
-                      <TableHead>NOME / E-MAIL</TableHead>
-                      <TableHead>TELEFONE</TableHead>
-                      <TableHead>TAGS</TableHead>
-                      <TableHead>RFM / PERFIL</TableHead>
-                      <TableHead className="text-center">COMPRAS</TableHead>
-                      <TableHead className="text-right">TOTAL GASTO</TableHead>
-                      <TableHead className="text-right">ÚLTIMA COMPRA</TableHead>
-                      <TableHead className="w-12"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {isLoading ? (
-                      <TableRow>
-                        <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
-                          <RefreshCw className="mx-auto size-6 animate-spin" />
-                          <p className="mt-2">Carregando contatos...</p>
-                        </TableCell>
+                <TableContainer sx={{ overflowX: "auto" }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: "action.hover" }}>
+                        <TableCell padding="checkbox" />
+                        <TableCell>NOME / E-MAIL</TableCell>
+                        <TableCell>TELEFONE</TableCell>
+                        <TableCell>TAGS</TableCell>
+                        <TableCell>RFM / PERFIL</TableCell>
+                        <TableCell align="center">COMPRAS</TableCell>
+                        <TableCell align="right">TOTAL GASTO</TableCell>
+                        <TableCell align="right">ÚLTIMA COMPRA</TableCell>
+                        <TableCell padding="checkbox" />
                       </TableRow>
-                    ) : listData?.customers.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
-                          Nenhum contato encontrado.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      listData?.customers.map((c: any) => (
-                        <TableRow key={c.id}>
-                          <TableCell className="text-center">
-                            <input type="checkbox" className="size-4 rounded border-gray-300" />
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <button
-                                type="button"
-                                className="w-fit text-left font-semibold text-foreground hover:text-brand hover:underline"
-                                onClick={() => navigate({ to: "/crm/cliente/$customerId", params: { customerId: c.id } })}
-                              >
-                                {c.name}
-                              </button>
-                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <Mail className="size-3" /> {c.email || "—"}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {c.phone ? (
-                              <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                                <Phone className="size-3" /> {c.phone}
-                              </div>
-                            ) : "—"}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1 max-w-[200px]">
-                              {(c.tagsCustom || []).map((tag: string) => (
-                                <Badge key={tag} variant="outline" className="text-[10px] bg-brand/5 text-brand border-brand/20">
-                                  {tag}
-                                </Badge>
-                              ))}
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="size-5 rounded-full hover:bg-brand/10 hover:text-brand"
-                                onClick={() => handleEditTags(c.id, c.tagsCustom || [])}
-                              >
-                                <Plus className="size-3" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col gap-1">
-                              {c.rfmSegment && (
-                                <Badge 
-                                  variant="outline" 
-                                  className="text-[9px] font-bold uppercase w-fit"
-                                  style={{ 
-                                    color: RFM_SEGMENTS_CONFIG[c.rfmSegment as keyof typeof RFM_SEGMENTS_CONFIG]?.color,
-                                    borderColor: `${RFM_SEGMENTS_CONFIG[c.rfmSegment as keyof typeof RFM_SEGMENTS_CONFIG]?.color}40`
-                                  }}
-                                >
-                                  {c.rfmSegment}
-                                </Badge>
-                              )}
-                              <Badge variant="secondary" className="bg-muted text-[10px] font-medium uppercase tracking-wider w-fit">
-                                {c.tags?.includes("Carrinho Abandonado") ? "Carrinho" : (c.totalOrders > 0 ? "Ativo" : "Lead")}
-                              </Badge>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-center font-bold">{c.totalOrders}</TableCell>
-                          <TableCell className="text-right font-bold">{brl(c.totalSpent)}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {c.lastOrderAt ? new Date(c.lastOrderAt).toLocaleDateString("pt-BR") : "—"}
-                          </TableCell>
-                          <TableCell>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="size-8">
-                                  <MoreHorizontal className="size-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleFixPhone(c.email)}>
-                                  <Phone className="mr-2 size-4" /> Corrigir Telefone
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleDeepSync(c.id.replace('email:', '').replace('id:', ''))}>
-                                  <RefreshCw className="mr-2 size-4" /> Forçar Sincronia Shopify
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => navigate({ to: "/crm/cliente/$customerId", params: { customerId: c.id } })}>
-                                  Ver Detalhes 360º
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                    </TableHead>
+                    <TableBody>
+                      {isLoading ? (
+                        <TableRow>
+                          <TableCell colSpan={9} align="center" sx={{ height: 128 }}>
+                            <CircularProgress size={24} />
+                            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Carregando contatos...</Typography>
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          </TabsContent>
+                      ) : listData?.customers.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={9} align="center" sx={{ height: 128, color: "text.secondary" }}>
+                            Nenhum contato encontrado.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        listData?.customers.map((c: any) => (
+                          <TableRow key={c.id} hover>
+                            <TableCell padding="checkbox">
+                              <Checkbox size="small" />
+                            </TableCell>
+                            <TableCell>
+                              <Box
+                                component="button"
+                                type="button"
+                                onClick={() => navigate({ to: "/crm/cliente/$customerId", params: { customerId: c.id } })}
+                                sx={{ display: "block", textAlign: "left", background: "none", border: "none", p: 0, cursor: "pointer", fontWeight: 600, fontSize: 14, color: "text.primary", "&:hover": { color: "primary.main", textDecoration: "underline" } }}
+                              >
+                                {c.name}
+                              </Box>
+                              <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", color: "text.secondary" }}>
+                                <Mail size={12} />
+                                <Typography variant="caption">{c.email || "—"}</Typography>
+                              </Stack>
+                            </TableCell>
+                            <TableCell>
+                              {c.phone ? (
+                                <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", color: "text.secondary" }}>
+                                  <Phone size={12} />
+                                  <Typography variant="body2">{c.phone}</Typography>
+                                </Stack>
+                              ) : "—"}
+                            </TableCell>
+                            <TableCell>
+                              <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", maxWidth: 200, alignItems: "center" }}>
+                                {(c.tagsCustom || []).map((tag: string) => (
+                                  <Chip key={tag} size="small" variant="outlined" color="primary" label={tag} sx={{ fontSize: 10, height: 20 }} />
+                                ))}
+                                <IconButton size="small" onClick={() => handleEditTags(c.id, c.tagsCustom || [])}>
+                                  <Plus size={12} />
+                                </IconButton>
+                              </Stack>
+                            </TableCell>
+                            <TableCell>
+                              <Stack spacing={0.5} sx={{ alignItems: "flex-start" }}>
+                                {c.rfmSegment && (
+                                  <Chip
+                                    size="small"
+                                    variant="outlined"
+                                    label={c.rfmSegment}
+                                    sx={{
+                                      fontSize: 9,
+                                      height: 18,
+                                      fontWeight: 700,
+                                      textTransform: "uppercase",
+                                      color: RFM_SEGMENTS_CONFIG[c.rfmSegment as keyof typeof RFM_SEGMENTS_CONFIG]?.color,
+                                      borderColor: `${RFM_SEGMENTS_CONFIG[c.rfmSegment as keyof typeof RFM_SEGMENTS_CONFIG]?.color}40`,
+                                    }}
+                                  />
+                                )}
+                                <Chip
+                                  size="small"
+                                  label={c.tags?.includes("Carrinho Abandonado") ? "Carrinho" : (c.totalOrders > 0 ? "Ativo" : "Lead")}
+                                  sx={{ fontSize: 10, height: 20, textTransform: "uppercase", fontWeight: 500 }}
+                                />
+                              </Stack>
+                            </TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 700 }}>{c.totalOrders}</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700 }}>{brl(c.totalSpent)}</TableCell>
+                            <TableCell align="right" sx={{ color: "text.secondary" }}>
+                              {c.lastOrderAt ? new Date(c.lastOrderAt).toLocaleDateString("pt-BR") : "—"}
+                            </TableCell>
+                            <TableCell padding="checkbox">
+                              <IconButton size="small" onClick={(e) => setRowMenu({ el: e.currentTarget, customer: c })}>
+                                <MoreHorizontal size={16} />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            </Stack>
+          )}
 
-          <TabsContent value="segmentos" className="mt-8 space-y-6">
-             <div className="surface-card p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-lg font-bold">Biblioteca de Segmentos</h2>
-                    <p className="text-sm text-muted-foreground">Públicos dinâmicos baseados em regras.</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="outline" 
-                      className="gap-2 border-brand text-brand hover:bg-brand/5"
+          {tab === "segmentos" && (
+            <Stack spacing={3} sx={{ mt: 4 }}>
+              <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
+                <Stack direction="row" spacing={2} sx={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
+                  <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 700 }}>Biblioteca de Segmentos</Typography>
+                    <Typography variant="body2" color="text.secondary">Públicos dinâmicos baseados em regras.</Typography>
+                  </Box>
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      variant="outline"
+                      startIcon={<Sparkles size={16} />}
+                      sx={{ borderColor: "primary.main", color: "primary.main" }}
                       onClick={async () => {
                         const segmentsToCreate = [
                           {
                             nome: "Compraram Hoje (Calendário)",
                             descricao: "Clientes que realizaram pedidos no dia de hoje (00:00 às 23:59).",
-                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "data_pedido_hoje", operator: "eq", value: "sim", label: "Compra Realizada Hoje" }] }] }
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "data_pedido_hoje", operator: "eq", value: "sim", label: "Compra Realizada Hoje" }] }] },
                           },
                           {
                             nome: "Compraram nas últimas 24h",
                             descricao: "Clientes que realizaram pedidos nas últimas 24 horas a partir de agora.",
-                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "data_pedido_24h", operator: "eq", value: "sim", label: "Compra Realizada (Últimas 24h)" }] }] }
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "data_pedido_24h", operator: "eq", value: "sim", label: "Compra Realizada (Últimas 24h)" }] }] },
                           },
                           {
                             nome: "Enviados Hoje",
                             descricao: "Pedidos que tiveram o envio processado hoje.",
-                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "data_envio_hoje", operator: "eq", value: "sim", label: "Pedido Enviado Hoje" }] }] }
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "data_envio_hoje", operator: "eq", value: "sim", label: "Pedido Enviado Hoje" }] }] },
                           },
                           {
                             nome: "Pedido Pendente (Pix)",
                             descricao: "Clientes com pedido criado hoje aguardando confirmação de pagamento (ex.: Pix via Mercado Pago).",
-                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "pedido_pendente_hoje", operator: "eq", value: "sim", label: "Pedido Pendente (Pix) Criado Hoje" }] }] }
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "pedido_pendente_hoje", operator: "eq", value: "sim", label: "Pedido Pendente (Pix) Criado Hoje" }] }] },
                           },
                           {
                             nome: "Checkouts Abandonados (CAR24)",
                             descricao: "Clientes capturados da integração de checkouts abandonados da Shopify.",
-                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "checkout_abandonado", operator: "eq", value: "sim", label: "Checkout Abandonado (CAR24)" }] }] }
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "checkout_abandonado", operator: "eq", value: "sim", label: "Checkout Abandonado (CAR24)" }] }] },
                           },
                           {
                             nome: "Acessou e Não Comprou",
                             descricao: "Leads que interagiram mas ainda não possuem pedidos.",
-                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "perfil", operator: "eq", value: "acesso_sem_compra", label: "Acessou e não comprou" }] }] }
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "perfil", operator: "eq", value: "acesso_sem_compra", label: "Acessou e não comprou" }] }] },
                           },
                           {
                             nome: "Primeira Compra",
                             descricao: "Clientes que realizaram sua primeira e única compra.",
-                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "perfil", operator: "eq", value: "primeira_compra", label: "Perfil do Cliente" }] }] }
-                          }
+                            regras: { groups: [{ id: "g1", type: "AND", conditions: [{ id: "c1", category: "comportamento", field: "perfil", operator: "eq", value: "primeira_compra", label: "Perfil do Cliente" }] }] },
+                          },
                         ];
-                        
+
                         try {
                           const existingNames = new Set((segments || []).map((s: any) => s.nome));
-                          const toCreate = segmentsToCreate.filter(seg => !existingNames.has(seg.nome));
+                          const toCreate = segmentsToCreate.filter((seg) => !existingNames.has(seg.nome));
 
                           if (toCreate.length === 0) {
                             toast.info("Os segmentos sugeridos já existem.");
@@ -618,43 +598,55 @@ function CRMPage() {
                         }
                       }}
                     >
-                      <Sparkles className="size-4" /> Criar Segmentos Sugeridos
+                      Criar Segmentos Sugeridos
                     </Button>
-                    <Button onClick={() => setShowEditor(true)} className="gap-2 bg-brand hover:bg-brand/90 text-white">
-                      <Plus className="size-4" /> Criar segmento
+                    <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => setShowEditor(true)}>
+                      Criar segmento
                     </Button>
-                  </div>
-                </div>
-                
-                <div className="mt-8">
+                  </Stack>
+                </Stack>
+
+                <Box sx={{ mt: 4 }}>
                   {segments?.length === 0 ? (
-                    <div className="text-center py-20 border-2 border-dashed border-border rounded-xl">
-                      <Sparkles className="mx-auto size-12 text-muted-foreground/30" />
-                      <h3 className="mt-4 font-semibold">Nenhum segmento customizado</h3>
-                      <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1">
+                    <Box sx={{ textAlign: "center", py: 8, border: "2px dashed", borderColor: "divider", borderRadius: 3 }}>
+                      <Sparkles size={48} style={{ margin: "0 auto", opacity: 0.3 }} />
+                      <Typography sx={{ fontWeight: 600, mt: 2 }}>Nenhum segmento customizado</Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 384, mx: "auto", mt: 0.5 }}>
                         Você ainda não criou segmentos baseados em regras dinâmicas.
-                      </p>
-                      <Button variant="outline" className="mt-4" onClick={() => setShowEditor(true)}>Criar meu primeiro segmento</Button>
-                    </div>
+                      </Typography>
+                      <Button variant="outline" sx={{ mt: 2 }} onClick={() => setShowEditor(true)}>Criar meu primeiro segmento</Button>
+                    </Box>
                   ) : (
-                    <div className="space-y-2">
+                    <Stack spacing={1}>
                       {segments?.map((seg: any) => (
-                        <div
+                        <Stack
                           key={seg.id}
-                          className={`surface-card flex flex-wrap items-center gap-4 p-4 ${selectedSegment === seg.id ? 'border-brand bg-brand/5' : ''}`}
+                          direction="row"
+                          spacing={2}
+                          sx={{
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                            border: "1px solid",
+                            borderColor: selectedSegment === seg.id ? "primary.main" : "divider",
+                            bgcolor: selectedSegment === seg.id ? "action.hover" : "transparent",
+                            borderRadius: 3,
+                            p: 2,
+                          }}
                         >
-                          <div className="min-w-[200px] flex-1">
-                            <p className="font-semibold">{seg.nome}</p>
-                            <p className="text-xs text-muted-foreground line-clamp-1">{seg.descricao || "Sem descrição."}</p>
-                          </div>
-                          <Badge variant="outline" className="text-[10px] uppercase font-bold text-brand border-brand/20">DINÂMICO</Badge>
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Users className="size-3" /> {seg.memberCount !== undefined ? `${seg.memberCount} contatos` : "Calculando..."}
-                          </span>
+                          <Box sx={{ minWidth: 200, flex: 1 }}>
+                            <Typography sx={{ fontWeight: 600 }}>{seg.nome}</Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                              {seg.descricao || "Sem descrição."}
+                            </Typography>
+                          </Box>
+                          <Chip size="small" variant="outlined" color="primary" label="DINÂMICO" sx={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase" }} />
+                          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", color: "text.secondary" }}>
+                            <Users size={12} />
+                            <Typography variant="caption">{seg.memberCount !== undefined ? `${seg.memberCount} contatos` : "Calculando..."}</Typography>
+                          </Stack>
                           <Button
                             variant="outline"
-                            size="sm"
-                            className="gap-1.5"
+                            size="small"
                             onClick={() => {
                               setSelectedSegment(seg.id);
                               setTab("contatos");
@@ -664,47 +656,64 @@ function CRMPage() {
                           </Button>
                           <Button
                             variant="outline"
-                            size="sm"
-                            className="gap-1.5"
+                            size="small"
+                            startIcon={<Pencil size={14} />}
                             onClick={() => {
                               setEditingSegment(seg);
                               setShowEditor(true);
                             }}
                           >
-                            <Pencil className="size-3.5" /> Editar Regras
+                            Editar Regras
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteSegment(seg.id)}
-                          >
-                            <Trash2 className="size-4 text-critical" />
-                          </Button>
-                        </div>
+                          <IconButton size="small" onClick={() => handleDeleteSegment(seg.id)}>
+                            <Trash2 size={16} color="var(--mui-palette-error-main, #EA5455)" />
+                          </IconButton>
+                        </Stack>
                       ))}
-                    </div>
+                    </Stack>
                   )}
-                </div>
-             </div>
-          </TabsContent>
+                </Box>
+              </Box>
+            </Stack>
+          )}
 
-          <TabsContent value="listas" className="mt-8 space-y-6">
-            <div className="surface-card p-6 text-center py-20 border-2 border-dashed border-border rounded-xl">
-              <Plus className="mx-auto size-12 text-muted-foreground/30" />
-              <h3 className="mt-4 font-semibold">Listas Estáticas</h3>
-              <p className="text-sm text-muted-foreground max-w-sm mx-auto mt-1">
+          {tab === "listas" && (
+            <Box sx={{ mt: 4, border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3, textAlign: "center", py: 8, borderStyle: "dashed" }}>
+              <Plus size={48} style={{ margin: "0 auto", opacity: 0.3 }} />
+              <Typography sx={{ fontWeight: 600, mt: 2 }}>Listas Estáticas</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 384, mx: "auto", mt: 0.5 }}>
                 Agrupe contatos manualmente para envios pontuais.
-              </p>
-              <Button variant="outline" className="mt-4">Criar primeira lista</Button>
-            </div>
-          </TabsContent>
-          <TabsContent value="rfm" className="mt-8">
-            <RFMAnalysis />
-          </TabsContent>
-        </Tabs>
-      </div>
+              </Typography>
+              <Button variant="outline" sx={{ mt: 2 }}>Criar primeira lista</Button>
+            </Box>
+          )}
+
+          {tab === "rfm" && (
+            <Box sx={{ mt: 4 }}>
+              <RFMAnalysis />
+            </Box>
+          )}
+        </Box>
+      </Box>
+
+      <Menu anchorEl={rowMenu?.el} open={Boolean(rowMenu)} onClose={() => setRowMenu(null)}>
+        <MenuItem onClick={() => { handleFixPhone(rowMenu!.customer.email); setRowMenu(null); }}>
+          <Phone size={14} style={{ marginRight: 8 }} /> Corrigir Telefone
+        </MenuItem>
+        <MenuItem onClick={() => { handleDeepSync(String(rowMenu!.customer.id).replace("email:", "").replace("id:", "")); setRowMenu(null); }}>
+          <RefreshCw size={14} style={{ marginRight: 8 }} /> Forçar Sincronia Shopify
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            navigate({ to: "/crm/cliente/$customerId", params: { customerId: rowMenu!.customer.id } });
+            setRowMenu(null);
+          }}
+        >
+          Ver Detalhes 360º
+        </MenuItem>
+      </Menu>
 
       <ImportContactsDialog open={importDialogOpen} onOpenChange={setImportDialogOpen} />
-    </div>
+    </Box>
   );
 }

@@ -1,14 +1,25 @@
 import { useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Dialog from "@mui/material/Dialog";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import { Upload, FileText, AlertTriangle, CheckCircle2, Loader2, ClipboardPaste } from "lucide-react";
 import { toast } from "sonner";
 import { parseContactsCsv, type ContactsImportParseResult } from "@/lib/contacts-import-shared";
 import { importContacts } from "@/lib/contacts-import.functions";
-import { cn } from "@/lib/utils";
 
 export function ImportContactsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const [parsed, setParsed] = useState<ContactsImportParseResult | null>(null);
@@ -37,7 +48,7 @@ export function ImportContactsDialog({ open, onOpenChange }: { open: boolean; on
       const buffer = reader.result as ArrayBuffer;
       let text = new TextDecoder("utf-8").decode(buffer);
       // Arquivos exportados de sistemas legados costumam vir em Latin-1/Windows-1252.
-      if (text.includes("\uFFFD")) {
+      if (text.includes("�")) {
         text = new TextDecoder("windows-1252").decode(buffer);
       }
       const result = parseContactsCsv(text);
@@ -50,7 +61,6 @@ export function ImportContactsDialog({ open, onOpenChange }: { open: boolean; on
     };
     reader.readAsArrayBuffer(file);
   }
-
 
   function handleParsePaste() {
     const result = parseContactsCsv(pasteText);
@@ -113,133 +123,149 @@ export function ImportContactsDialog({ open, onOpenChange }: { open: boolean; on
   return (
     <Dialog
       open={open}
-      onOpenChange={(v) => {
-        onOpenChange(v);
-        if (!v) reset();
+      onClose={() => {
+        onOpenChange(false);
+        reset();
       }}
+      maxWidth="md"
+      fullWidth
+      slotProps={{ paper: { sx: { maxHeight: "85vh" } } }}
     >
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Importar contatos</DialogTitle>
-          <DialogDescription>
-            Envie um CSV ou cole os dados com as colunas: <strong>nome, email, telefone, tag, data da última compra</strong>.
-            Aceita separador por vírgula, ponto-e-vírgula ou tab; datas em dd/mm/aaaa ou ISO.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogTitle>Importar contatos</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Envie um CSV ou cole os dados com as colunas: <strong>nome, email, telefone, tag, data da última compra</strong>.
+          Aceita separador por vírgula, ponto-e-vírgula ou tab; datas em dd/mm/aaaa ou ISO.
+        </Typography>
 
         {!parsed && !pasteMode && (
-          <div className="space-y-4">
-            <button
+          <Stack spacing={2}>
+            <Box
+              component="button"
               onClick={() => fileRef.current?.click()}
-              className="w-full rounded-xl border-2 border-dashed border-border p-10 text-center hover:border-brand/50 hover:bg-muted/30 transition-colors"
+              sx={{
+                width: "100%",
+                borderRadius: 3,
+                border: "2px dashed",
+                borderColor: "divider",
+                p: 5,
+                textAlign: "center",
+                cursor: "pointer",
+                bgcolor: "transparent",
+                transition: "all 0.15s",
+                "&:hover": { borderColor: "primary.light", bgcolor: "action.hover" },
+              }}
             >
-              <Upload className="size-8 mx-auto mb-3 text-muted-foreground" />
-              <p className="font-medium">Clique para escolher o arquivo CSV</p>
-              <p className="text-xs text-muted-foreground mt-1">Listas grandes são processadas automaticamente em lotes seguros</p>
-            </button>
+              <Upload size={32} style={{ margin: "0 auto 12px" }} color="var(--mui-palette-text-secondary)" />
+              <Typography sx={{ fontWeight: 500 }}>Clique para escolher o arquivo CSV</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                Listas grandes são processadas automaticamente em lotes seguros
+              </Typography>
+            </Box>
             <input
               ref={fileRef}
               type="file"
               accept=".csv,.txt,.tsv"
-              className="hidden"
+              hidden
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) handleFile(f);
                 e.target.value = "";
               }}
             />
-            <Button variant="outline" className="w-full gap-2" onClick={() => setPasteMode(true)}>
-              <ClipboardPaste className="size-4" /> Colar dados manualmente
+            <Button variant="outline" fullWidth startIcon={<ClipboardPaste size={16} />} onClick={() => setPasteMode(true)}>
+              Colar dados manualmente
             </Button>
-          </div>
+          </Stack>
         )}
 
         {!parsed && pasteMode && (
-          <div className="space-y-3">
-            <textarea
+          <Stack spacing={1.5}>
+            <TextField
+              fullWidth
+              multiline
+              rows={10}
               value={pasteText}
               onChange={(e) => setPasteText(e.target.value)}
-              rows={10}
               placeholder={"nome;email;telefone;tag;data da ultima compra\nMaria;maria@ex.com;31999998888;VIP;15/08/2026"}
-              className="w-full rounded-lg border border-border bg-background p-3 text-sm font-mono"
+              sx={{ "& textarea": { fontFamily: "monospace", fontSize: 13 } }}
             />
-            <div className="flex gap-2 justify-end">
+            <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end" }}>
               <Button variant="ghost" onClick={() => setPasteMode(false)}>Voltar</Button>
-              <Button onClick={handleParsePaste} disabled={!pasteText.trim()}>Pré-visualizar</Button>
-            </div>
-          </div>
+              <Button variant="contained" onClick={handleParsePaste} disabled={!pasteText.trim()}>Pré-visualizar</Button>
+            </Stack>
+          </Stack>
         )}
 
         {parsed && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <FileText className="size-4 text-muted-foreground" />
-              <span className="font-medium">{fileName}</span>
-              <Badge variant="secondary">{parsed.rows.length} linhas</Badge>
-              <Badge className="bg-success-soft text-success border-transparent">{validRows.length} válidas</Badge>
-              {invalidRows.length > 0 && (
-                <Badge className="bg-critical-soft text-critical border-transparent">{invalidRows.length} com erro</Badge>
-              )}
-            </div>
+          <Stack spacing={2}>
+            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
+              <FileText size={16} color="var(--mui-palette-text-secondary)" />
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>{fileName}</Typography>
+              <Chip size="small" label={`${parsed.rows.length} linhas`} />
+              <Chip size="small" color="success" label={`${validRows.length} válidas`} />
+              {invalidRows.length > 0 && <Chip size="small" color="error" label={`${invalidRows.length} com erro`} />}
+            </Stack>
 
-            <div className="rounded-lg border border-border overflow-hidden">
-              <div className="max-h-72 overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-muted/40 sticky top-0">
-                    <tr>
-                      <th className="text-left px-3 py-2 font-medium">#</th>
-                      <th className="text-left px-3 py-2 font-medium">Nome</th>
-                      <th className="text-left px-3 py-2 font-medium">Email</th>
-                      <th className="text-left px-3 py-2 font-medium">Telefone</th>
-                      <th className="text-left px-3 py-2 font-medium">Tags</th>
-                      <th className="text-left px-3 py-2 font-medium">Última compra</th>
-                      <th className="text-left px-3 py-2 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {parsed.rows.slice(0, 200).map((r) => (
-                      <tr key={r.line} className={cn(r.errors.length > 0 && "bg-critical-soft/40")}>
-                        <td className="px-3 py-1.5 text-muted-foreground">{r.line}</td>
-                        <td className="px-3 py-1.5">{r.nome ?? "—"}</td>
-                        <td className="px-3 py-1.5">{r.email ?? "—"}</td>
-                        <td className="px-3 py-1.5">{r.phone ?? "—"}</td>
-                        <td className="px-3 py-1.5">{r.tags.length > 0 ? r.tags.join(", ") : "—"}</td>
-                        <td className="px-3 py-1.5">
-                          {r.lastPurchaseAt ? new Date(r.lastPurchaseAt).toLocaleDateString("pt-BR") : "—"}
-                        </td>
-                        <td className="px-3 py-1.5">
-                          {r.errors.length === 0 ? (
-                            <CheckCircle2 className="size-3.5 text-success" />
-                          ) : (
-                            <span className="flex items-center gap-1 text-critical">
-                              <AlertTriangle className="size-3.5" /> {r.errors.join("; ")}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {parsed.rows.length > 200 && (
-                <p className="px-3 py-2 text-xs text-muted-foreground border-t border-border">
-                  Mostrando 200 de {parsed.rows.length} linhas na prévia.
-                </p>
-              )}
-            </div>
+            <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, maxHeight: 288, overflow: "auto" }}>
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>#</TableCell>
+                    <TableCell>Nome</TableCell>
+                    <TableCell>Email</TableCell>
+                    <TableCell>Telefone</TableCell>
+                    <TableCell>Tags</TableCell>
+                    <TableCell>Última compra</TableCell>
+                    <TableCell>Status</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {parsed.rows.slice(0, 200).map((r) => (
+                    <TableRow key={r.line} sx={r.errors.length > 0 ? { bgcolor: "error.50" } : undefined}>
+                      <TableCell sx={{ color: "text.secondary" }}>{r.line}</TableCell>
+                      <TableCell>{r.nome ?? "—"}</TableCell>
+                      <TableCell>{r.email ?? "—"}</TableCell>
+                      <TableCell>{r.phone ?? "—"}</TableCell>
+                      <TableCell>{r.tags.length > 0 ? r.tags.join(", ") : "—"}</TableCell>
+                      <TableCell>{r.lastPurchaseAt ? new Date(r.lastPurchaseAt).toLocaleDateString("pt-BR") : "—"}</TableCell>
+                      <TableCell>
+                        {r.errors.length === 0 ? (
+                          <CheckCircle2 size={14} color="var(--mui-palette-success-main, #28C76F)" />
+                        ) : (
+                          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", color: "error.main" }}>
+                            <AlertTriangle size={14} />
+                            <Typography variant="caption">{r.errors.join("; ")}</Typography>
+                          </Stack>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            {parsed.rows.length > 200 && (
+              <Typography variant="caption" color="text.secondary">
+                Mostrando 200 de {parsed.rows.length} linhas na prévia.
+              </Typography>
+            )}
 
-            <div className="flex items-center justify-between gap-2">
+            <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "center" }}>
               <Button variant="ghost" onClick={reset} disabled={importing}>
                 Escolher outro arquivo
               </Button>
-              <Button onClick={handleImport} disabled={importing || validRows.length === 0} className="gap-2">
-                {importing && <Loader2 className="size-4 animate-spin" />}
+              <Button
+                variant="contained"
+                startIcon={importing ? <Loader2 size={16} className="animate-spin" /> : null}
+                onClick={handleImport}
+                disabled={importing || validRows.length === 0}
+              >
                 {importing && importProgress
                   ? `Importando lote ${importProgress.current} de ${importProgress.total}`
                   : `Importar ${validRows.length} contatos`}
               </Button>
-            </div>
-          </div>
+            </Stack>
+          </Stack>
         )}
       </DialogContent>
     </Dialog>

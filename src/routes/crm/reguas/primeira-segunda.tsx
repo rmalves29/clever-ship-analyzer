@@ -5,15 +5,28 @@ import { format, subDays } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, ChevronLeft, ChevronRight, Info, Save, Sparkles, Target, Users } from "lucide-react";
 import { toast } from "sonner";
+// WhatsappSendDialog ainda é shadcn — componente compartilhado com o módulo de WhatsApp
+// (Grupo 3, migrado por último no plano). Deixado como está de propósito: migrar a
+// tela mas manter esse diálogo intacto até chegar a vez do módulo de WhatsApp.
 import { WhatsappSendDialog, type SendDialogSeed } from "@/components/whatsapp/WhatsappSendDialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Grid from "@mui/material/Grid";
+import IconButton from "@mui/material/IconButton";
+import LinearProgress from "@mui/material/LinearProgress";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
 import {
   createRepurchaseCampaignDraft,
   getRepurchaseCustomers,
@@ -64,23 +77,20 @@ const SOURCE_LABELS: Record<string, string> = {
 
 function MetricCard({ label, value, hint, explanation }: { label: string; value: string | number; hint: string; explanation: string }) {
   return (
-    <div className="surface-card p-5">
-      <div className="flex items-center gap-1.5">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button type="button" aria-label={`Como é calculado: ${label}`} className="text-muted-foreground hover:text-foreground">
-                <Info className="size-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-72">{explanation}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-      <p className="mt-2 text-3xl font-bold tracking-tight">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
-    </div>
+    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5, height: "100%" }}>
+      <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+        <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+          {label}
+        </Typography>
+        <Tooltip title={explanation} arrow>
+          <IconButton size="small" sx={{ p: 0.25 }} aria-label={`Como é calculado: ${label}`}>
+            <Info size={14} />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+      <Typography variant="h5" sx={{ fontWeight: 700, mt: 1 }}>{value}</Typography>
+      <Typography variant="caption" color="text.secondary">{hint}</Typography>
+    </Box>
   );
 }
 
@@ -177,8 +187,20 @@ function RepurchasePage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
-  if (isLoading) return <div className="p-8 text-muted-foreground">Carregando régua de recompra…</div>;
-  if (error || !data) return <div className="p-8 text-destructive">Não foi possível carregar a régua de recompra.</div>;
+  if (isLoading) {
+    return (
+      <Typography color="text.secondary" sx={{ p: 4 }}>
+        Carregando régua de recompra…
+      </Typography>
+    );
+  }
+  if (error || !data) {
+    return (
+      <Typography color="error.main" sx={{ p: 4 }}>
+        Não foi possível carregar a régua de recompra.
+      </Typography>
+    );
+  }
 
   const summary = data.summary;
   const customers = customerResult?.customers ?? [];
@@ -195,88 +217,367 @@ function RepurchasePage() {
   };
 
   return (
-    <div className="space-y-6 p-6 lg:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-sm text-muted-foreground">CRM → Réguas</p>
-          <h1 className="text-2xl font-bold">1ª compra → 2ª compra</h1>
-          <p className="text-sm text-muted-foreground">Acompanhe clientes desde a primeira compra e meça a segunda compra com uma janela justa.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={!actionableStage || aiMutation.isPending} onClick={() => actionableStage && aiMutation.mutate(actionableStage)}>
-            <Sparkles className="mr-2 size-4" />{aiMutation.isPending ? "Gerando…" : "Sugerir campanha com IA"}
+    <Stack spacing={3} sx={{ p: { xs: 2, lg: 4 } }}>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+        <Box>
+          <Typography variant="body2" color="text.secondary">CRM → Réguas</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>1ª compra → 2ª compra</Typography>
+          <Typography variant="body2" color="text.secondary">Acompanhe clientes desde a primeira compra e meça a segunda compra com uma janela justa.</Typography>
+        </Box>
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+          <Button variant="outline" startIcon={<Sparkles size={16} />} disabled={!actionableStage || aiMutation.isPending} onClick={() => actionableStage && aiMutation.mutate(actionableStage)}>
+            {aiMutation.isPending ? "Gerando…" : "Sugerir campanha com IA"}
           </Button>
-          <Button disabled={!actionableStage || campaignMutation.isPending} onClick={() => actionableStage && campaignMutation.mutate(actionableStage)}>
-            <Target className="mr-2 size-4" />{campaignMutation.isPending ? "Preparando…" : "Criar campanha"}
+          <Button variant="contained" startIcon={<Target size={16} />} disabled={!actionableStage || campaignMutation.isPending} onClick={() => actionableStage && campaignMutation.mutate(actionableStage)}>
+            {campaignMutation.isPending ? "Preparando…" : "Criar campanha"}
           </Button>
-        </div>
-      </div>
+        </Stack>
+      </Stack>
 
-      <section className="surface-card space-y-4 p-5">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div><h2 className="font-semibold">Período da primeira compra</h2><p className="text-xs text-muted-foreground">O filtro define quais coortes e clientes entram nos cards abaixo.</p></div>
-          <Badge variant="outline">Dados disponíveis: {coverageFrom} até {coverageTo} · {data.dataCoverage.historyDays} dias</Badge>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {PERIODS.map((item) => <Button key={item.value} size="sm" variant={period === item.value ? "default" : "outline"} onClick={() => setPeriod(item.value)}>{item.label}</Button>)}
-        </div>
-        {period === "custom" && <div className="flex flex-wrap gap-3"><div><Label>De</Label><Input type="date" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} /></div><div><Label>Até</Label><Input type="date" value={customTo} onChange={(event) => setCustomTo(event.target.value)} /></div></div>}
-        {data.dataCoverage.historyDays < targetWindow && <p className="rounded-lg border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning">O histórico ainda tem {data.dataCoverage.historyDays} dias. A métrica de {targetWindow} dias ficará completa quando houver clientes com essa janela inteira de observação.</p>}
-      </section>
+      <Stack spacing={2} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+        <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-end" }}>
+          <Box>
+            <Typography sx={{ fontWeight: 600 }}>Período da primeira compra</Typography>
+            <Typography variant="caption" color="text.secondary">O filtro define quais coortes e clientes entram nos cards abaixo.</Typography>
+          </Box>
+          <Chip variant="outlined" label={`Dados disponíveis: ${coverageFrom} até ${coverageTo} · ${data.dataCoverage.historyDays} dias`} />
+        </Stack>
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+          {PERIODS.map((item) => (
+            <Button key={item.value} size="small" variant={period === item.value ? "contained" : "outline"} onClick={() => setPeriod(item.value)}>
+              {item.label}
+            </Button>
+          ))}
+        </Stack>
+        {period === "custom" && (
+          <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap" }}>
+            <TextField size="small" type="date" label="De" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+            <TextField size="small" type="date" label="Até" value={customTo} onChange={(event) => setCustomTo(event.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+          </Stack>
+        )}
+        {data.dataCoverage.historyDays < targetWindow && (
+          <Typography variant="body2" sx={{ border: "1px solid", borderColor: "warning.main", bgcolor: "warning.50", borderRadius: 2, px: 1.5, py: 1, color: "warning.main" }}>
+            O histórico ainda tem {data.dataCoverage.historyDays} dias. A métrica de {targetWindow} dias ficará completa quando houver clientes com essa janela inteira de observação.
+          </Typography>
+        )}
+      </Stack>
 
-      {!actionableStage && <div className="rounded-xl border border-dashed px-4 py-3 text-sm text-muted-foreground">Selecione uma etapa pendente na jornada. “Criar campanha” abrirá o assistente oficial para escolher template, revisar o público e decidir entre aprovação, envio ou agendamento.</div>}
+      {!actionableStage && (
+        <Typography variant="body2" color="text.secondary" sx={{ border: "1px dashed", borderColor: "divider", borderRadius: 3, px: 2, py: 1.5 }}>
+          Selecione uma etapa pendente na jornada. "Criar campanha" abrirá o assistente oficial para escolher template, revisar o público e decidir entre aprovação, envio ou agendamento.
+        </Typography>
+      )}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Aguardando 2ª compra" value={summary.pending} hint="Exatamente 1 pedido válido" explanation="Clientes do período selecionado que possuem exatamente uma compra paga e não cancelada." />
-        <MetricCard label="Converteram" value={summary.converted} hint="Já fizeram a 2ª compra" explanation="Clientes do período que possuem pelo menos duas compras válidas. A terceira compra e seguintes não aumentam esta contagem." />
-        <MetricCard label="Taxa geral" value={pct(summary.conversionRate)} hint={`${summary.converted} de ${summary.buyers} clientes`} explanation="Clientes que já fizeram a segunda compra divididos por toda a base, inclusive clientes recém-chegados que ainda não tiveram tempo para recomprar." />
-        <MetricCard label={`Taxa madura em ${summary.targetWindowDays}d`} value={summary.matureEligible ? pct(summary.matureConversionRate) : "Aguardando"} hint={`${summary.matureConverted} de ${summary.matureEligible} elegíveis`} explanation={`Considera somente clientes que já tiveram ${summary.targetWindowDays} dias completos desde a primeira compra. Conta como conversão apenas a segunda compra feita dentro dessa janela.`} />
-        <MetricCard label="Base da jornada" value={summary.buyers} hint="Clientes com compra válida" explanation="Total de clientes com pelo menos um pedido PAID ou PARTIALLY_PAID, sem cancelamento, dentro do período de primeira compra selecionado." />
-        <MetricCard label="Receita da 1ª compra" value={brl(summary.firstRevenue)} hint={`Ticket médio ${brl(summary.firstAverageTicket)}`} explanation="Soma somente o valor da primeira compra válida de cada cliente da base." />
-        <MetricCard label="Receita da 2ª compra" value={brl(summary.secondRevenue)} hint={`Ticket médio ${brl(summary.secondAverageTicket)}`} explanation="Soma somente a segunda compra válida. Terceira compra e posteriores não entram neste card." />
-        <MetricCard label="Tempo até 2ª compra" value={`${summary.averageDaysToSecondOrder.toFixed(1)} dias`} hint="Média de quem converteu" explanation="Quantidade média de dias entre a primeira e a segunda compra válida dos clientes que já converteram." />
-        <MetricCard label="Espera dos pendentes" value={`${summary.averageDaysSinceFirstOrderPending.toFixed(1)} dias`} hint="Média sem segunda compra" explanation="Dias médios desde a primeira compra dos clientes que ainda não realizaram a segunda." />
-        <MetricCard label="Faltam para a meta" value={summary.matureEligible ? summary.customersMissingToTarget : "—"} hint={`Meta ${pct(summary.targetConversionRate)} em ${summary.targetWindowDays} dias`} explanation="Quantidade adicional de clientes elegíveis que precisariam recomprar dentro da janela para atingir a meta atual." />
-      </div>
+      <Grid container spacing={2}>
+        {[
+          { label: "Aguardando 2ª compra", value: summary.pending, hint: "Exatamente 1 pedido válido", explanation: "Clientes do período selecionado que possuem exatamente uma compra paga e não cancelada." },
+          { label: "Converteram", value: summary.converted, hint: "Já fizeram a 2ª compra", explanation: "Clientes do período que possuem pelo menos duas compras válidas. A terceira compra e seguintes não aumentam esta contagem." },
+          { label: "Taxa geral", value: pct(summary.conversionRate), hint: `${summary.converted} de ${summary.buyers} clientes`, explanation: "Clientes que já fizeram a segunda compra divididos por toda a base, inclusive clientes recém-chegados que ainda não tiveram tempo para recomprar." },
+          { label: `Taxa madura em ${summary.targetWindowDays}d`, value: summary.matureEligible ? pct(summary.matureConversionRate) : "Aguardando", hint: `${summary.matureConverted} de ${summary.matureEligible} elegíveis`, explanation: `Considera somente clientes que já tiveram ${summary.targetWindowDays} dias completos desde a primeira compra. Conta como conversão apenas a segunda compra feita dentro dessa janela.` },
+          { label: "Base da jornada", value: summary.buyers, hint: "Clientes com compra válida", explanation: "Total de clientes com pelo menos um pedido PAID ou PARTIALLY_PAID, sem cancelamento, dentro do período de primeira compra selecionado." },
+          { label: "Receita da 1ª compra", value: brl(summary.firstRevenue), hint: `Ticket médio ${brl(summary.firstAverageTicket)}`, explanation: "Soma somente o valor da primeira compra válida de cada cliente da base." },
+          { label: "Receita da 2ª compra", value: brl(summary.secondRevenue), hint: `Ticket médio ${brl(summary.secondAverageTicket)}`, explanation: "Soma somente a segunda compra válida. Terceira compra e posteriores não entram neste card." },
+          { label: "Tempo até 2ª compra", value: `${summary.averageDaysToSecondOrder.toFixed(1)} dias`, hint: "Média de quem converteu", explanation: "Quantidade média de dias entre a primeira e a segunda compra válida dos clientes que já converteram." },
+          { label: "Espera dos pendentes", value: `${summary.averageDaysSinceFirstOrderPending.toFixed(1)} dias`, hint: "Média sem segunda compra", explanation: "Dias médios desde a primeira compra dos clientes que ainda não realizaram a segunda." },
+          { label: "Faltam para a meta", value: summary.matureEligible ? summary.customersMissingToTarget : "—", hint: `Meta ${pct(summary.targetConversionRate)} em ${summary.targetWindowDays} dias`, explanation: "Quantidade adicional de clientes elegíveis que precisariam recomprar dentro da janela para atingir a meta atual." },
+        ].map((card) => (
+          <Grid key={card.label} size={{ xs: 12, sm: 6, xl: 12 / 5 }}>
+            <MetricCard {...card} />
+          </Grid>
+        ))}
+      </Grid>
 
-      <section className="surface-card p-5">
-        <div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div><h2 className="font-semibold">Meta operacional de segunda compra</h2><p className="mt-1 text-xs text-muted-foreground">Taxa madura atual {summary.matureEligible ? pct(summary.matureConversionRate) : "sem coorte madura"} · meta {pct(summary.targetConversionRate)} em até {summary.targetWindowDays} dias.</p><div className="mt-3"><Progress value={targetProgress} /></div><p className="mt-1 text-xs text-muted-foreground">{summary.matureEligible ? `${targetProgress.toFixed(0)}% da meta` : "Aguardando clientes completarem a janela"}</p></div>
-          <div className="flex flex-wrap items-end gap-2">
-            <div><Label>Meta (%)</Label><Input className="w-28" inputMode="decimal" value={targetPercent} onChange={(event) => setTargetPercent(event.target.value)} /></div>
-            <div><Label>Janela</Label><Select value={String(targetWindow)} onValueChange={(value) => setTargetWindow(Number(value) as RepurchaseTargetWindowDays)}><SelectTrigger className="w-32"><SelectValue /></SelectTrigger><SelectContent>{REPURCHASE_TARGET_WINDOWS.map((days) => <SelectItem key={days} value={String(days)}>{days} dias</SelectItem>)}</SelectContent></Select></div>
-            <Button onClick={() => settingsMutation.mutate()} disabled={settingsMutation.isPending}><Save className="mr-2 size-4" />Salvar meta</Button>
-          </div>
-        </div>
-      </section>
+      <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+        <Grid container spacing={2} sx={{ alignItems: "flex-end" }}>
+          <Grid size={{ xs: 12, lg: "grow" }}>
+            <Typography sx={{ fontWeight: 600 }}>Meta operacional de segunda compra</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+              Taxa madura atual {summary.matureEligible ? pct(summary.matureConversionRate) : "sem coorte madura"} · meta {pct(summary.targetConversionRate)} em até {summary.targetWindowDays} dias.
+            </Typography>
+            <LinearProgress variant="determinate" value={targetProgress} sx={{ height: 6, borderRadius: 999, mt: 1.5 }} />
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+              {summary.matureEligible ? `${targetProgress.toFixed(0)}% da meta` : "Aguardando clientes completarem a janela"}
+            </Typography>
+          </Grid>
+          <Grid size={{ xs: 12, lg: "auto" }}>
+            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "flex-end" }}>
+              <TextField size="small" label="Meta (%)" sx={{ width: 112 }} inputMode="decimal" value={targetPercent} onChange={(event) => setTargetPercent(event.target.value)} />
+              <Select size="small" sx={{ width: 128 }} value={String(targetWindow)} onChange={(e) => setTargetWindow(Number(e.target.value) as RepurchaseTargetWindowDays)}>
+                {REPURCHASE_TARGET_WINDOWS.map((days) => <MenuItem key={days} value={String(days)}>{days} dias</MenuItem>)}
+              </Select>
+              <Button variant="contained" startIcon={<Save size={16} />} onClick={() => settingsMutation.mutate()} disabled={settingsMutation.isPending}>
+                Salvar meta
+              </Button>
+            </Stack>
+          </Grid>
+        </Grid>
+      </Box>
 
-      <section className="surface-card p-5">
-        <div className="mb-4 flex items-center gap-2"><Users className="size-4" /><h2 className="font-semibold">Jornada dos clientes ainda pendentes</h2></div>
-        <div className="grid gap-2 lg:grid-cols-7">
-          {REPURCHASE_WINDOWS.map((name) => <button key={name} onClick={() => selectStage(name)} className={`rounded-xl border p-4 text-left transition hover:bg-muted/40 ${stage === name ? "ring-2 ring-primary" : ""}`}><p className="text-xs text-muted-foreground">{name}</p><p className="mt-1 text-2xl font-bold">{summary.windows[name]}</p><p className="text-[11px] text-muted-foreground">Sem 2ª compra</p></button>)}
-          <button onClick={() => selectStage("Convertido")} className={`rounded-xl border p-4 text-left transition hover:bg-muted/40 ${stage === "Convertido" ? "ring-2 ring-primary" : ""}`}><p className="text-xs text-muted-foreground">2ª compra</p><p className="mt-1 text-2xl font-bold">{summary.converted}</p><p className="text-xs text-muted-foreground">Convertido</p></button>
-        </div>
-      </section>
+      <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 2 }}>
+          <Users size={16} />
+          <Typography sx={{ fontWeight: 600 }}>Jornada dos clientes ainda pendentes</Typography>
+        </Stack>
+        <Grid container spacing={1.5}>
+          {REPURCHASE_WINDOWS.map((name) => (
+            <Grid key={name} size={{ xs: 6, lg: 12 / 7 }}>
+              <Box
+                component="button"
+                onClick={() => selectStage(name)}
+                sx={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  borderRadius: 3,
+                  border: "1px solid",
+                  borderColor: "divider",
+                  outline: stage === name ? "2px solid" : "none",
+                  outlineColor: "primary.main",
+                  p: 2,
+                  bgcolor: "transparent",
+                  cursor: "pointer",
+                  "&:hover": { bgcolor: "action.hover" },
+                }}
+              >
+                <Typography variant="caption" color="text.secondary">{name}</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.5 }}>{summary.windows[name]}</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>Sem 2ª compra</Typography>
+              </Box>
+            </Grid>
+          ))}
+          <Grid size={{ xs: 6, lg: 12 / 7 }}>
+            <Box
+              component="button"
+              onClick={() => selectStage("Convertido")}
+              sx={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                borderRadius: 3,
+                border: "1px solid",
+                borderColor: "divider",
+                outline: stage === "Convertido" ? "2px solid" : "none",
+                outlineColor: "primary.main",
+                p: 2,
+                bgcolor: "transparent",
+                cursor: "pointer",
+                "&:hover": { bgcolor: "action.hover" },
+              }}
+            >
+              <Typography variant="caption" color="text.secondary">2ª compra</Typography>
+              <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.5 }}>{summary.converted}</Typography>
+              <Typography variant="caption" color="text.secondary">Convertido</Typography>
+            </Box>
+          </Grid>
+        </Grid>
+      </Box>
 
-      {suggestion && <section className="surface-card p-5"><div className="mb-3 flex items-center gap-2"><Sparkles className="size-4" /><h2 className="font-semibold">Sugestão da IA — revisão humana</h2></div><div className="grid gap-4 text-sm lg:grid-cols-2"><div className="space-y-3"><p><strong>Abordagem:</strong> {suggestion.approach}</p><div className="rounded-lg border bg-muted/20 p-3"><p className="whitespace-pre-wrap">{suggestion.message}</p></div></div><div className="space-y-2"><p><strong>Incentivo sugerido:</strong> {suggestion.incentive}</p><p><strong>Oferta sugerida:</strong> {suggestion.offer}</p><p><strong>CTA:</strong> {suggestion.cta}</p><p className="text-muted-foreground"><strong>Por quê:</strong> {suggestion.rationale}</p></div></div></section>}
+      {suggestion && (
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1.5 }}>
+            <Sparkles size={16} />
+            <Typography sx={{ fontWeight: 600 }}>Sugestão da IA — revisão humana</Typography>
+          </Stack>
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, lg: 6 }}>
+              <Stack spacing={1.5}>
+                <Typography variant="body2"><strong>Abordagem:</strong> {suggestion.approach}</Typography>
+                <Box sx={{ border: "1px solid", borderColor: "divider", bgcolor: "action.hover", borderRadius: 2, p: 1.5 }}>
+                  <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>{suggestion.message}</Typography>
+                </Box>
+              </Stack>
+            </Grid>
+            <Grid size={{ xs: 12, lg: 6 }}>
+              <Stack spacing={1}>
+                <Typography variant="body2"><strong>Incentivo sugerido:</strong> {suggestion.incentive}</Typography>
+                <Typography variant="body2"><strong>Oferta sugerida:</strong> {suggestion.offer}</Typography>
+                <Typography variant="body2"><strong>CTA:</strong> {suggestion.cta}</Typography>
+                <Typography variant="body2" color="text.secondary"><strong>Por quê:</strong> {suggestion.rationale}</Typography>
+              </Stack>
+            </Grid>
+          </Grid>
+        </Box>
+      )}
 
-      <section className="grid gap-4 xl:grid-cols-2">
-        <div className="surface-card p-5"><h2 className="font-semibold">Produtos da 1ª compra com mais conversões</h2><p className="mb-3 text-xs text-muted-foreground">Correlação por produto da primeira compra; não representa causalidade.</p><Table><TableHeader><TableRow><TableHead>Produto</TableHead><TableHead>Clientes</TableHead><TableHead>2ª compra</TableHead><TableHead>Taxa</TableHead></TableRow></TableHeader><TableBody>{data.products.length ? data.products.map((row) => <TableRow key={row.name}><TableCell className="max-w-72"><span className="line-clamp-2">{row.name}</span></TableCell><TableCell>{row.customers}</TableCell><TableCell>{row.converted}</TableCell><TableCell>{pct(row.conversionRate)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Sem dados no período.</TableCell></TableRow>}</TableBody></Table></div>
-        <div className="surface-card p-5"><h2 className="font-semibold">Recompra por origem da 1ª compra</h2><p className="mb-3 text-xs text-muted-foreground">Compara a origem registrada pela Shopify.</p><Table><TableHeader><TableRow><TableHead>Origem</TableHead><TableHead>Clientes</TableHead><TableHead>2ª compra</TableHead><TableHead>Taxa</TableHead><TableHead>Receita 2ª</TableHead></TableRow></TableHeader><TableBody>{data.sources.length ? data.sources.map((row) => <TableRow key={row.source}><TableCell>{SOURCE_LABELS[row.source] ?? row.source}</TableCell><TableCell>{row.customers}</TableCell><TableCell>{row.converted}</TableCell><TableCell>{pct(row.conversionRate)}</TableCell><TableCell>{brl(row.secondRevenue)}</TableCell></TableRow>) : <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Sem dados no período.</TableCell></TableRow>}</TableBody></Table></div>
-      </section>
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, xl: 6 }}>
+          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+            <Typography sx={{ fontWeight: 600 }}>Produtos da 1ª compra com mais conversões</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>Correlação por produto da primeira compra; não representa causalidade.</Typography>
+            <TableContainer sx={{ overflowX: "auto" }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Produto</TableCell>
+                    <TableCell>Clientes</TableCell>
+                    <TableCell>2ª compra</TableCell>
+                    <TableCell>Taxa</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {data.products.length ? data.products.map((row) => (
+                    <TableRow key={row.name}>
+                      <TableCell sx={{ maxWidth: 288 }}>
+                        <Typography variant="body2" sx={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{row.name}</Typography>
+                      </TableCell>
+                      <TableCell>{row.customers}</TableCell>
+                      <TableCell>{row.converted}</TableCell>
+                      <TableCell>{pct(row.conversionRate)}</TableCell>
+                    </TableRow>
+                  )) : (
+                    <TableRow><TableCell colSpan={4} align="center" sx={{ color: "text.secondary" }}>Sem dados no período.</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        </Grid>
+        <Grid size={{ xs: 12, xl: 6 }}>
+          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+            <Typography sx={{ fontWeight: 600 }}>Recompra por origem da 1ª compra</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>Compara a origem registrada pela Shopify.</Typography>
+            <TableContainer sx={{ overflowX: "auto" }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Origem</TableCell>
+                    <TableCell>Clientes</TableCell>
+                    <TableCell>2ª compra</TableCell>
+                    <TableCell>Taxa</TableCell>
+                    <TableCell>Receita 2ª</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {data.sources.length ? data.sources.map((row) => (
+                    <TableRow key={row.source}>
+                      <TableCell>{SOURCE_LABELS[row.source] ?? row.source}</TableCell>
+                      <TableCell>{row.customers}</TableCell>
+                      <TableCell>{row.converted}</TableCell>
+                      <TableCell>{pct(row.conversionRate)}</TableCell>
+                      <TableCell>{brl(row.secondRevenue)}</TableCell>
+                    </TableRow>
+                  )) : (
+                    <TableRow><TableCell colSpan={5} align="center" sx={{ color: "text.secondary" }}>Sem dados no período.</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        </Grid>
+      </Grid>
 
-      <section className="surface-card p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">Clientes {stage ? `— ${stage}` : "— toda a jornada"}</h2><p className="text-xs text-muted-foreground">{totalCustomers} cliente(s) no período e filtro atuais.</p></div><div className="flex flex-wrap gap-2"><Input className="w-72" placeholder="Buscar cliente ou produto…" value={search} onChange={(event) => setSearch(event.target.value)} />{stage && <Button variant="outline" onClick={() => setStage(undefined)}>Limpar etapa</Button>}</div></div>
-        <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Cliente</TableHead><TableHead>1ª compra</TableHead><TableHead>Dias</TableHead><TableHead>Valor</TableHead><TableHead>Produtos</TableHead><TableHead>Local</TableHead><TableHead>Canal</TableHead><TableHead>Estágio</TableHead><TableHead>2ª compra</TableHead></TableRow></TableHeader><TableBody>{customersLoading ? <TableRow><TableCell colSpan={9} className="py-8 text-center text-muted-foreground">Carregando clientes…</TableCell></TableRow> : customers.length === 0 ? <TableRow><TableCell colSpan={9} className="py-8 text-center text-muted-foreground">Nenhum cliente encontrado.</TableCell></TableRow> : customers.map((customer) => <TableRow key={customer.customerId}><TableCell className="font-medium">{customer.name}</TableCell><TableCell>{new Date(customer.firstOrderAt).toLocaleDateString("pt-BR")}</TableCell><TableCell>{customer.daysSinceFirstOrder}</TableCell><TableCell>{brl(customer.firstOrderRevenue)}</TableCell><TableCell className="max-w-80"><span className="line-clamp-2 text-xs">{customer.products.join(", ") || "—"}</span></TableCell><TableCell>{[customer.city, customer.province].filter(Boolean).join("/") || "—"}</TableCell><TableCell>{SOURCE_LABELS[customer.sourceName ?? ""] ?? customer.sourceName ?? "—"}</TableCell><TableCell>{customer.stage}</TableCell><TableCell>{customer.secondOrderAt ? <span className="inline-flex items-center gap-1 whitespace-nowrap">{new Date(customer.secondOrderAt).toLocaleDateString("pt-BR")}<ArrowRight className="size-3" />{brl(customer.secondOrderRevenue ?? 0)}</span> : "—"}</TableCell></TableRow>)}</TableBody></Table></div>
-        <div className="mt-4 flex items-center justify-between gap-4"><p className="text-xs text-muted-foreground">Página {page + 1} de {totalPages}</p><div className="flex gap-2"><Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}><ChevronLeft className="mr-1 size-4" />Anterior</Button><Button variant="outline" size="sm" disabled={page + 1 >= totalPages} onClick={() => setPage((current) => current + 1)}>Próxima<ChevronRight className="ml-1 size-4" /></Button></div></div>
-      </section>
+      <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+        <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+          <Box>
+            <Typography sx={{ fontWeight: 600 }}>Clientes {stage ? `— ${stage}` : "— toda a jornada"}</Typography>
+            <Typography variant="caption" color="text.secondary">{totalCustomers} cliente(s) no período e filtro atuais.</Typography>
+          </Box>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+            <TextField size="small" sx={{ width: 288 }} placeholder="Buscar cliente ou produto…" value={search} onChange={(event) => setSearch(event.target.value)} />
+            {stage && <Button variant="outline" onClick={() => setStage(undefined)}>Limpar etapa</Button>}
+          </Stack>
+        </Stack>
+        <TableContainer sx={{ overflowX: "auto" }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Cliente</TableCell>
+                <TableCell>1ª compra</TableCell>
+                <TableCell>Dias</TableCell>
+                <TableCell>Valor</TableCell>
+                <TableCell>Produtos</TableCell>
+                <TableCell>Local</TableCell>
+                <TableCell>Canal</TableCell>
+                <TableCell>Estágio</TableCell>
+                <TableCell>2ª compra</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {customersLoading ? (
+                <TableRow><TableCell colSpan={9} align="center" sx={{ py: 4, color: "text.secondary" }}>Carregando clientes…</TableCell></TableRow>
+              ) : customers.length === 0 ? (
+                <TableRow><TableCell colSpan={9} align="center" sx={{ py: 4, color: "text.secondary" }}>Nenhum cliente encontrado.</TableCell></TableRow>
+              ) : (
+                customers.map((customer) => (
+                  <TableRow key={customer.customerId}>
+                    <TableCell sx={{ fontWeight: 500 }}>{customer.name}</TableCell>
+                    <TableCell>{new Date(customer.firstOrderAt).toLocaleDateString("pt-BR")}</TableCell>
+                    <TableCell>{customer.daysSinceFirstOrder}</TableCell>
+                    <TableCell>{brl(customer.firstOrderRevenue)}</TableCell>
+                    <TableCell sx={{ maxWidth: 320 }}>
+                      <Typography variant="caption" sx={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                        {customer.products.join(", ") || "—"}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>{[customer.city, customer.province].filter(Boolean).join("/") || "—"}</TableCell>
+                    <TableCell>{SOURCE_LABELS[customer.sourceName ?? ""] ?? customer.sourceName ?? "—"}</TableCell>
+                    <TableCell>{customer.stage}</TableCell>
+                    <TableCell>
+                      {customer.secondOrderAt ? (
+                        <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", whiteSpace: "nowrap" }}>
+                          {new Date(customer.secondOrderAt).toLocaleDateString("pt-BR")}
+                          <ArrowRight size={12} />
+                          {brl(customer.secondOrderRevenue ?? 0)}
+                        </Stack>
+                      ) : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mt: 2 }}>
+          <Typography variant="caption" color="text.secondary">Página {page + 1} de {totalPages}</Typography>
+          <Stack direction="row" spacing={1}>
+            <Button variant="outline" size="small" startIcon={<ChevronLeft size={16} />} disabled={page === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>
+              Anterior
+            </Button>
+            <Button variant="outline" size="small" endIcon={<ChevronRight size={16} />} disabled={page + 1 >= totalPages} onClick={() => setPage((current) => current + 1)}>
+              Próxima
+            </Button>
+          </Stack>
+        </Stack>
+      </Box>
 
-      <section className="surface-card p-5">
-        <h2 className="mb-1 font-semibold">Coortes de primeira compra</h2><p className="mb-4 text-xs text-muted-foreground">“Taxa madura” usa apenas clientes que já completaram a janela de {summary.targetWindowDays} dias, evitando penalizar meses recentes.</p>
-        <Table><TableHeader><TableRow><TableHead>Mês</TableHead><TableHead>Clientes</TableHead><TableHead>Elegíveis maduros</TableHead><TableHead>Converteram na janela</TableHead><TableHead>Taxa madura</TableHead><TableHead>Situação</TableHead><TableHead>Tempo médio</TableHead></TableRow></TableHeader><TableBody>{data.cohorts.map((cohort) => <TableRow key={cohort.month}><TableCell>{cohort.month}</TableCell><TableCell>{cohort.customers}</TableCell><TableCell>{cohort.matureCustomers}</TableCell><TableCell>{cohort.matureConverted}</TableCell><TableCell>{pct(cohort.matureConversionRate)}</TableCell><TableCell><Badge variant="outline">{cohort.maturityStatus === "completa" ? "Completa" : cohort.maturityStatus === "parcial" ? "Parcial" : "Aguardando"}</Badge></TableCell><TableCell>{cohort.averageDaysToSecondOrder.toFixed(1)} dias</TableCell></TableRow>)}</TableBody></Table>
-      </section>
+      <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+        <Typography sx={{ fontWeight: 600 }}>Coortes de primeira compra</Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+          "Taxa madura" usa apenas clientes que já completaram a janela de {summary.targetWindowDays} dias, evitando penalizar meses recentes.
+        </Typography>
+        <TableContainer sx={{ overflowX: "auto" }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Mês</TableCell>
+                <TableCell>Clientes</TableCell>
+                <TableCell>Elegíveis maduros</TableCell>
+                <TableCell>Converteram na janela</TableCell>
+                <TableCell>Taxa madura</TableCell>
+                <TableCell>Situação</TableCell>
+                <TableCell>Tempo médio</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {data.cohorts.map((cohort) => (
+                <TableRow key={cohort.month}>
+                  <TableCell>{cohort.month}</TableCell>
+                  <TableCell>{cohort.customers}</TableCell>
+                  <TableCell>{cohort.matureCustomers}</TableCell>
+                  <TableCell>{cohort.matureConverted}</TableCell>
+                  <TableCell>{pct(cohort.matureConversionRate)}</TableCell>
+                  <TableCell>
+                    <Chip size="small" variant="outlined" label={cohort.maturityStatus === "completa" ? "Completa" : cohort.maturityStatus === "parcial" ? "Parcial" : "Aguardando"} />
+                  </TableCell>
+                  <TableCell>{cohort.averageDaysToSecondOrder.toFixed(1)} dias</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
 
       <WhatsappSendDialog seed={sendSeed} open={sendOpen} onOpenChange={setSendOpen} segments={preparedSegment ? [preparedSegment] : []} onDone={() => queryClient.invalidateQueries({ queryKey: ["whatsapp-campaigns"] })} />
-    </div>
+    </Stack>
   );
 }

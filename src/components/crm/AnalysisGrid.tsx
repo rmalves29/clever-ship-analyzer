@@ -1,44 +1,58 @@
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-  Area,
-  AreaChart,
-} from "recharts";
+import { BarChart } from "@mui/x-charts/BarChart";
+import { LineChart } from "@mui/x-charts/LineChart";
+import { PieChart } from "@mui/x-charts/PieChart";
 import { Maximize2 } from "lucide-react";
+import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
+import LinearProgress from "@mui/material/LinearProgress";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Typography from "@mui/material/Typography";
 import type { DashboardData, PanelBadge } from "@/lib/crm-mock";
 import { brlCents } from "@/lib/crm-mock";
-import { statusChip, statusLabel } from "./KpiCard";
-import { cn } from "@/lib/utils";
 
-/** Chip do painel. "sem-dados" = amostra insuficiente, nunca pintado como bom/ruim. */
-const badgeChip: Record<PanelBadge, string> = {
-  ...statusChip,
-  "sem-dados": "bg-muted text-muted-foreground",
+type ChipColor = "success" | "warning" | "error" | "default";
+
+const BADGE_COLOR: Record<PanelBadge, ChipColor> = {
+  meta: "success",
+  regular: "warning",
+  critico: "error",
+  "sem-dados": "default",
 };
-const badgeLabel: Record<PanelBadge, string> = {
-  ...statusLabel,
+const BADGE_LABEL: Record<PanelBadge, string> = {
+  meta: "na meta",
+  regular: "regular",
+  critico: "crítico",
   "sem-dados": "sem dados",
 };
 
+const CHART = ["#7367F0", "#00CFE8", "#FF9F43", "#28C76F"];
+
 function EmptyState({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-      {children}
-    </div>
+    <Stack sx={{ height: "100%", alignItems: "center", justifyContent: "center", border: "1px dashed", borderColor: "divider", borderRadius: 2, p: 2, textAlign: "center" }}>
+      <Typography variant="caption" color="text.secondary">{children}</Typography>
+    </Stack>
   );
 }
 
-const CHART = ["var(--color-chart-1)", "var(--color-chart-3)", "var(--color-chart-2)", "var(--color-chart-5)"];
+function PanelHeader({ index, title, status }: { index: string; title: string; status?: PanelBadge }) {
+  return (
+    <Stack direction="row" spacing={1.5} sx={{ alignItems: "flex-start" }}>
+      <Typography variant="caption" sx={{ mt: 0.25, fontFamily: "monospace", color: "text.secondary" }}>{index}</Typography>
+      <Box sx={{ flex: 1 }}>
+        <Typography sx={{ fontWeight: 700 }}>{title}</Typography>
+      </Box>
+      {status && <Chip size="small" color={BADGE_COLOR[status]} label={BADGE_LABEL[status]} sx={{ textTransform: "uppercase", fontSize: 10, fontWeight: 700 }} />}
+      <Maximize2 size={16} color="var(--mui-palette-text-secondary, #6f6b7d)" />
+    </Stack>
+  );
+}
 
 function Panel({
   index,
@@ -60,36 +74,18 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="surface-card p-5">
-      <header className="flex items-start gap-3">
-        <span className="mt-1 text-xs font-mono text-muted-foreground">{index}</span>
-        <div className="flex-1">
-          <h3 className="text-base font-semibold">{title}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-        </div>
-        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase", badgeChip[status])}>
-          {badgeLabel[status]}
-        </span>
-        <Maximize2 className="size-4 text-muted-foreground" />
-      </header>
-      <div className="mt-4 h-[240px]">{empty ? <EmptyState>{empty}</EmptyState> : children}</div>
-      {footnote && <p className="mt-2 text-[11px] text-muted-foreground">{footnote}</p>}
-    </section>
+    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+      <PanelHeader index={index} title={title} status={status} />
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, ml: 4 }}>{description}</Typography>
+      <Box sx={{ mt: 2, height: 240 }}>{empty ? <EmptyState>{empty}</EmptyState> : children}</Box>
+      {footnote && <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block", fontSize: 11 }}>{footnote}</Typography>}
+    </Box>
   );
 }
 
-const tooltipStyle = {
-  contentStyle: {
-    background: "var(--color-card)",
-    border: "1px solid var(--color-border)",
-    borderRadius: "0.75rem",
-    fontSize: 12,
-  },
-} as const;
-
 export function AnalysisGrid({ data }: { data: DashboardData }) {
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <Box sx={{ display: "grid", gap: 2.5, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
       <Panel
         index="01"
         title="Frequência de compra por cliente"
@@ -98,16 +94,17 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         footnote={`Base: ${data.meta.totalClientesBase} cliente(s) com pedido pago.`}
         empty={data.frequencia.length ? null : "Sem clientes com pedido pago para este período."}
       >
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie data={data.frequencia} dataKey="value" nameKey="name" innerRadius={62} outerRadius={92} paddingAngle={2}>
-              {data.frequencia.map((_, i) => (
-                <Cell key={i} fill={CHART[i % CHART.length]} />
-              ))}
-            </Pie>
-            <Tooltip formatter={(v: number) => `${v}%`} {...tooltipStyle} />
-          </PieChart>
-        </ResponsiveContainer>
+        <PieChart
+          series={[{
+            data: data.frequencia.map((f, i) => ({ id: i, value: f.value, label: f.name, color: CHART[i % CHART.length] as string })),
+            innerRadius: 62,
+            outerRadius: 92,
+            paddingAngle: 2,
+            valueFormatter: (v) => `${v.value}%`,
+          }]}
+          height={240}
+          margin={{ right: 120 }}
+        />
       </Panel>
 
       <Panel
@@ -118,67 +115,43 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         footnote="Valor observado até hoje — nenhuma projeção de vida útil é aplicada."
         empty={data.clv.length ? null : "Sem clientes com pedido pago para este período."}
       >
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data.clv}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-            <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={12} />
-            <YAxis tickLine={false} axisLine={false} fontSize={11} width={60} />
-            <Tooltip formatter={(v: number) => brlCents(v)} {...tooltipStyle} />
-            <Bar dataKey="value" fill="var(--color-chart-3)" radius={[6, 6, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <BarChart
+          dataset={data.clv}
+          xAxis={[{ dataKey: "name", scaleType: "band" }]}
+          series={[{ dataKey: "value", color: "#00CFE8", valueFormatter: (v) => brlCents(v ?? 0) }]}
+          height={240}
+          margin={{ left: 56, right: 10, top: 10, bottom: 30 }}
+        />
       </Panel>
 
-      <section className="surface-card p-5">
-        <header className="flex items-start gap-3">
-          <span className="mt-1 text-xs font-mono text-muted-foreground">03</span>
-          <div className="flex-1">
-            <h3 className="text-base font-semibold">Ticket médio x recorrência</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Relação entre o valor gasto por pedido e a maturidade do cliente.
-            </p>
-          </div>
-          <span
-            className={cn(
-              "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase",
-              badgeChip[data.panelStatus.ticketRecorrencia],
-            )}
-          >
-            {badgeLabel[data.panelStatus.ticketRecorrencia]}
-          </span>
-        </header>
-        <ul className="mt-4 space-y-4">
+      <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+        <PanelHeader index="03" title="Ticket médio x recorrência" status={data.panelStatus.ticketRecorrencia} />
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, ml: 4 }}>
+          Relação entre o valor gasto por pedido e a maturidade do cliente.
+        </Typography>
+        <Stack spacing={2} sx={{ mt: 2 }}>
           {data.ticketRecorrencia.map((r) => (
-            <li key={r.label}>
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-medium">
-                  {r.label} <span className="text-muted-foreground">· {r.clientes} clientes</span>
-                </span>
-                <span className="flex items-center gap-2 font-semibold">
-                  {brlCents(r.ticket)}
+            <Box key={r.label}>
+              <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {r.label} <Typography component="span" variant="caption" color="text.secondary">· {r.clientes} clientes</Typography>
+                </Typography>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>{brlCents(r.ticket)}</Typography>
                   {r.delta !== null && (
-                    <span
-                      className={cn(
-                        "rounded-md px-1.5 py-0.5 text-[11px]",
-                        r.delta >= 0 ? statusChip.meta : statusChip.critico,
-                      )}
-                    >
-                      {r.delta > 0 ? "+" : ""}
-                      {r.delta.toFixed(1)}%
-                    </span>
+                    <Chip size="small" color={r.delta >= 0 ? "success" : "error"} label={`${r.delta > 0 ? "+" : ""}${r.delta.toFixed(1)}%`} sx={{ height: 20, fontSize: 11 }} />
                   )}
-                </span>
-              </div>
-              <div className="mt-1.5 h-2 rounded-full bg-muted">
-                <div
-                  className="gradient-brand h-2 rounded-full"
-                  style={{ width: `${Math.min(100, (r.ticket / 700) * 100)}%` }}
-                />
-              </div>
-            </li>
+                </Stack>
+              </Stack>
+              <LinearProgress
+                variant="determinate"
+                value={Math.min(100, (r.ticket / 700) * 100)}
+                sx={{ mt: 0.75, height: 8, borderRadius: 4, bgcolor: "action.hover", "& .MuiLinearProgress-bar": { borderRadius: 4, background: (theme) => `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})` } }}
+              />
+            </Box>
           ))}
-        </ul>
-      </section>
+        </Stack>
+      </Box>
 
       <Panel
         index="04"
@@ -188,15 +161,13 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         footnote={`Base: ${data.meta.numPedidos} pedido(s) pago(s) no período.`}
         empty={data.faixaTicket.length ? null : "Sem pedidos pagos no período selecionado."}
       >
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data.faixaTicket}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-            <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={11} />
-            <YAxis tickLine={false} axisLine={false} fontSize={11} unit="%" width={44} />
-            <Tooltip formatter={(v: number) => `${v}%`} {...tooltipStyle} />
-            <Bar dataKey="value" fill="var(--color-chart-2)" radius={[6, 6, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <BarChart
+          dataset={data.faixaTicket}
+          xAxis={[{ dataKey: "name", scaleType: "band" }]}
+          series={[{ dataKey: "value", color: "#FF9F43", valueFormatter: (v) => `${v}%` }]}
+          height={240}
+          margin={{ left: 44, right: 10, top: 10, bottom: 30 }}
+        />
       </Panel>
 
       <Panel
@@ -207,15 +178,13 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         footnote={`Só entram estados com pelo menos ${data.meta.minSample} clientes.`}
         empty={data.regioes.length ? null : `Nenhum estado atingiu a amostra mínima de ${data.meta.minSample} clientes.`}
       >
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data.regioes}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-            <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={12} />
-            <YAxis tickLine={false} axisLine={false} fontSize={11} unit="%" width={44} />
-            <Tooltip formatter={(v: number) => `${v}%`} {...tooltipStyle} />
-            <Bar dataKey="value" fill="var(--color-chart-3)" radius={[6, 6, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <BarChart
+          dataset={data.regioes}
+          xAxis={[{ dataKey: "name", scaleType: "band" }]}
+          series={[{ dataKey: "value", color: "#00CFE8", valueFormatter: (v) => `${v}%` }]}
+          height={240}
+          margin={{ left: 44, right: 10, top: 10, bottom: 30 }}
+        />
       </Panel>
 
       <Panel
@@ -230,15 +199,14 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         }
         empty={data.churn.length ? null : "Sem clientes com pedido pago para calcular retenção."}
       >
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data.churn}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-            <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={11} />
-            <YAxis tickLine={false} axisLine={false} fontSize={11} unit="%" width={44} domain={[0, 100]} />
-            <Tooltip formatter={(v: number) => `${v}%`} {...tooltipStyle} />
-            <Area dataKey="value" stroke="var(--color-warning)" fill="var(--color-warning-soft)" strokeWidth={2} />
-          </AreaChart>
-        </ResponsiveContainer>
+        <LineChart
+          dataset={data.churn}
+          xAxis={[{ dataKey: "name", scaleType: "point" }]}
+          yAxis={[{ min: 0, max: 100 }]}
+          series={[{ dataKey: "value", color: "#FF9F43", area: true, showMark: false, valueFormatter: (v) => `${v}%` }]}
+          height={240}
+          margin={{ left: 44, right: 10, top: 10, bottom: 30 }}
+        />
       </Panel>
 
       <Panel
@@ -253,15 +221,13 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
             : `Amostra insuficiente: ${data.meta.gapsAmostra} cliente(s) com 2ª compra.`
         }
       >
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data.tempoEntreCompras}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-            <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={12} />
-            <YAxis tickLine={false} axisLine={false} fontSize={11} unit="%" width={44} />
-            <Tooltip formatter={(v: number) => `${v}%`} {...tooltipStyle} />
-            <Bar dataKey="value" fill="var(--color-chart-5)" radius={[6, 6, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <BarChart
+          dataset={data.tempoEntreCompras}
+          xAxis={[{ dataKey: "name", scaleType: "band" }]}
+          series={[{ dataKey: "value", color: "#28C76F", valueFormatter: (v) => `${v}%` }]}
+          height={240}
+          margin={{ left: 44, right: 10, top: 10, bottom: 30 }}
+        />
       </Panel>
 
       <Panel
@@ -276,214 +242,179 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
             : `Amostra insuficiente: ${data.meta.gapsAmostra} cliente(s) com 2ª compra.`
         }
       >
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data.curvaRecompra}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-            <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={11} />
-            <YAxis tickLine={false} axisLine={false} fontSize={11} unit="%" width={44} />
-            <Tooltip formatter={(v: number) => `${v}%`} {...tooltipStyle} />
-            <Line dataKey="value" stroke="var(--color-chart-1)" strokeWidth={2.5} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
+        <LineChart
+          dataset={data.curvaRecompra}
+          xAxis={[{ dataKey: "name", scaleType: "point" }]}
+          series={[{ dataKey: "value", color: "#7367F0", showMark: false, valueFormatter: (v) => `${v}%` }]}
+          height={240}
+          margin={{ left: 44, right: 10, top: 10, bottom: 30 }}
+        />
       </Panel>
 
-      <section className="surface-card p-5 lg:col-span-2">
-        <header className="flex items-start gap-3">
-          <span className="mt-1 text-xs font-mono text-muted-foreground">09</span>
-          <div className="flex-1">
-            <h3 className="text-base font-semibold">Operação de envio</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Pedidos e produtos enviados por dia (pedidos pagos com rastreio). Tempo médio = 1º envio − pagamento.
-            </p>
-          </div>
-          <span
-            className={cn(
-              "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase",
-              badgeChip[data.panelStatus.envios],
-            )}
-          >
-            {badgeLabel[data.panelStatus.envios]}
-          </span>
-        </header>
-        <div className="mt-4 h-[280px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data.enviosPorDia}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-              <XAxis dataKey="dia" tickLine={false} axisLine={false} fontSize={12} />
-              <YAxis tickLine={false} axisLine={false} fontSize={11} width={44} />
-              <Tooltip {...tooltipStyle} />
-              <Bar dataKey="pedidos" name="Pedidos enviados" fill="var(--color-chart-1)" radius={[6, 6, 0, 0]} />
-              <Bar dataKey="produtos" name="Produtos enviados" fill="var(--color-chart-2)" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
+      <Box sx={{ gridColumn: { lg: "span 2" }, border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+        <PanelHeader index="09" title="Operação de envio" status={data.panelStatus.envios} />
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, ml: 4 }}>
+          Pedidos e produtos enviados por dia (pedidos pagos com rastreio). Tempo médio = 1º envio − pagamento.
+        </Typography>
+        <Box sx={{ mt: 2, height: 280 }}>
+          <BarChart
+            dataset={data.enviosPorDia}
+            xAxis={[{ dataKey: "dia", scaleType: "band" }]}
+            series={[
+              { dataKey: "pedidos", label: "Pedidos enviados", color: "#7367F0" },
+              { dataKey: "produtos", label: "Produtos enviados", color: "#00CFE8" },
+            ]}
+            height={280}
+            margin={{ left: 44, right: 10, top: 10, bottom: 50 }}
+          />
+        </Box>
+      </Box>
 
-      <section className="surface-card p-5 lg:col-span-2">
-        <header className="flex items-start gap-3 border-b border-border pb-3">
-          <span className="mt-1 text-xs font-mono text-muted-foreground">10</span>
-          <div className="flex-1">
-            <h3 className="text-base font-semibold">Análise de coorte de clientes</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Retenção por mês da 1ª compra paga. Células vazias = mês sem coorte (não é 0%).
-            </p>
-          </div>
-        </header>
-        <div className="mt-4 overflow-x-auto pb-2">
-          <table className="w-full text-left text-[10px] border-collapse min-w-[600px]">
-            <thead>
-              <tr>
-                <th className="p-2 font-medium text-muted-foreground border-b border-border">Coorte</th>
-                <th className="p-2 font-medium text-muted-foreground border-b border-border text-center" colSpan={8}>Meses</th>
-              </tr>
-            </thead>
-            <tbody>
+      <Box sx={{ gridColumn: { lg: "span 2" }, border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+        <Box sx={{ borderBottom: "1px solid", borderColor: "divider", pb: 1.5 }}>
+          <PanelHeader index="10" title="Análise de coorte de clientes" />
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, ml: 4 }}>
+            Retenção por mês da 1ª compra paga. Células vazias = mês sem coorte (não é 0%).
+          </Typography>
+        </Box>
+        <TableContainer sx={{ mt: 2, overflowX: "auto" }}>
+          <Table size="small" sx={{ minWidth: 600 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell>Coorte</TableCell>
+                <TableCell colSpan={8} align="center">Meses</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {data.cohortData?.map((cohort, idx) => (
-                <tr key={idx} className="hover:bg-muted/50 transition-colors">
-                  <td className="p-2 font-medium whitespace-nowrap border-b border-border">
-                    {cohort.month} <span className="text-muted-foreground">({cohort.size})</span>
-                  </td>
+                <TableRow key={idx} hover>
+                  <TableCell sx={{ whiteSpace: "nowrap", fontWeight: 600 }}>
+                    {cohort.month} <Typography component="span" variant="caption" color="text.secondary">({cohort.size})</Typography>
+                  </TableCell>
                   {cohort.retention.map((val, i) => (
-                    <td 
-                      key={i} 
-                      className={cn(
-                        "p-2 text-center border-b border-border",
-                        val === null ? "bg-transparent" : 
-                        val === 0 ? "text-muted-foreground/30" : 
-                        val > 20 ? "bg-meta/20 font-semibold" : 
-                        val > 10 ? "bg-meta/10" : ""
-                      )}
+                    <TableCell
+                      key={i}
+                      align="center"
+                      sx={{
+                        bgcolor: val === null ? "transparent" : val > 20 ? "success.50" : val > 10 ? "action.hover" : "transparent",
+                        color: val === 0 ? "text.disabled" : "text.primary",
+                        fontWeight: val !== null && val > 20 ? 700 : 400,
+                      }}
                     >
                       {val !== null ? `${val}%` : ""}
-                    </td>
+                    </TableCell>
                   ))}
-                </tr>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
 
-      <section className="surface-card p-5 lg:col-span-2">
-        <header className="flex items-start gap-3 border-b border-border pb-3">
-          <span className="mt-1 text-xs font-mono text-muted-foreground">11</span>
-          <div className="flex-1">
-            <h3 className="text-base font-semibold">Pedidos por página de entrada</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Página de entrada (landing site) registrada nos pedidos pagos. Não é contagem de sessões.
-            </p>
-          </div>
-        </header>
-        <ul className="mt-4 space-y-2">
+      <Box sx={{ gridColumn: { lg: "span 2" }, border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+        <Box sx={{ borderBottom: "1px solid", borderColor: "divider", pb: 1.5 }}>
+          <PanelHeader index="11" title="Pedidos por página de entrada" />
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, ml: 4 }}>
+            Página de entrada (landing site) registrada nos pedidos pagos. Não é contagem de sessões.
+          </Typography>
+        </Box>
+        <Stack spacing={0.5} sx={{ mt: 2 }}>
           {data.sessoes?.map((s, i) => (
-            <li key={i} className="flex items-center justify-between text-xs p-2 rounded-md hover:bg-muted/50 transition-colors">
-              <span className="truncate max-w-[300px]" title={s.page}>{s.page}</span>
-              <div className="flex items-center gap-3">
-                <span className="font-semibold">{s.count} pedido(s)</span>
-              </div>
-            </li>
+            <Stack key={i} direction="row" sx={{ justifyContent: "space-between", alignItems: "center", px: 1, py: 1, borderRadius: 2, "&:hover": { bgcolor: "action.hover" } }}>
+              <Typography variant="caption" noWrap sx={{ maxWidth: 300 }} title={s.page}>{s.page}</Typography>
+              <Typography variant="caption" sx={{ fontWeight: 700 }}>{s.count} pedido(s)</Typography>
+            </Stack>
           ))}
           {(!data.sessoes || data.sessoes.length === 0) && (
-            <li className="p-2 text-xs text-muted-foreground">Nenhum pedido pago com página de entrada registrada.</li>
+            <Typography variant="caption" color="text.secondary" sx={{ p: 1 }}>Nenhum pedido pago com página de entrada registrada.</Typography>
           )}
-        </ul>
-      </section>
+        </Stack>
+      </Box>
 
-      <section className="surface-card p-5 lg:col-span-2">
-        <header className="flex items-start gap-3 border-b border-border pb-3">
-          <span className="mt-1 text-xs font-mono text-muted-foreground">12</span>
-          <div className="flex-1">
-            <h3 className="text-base font-semibold">Produtos mais vendidos</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Quantidade vendida em pedidos pagos no período.</p>
-          </div>
-        </header>
-        <ul className="mt-4 space-y-2">
+      <Box sx={{ gridColumn: { lg: "span 2" }, border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+        <Box sx={{ borderBottom: "1px solid", borderColor: "divider", pb: 1.5 }}>
+          <PanelHeader index="12" title="Produtos mais vendidos" />
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, ml: 4 }}>Quantidade vendida em pedidos pagos no período.</Typography>
+        </Box>
+        <Stack spacing={0.5} sx={{ mt: 2 }}>
           {data.produtosMaisVendidos?.map((p, i) => (
-            <li key={i} className="flex items-center justify-between text-xs p-2 rounded-md hover:bg-muted/50 transition-colors">
-              <span className="truncate max-w-[300px]" title={p.nome}>{p.nome}</span>
-              <div className="flex items-center gap-3">
-                <span className="font-semibold">{p.quantidade} un.</span>
-                <span className="text-muted-foreground">
+            <Stack key={i} direction="row" spacing={1.5} sx={{ justifyContent: "space-between", alignItems: "center", px: 1, py: 1, borderRadius: 2, "&:hover": { bgcolor: "action.hover" } }}>
+              <Typography variant="caption" noWrap sx={{ maxWidth: 300 }} title={p.nome}>{p.nome}</Typography>
+              <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+                <Typography variant="caption" sx={{ fontWeight: 700 }}>{p.quantidade} un.</Typography>
+                <Typography variant="caption" color="text.secondary">
                   {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(p.faturamento)}
-                </span>
-              </div>
-            </li>
+                </Typography>
+              </Stack>
+            </Stack>
           ))}
           {(!data.produtosMaisVendidos || data.produtosMaisVendidos.length === 0) && (
-            <li className="text-xs text-muted-foreground p-2">Nenhum produto vendido no período selecionado.</li>
+            <Typography variant="caption" color="text.secondary" sx={{ p: 1 }}>Nenhum produto vendido no período selecionado.</Typography>
           )}
-        </ul>
-      </section>
+        </Stack>
+      </Box>
 
-      <section className="surface-card p-5 lg:col-span-2">
-        <header className="flex items-start gap-3 border-b border-border pb-3">
-          <span className="mt-1 text-xs font-mono text-muted-foreground">13</span>
-          <div className="flex-1">
-            <h3 className="text-base font-semibold">Curva ABC de produtos</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Classificação por receita (A até 80% acumulado, B até 95%, C o resto) e por itens vendidos, cada uma com seu
-              próprio ranking. Ordenado por valor vendido, do maior pro menor.
-            </p>
-          </div>
-        </header>
-        <div className="mt-4 max-h-[420px] overflow-y-auto rounded-lg border border-border">
-          <table className="w-full min-w-[720px] text-xs">
-            <thead className="sticky top-0 bg-muted/90 text-left uppercase tracking-wider text-muted-foreground backdrop-blur">
-              <tr>
-                <th className="px-3 py-2 font-medium">Código</th>
-                <th className="px-3 py-2 font-medium">Produto</th>
-                <th className="px-3 py-2 font-medium">Variação</th>
-                <th className="px-3 py-2 text-right font-medium">Valor vendido</th>
-                <th className="px-3 py-2 text-right font-medium">Qtd. vendida</th>
-                <th className="px-3 py-2 text-center font-medium">Curva (receita)</th>
-                <th className="px-3 py-2 text-center font-medium">Curva (itens)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
+      <Box sx={{ gridColumn: { lg: "span 2" }, border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+        <Box sx={{ borderBottom: "1px solid", borderColor: "divider", pb: 1.5 }}>
+          <PanelHeader index="13" title="Curva ABC de produtos" />
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, ml: 4 }}>
+            Classificação por receita (A até 80% acumulado, B até 95%, C o resto) e por itens vendidos, cada uma com seu
+            próprio ranking. Ordenado por valor vendido, do maior pro menor.
+          </Typography>
+        </Box>
+        <TableContainer sx={{ mt: 2, maxHeight: 420, border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
+          <Table size="small" stickyHeader sx={{ minWidth: 720 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell>Código</TableCell>
+                <TableCell>Produto</TableCell>
+                <TableCell>Variação</TableCell>
+                <TableCell align="right">Valor vendido</TableCell>
+                <TableCell align="right">Qtd. vendida</TableCell>
+                <TableCell align="center">Curva (receita)</TableCell>
+                <TableCell align="center">Curva (itens)</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {data.curvaAbcProdutos.map((p) => (
-                <tr key={p.key} className="hover:bg-muted/50">
-                  <td className="px-3 py-2 font-mono text-muted-foreground">{p.sku ?? "—"}</td>
-                  <td className="max-w-[240px] truncate px-3 py-2" title={p.nome}>{p.nome}</td>
-                  <td className="max-w-[160px] truncate px-3 py-2 text-muted-foreground" title={p.variacao ?? undefined}>
-                    {p.variacao ?? "—"}
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold">
+                <TableRow key={p.key} hover>
+                  <TableCell sx={{ fontFamily: "monospace", color: "text.secondary" }}>{p.sku ?? "—"}</TableCell>
+                  <TableCell sx={{ maxWidth: 240 }}><Typography variant="caption" noWrap title={p.nome} sx={{ display: "block" }}>{p.nome}</Typography></TableCell>
+                  <TableCell sx={{ maxWidth: 160, color: "text.secondary" }}>
+                    <Typography variant="caption" noWrap title={p.variacao ?? undefined} sx={{ display: "block" }}>{p.variacao ?? "—"}</Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700 }}>
                     {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(p.valorVendido)}
-                  </td>
-                  <td className="px-3 py-2 text-right text-muted-foreground">{p.quantidadeVendida}</td>
-                  <td className="px-3 py-2 text-center">
-                    <AbcBadge tier={p.curvaReceita} />
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <AbcBadge tier={p.curvaItens} />
-                  </td>
-                </tr>
+                  </TableCell>
+                  <TableCell align="right" sx={{ color: "text.secondary" }}>{p.quantidadeVendida}</TableCell>
+                  <TableCell align="center"><AbcBadge tier={p.curvaReceita} /></TableCell>
+                  <TableCell align="center"><AbcBadge tier={p.curvaItens} /></TableCell>
+                </TableRow>
               ))}
               {data.curvaAbcProdutos.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
-                    Nenhum produto vendido no período selecionado.
-                  </td>
-                </tr>
+                <TableRow><TableCell colSpan={7} align="center" sx={{ py: 4, color: "text.secondary" }}>Nenhum produto vendido no período selecionado.</TableCell></TableRow>
               )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </div>
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
+    </Box>
   );
 }
 
-const ABC_TIER_CLASS: Record<"A" | "B" | "C", string> = {
-  A: "bg-success-soft text-success",
-  B: "bg-warning-soft text-warning",
-  C: "bg-muted text-muted-foreground",
+const ABC_TIER_COLOR: Record<"A" | "B" | "C", ChipColor> = {
+  A: "success",
+  B: "warning",
+  C: "default",
 };
 
 function AbcBadge({ tier }: { tier: "A" | "B" | "C" }) {
   return (
-    <span className={cn("inline-flex size-6 items-center justify-center rounded-full text-[11px] font-bold", ABC_TIER_CLASS[tier])}>
-      {tier}
-    </span>
+    <Chip
+      size="small"
+      color={ABC_TIER_COLOR[tier]}
+      label={tier}
+      sx={{ width: 24, height: 24, borderRadius: "50%", fontSize: 11, fontWeight: 700, "& .MuiChip-label": { px: 0 } }}
+    />
   );
 }

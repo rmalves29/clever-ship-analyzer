@@ -2,11 +2,11 @@ import { Calendar as CalendarIcon, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
-import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import Button from "@mui/material/Button";
+import Stack from "@mui/material/Stack";
 import { PERIODS, type PeriodKey } from "@/lib/crm-mock";
-import { cn } from "@/lib/utils";
 
 type Props = {
   period: PeriodKey;
@@ -19,27 +19,29 @@ type Props = {
 
 export function PeriodFilter({ period, onPeriodChange, range, onRangeChange, onRefresh, loading }: Props) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card p-1">
+    <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap", alignItems: "center" }}>
+      <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", border: "1px solid", borderColor: "divider", borderRadius: 3, p: 0.5 }}>
         {PERIODS.map((p) => (
-          <button
+          <Button
             key={p.key}
+            size="small"
+            variant={period === p.key ? "contained" : "text"}
+            color={period === p.key ? "primary" : "inherit"}
+            sx={{ borderRadius: 2 }}
             onClick={() => onPeriodChange(p.key)}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-              period === p.key ? "gradient-brand text-primary-foreground" : "text-muted-foreground hover:bg-accent",
-            )}
           >
             {p.label}
-          </button>
+          </Button>
         ))}
-      </div>
+      </Stack>
 
+      {/* Popover/Calendar (shadcn) mantidos de propósito: date-range picker não tem
+          equivalente MUI instalado (precisaria de @mui/x-date-pickers, fora do escopo
+          desta migração de biblioteca de componentes de UI). */}
       {period === "personalizado" && (
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" className="gap-2">
-              <CalendarIcon className="size-4" />
+            <Button variant="outlined" startIcon={<CalendarIcon size={16} />}>
               {range?.from
                 ? range.to
                   ? `${format(range.from, "dd/MM", { locale: ptBR })} – ${format(range.to, "dd/MM", { locale: ptBR })}`
@@ -53,10 +55,15 @@ export function PeriodFilter({ period, onPeriodChange, range, onRangeChange, onR
         </Popover>
       )}
 
-      <Button onClick={onRefresh} disabled={loading} className="ml-auto gap-2">
-        <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+      <Button
+        variant="contained"
+        startIcon={<RefreshCw size={16} className={loading ? "animate-spin" : undefined} />}
+        onClick={onRefresh}
+        disabled={loading}
+        sx={{ ml: "auto" }}
+      >
         {loading ? "Analisando..." : "Refazer análise"}
       </Button>
-    </div>
+    </Stack>
   );
 }

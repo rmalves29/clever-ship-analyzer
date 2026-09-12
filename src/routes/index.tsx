@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, createLink } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { format } from "date-fns";
@@ -9,7 +9,12 @@ import { PeriodFilter } from "@/components/crm/PeriodFilter";
 import { ExecutiveSummary } from "@/components/crm/ExecutiveSummary";
 import { AnalysisGrid } from "@/components/crm/AnalysisGrid";
 import { SuggestedActions } from "@/components/crm/SuggestedActions";
-import { Button } from "@/components/ui/button";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import IconButton from "@mui/material/IconButton";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 
 import {
   emptyDashboardData,
@@ -49,6 +54,8 @@ export const Route = createFileRoute("/")({
   }),
   component: Index,
 });
+
+const LinkIconButton = createLink(IconButton);
 
 function Index() {
   const [period, setPeriod] = useState<PeriodKey>("mensal");
@@ -309,44 +316,59 @@ function Index() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-[1400px] px-4 py-8 md:px-8">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="gradient-brand flex size-11 items-center justify-center rounded-2xl text-primary-foreground">
-              <Sparkles className="size-5" />
-            </span>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">CRM Analytics</h1>
-              <p className="text-sm text-muted-foreground">
-                Análise da base • {data.periodLabel}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center gap-2">
-              <span className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground">
-                <Store className="size-3.5" /> Shopify: Integrado
-              </span>
-              <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing} className="h-8 gap-2">
-                <RefreshCw className={`size-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+    <Box sx={{ minHeight: "100vh" }}>
+      <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
+        <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 44,
+                height: 44,
+                borderRadius: 4,
+                background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+                color: "primary.contrastText",
+              }}
+            >
+              <Sparkles size={20} />
+            </Box>
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>CRM Analytics</Typography>
+              <Typography variant="body2" color="text.secondary">Análise da base • {data.periodLabel}</Typography>
+            </Box>
+          </Stack>
+          <Stack spacing={1} sx={{ alignItems: "flex-end" }}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+              <Chip
+                icon={<Store size={14} />}
+                label="Shopify: Integrado"
+                variant="outlined"
+                size="small"
+              />
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<RefreshCw size={14} className={isSyncing ? "animate-spin" : undefined} />}
+                onClick={handleSync}
+                disabled={isSyncing}
+              >
                 {isSyncing ? "Sincronizando..." : "Sincronizar Shopify"}
               </Button>
-              <Button variant="outline" size="icon" asChild className="size-8 rounded-full">
-                <Link to="/configuracoes">
-                  <Settings className="size-4" />
-                </Link>
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
+              <LinkIconButton to="/configuracoes" size="small" sx={{ border: "1px solid", borderColor: "divider" }}>
+                <Settings size={16} />
+              </LinkIconButton>
+            </Stack>
+            <Typography variant="caption" color="text.secondary">
               {storeSettings?.lastSyncAt
                 ? `Última sincronização: ${new Date(storeSettings.lastSyncAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}`
                 : "Ainda não sincronizado"}
-            </p>
-          </div>
-        </header>
+            </Typography>
+          </Stack>
+        </Stack>
 
-        <div className="mt-6">
+        <Box sx={{ mt: 3 }}>
           <PeriodFilter
             period={period}
             onPeriodChange={setPeriod}
@@ -355,43 +377,49 @@ function Index() {
             onRefresh={refresh}
             loading={loading}
           />
-        </div>
+        </Box>
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Box sx={{ mt: 3, display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", xl: "repeat(4, 1fr)" } }}>
           {data.kpis.map((kpi) => (
             <KpiCard key={kpi.id} kpi={kpi} />
           ))}
-        </div>
+        </Box>
 
         {aiIsStaleForPeriod && (
-          <div className="mt-6 rounded-lg border border-warning/30 bg-warning-soft/60 px-4 py-2.5 text-sm text-warning">
-            A última análise por IA é de outro período ou tem mais de 24h. Os insights abaixo vêm direto dos dados
-            reais deste período — clique em "Refazer análise" para a leitura completa da IA.
-          </div>
+          <Box sx={{ mt: 3, border: "1px solid", borderColor: "warning.light", bgcolor: "warning.50", borderRadius: 2, px: 2, py: 1.5 }}>
+            <Typography variant="body2" color="warning.dark">
+              A última análise por IA é de outro período ou tem mais de 24h. Os insights abaixo vêm direto dos dados
+              reais deste período — clique em "Refazer análise" para a leitura completa da IA.
+            </Typography>
+          </Box>
         )}
 
-        <div className="mt-6">
+        <Box sx={{ mt: 3 }}>
           <ExecutiveSummary insights={data.insights} />
-        </div>
+        </Box>
 
-        <div className="mt-6">
+        <Box sx={{ mt: 3 }}>
           <AnalysisGrid data={data} />
-        </div>
+        </Box>
 
-        <div className="mt-6">
+        <Box sx={{ mt: 3 }}>
           <SuggestedActions reguas={data.reguas} acoes={data.acoes} />
-        </div>
+        </Box>
 
         {isShopifyLoading && (
-          <div className="mb-4 text-center text-xs text-muted-foreground animate-pulse">
+          <Typography variant="caption" color="text.secondary" className="animate-pulse" sx={{ display: "block", textAlign: "center", mb: 2 }}>
             Carregando dados reais da Shopify...
-          </div>
+          </Typography>
         )}
-        <footer className="mt-10 pb-6 text-center text-xs text-muted-foreground">
-          Legenda do semáforo: <span className="text-critical">vermelho crítico</span> ·{" "}
-          <span className="text-warning">amarelo regular</span> · <span className="text-success">verde dentro da meta</span>
-        </footer>
-      </div>
-    </div>
+        <Stack component="footer" direction="row" spacing={0.75} sx={{ mt: 5, pb: 3, justifyContent: "center", color: "text.secondary", fontSize: 12 }}>
+          <span>Legenda do semáforo:</span>
+          <Box component="span" sx={{ color: "error.main" }}>vermelho crítico</Box>
+          <span>·</span>
+          <Box component="span" sx={{ color: "warning.main" }}>amarelo regular</Box>
+          <span>·</span>
+          <Box component="span" sx={{ color: "success.main" }}>verde dentro da meta</Box>
+        </Stack>
+      </Box>
+    </Box>
   );
 }

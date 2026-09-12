@@ -2,14 +2,23 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Checkbox from "@mui/material/Checkbox";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Grid from "@mui/material/Grid";
+import IconButton from "@mui/material/IconButton";
+import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import {
   listEnvioAutoMessages,
   createEnvioAutoMessage,
@@ -60,51 +69,55 @@ function AutoMessagesSection() {
   const deleteMut = useMutation({ mutationFn: (id: string) => del({ data: { id } }), onSuccess: invalidate });
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="font-semibold">Mensagens de entrada/saída</p>
-        <Button size="sm" onClick={() => setOpen(true)} className="gap-2">
-          <Plus className="size-4" /> Nova
+    <Stack spacing={1.5}>
+      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+        <Typography sx={{ fontWeight: 600 }}>Mensagens de entrada/saída</Typography>
+        <Button size="small" variant="contained" startIcon={<Plus size={16} />} onClick={() => setOpen(true)}>
+          Nova
         </Button>
-      </div>
-      <p className="text-xs text-muted-foreground">Use {"{{nome}}"} na mensagem pra personalizar.</p>
-      <div className="space-y-2">
+      </Stack>
+      <Typography variant="caption" color="text.secondary">
+        Use {"{{nome}}"} na mensagem pra personalizar.
+      </Typography>
+      <Stack spacing={1}>
         {(messages ?? []).map((m) => (
-          <div key={m.id} className="surface-card flex items-center gap-3 p-3">
-            <span className="text-xs font-medium">{m.event_type === "join" ? "Entrada" : "Saída"}</span>
-            <p className="flex-1 truncate text-sm text-muted-foreground">{m.content_text}</p>
-            <Switch checked={m.is_active} onCheckedChange={(v) => toggleMut.mutate({ id: m.id, is_active: v })} />
-            <Button variant="ghost" size="icon" onClick={() => deleteMut.mutate(m.id)}>
-              <Trash2 className="size-4 text-critical" />
-            </Button>
-          </div>
+          <Stack key={m.id} direction="row" spacing={1.5} sx={{ alignItems: "center", border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+            <Typography variant="caption" sx={{ fontWeight: 500 }}>
+              {m.event_type === "join" ? "Entrada" : "Saída"}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {m.content_text}
+            </Typography>
+            <Switch size="small" checked={m.is_active} onChange={(e) => toggleMut.mutate({ id: m.id, is_active: e.target.checked })} />
+            <IconButton size="small" onClick={() => deleteMut.mutate(m.id)}>
+              <Trash2 size={16} color="var(--mui-palette-error-main, #EA5455)" />
+            </IconButton>
+          </Stack>
         ))}
-      </div>
+      </Stack>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Nova mensagem automática</DialogTitle>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Nova mensagem automática</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="flex gap-2">
-              <Button size="sm" variant={eventType === "join" ? "default" : "outline"} onClick={() => setEventType("join")}>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <Stack direction="row" spacing={1}>
+              <Button size="small" variant={eventType === "join" ? "contained" : "outline"} onClick={() => setEventType("join")}>
                 Entrada
               </Button>
-              <Button size="sm" variant={eventType === "leave" ? "default" : "outline"} onClick={() => setEventType("leave")}>
+              <Button size="small" variant={eventType === "leave" ? "contained" : "outline"} onClick={() => setEventType("leave")}>
                 Saída
               </Button>
-            </div>
-            <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={4} placeholder="Olá {{nome}}, seja bem-vindo(a) ao {{grupo}}!" />
-          </div>
-          <DialogFooter>
-            <Button onClick={() => createMut.mutate()} disabled={createMut.isPending || !text}>
-              Criar
-            </Button>
-          </DialogFooter>
+            </Stack>
+            <TextField fullWidth multiline rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder="Olá {{nome}}, seja bem-vindo(a) ao {{grupo}}!" />
+          </Stack>
         </DialogContent>
+        <DialogActions>
+          <Button variant="contained" onClick={() => createMut.mutate()} disabled={createMut.isPending || !text}>
+            Criar
+          </Button>
+        </DialogActions>
       </Dialog>
-    </div>
+    </Stack>
   );
 }
 
@@ -178,129 +191,152 @@ function ReturnAutomationSection() {
   const successPct = statsData && statsData.leftTotal > 0 ? ((statsData.rewardedTotal / statsData.leftTotal) * 100).toFixed(1) : "0";
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="font-semibold">Automação de retorno (win-back)</p>
-        <Button size="sm" onClick={() => setOpen(true)} className="gap-2">
-          <Plus className="size-4" /> Nova
+    <Stack spacing={1.5}>
+      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+        <Typography sx={{ fontWeight: 600 }}>Automação de retorno (win-back)</Typography>
+        <Button size="small" variant="contained" startIcon={<Plus size={16} />} onClick={() => setOpen(true)}>
+          Nova
         </Button>
-      </div>
+      </Stack>
 
-      <div className="grid grid-cols-3 gap-3 text-center text-sm">
-        <div className="surface-card p-3">
-          <p className="text-2xl font-bold">{statsData?.leftTotal ?? 0}</p>
-          <p className="text-xs text-muted-foreground">Saíram do grupo</p>
-        </div>
-        <div className="surface-card p-3">
-          <p className="text-2xl font-bold">{statsData?.rewardedTotal ?? 0}</p>
-          <p className="text-xs text-muted-foreground">Retornaram</p>
-        </div>
-        <div className="surface-card p-3">
-          <p className="text-2xl font-bold">{successPct}%</p>
-          <p className="text-xs text-muted-foreground">Taxa de retorno</p>
-        </div>
-      </div>
+      <Grid container spacing={1.5}>
+        <Grid size={4}>
+          <Card variant="outlined" sx={{ textAlign: "center" }}>
+            <CardContent>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                {statsData?.leftTotal ?? 0}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Saíram do grupo
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={4}>
+          <Card variant="outlined" sx={{ textAlign: "center" }}>
+            <CardContent>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                {statsData?.rewardedTotal ?? 0}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Retornaram
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={4}>
+          <Card variant="outlined" sx={{ textAlign: "center" }}>
+            <CardContent>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                {successPct}%
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Taxa de retorno
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
 
-      <div className="space-y-2">
+      <Stack spacing={1}>
         {(automations ?? []).map((a) => (
-          <div key={a.id} className="surface-card flex items-center gap-3 p-3">
-            <p className="flex-1 text-sm font-medium">{a.name}</p>
-            <span className="text-xs text-muted-foreground">cupom: {a.coupon_code}</span>
-            <Switch checked={a.is_active} onCheckedChange={(v) => toggleMut.mutate({ id: a.id, is_active: v })} />
-            <Button
-              variant="ghost"
-              size="icon"
+          <Stack key={a.id} direction="row" spacing={1.5} sx={{ alignItems: "center", border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+            <Typography variant="body2" sx={{ flex: 1, fontWeight: 500 }}>
+              {a.name}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              cupom: {a.coupon_code}
+            </Typography>
+            <Switch size="small" checked={a.is_active} onChange={(e) => toggleMut.mutate({ id: a.id, is_active: e.target.checked })} />
+            <IconButton
+              size="small"
               onClick={() => {
                 if (confirm(`Apagar "${a.name}"? Convites pendentes serão cancelados.`)) deleteMut.mutate(a.id);
               }}
             >
-              <Trash2 className="size-4 text-critical" />
-            </Button>
-          </div>
+              <Trash2 size={16} color="var(--mui-palette-error-main, #EA5455)" />
+            </IconButton>
+          </Stack>
         ))}
-      </div>
+      </Stack>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Nova automação de retorno</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>Nome</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant={scope === "groups" ? "default" : "outline"} onClick={() => setScope("groups")}>
+      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth slotProps={{ paper: { sx: { maxHeight: "85vh" } } }}>
+        <DialogTitle>Nova automação de retorno</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <TextField fullWidth size="small" label="Nome" value={name} onChange={(e) => setName(e.target.value)} />
+            <Stack direction="row" spacing={1}>
+              <Button size="small" variant={scope === "groups" ? "contained" : "outline"} onClick={() => setScope("groups")}>
                 Grupos
               </Button>
-              <Button size="sm" variant={scope === "campaigns" ? "default" : "outline"} onClick={() => setScope("campaigns")}>
+              <Button size="small" variant={scope === "campaigns" ? "contained" : "outline"} onClick={() => setScope("campaigns")}>
                 Campanhas
               </Button>
-            </div>
-            <div className="max-h-32 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+            </Stack>
+            <Box sx={{ maxHeight: 128, overflowY: "auto", border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1 }}>
               {(scope === "groups" ? groups ?? [] : campaigns ?? []).map((item: any) => (
-                <label key={item.id} className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={selectedIds.has(item.id)}
-                    onCheckedChange={(checked) => {
-                      setSelectedIds((prev) => {
-                        const next = new Set(prev);
-                        if (checked) next.add(item.id);
-                        else next.delete(item.id);
-                        return next;
-                      });
-                    }}
-                  />
-                  {item.group_name ?? item.name}
-                </label>
+                <FormControlLabel
+                  key={item.id}
+                  sx={{ display: "flex", width: "100%", m: 0 }}
+                  control={
+                    <Checkbox
+                      size="small"
+                      checked={selectedIds.has(item.id)}
+                      onChange={(e) => {
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(item.id);
+                          else next.delete(item.id);
+                          return next;
+                        });
+                      }}
+                    />
+                  }
+                  label={<Typography variant="body2">{item.group_name ?? item.name}</Typography>}
+                />
               ))}
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <Label>Atraso (min)</Label>
-                <Input type="number" value={delayMinutes} onChange={(e) => setDelayMinutes(Number(e.target.value))} />
-              </div>
-              <div>
-                <Label>Validade (dias)</Label>
-                <Input type="number" value={validityDays} onChange={(e) => setValidityDays(Number(e.target.value))} />
-              </div>
-              <div>
-                <Label>Cooldown (h)</Label>
-                <Input type="number" value={cooldownHours} onChange={(e) => setCooldownHours(Number(e.target.value))} />
-              </div>
-            </div>
-            <div>
-              <Label>Mensagem de convite (após sair)</Label>
-              <Textarea value={inviteMessage} onChange={(e) => setInviteMessage(e.target.value)} rows={2} />
-              <p className="mt-1 text-xs text-muted-foreground">Variáveis: {"{{nome}}, {{grupo}}, {{link_grupo}}"} — envios respeitam 1 msg/5s.</p>
-            </div>
-            <div>
-              <Label>Mensagem de recompensa (ao retornar)</Label>
-              <Textarea value={rewardMessage} onChange={(e) => setRewardMessage(e.target.value)} rows={2} />
-              <p className="mt-1 text-xs text-muted-foreground">Variáveis: {"{{nome}}, {{cupom}}, {{grupo}}"}</p>
-            </div>
-            <div>
-              <Label>Código do cupom</Label>
-              <Input value={couponCode} onChange={(e) => setCouponCode(e.target.value)} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => createMut.mutate()} disabled={createMut.isPending || !name || !couponCode}>
-              Criar
-            </Button>
-          </DialogFooter>
+            </Box>
+            <Grid container spacing={1.5}>
+              <Grid size={4}>
+                <TextField fullWidth size="small" type="number" label="Atraso (min)" value={delayMinutes} onChange={(e) => setDelayMinutes(Number(e.target.value))} />
+              </Grid>
+              <Grid size={4}>
+                <TextField fullWidth size="small" type="number" label="Validade (dias)" value={validityDays} onChange={(e) => setValidityDays(Number(e.target.value))} />
+              </Grid>
+              <Grid size={4}>
+                <TextField fullWidth size="small" type="number" label="Cooldown (h)" value={cooldownHours} onChange={(e) => setCooldownHours(Number(e.target.value))} />
+              </Grid>
+            </Grid>
+            <Box>
+              <TextField fullWidth multiline rows={2} label="Mensagem de convite (após sair)" value={inviteMessage} onChange={(e) => setInviteMessage(e.target.value)} />
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                Variáveis: {"{{nome}}, {{grupo}}, {{link_grupo}}"} — envios respeitam 1 msg/5s.
+              </Typography>
+            </Box>
+            <Box>
+              <TextField fullWidth multiline rows={2} label="Mensagem de recompensa (ao retornar)" value={rewardMessage} onChange={(e) => setRewardMessage(e.target.value)} />
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                Variáveis: {"{{nome}}, {{cupom}}, {{grupo}}"}
+              </Typography>
+            </Box>
+            <TextField fullWidth size="small" label="Código do cupom" value={couponCode} onChange={(e) => setCouponCode(e.target.value)} />
+          </Stack>
         </DialogContent>
+        <DialogActions>
+          <Button variant="contained" onClick={() => createMut.mutate()} disabled={createMut.isPending || !name || !couponCode}>
+            Criar
+          </Button>
+        </DialogActions>
       </Dialog>
-    </div>
+    </Stack>
   );
 }
 
 export function AutoMessagesManager() {
   return (
-    <div className="space-y-8 py-4">
+    <Stack spacing={4} sx={{ py: 2 }}>
       <AutoMessagesSection />
       <ReturnAutomationSection />
-    </div>
+    </Stack>
   );
 }

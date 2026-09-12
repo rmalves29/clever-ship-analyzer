@@ -1,5 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Box from "@mui/material/Box";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
+import Typography from "@mui/material/Typography";
 import { Smartphone, Users, Megaphone, Send, Bot, BarChart3 } from "lucide-react";
 import { ConexaoUazapi } from "@/components/fluxo-envio/ConexaoUazapi";
 import { GroupsManager } from "@/components/fluxo-envio/GroupsManager";
@@ -29,41 +32,33 @@ function FluxoEnvio() {
   const setTab = (value: string) => navigate({ to: "/fluxo-envio", search: { tab: value } });
 
   return (
-    <div className="mx-auto max-w-[1400px] px-4 py-8 md:px-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Fluxo de Envio</h1>
-        <p className="text-sm text-muted-foreground">Grupos, campanhas e envio de mensagens no WhatsApp via UazAPI</p>
-      </div>
+    <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+          Fluxo de Envio
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Grupos, campanhas e envio de mensagens no WhatsApp via UazAPI
+        </Typography>
+      </Box>
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="w-full sm:w-auto grid grid-cols-6 sm:inline-flex">
-          <TabsTrigger value="conexao" className="gap-1">
-            <Smartphone className="size-4" /> <span className="hidden sm:inline">Conexão</span>
-          </TabsTrigger>
-          <TabsTrigger value="grupos" className="gap-1">
-            <Users className="size-4" /> <span className="hidden sm:inline">Grupos</span>
-          </TabsTrigger>
-          <TabsTrigger value="campanhas" className="gap-1">
-            <Megaphone className="size-4" /> <span className="hidden sm:inline">Campanhas</span>
-          </TabsTrigger>
-          <TabsTrigger value="envios" className="gap-1">
-            <Send className="size-4" /> <span className="hidden sm:inline">Envios</span>
-          </TabsTrigger>
-          <TabsTrigger value="automacoes" className="gap-1">
-            <Bot className="size-4" /> <span className="hidden sm:inline">Automações</span>
-          </TabsTrigger>
-          <TabsTrigger value="relatorios" className="gap-1">
-            <BarChart3 className="size-4" /> <span className="hidden sm:inline">Relatórios</span>
-          </TabsTrigger>
-        </TabsList>
+      <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
+          <Tab value="conexao" icon={<Smartphone size={16} />} iconPosition="start" label="Conexão" sx={{ minHeight: 40, minWidth: "auto" }} />
+          <Tab value="grupos" icon={<Users size={16} />} iconPosition="start" label="Grupos" sx={{ minHeight: 40, minWidth: "auto" }} />
+          <Tab value="campanhas" icon={<Megaphone size={16} />} iconPosition="start" label="Campanhas" sx={{ minHeight: 40, minWidth: "auto" }} />
+          <Tab value="envios" icon={<Send size={16} />} iconPosition="start" label="Envios" sx={{ minHeight: 40, minWidth: "auto" }} />
+          <Tab value="automacoes" icon={<Bot size={16} />} iconPosition="start" label="Automações" sx={{ minHeight: 40, minWidth: "auto" }} />
+          <Tab value="relatorios" icon={<BarChart3 size={16} />} iconPosition="start" label="Relatórios" sx={{ minHeight: 40, minWidth: "auto" }} />
+        </Tabs>
+      </Box>
 
-        <TabsContent value="conexao"><ConexaoUazapi /></TabsContent>
-        <TabsContent value="grupos"><GroupsManager /></TabsContent>
-        <TabsContent value="campanhas"><CampaignsManager /></TabsContent>
-        <TabsContent value="envios"><MessageComposer /></TabsContent>
-        <TabsContent value="automacoes"><AutoMessagesManager /></TabsContent>
-        <TabsContent value="relatorios"><ReportsPanel /></TabsContent>
-      </Tabs>
-    </div>
+      {tab === "conexao" && <ConexaoUazapi />}
+      {tab === "grupos" && <GroupsManager />}
+      {tab === "campanhas" && <CampaignsManager />}
+      {tab === "envios" && <MessageComposer />}
+      {tab === "automacoes" && <AutoMessagesManager />}
+      {tab === "relatorios" && <ReportsPanel />}
+    </Box>
   );
 }

@@ -2,18 +2,24 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Send, Paperclip, X, ThumbsUp, ThumbsDown } from "lucide-react";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
+import Chip from "@mui/material/Chip";
+import FormControl from "@mui/material/FormControl";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Grid from "@mui/material/Grid";
+import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import type { ChipProps } from "@mui/material/Chip";
 import {
   createAndSendEnvioMessage,
   listRecentEnvioMessages,
-  editPendingEnvioMessage,
   cancelPendingEnvioMessage,
   uploadEnvioMedia,
   submitMessageFeedback,
@@ -31,12 +37,7 @@ const CONTENT_TYPES = [
 ] as const;
 
 const STATUS_LABEL: Record<string, string> = { pending: "Agendada", sending: "Enviando", sent: "Enviada", failed: "Falhou" };
-const STATUS_CLASS: Record<string, string> = {
-  pending: "bg-warning-soft text-warning",
-  sending: "bg-brand-soft text-brand",
-  sent: "bg-success-soft text-success",
-  failed: "bg-critical-soft text-critical",
-};
+const STATUS_COLOR: Record<string, ChipProps["color"]> = { pending: "warning", sending: "primary", sent: "success", failed: "error" };
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -51,7 +52,6 @@ export function MessageComposer() {
   const qc = useQueryClient();
   const send = useServerFn(createAndSendEnvioMessage);
   const listMessages = useServerFn(listRecentEnvioMessages);
-  const editMsg = useServerFn(editPendingEnvioMessage);
   const cancelMsg = useServerFn(cancelPendingEnvioMessage);
   const upload = useServerFn(uploadEnvioMedia);
   const listGroups = useServerFn(listEnvioGroups);
@@ -144,144 +144,171 @@ export function MessageComposer() {
   const adminGroups = (groups ?? []).filter((g) => g.is_admin);
 
   return (
-    <div className="grid gap-6 py-4 lg:grid-cols-[1fr_320px]">
-      <div className="surface-card space-y-4 p-5">
-        <div className="flex flex-wrap gap-2">
-          {CONTENT_TYPES.map((t) => (
-            <Button
-              key={t.value}
-              size="sm"
-              variant={contentType === t.value ? "default" : "outline"}
-              onClick={() => {
-                setContentType(t.value);
-                setMediaUrl("");
-              }}
-            >
-              {t.label}
-            </Button>
-          ))}
-        </div>
-
-        <Textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={contentType === "text" ? "Mensagem…" : "Legenda (opcional)…"}
-          rows={4}
-        />
-
-        {contentType !== "text" && (
-          <div className="flex items-center gap-2">
-            <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
-            <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2">
-              <Paperclip className="size-4" /> {uploading ? "Enviando…" : mediaUrl ? "Trocar arquivo" : "Anexar arquivo"}
-            </Button>
-            {mediaUrl && <Badge variant="secondary">arquivo pronto</Badge>}
-          </div>
-        )}
-
-        <div>
-          <Label>Destino</Label>
-          <div className="mt-1 flex gap-2">
-            <Button size="sm" variant={targetMode === "groups" ? "default" : "outline"} onClick={() => setTargetMode("groups")}>
-              Grupos específicos
-            </Button>
-            <Button size="sm" variant={targetMode === "campaign" ? "default" : "outline"} onClick={() => setTargetMode("campaign")}>
-              Campanha
-            </Button>
-          </div>
-        </div>
-
-        {targetMode === "groups" ? (
-          <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
-            {adminGroups.map((g) => (
-              <label key={g.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted">
-                <Checkbox
-                  checked={selectedGroupIds.has(g.id)}
-                  onCheckedChange={(checked) => {
-                    setSelectedGroupIds((prev) => {
-                      const next = new Set(prev);
-                      if (checked) next.add(g.id);
-                      else next.delete(g.id);
-                      return next;
-                    });
+    <Grid container spacing={3} sx={{ py: 2 }}>
+      <Grid size={{ xs: 12, lg: "grow" }}>
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 2.5 }}>
+          <Stack spacing={2}>
+            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+              {CONTENT_TYPES.map((t) => (
+                <Button
+                  key={t.value}
+                  size="small"
+                  variant={contentType === t.value ? "contained" : "outline"}
+                  onClick={() => {
+                    setContentType(t.value);
+                    setMediaUrl("");
                   }}
-                />
-                {g.group_name}
-              </label>
-            ))}
-          </div>
-        ) : (
-          <Select value={campaignId} onValueChange={setCampaignId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Escolha uma campanha" />
-            </SelectTrigger>
-            <SelectContent>
-              {(campaigns ?? []).map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
+                >
+                  {t.label}
+                </Button>
               ))}
-            </SelectContent>
-          </Select>
-        )}
+            </Stack>
 
-        <div>
-          <Label>Envio</Label>
-          <div className="mt-1 flex gap-2">
-            <Button size="sm" variant={scheduleMode === "instant" ? "default" : "outline"} onClick={() => setScheduleMode("instant")}>
-              Instantâneo
+            <TextField
+              fullWidth
+              multiline
+              rows={4}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={contentType === "text" ? "Mensagem…" : "Legenda (opcional)…"}
+            />
+
+            {contentType !== "text" && (
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                <input ref={fileInputRef} type="file" hidden onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+                <Button variant="outline" startIcon={<Paperclip size={16} />} onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                  {uploading ? "Enviando…" : mediaUrl ? "Trocar arquivo" : "Anexar arquivo"}
+                </Button>
+                {mediaUrl && <Chip size="small" label="arquivo pronto" />}
+              </Stack>
+            )}
+
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.75 }}>
+                Destino
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <Button size="small" variant={targetMode === "groups" ? "contained" : "outline"} onClick={() => setTargetMode("groups")}>
+                  Grupos específicos
+                </Button>
+                <Button size="small" variant={targetMode === "campaign" ? "contained" : "outline"} onClick={() => setTargetMode("campaign")}>
+                  Campanha
+                </Button>
+              </Stack>
+            </Box>
+
+            {targetMode === "groups" ? (
+              <Box sx={{ maxHeight: 192, overflowY: "auto", border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1 }}>
+                {adminGroups.map((g) => (
+                  <FormControlLabel
+                    key={g.id}
+                    sx={{ display: "flex", width: "100%", m: 0, borderRadius: 1, px: 1, py: 0.25, "&:hover": { bgcolor: "action.hover" } }}
+                    control={
+                      <Checkbox
+                        size="small"
+                        checked={selectedGroupIds.has(g.id)}
+                        onChange={(e) => {
+                          setSelectedGroupIds((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(g.id);
+                            else next.delete(g.id);
+                            return next;
+                          });
+                        }}
+                      />
+                    }
+                    label={<Typography variant="body2">{g.group_name}</Typography>}
+                  />
+                ))}
+              </Box>
+            ) : (
+              <FormControl size="small" fullWidth>
+                <Select value={campaignId} onChange={(e) => setCampaignId(e.target.value)} displayEmpty>
+                  <MenuItem value="">
+                    <em>Escolha uma campanha</em>
+                  </MenuItem>
+                  {(campaigns ?? []).map((c) => (
+                    <MenuItem key={c.id} value={c.id}>
+                      {c.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.75 }}>
+                Envio
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <Button size="small" variant={scheduleMode === "instant" ? "contained" : "outline"} onClick={() => setScheduleMode("instant")}>
+                  Instantâneo
+                </Button>
+                <Button size="small" variant={scheduleMode === "scheduled" ? "contained" : "outline"} onClick={() => setScheduleMode("scheduled")}>
+                  Agendado
+                </Button>
+              </Stack>
+              {scheduleMode === "scheduled" && (
+                <TextField fullWidth size="small" type="datetime-local" sx={{ mt: 1.5 }} value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
+              )}
+            </Box>
+
+            <Button variant="contained" fullWidth startIcon={<Send size={16} />} onClick={() => sendMut.mutate()} disabled={sendMut.isPending}>
+              {scheduleMode === "scheduled" ? "Agendar" : "Enviar agora"}
             </Button>
-            <Button size="sm" variant={scheduleMode === "scheduled" ? "default" : "outline"} onClick={() => setScheduleMode("scheduled")}>
-              Agendado
-            </Button>
-          </div>
-          {scheduleMode === "scheduled" && (
-            <Input type="datetime-local" className="mt-2" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
-          )}
-        </div>
+          </Stack>
+        </Box>
+      </Grid>
 
-        <Button onClick={() => sendMut.mutate()} disabled={sendMut.isPending} className="w-full gap-2">
-          <Send className="size-4" /> {scheduleMode === "scheduled" ? "Agendar" : "Enviar agora"}
-        </Button>
-      </div>
-
-      <div className="surface-card p-4">
-        <p className="mb-2 text-sm font-semibold">Histórico recente</p>
-        <div className="space-y-2">
-          {(history ?? []).map((m) => (
-            <div key={m.id} className="rounded-lg border border-border p-2 text-xs">
-              <div className="flex items-center justify-between">
-                <Badge className={STATUS_CLASS[m.status]}>{STATUS_LABEL[m.status]}</Badge>
-                {m.status === "pending" && (
-                  <button onClick={() => cancelMut.mutate(m.id)} className="text-critical hover:underline">
-                    <X className="size-3.5" />
-                  </button>
-                )}
-                {m.status === "sent" && (
-                  <div className="flex items-center gap-1">
-                    <button
-                      title="nao está dando certo."
-                      onClick={() => feedbackMut.mutate({ id: m.id, feedback: "good" })}
-                      className={`rounded p-0.5 hover:bg-success-soft ${feedbackMap?.[m.id] === "good" ? "text-success" : "text-muted-foreground"}`}
-                    >
-                      <ThumbsUp className="size-3.5" />
-                    </button>
-                    <button
-                      title="nao está dando certo."
-                      onClick={() => feedbackMut.mutate({ id: m.id, feedback: "bad" })}
-                      className={`rounded p-0.5 hover:bg-critical-soft ${feedbackMap?.[m.id] === "bad" ? "text-critical" : "text-muted-foreground"}`}
-                    >
-                      <ThumbsDown className="size-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-              <p className="mt-1 truncate text-muted-foreground">{m.content_text || m.content_type}</p>
-            </div>
-          ))}
-          {(history ?? []).length === 0 && <p className="text-xs text-muted-foreground">Nenhum envio ainda.</p>}
-        </div>
-      </div>
-    </div>
+      <Grid size={{ xs: 12, lg: 4 }} sx={{ maxWidth: { lg: 320 } }}>
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 2 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+            Histórico recente
+          </Typography>
+          <Stack spacing={1}>
+            {(history ?? []).map((m) => (
+              <Box key={m.id} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1 }}>
+                <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+                  <Chip size="small" color={STATUS_COLOR[m.status]} label={STATUS_LABEL[m.status]} />
+                  {m.status === "pending" && (
+                    <IconButton size="small" onClick={() => cancelMut.mutate(m.id)}>
+                      <X size={14} color="var(--mui-palette-error-main, #EA5455)" />
+                    </IconButton>
+                  )}
+                  {m.status === "sent" && (
+                    <Stack direction="row" spacing={0.5}>
+                      <IconButton
+                        size="small"
+                        title="nao está dando certo."
+                        onClick={() => feedbackMut.mutate({ id: m.id, feedback: "good" })}
+                        sx={{ color: feedbackMap?.[m.id] === "good" ? "success.main" : "text.secondary" }}
+                      >
+                        <ThumbsUp size={14} />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        title="nao está dando certo."
+                        onClick={() => feedbackMut.mutate({ id: m.id, feedback: "bad" })}
+                        sx={{ color: feedbackMap?.[m.id] === "bad" ? "error.main" : "text.secondary" }}
+                      >
+                        <ThumbsDown size={14} />
+                      </IconButton>
+                    </Stack>
+                  )}
+                </Stack>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {m.content_text || m.content_type}
+                </Typography>
+              </Box>
+            ))}
+            {(history ?? []).length === 0 && (
+              <Typography variant="caption" color="text.secondary">
+                Nenhum envio ainda.
+              </Typography>
+            )}
+          </Stack>
+        </Box>
+      </Grid>
+    </Grid>
   );
 }

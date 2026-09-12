@@ -1,9 +1,20 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Download } from "lucide-react";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Grid from "@mui/material/Grid";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Typography from "@mui/material/Typography";
 import { getEnvioReports } from "@/lib/envio-reports.functions";
 import type { EnvioReportsPeriod } from "@/lib/envio-reports.server";
 import { getAiContentPerformanceFn } from "@/lib/ai-content-queue.functions";
@@ -18,10 +29,16 @@ const PERIODS: { value: EnvioReportsPeriod; label: string }[] = [
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="surface-card p-4 text-center">
-      <p className="text-2xl font-bold">{value}</p>
-      <p className="text-xs text-muted-foreground">{label}</p>
-    </div>
+    <Card variant="outlined" sx={{ textAlign: "center" }}>
+      <CardContent>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+          {value}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {label}
+        </Typography>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -47,45 +64,63 @@ export function ReportsPanel() {
     URL.revokeObjectURL(url);
   };
 
-  if (isLoading || !data) return <div className="p-6 text-sm text-muted-foreground">Carregando…</div>;
+  if (isLoading || !data) {
+    return (
+      <Typography variant="body2" color="text.secondary" sx={{ p: 3 }}>
+        Carregando…
+      </Typography>
+    );
+  }
 
   return (
-    <div className="space-y-6 py-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-2">
+    <Stack spacing={3} sx={{ py: 2 }}>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+        <Stack direction="row" spacing={1}>
           {PERIODS.map((p) => (
-            <Button key={p.value} size="sm" variant={period === p.value ? "default" : "outline"} onClick={() => setPeriod(p.value)}>
+            <Button key={p.value} size="small" variant={period === p.value ? "contained" : "outline"} onClick={() => setPeriod(p.value)}>
               {p.label}
             </Button>
           ))}
-        </div>
-        <Button variant="outline" size="sm" onClick={exportCsv} className="gap-2">
-          <Download className="size-4" /> Exportar CSV
+        </Stack>
+        <Button variant="outline" size="small" startIcon={<Download size={16} />} onClick={exportCsv}>
+          Exportar CSV
         </Button>
-      </div>
+      </Stack>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <StatCard label="Cliques" value={data.totalClicks} />
-        <StatCard label="Entradas" value={data.totalEntries} />
-        <StatCard label="Saídas" value={data.totalExits} />
-        <StatCard label="Líquido" value={data.net} />
-        <StatCard label="Conversão" value={`${data.conversionPct}%`} />
-      </div>
+      <Grid container spacing={1.5}>
+        <Grid size={{ xs: 6, sm: 12 / 5 }}>
+          <StatCard label="Cliques" value={data.totalClicks} />
+        </Grid>
+        <Grid size={{ xs: 6, sm: 12 / 5 }}>
+          <StatCard label="Entradas" value={data.totalEntries} />
+        </Grid>
+        <Grid size={{ xs: 6, sm: 12 / 5 }}>
+          <StatCard label="Saídas" value={data.totalExits} />
+        </Grid>
+        <Grid size={{ xs: 6, sm: 12 / 5 }}>
+          <StatCard label="Líquido" value={data.net} />
+        </Grid>
+        <Grid size={{ xs: 6, sm: 12 / 5 }}>
+          <StatCard label="Conversão" value={`${data.conversionPct}%`} />
+        </Grid>
+      </Grid>
 
-      <div>
-        <p className="mb-2 text-sm font-semibold">Campanhas</p>
-        <div className="surface-card overflow-x-auto">
-          <Table>
-            <TableHeader>
+      <Box>
+        <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+          Campanhas
+        </Typography>
+        <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, overflowX: "auto" }}>
+          <Table size="small">
+            <TableHead>
               <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Cliques</TableHead>
-                <TableHead>Entradas</TableHead>
-                <TableHead>Saídas</TableHead>
-                <TableHead>Líquido</TableHead>
-                <TableHead>Conversão</TableHead>
+                <TableCell>Nome</TableCell>
+                <TableCell>Cliques</TableCell>
+                <TableCell>Entradas</TableCell>
+                <TableCell>Saídas</TableCell>
+                <TableCell>Líquido</TableCell>
+                <TableCell>Conversão</TableCell>
               </TableRow>
-            </TableHeader>
+            </TableHead>
             <TableBody>
               {data.campaigns.map((c) => (
                 <TableRow key={c.id}>
@@ -93,28 +128,30 @@ export function ReportsPanel() {
                   <TableCell>{c.clicks}</TableCell>
                   <TableCell>{c.entries}</TableCell>
                   <TableCell>{c.exits}</TableCell>
-                  <TableCell className={c.net < 0 ? "text-critical" : ""}>{c.net}</TableCell>
+                  <TableCell sx={{ color: c.net < 0 ? "error.main" : undefined }}>{c.net}</TableCell>
                   <TableCell>{c.conversionPct}%</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </div>
-      </div>
+        </TableContainer>
+      </Box>
 
-      <div>
-        <p className="mb-2 text-sm font-semibold">Grupos</p>
-        <div className="surface-card overflow-x-auto">
-          <Table>
-            <TableHeader>
+      <Box>
+        <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+          Grupos
+        </Typography>
+        <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, overflowX: "auto" }}>
+          <Table size="small">
+            <TableHead>
               <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Participantes</TableHead>
-                <TableHead>Entradas</TableHead>
-                <TableHead>Saídas</TableHead>
-                <TableHead>Líquido</TableHead>
+                <TableCell>Nome</TableCell>
+                <TableCell>Participantes</TableCell>
+                <TableCell>Entradas</TableCell>
+                <TableCell>Saídas</TableCell>
+                <TableCell>Líquido</TableCell>
               </TableRow>
-            </TableHeader>
+            </TableHead>
             <TableBody>
               {data.groups.map((g) => (
                 <TableRow key={g.id}>
@@ -122,63 +159,79 @@ export function ReportsPanel() {
                   <TableCell>{g.participants}</TableCell>
                   <TableCell>{g.entries}</TableCell>
                   <TableCell>{g.exits}</TableCell>
-                  <TableCell className={g.net < 0 ? "text-critical" : ""}>{g.net}</TableCell>
+                  <TableCell sx={{ color: g.net < 0 ? "error.main" : undefined }}>{g.net}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </div>
-      </div>
+        </TableContainer>
+      </Box>
 
-      <div>
-        <p className="mb-2 text-sm font-semibold">Postagens geradas por IA — o que nao está dando certo.</p>
-        <div className="surface-card overflow-x-auto">
-          <Table>
-            <TableHeader>
+      <Box>
+        <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+          Postagens geradas por IA — o que nao está dando certo.
+        </Typography>
+        <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, overflowX: "auto" }}>
+          <Table size="small">
+            <TableHead>
               <TableRow>
-                <TableHead>Data</TableHead>
-                <TableHead>Campanha</TableHead>
-                <TableHead>Texto</TableHead>
-                <TableHead>Cliques</TableHead>
-                <TableHead>Respostas</TableHead>
-                <TableHead>Saídas (24h)</TableHead>
-                <TableHead>Feedback</TableHead>
+                <TableCell>Data</TableCell>
+                <TableCell>Campanha</TableCell>
+                <TableCell>Texto</TableCell>
+                <TableCell>Cliques</TableCell>
+                <TableCell>Respostas</TableCell>
+                <TableCell>Saídas (24h)</TableCell>
+                <TableCell>Feedback</TableCell>
               </TableRow>
-            </TableHeader>
+            </TableHead>
             <TableBody>
               {(aiPosts ?? []).map((p) => (
                 <TableRow key={p.id}>
-                  <TableCell className="whitespace-nowrap">{new Date(`${p.scheduledDate}T12:00:00Z`).toLocaleDateString("pt-BR")}</TableCell>
+                  <TableCell sx={{ whiteSpace: "nowrap" }}>{new Date(`${p.scheduledDate}T12:00:00Z`).toLocaleDateString("pt-BR")}</TableCell>
                   <TableCell>{p.campaignName}</TableCell>
-                  <TableCell className="max-w-xs truncate" title={p.text}>{p.text}</TableCell>
+                  <TableCell sx={{ maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={p.text}>
+                    {p.text}
+                  </TableCell>
                   <TableCell>{p.clicks}</TableCell>
                   <TableCell>{p.replies}</TableCell>
-                  <TableCell className={p.exits24h > 0 ? "text-critical" : ""}>{p.exits24h}</TableCell>
+                  <TableCell sx={{ color: p.exits24h > 0 ? "error.main" : undefined }}>{p.exits24h}</TableCell>
                   <TableCell>{p.feedback === "good" ? "👍" : p.feedback === "bad" ? "👎" : "—"}</TableCell>
                 </TableRow>
               ))}
               {(aiPosts ?? []).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">Nenhuma postagem gerada por IA enviada ainda nos últimos 30 dias.</TableCell>
+                  <TableCell colSpan={7} align="center" sx={{ color: "text.secondary" }}>
+                    Nenhuma postagem gerada por IA enviada ainda nos últimos 30 dias.
+                  </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
-        </div>
-      </div>
+        </TableContainer>
+      </Box>
 
-      <div>
-        <p className="mb-2 text-sm font-semibold">Eventos recentes</p>
-        <div className="surface-card max-h-72 divide-y divide-border overflow-y-auto">
+      <Box>
+        <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+          Eventos recentes
+        </Typography>
+        <Box sx={{ maxHeight: 288, overflowY: "auto", border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
           {data.recentEvents.map((e: any, i: number) => (
-            <div key={i} className="flex items-center justify-between p-2 text-xs">
-              <span>{e.event_type === "join" ? "🟢 Entrou" : "🔴 Saiu"}</span>
-              <span className="text-muted-foreground">{e.phone ?? "desconhecido"}</span>
-              <span className="text-muted-foreground">{new Date(e.created_at).toLocaleString("pt-BR")}</span>
-            </div>
+            <Stack
+              key={i}
+              direction="row"
+              sx={{ justifyContent: "space-between", alignItems: "center", p: 1, borderTop: i > 0 ? "1px solid" : "none", borderColor: "divider" }}
+            >
+              <Typography variant="caption">{e.event_type === "join" ? "🟢 Entrou" : "🔴 Saiu"}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {e.phone ?? "desconhecido"}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {new Date(e.created_at).toLocaleString("pt-BR")}
+              </Typography>
+            </Stack>
           ))}
-        </div>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Stack>
   );
 }

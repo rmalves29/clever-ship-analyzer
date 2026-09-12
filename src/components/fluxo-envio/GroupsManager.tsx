@@ -2,13 +2,20 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Trash2, RefreshCw, Plus, ExternalLink } from "lucide-react";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import IconButton from "@mui/material/IconButton";
+import Link from "@mui/material/Link";
+import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import {
   listEnvioGroups,
   syncEnvioGroupsFromWhatsapp,
@@ -78,98 +85,112 @@ export function GroupsManager() {
     return true;
   });
 
-  if (isLoading) return <div className="p-6 text-sm text-muted-foreground">Carregando…</div>;
+  if (isLoading) {
+    return (
+      <Typography variant="body2" color="text.secondary" sx={{ p: 3 }}>
+        Carregando…
+      </Typography>
+    );
+  }
 
   return (
-    <div className="space-y-4 py-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Input placeholder="Buscar grupo…" value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
-        <label className="flex items-center gap-2 text-sm">
-          <Switch checked={adminOnly} onCheckedChange={setAdminOnly} /> Só onde sou admin
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <Switch checked={showInactive} onCheckedChange={setShowInactive} /> Mostrar inativos
-        </label>
-        <div className="ml-auto flex gap-2">
-          <Button variant="outline" onClick={() => setAddOpen(true)} className="gap-2">
-            <Plus className="size-4" /> Adicionar manual
+    <Stack spacing={2} sx={{ py: 2 }}>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", alignItems: "center" }}>
+        <TextField size="small" placeholder="Buscar grupo…" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ maxWidth: 260 }} />
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <Switch size="small" checked={adminOnly} onChange={(e) => setAdminOnly(e.target.checked)} />
+          <Typography variant="body2">Só onde sou admin</Typography>
+        </Stack>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <Switch size="small" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
+          <Typography variant="body2">Mostrar inativos</Typography>
+        </Stack>
+        <Stack direction="row" spacing={1} sx={{ ml: "auto" }}>
+          <Button variant="outline" startIcon={<Plus size={16} />} onClick={() => setAddOpen(true)}>
+            Adicionar manual
           </Button>
-          <Button onClick={() => syncMut.mutate()} disabled={syncMut.isPending} className="gap-2">
-            <RefreshCw className={`size-4 ${syncMut.isPending ? "animate-spin" : ""}`} /> Buscar do WhatsApp
+          <Button
+            variant="contained"
+            startIcon={<RefreshCw size={16} className={syncMut.isPending ? "animate-spin" : undefined} />}
+            onClick={() => syncMut.mutate()}
+            disabled={syncMut.isPending}
+          >
+            Buscar do WhatsApp
           </Button>
-        </div>
-      </div>
+        </Stack>
+      </Stack>
 
-      <div className="surface-card divide-y divide-border">
-        {filtered.length === 0 && <p className="p-6 text-sm text-muted-foreground">Nenhum grupo encontrado.</p>}
-        {filtered.map((g) => (
-          <div key={g.id} className="flex flex-wrap items-center gap-3 p-4">
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">{g.group_name}</p>
-              <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                <Badge variant="secondary">
-                  {g.participant_count}/{g.max_participants || 1024}
-                </Badge>
-                {g.is_admin && <Badge className="bg-brand-soft text-brand">Admin</Badge>}
+      <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
+        {filtered.length === 0 && (
+          <Typography variant="body2" color="text.secondary" sx={{ p: 3 }}>
+            Nenhum grupo encontrado.
+          </Typography>
+        )}
+        {filtered.map((g, i) => (
+          <Stack
+            key={g.id}
+            direction="row"
+            spacing={2}
+            sx={{ flexWrap: "wrap", alignItems: "center", p: 2, borderTop: i > 0 ? "1px solid" : "none", borderColor: "divider" }}
+          >
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Typography sx={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.group_name}</Typography>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center", mt: 0.5 }}>
+                <Chip size="small" variant="outlined" label={`${g.participant_count}/${g.max_participants || 1024}`} />
+                {g.is_admin && <Chip size="small" color="primary" label="Admin" />}
                 {g.invite_link ? (
-                  <a href={g.invite_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-brand hover:underline">
-                    <ExternalLink className="size-3" /> Link
-                  </a>
+                  <Link href={g.invite_link} target="_blank" rel="noreferrer" underline="hover" sx={{ display: "flex", alignItems: "center", gap: 0.5, fontSize: 12 }}>
+                    <ExternalLink size={12} /> Link
+                  </Link>
                 ) : (
-                  <span className="text-critical">Falta link de convite</span>
+                  <Typography variant="caption" color="error.main">
+                    Falta link de convite
+                  </Typography>
                 )}
-              </div>
-            </div>
-            <label className="flex items-center gap-1.5 text-xs">
-              Aberto
-              <Switch
-                checked={g.is_entry_open}
-                onCheckedChange={(v) => updateMut.mutate({ id: g.id, is_entry_open: v })}
-              />
-            </label>
-            <label className="flex items-center gap-1.5 text-xs">
-              Ativo
-              <Switch checked={g.is_active} onCheckedChange={(v) => updateMut.mutate({ id: g.id, is_active: v })} />
-            </label>
-            <Button
-              variant="ghost"
-              size="icon"
+              </Stack>
+            </Box>
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+              <Typography variant="caption">Aberto</Typography>
+              <Switch size="small" checked={g.is_entry_open} onChange={(e) => updateMut.mutate({ id: g.id, is_entry_open: e.target.checked })} />
+            </Stack>
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+              <Typography variant="caption">Ativo</Typography>
+              <Switch size="small" checked={g.is_active} onChange={(e) => updateMut.mutate({ id: g.id, is_active: e.target.checked })} />
+            </Stack>
+            <IconButton
+              size="small"
               onClick={() => {
                 if (confirm(`Apagar o grupo "${g.group_name}"?`)) deleteMut.mutate(g.id);
               }}
             >
-              <Trash2 className="size-4 text-critical" />
-            </Button>
-          </div>
+              <Trash2 size={16} color="var(--mui-palette-error-main, #EA5455)" />
+            </IconButton>
+          </Stack>
         ))}
-      </div>
+      </Box>
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Adicionar grupo manualmente</DialogTitle>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Adicionar grupo manualmente</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>JID do grupo</Label>
-              <Input value={newJid} onChange={(e) => setNewJid(e.target.value)} placeholder="120363xxxxxxx-group" />
-            </div>
-            <div>
-              <Label>Nome</Label>
-              <Input value={newName} onChange={(e) => setNewName(e.target.value)} />
-            </div>
-            <div>
-              <Label>Link de convite (opcional)</Label>
-              <Input value={newInvite} onChange={(e) => setNewInvite(e.target.value)} placeholder="https://chat.whatsapp.com/…" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => addMut.mutate()} disabled={addMut.isPending || !newJid || !newName}>
-              Adicionar
-            </Button>
-          </DialogFooter>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <TextField fullWidth size="small" label="JID do grupo" value={newJid} onChange={(e) => setNewJid(e.target.value)} placeholder="120363xxxxxxx-group" />
+            <TextField fullWidth size="small" label="Nome" value={newName} onChange={(e) => setNewName(e.target.value)} />
+            <TextField
+              fullWidth
+              size="small"
+              label="Link de convite (opcional)"
+              value={newInvite}
+              onChange={(e) => setNewInvite(e.target.value)}
+              placeholder="https://chat.whatsapp.com/…"
+            />
+          </Stack>
         </DialogContent>
+        <DialogActions>
+          <Button variant="contained" onClick={() => addMut.mutate()} disabled={addMut.isPending || !newJid || !newName}>
+            Adicionar
+          </Button>
+        </DialogActions>
       </Dialog>
-    </div>
+    </Stack>
   );
 }

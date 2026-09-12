@@ -2,13 +2,21 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Plus, Copy, Trash2 } from "lucide-react";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import Grid from "@mui/material/Grid";
+import IconButton from "@mui/material/IconButton";
+import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import {
   listEnvioCampaigns,
   createEnvioCampaign,
@@ -57,89 +65,99 @@ export function CampaignsManager() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  if (isLoading) return <div className="p-6 text-sm text-muted-foreground">Carregando…</div>;
+  if (isLoading) {
+    return (
+      <Typography variant="body2" color="text.secondary" sx={{ p: 3 }}>
+        Carregando…
+      </Typography>
+    );
+  }
 
   return (
-    <div className="space-y-4 py-4">
-      <div className="flex justify-end">
-        <Button onClick={() => setCreateOpen(true)} className="gap-2">
-          <Plus className="size-4" /> Nova campanha
+    <Stack spacing={2} sx={{ py: 2 }}>
+      <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+        <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => setCreateOpen(true)}>
+          Nova campanha
         </Button>
-      </div>
+      </Box>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <Grid container spacing={2}>
         {(campaigns ?? []).map((c) => {
           const url = `https://clever-ship-analyzer.lovable.app/fluxo/${c.slug}`;
           return (
-            <div key={c.id} className="surface-card cursor-pointer p-4" onClick={() => setDetailId(c.id)}>
-              <div className="flex items-start justify-between gap-2">
-                <p className="font-semibold">{c.name}</p>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (confirm(`Apagar a campanha "${c.name}"?`)) deleteMut.mutate(c.id);
-                  }}
-                >
-                  <Trash2 className="size-4 text-critical" />
-                </Button>
-              </div>
-              {c.description && <p className="mt-1 text-sm text-muted-foreground">{c.description}</p>}
-              <div className="mt-3 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                <Input readOnly value={url} className="h-8 text-xs" />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="size-8 shrink-0"
-                  onClick={() => {
-                    navigator.clipboard.writeText(url);
-                    toast.success("Link copiado.");
-                  }}
-                >
-                  <Copy className="size-3.5" />
-                </Button>
-              </div>
-              <div className="mt-3 flex items-center gap-4 text-xs" onClick={(e) => e.stopPropagation()}>
-                <label className="flex items-center gap-1.5">
-                  Aberta
-                  <Switch checked={c.is_entry_open} onCheckedChange={(v) => toggleMut.mutate({ id: c.id, is_entry_open: v })} />
-                </label>
-                <label className="flex items-center gap-1.5">
-                  Ativa
-                  <Switch checked={c.is_active} onCheckedChange={(v) => toggleMut.mutate({ id: c.id, is_active: v })} />
-                </label>
-              </div>
-            </div>
+            <Grid key={c.id} size={{ xs: 12, sm: 6, lg: 4 }}>
+              <Card variant="outlined" sx={{ cursor: "pointer", height: "100%" }} onClick={() => setDetailId(c.id)}>
+                <CardContent>
+                  <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <Typography sx={{ fontWeight: 600 }}>{c.name}</Typography>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Apagar a campanha "${c.name}"?`)) deleteMut.mutate(c.id);
+                      }}
+                    >
+                      <Trash2 size={16} color="var(--mui-palette-error-main, #EA5455)" />
+                    </IconButton>
+                  </Stack>
+                  {c.description && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                      {c.description}
+                    </Typography>
+                  )}
+                  <Stack direction="row" spacing={1} sx={{ mt: 1.5 }} onClick={(e) => e.stopPropagation()}>
+                    <TextField size="small" fullWidth value={url} slotProps={{ input: { readOnly: true } }} sx={{ "& input": { fontSize: 12 } }} />
+                    <IconButton
+                      size="small"
+                      sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5, flexShrink: 0 }}
+                      onClick={() => {
+                        navigator.clipboard.writeText(url);
+                        toast.success("Link copiado.");
+                      }}
+                    >
+                      <Copy size={14} />
+                    </IconButton>
+                  </Stack>
+                  <Stack direction="row" spacing={2} sx={{ mt: 1.5, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
+                    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+                      <Typography variant="caption">Aberta</Typography>
+                      <Switch size="small" checked={c.is_entry_open} onChange={(e) => toggleMut.mutate({ id: c.id, is_entry_open: e.target.checked })} />
+                    </Stack>
+                    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+                      <Typography variant="caption">Ativa</Typography>
+                      <Switch size="small" checked={c.is_active} onChange={(e) => toggleMut.mutate({ id: c.id, is_active: e.target.checked })} />
+                    </Stack>
+                  </Stack>
+                </CardContent>
+              </Card>
+            </Grid>
           );
         })}
-        {(campaigns ?? []).length === 0 && <p className="text-sm text-muted-foreground">Nenhuma campanha criada ainda.</p>}
-      </div>
+        {(campaigns ?? []).length === 0 && (
+          <Grid size={12}>
+            <Typography variant="body2" color="text.secondary">
+              Nenhuma campanha criada ainda.
+            </Typography>
+          </Grid>
+        )}
+      </Grid>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Nova campanha</DialogTitle>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Nova campanha</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>Nome</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div>
-              <Label>Descrição (opcional)</Label>
-              <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => createMut.mutate()} disabled={createMut.isPending || !name}>
-              Criar
-            </Button>
-          </DialogFooter>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <TextField fullWidth size="small" label="Nome" value={name} onChange={(e) => setName(e.target.value)} />
+            <TextField fullWidth size="small" label="Descrição (opcional)" multiline rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </Stack>
         </DialogContent>
+        <DialogActions>
+          <Button variant="contained" onClick={() => createMut.mutate()} disabled={createMut.isPending || !name}>
+            Criar
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {detailId && <CampaignDetailDialog campaignId={detailId} onClose={() => setDetailId(null)} />}
-    </div>
+    </Stack>
   );
 }

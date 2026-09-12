@@ -2,10 +2,15 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Wifi, WifiOff, QrCode } from "lucide-react";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Grid from "@mui/material/Grid";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import {
   getEnvioConnectionStatus,
   saveEnvioCredentials,
@@ -69,64 +74,95 @@ export function ConexaoUazapi() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  if (isLoading) return <div className="p-6 text-sm text-muted-foreground">Carregando…</div>;
+  if (isLoading) {
+    return (
+      <Typography variant="body2" color="text.secondary" sx={{ p: 3 }}>
+        Carregando…
+      </Typography>
+    );
+  }
 
   return (
-    <div className="space-y-6 py-4">
-      <div className="surface-card p-5">
-        <div className="flex items-center gap-2">
-          {status?.connected ? <Wifi className="size-5 text-success" /> : <WifiOff className="size-5 text-muted-foreground" />}
-          <p className="font-semibold">{status?.connected ? "Conectado" : "Desconectado"}</p>
-        </div>
-        {status?.connectedPhone && <p className="mt-1 text-sm text-muted-foreground">Número: {status.connectedPhone}</p>}
-        <p className="mt-1 text-xs text-muted-foreground">
-          Essa instância UazAPI é compartilhada com o live-launchpad-79 — reconectar por aqui reaponta o webhook pra este app.
-        </p>
-      </div>
+    <Stack spacing={3} sx={{ py: 2 }}>
+      <Card variant="outlined">
+        <CardContent>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            {status?.connected ? <Wifi size={20} color="var(--mui-palette-success-main, #28C76F)" /> : <WifiOff size={20} color="var(--mui-palette-text-secondary)" />}
+            <Typography sx={{ fontWeight: 600 }}>{status?.connected ? "Conectado" : "Desconectado"}</Typography>
+          </Stack>
+          {status?.connectedPhone && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              Número: {status.connectedPhone}
+            </Typography>
+          )}
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+            Essa instância UazAPI é compartilhada com o live-launchpad-79 — reconectar por aqui reaponta o webhook pra este app.
+          </Typography>
+        </CardContent>
+      </Card>
 
       {!status?.configured && (
-        <div className="surface-card space-y-3 p-5">
-          <p className="font-semibold">Configurar credenciais</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <Label>URL da instância</Label>
-              <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://sua-instancia.uazapi.com" />
-            </div>
-            <div>
-              <Label>Token</Label>
-              <Input value={token} onChange={(e) => setToken(e.target.value)} type="password" />
-            </div>
-            <div>
-              <Label>Admin Token (opcional)</Label>
-              <Input value={adminToken} onChange={(e) => setAdminToken(e.target.value)} type="password" />
-            </div>
-          </div>
-          <Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending || !url || !token}>
-            Salvar e registrar webhook
-          </Button>
-        </div>
+        <Card variant="outlined">
+          <CardContent>
+            <Typography sx={{ fontWeight: 600, mb: 1.5 }}>Configurar credenciais</Typography>
+            <Grid container spacing={1.5}>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="URL da instância"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://sua-instancia.uazapi.com"
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField fullWidth size="small" label="Token" type="password" value={token} onChange={(e) => setToken(e.target.value)} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Admin Token (opcional)"
+                  type="password"
+                  value={adminToken}
+                  onChange={(e) => setAdminToken(e.target.value)}
+                />
+              </Grid>
+            </Grid>
+            <Button variant="contained" sx={{ mt: 2 }} onClick={() => saveMut.mutate()} disabled={saveMut.isPending || !url || !token}>
+              Salvar e registrar webhook
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {status?.configured && !status?.connected && (
-        <div className="surface-card space-y-3 p-5">
-          <p className="font-semibold">Conectar via QR Code</p>
-          <Button onClick={() => qrMut.mutate()} disabled={qrMut.isPending} className="gap-2">
-            <QrCode className="size-4" /> Gerar QR Code
-          </Button>
-          {qr && (
-            <div className="flex flex-col items-center gap-2">
-              <img src={qr} alt="QR Code" className="size-72 rounded-lg border border-border" />
-              <p className="text-xs text-muted-foreground">Expira em {secondsLeft}s — escaneie no WhatsApp do celular.</p>
-            </div>
-          )}
-        </div>
+        <Card variant="outlined">
+          <CardContent>
+            <Typography sx={{ fontWeight: 600, mb: 1.5 }}>Conectar via QR Code</Typography>
+            <Button variant="contained" startIcon={<QrCode size={16} />} onClick={() => qrMut.mutate()} disabled={qrMut.isPending}>
+              Gerar QR Code
+            </Button>
+            {qr && (
+              <Stack spacing={1} sx={{ alignItems: "center", mt: 2 }}>
+                <Box component="img" src={qr} alt="QR Code" sx={{ width: 288, height: 288, borderRadius: 2, border: "1px solid", borderColor: "divider" }} />
+                <Typography variant="caption" color="text.secondary">
+                  Expira em {secondsLeft}s — escaneie no WhatsApp do celular.
+                </Typography>
+              </Stack>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {status?.configured && status?.connected && (
-        <Button variant="outline" onClick={() => disconnectMut.mutate()} disabled={disconnectMut.isPending}>
-          Desconectar
-        </Button>
+        <Box>
+          <Button variant="outline" onClick={() => disconnectMut.mutate()} disabled={disconnectMut.isPending}>
+            Desconectar
+          </Button>
+        </Box>
       )}
-    </div>
+    </Stack>
   );
 }

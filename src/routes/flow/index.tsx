@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, createLink, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -16,22 +16,29 @@ import {
 } from "@/lib/flow.functions";
 import { getFlowStatus } from "@/lib/flow-diagnostics.functions";
 import type { FlowAutomation, FlowAutomationStats, FlowContact } from "@/lib/flow.server";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, MessageSquare, Trash2, MoreVertical, Users, ScrollText, CheckCircle2, XCircle, MinusCircle, Tag, X, Pencil, Copy, Send, Eye, MousePointerClick, Inbox } from "lucide-react";
-import { cn } from "@/lib/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import IconButton from "@mui/material/IconButton";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
+import Tab from "@mui/material/Tab";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Tabs from "@mui/material/Tabs";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 
 export const Route = createFileRoute("/flow/")({
   component: FlowDashboard,
@@ -42,6 +49,9 @@ export const Route = createFileRoute("/flow/")({
     ],
   }),
 });
+
+const LinkMenuItem = createLink(MenuItem);
+const LinkBox = createLink(Box);
 
 function FlowDashboard() {
   const [view, setView] = useState<"automacoes" | "contatos" | "logs">("automacoes");
@@ -150,90 +160,83 @@ function FlowDashboard() {
   );
 
   return (
-    <div className="p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">ManyChat</h1>
-          <p className="text-sm text-muted-foreground">Fluxos que respondem por você no Instagram — comentário vira DM automática.</p>
-        </div>
+    <Box sx={{ p: 3 }}>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>ManyChat</Typography>
+          <Typography variant="body2" color="text.secondary">Fluxos que respondem por você no Instagram — comentário vira DM automática.</Typography>
+        </Box>
         {view === "automacoes" && (
-          <Button onClick={() => createMut.mutate()} disabled={createMut.isPending} className="gap-2">
-            <Plus className="size-4" /> Nova automação
+          <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => createMut.mutate()} disabled={createMut.isPending}>
+            Nova automação
           </Button>
         )}
-      </div>
+      </Stack>
 
       {diagnostics && (
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className={cn("p-4 rounded-xl border bg-card", diagnostics.webhookCount > 0 ? "border-success/20" : "border-warning/20")}>
-            <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Status do Webhook</p>
-            <div className="mt-1 flex items-center gap-2">
-              <div className={cn("size-2 rounded-full animate-pulse", diagnostics.webhookCount > 0 ? "bg-success" : "bg-warning")} />
-              <p className="text-sm font-medium">
+        <Box sx={{ mt: 2, display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" } }}>
+          <Box sx={{ p: 2, borderRadius: 3, border: "1px solid", borderColor: diagnostics.webhookCount > 0 ? "success.light" : "warning.light" }}>
+            <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>Status do Webhook</Typography>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center", mt: 0.5 }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: diagnostics.webhookCount > 0 ? "success.main" : "warning.main" }} />
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
                 {diagnostics.webhookCount > 0 ? `${diagnostics.webhookCount} eventos recebidos` : "Aguardando primeiro evento..."}
-              </p>
-            </div>
-          </div>
-          <div className={cn("p-4 rounded-xl border bg-card", diagnostics.hasCredentials ? "border-success/20" : "border-critical/20")}>
-            <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Conexão Instagram</p>
-            <p className="mt-1 text-sm font-medium">
+              </Typography>
+            </Stack>
+          </Box>
+          <Box sx={{ p: 2, borderRadius: 3, border: "1px solid", borderColor: diagnostics.hasCredentials ? "success.light" : "error.light" }}>
+            <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>Conexão Instagram</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600, mt: 0.5 }}>
               {diagnostics.hasCredentials ? "Autenticado e pronto" : "Credenciais ausentes em Configurações"}
-            </p>
-          </div>
-          <div className="p-4 rounded-xl border bg-card border-border">
-            <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Saúde do Fluxo</p>
-            <p className="text-sm font-medium mt-1">
+            </Typography>
+          </Box>
+          <Box sx={{ p: 2, borderRadius: 3, border: "1px solid", borderColor: "divider" }}>
+            <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>Saúde do Fluxo</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600, mt: 0.5 }}>
               {(diagnostics.recentErrors?.length ?? 0) > 0 ? "Existem falhas recentes" : "Nenhum erro reportado"}
-            </p>
-          </div>
-        </div>
+            </Typography>
+          </Box>
+        </Box>
       )}
 
       {diagnostics && (diagnostics.recentErrors?.length ?? 0) > 0 && (
-        <div className="mt-4 p-4 rounded-xl bg-critical-soft border border-critical/20">
-          <div className="flex items-center gap-2 text-critical mb-2">
-            <XCircle className="size-4" />
-            <h3 className="text-sm font-bold">Problemas de Permissão Detectados</h3>
-          </div>
-          <div className="space-y-2">
+        <Box sx={{ mt: 2, p: 2, borderRadius: 3, bgcolor: "error.50", border: "1px solid", borderColor: "error.light" }}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center", color: "error.main", mb: 1 }}>
+            <XCircle size={16} />
+            <Typography variant="body2" sx={{ fontWeight: 700 }}>Problemas de Permissão Detectados</Typography>
+          </Stack>
+          <Stack spacing={1}>
             {diagnostics.recentErrors?.slice(0, 1).map((e: any, idx: number) => (
-              <div key={idx} className="text-xs text-critical bg-white/50 p-2 rounded">
-                <p className="font-mono">{e.message}</p>
-              </div>
+              <Box key={idx} sx={{ fontSize: 12, color: "error.main", bgcolor: "rgba(255,255,255,0.5)", p: 1, borderRadius: 1, fontFamily: "monospace" }}>
+                {e.message}
+              </Box>
             ))}
-          </div>
-          <p className="mt-2 text-[11px] text-critical leading-relaxed">
-            <strong>Dica de Correção:</strong> O erro "(#3) Capability" geralmente significa que o App da Meta não tem a permissão 
-            <code>instagram_manage_messages</code>. Vá ao <a href="https://developers.facebook.com" target="_blank" className="underline font-bold">Meta for Developers</a>, 
+          </Stack>
+          <Typography variant="caption" sx={{ mt: 1, display: "block", color: "error.main", lineHeight: 1.6 }}>
+            <strong>Dica de Correção:</strong> O erro "(#3) Capability" geralmente significa que o App da Meta não tem a permissão{" "}
+            <code>instagram_manage_messages</code>. Vá ao{" "}
+            <a href="https://developers.facebook.com" target="_blank" rel="noreferrer" style={{ textDecoration: "underline", fontWeight: 700 }}>Meta for Developers</a>,{" "}
             garanta que o produto "Instagram Graph API" está configurado e que todas as permissões de mensagens estão ativas.
-          </p>
-        </div>
+          </Typography>
+        </Box>
       )}
 
-      <div className="mt-4">
-        <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
-          <TabsList>
-            <TabsTrigger value="automacoes" className="gap-1.5">
-              <MessageSquare className="size-3.5" /> ManyChat
-            </TabsTrigger>
-            <TabsTrigger value="contatos" className="gap-1.5">
-              <Users className="size-3.5" /> Contatos
-            </TabsTrigger>
-            <TabsTrigger value="logs" className="gap-1.5">
-              <ScrollText className="size-3.5" /> Logs
-            </TabsTrigger>
-          </TabsList>
+      <Box sx={{ mt: 2, borderBottom: "1px solid", borderColor: "divider" }}>
+        <Tabs value={view} onChange={(_, v) => setView(v)}>
+          <Tab value="automacoes" icon={<MessageSquare size={14} />} iconPosition="start" label="ManyChat" sx={{ minHeight: 40 }} />
+          <Tab value="contatos" icon={<Users size={14} />} iconPosition="start" label="Contatos" sx={{ minHeight: 40 }} />
+          <Tab value="logs" icon={<ScrollText size={14} />} iconPosition="start" label="Logs" sx={{ minHeight: 40 }} />
         </Tabs>
-      </div>
+      </Box>
 
       {view === "automacoes" && (
-        <div className="mt-4">
+        <Box sx={{ mt: 2 }}>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Carregando…</p>
+            <Typography variant="body2" color="text.secondary">Carregando…</Typography>
           ) : automations.length === 0 ? (
             <EmptyState onCreate={() => createMut.mutate()} loading={createMut.isPending} />
           ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", lg: "repeat(3, 1fr)" } }}>
               {automations.map((a) => (
                 <AutomationCard
                   key={a.id}
@@ -244,60 +247,58 @@ function FlowDashboard() {
                   onToggleStatus={(active) => toggleStatusMut.mutate({ id: a.id, status: active ? "active" : "paused" })}
                 />
               ))}
-            </div>
+            </Box>
           )}
-        </div>
+        </Box>
       )}
 
       {view === "contatos" && (
-        <div className="mt-4">
+        <Box sx={{ mt: 2 }}>
           {loadingContacts ? (
-            <p className="text-sm text-muted-foreground">Carregando…</p>
+            <Typography variant="body2" color="text.secondary">Carregando…</Typography>
           ) : contacts.length === 0 ? (
-            <div className="mt-4 rounded-xl border border-dashed p-16 text-center max-w-xl mx-auto">
-              <div className="size-12 rounded-xl bg-brand-soft text-brand grid place-items-center mx-auto mb-4">
-                <Users className="size-6" />
-              </div>
-              <h2 className="text-lg font-semibold mb-1">Sem contatos ainda</h2>
-              <p className="text-sm text-muted-foreground">Quando alguém for atingido por uma automação, aparece aqui.</p>
-            </div>
+            <Box sx={{ mt: 2, border: "1px dashed", borderColor: "divider", borderRadius: 3, p: 8, textAlign: "center", maxWidth: 480, mx: "auto" }}>
+              <Box sx={{ width: 48, height: 48, borderRadius: 3, bgcolor: "primary.50", color: "primary.main", display: "grid", placeItems: "center", mx: "auto", mb: 2 }}>
+                <Users size={24} />
+              </Box>
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>Sem contatos ainda</Typography>
+              <Typography variant="body2" color="text.secondary">Quando alguém for atingido por uma automação, aparece aqui.</Typography>
+            </Box>
           ) : (
             <>
               {allTags.length > 0 && (
-                <div className="mb-3 flex flex-wrap items-center gap-1.5">
-                  <Tag className="size-3.5 text-muted-foreground" />
-                  <button
+                <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", alignItems: "center", mb: 1.5 }}>
+                  <Tag size={14} color="var(--mui-palette-text-secondary, #6f6b7d)" />
+                  <Chip
+                    size="small"
+                    label="Todos"
+                    color={tagFilter === null ? "primary" : "default"}
+                    variant={tagFilter === null ? "filled" : "outlined"}
                     onClick={() => setTagFilter(null)}
-                    className={`px-2 py-0.5 rounded-full text-xs border transition-colors ${
-                      tagFilter === null ? "bg-brand text-brand-foreground border-brand" : "hover:bg-muted"
-                    }`}
-                  >
-                    Todos
-                  </button>
+                  />
                   {allTags.map((t) => (
-                    <button
+                    <Chip
                       key={t}
+                      size="small"
+                      label={t}
+                      color={tagFilter === t ? "primary" : "default"}
+                      variant={tagFilter === t ? "filled" : "outlined"}
                       onClick={() => setTagFilter(t === tagFilter ? null : t)}
-                      className={`px-2 py-0.5 rounded-full text-xs border transition-colors ${
-                        tagFilter === t ? "bg-brand text-brand-foreground border-brand" : "hover:bg-muted"
-                      }`}
-                    >
-                      {t}
-                    </button>
+                    />
                   ))}
-                </div>
+                </Stack>
               )}
-              <div className="rounded-xl border border-border bg-card overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
-                    <tr>
-                      <th className="text-left px-4 py-3 font-medium">Usuário</th>
-                      <th className="text-left px-4 py-3 font-medium">Tags</th>
-                      <th className="text-left px-4 py-3 font-medium">Primeiro contato</th>
-                      <th className="text-left px-4 py-3 font-medium">Último contato</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
+              <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Usuário</TableCell>
+                      <TableCell>Tags</TableCell>
+                      <TableCell>Primeiro contato</TableCell>
+                      <TableCell>Último contato</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {filteredContacts.map((c) => (
                       <ContactRow
                         key={c.id}
@@ -306,58 +307,58 @@ function FlowDashboard() {
                         onRemoveTag={(tag) => removeTagMut.mutate({ contactId: c.id, tag })}
                       />
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </>
           )}
-        </div>
+        </Box>
       )}
 
       {view === "logs" && (
-        <div className="mt-4">
+        <Box sx={{ mt: 2 }}>
           {loadingLogs ? (
-            <p className="text-sm text-muted-foreground">Carregando…</p>
+            <Typography variant="body2" color="text.secondary">Carregando…</Typography>
           ) : logs.length === 0 ? (
-            <div className="mt-4 rounded-xl border border-dashed p-16 text-center max-w-xl mx-auto">
-              <div className="size-12 rounded-xl bg-brand-soft text-brand grid place-items-center mx-auto mb-4">
-                <ScrollText className="size-6" />
-              </div>
-              <h2 className="text-lg font-semibold mb-1">Nenhum disparo ainda</h2>
-              <p className="text-sm text-muted-foreground">Cada tentativa de envio (sucesso ou erro) aparece aqui.</p>
-            </div>
+            <Box sx={{ mt: 2, border: "1px dashed", borderColor: "divider", borderRadius: 3, p: 8, textAlign: "center", maxWidth: 480, mx: "auto" }}>
+              <Box sx={{ width: 48, height: 48, borderRadius: 3, bgcolor: "primary.50", color: "primary.main", display: "grid", placeItems: "center", mx: "auto", mb: 2 }}>
+                <ScrollText size={24} />
+              </Box>
+              <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>Nenhum disparo ainda</Typography>
+              <Typography variant="body2" color="text.secondary">Cada tentativa de envio (sucesso ou erro) aparece aqui.</Typography>
+            </Box>
           ) : (
-            <div className="rounded-xl border border-border bg-card divide-y divide-border">
+            <Stack sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }} divider={<Box sx={{ borderBottom: "1px solid", borderColor: "divider" }} />}>
               {logs.map((l) => (
-                <div key={l.id} className="p-4 flex items-center gap-4">
+                <Stack key={l.id} direction="row" spacing={2} sx={{ alignItems: "center", p: 2 }}>
                   {l.status === "success" ? (
-                    <CheckCircle2 className="size-5 text-success shrink-0" />
+                    <CheckCircle2 size={20} color="var(--mui-palette-success-main, #28C76F)" style={{ flexShrink: 0 }} />
                   ) : l.status === "error" ? (
-                    <XCircle className="size-5 text-critical shrink-0" />
+                    <XCircle size={20} color="var(--mui-palette-error-main, #EA5455)" style={{ flexShrink: 0 }} />
                   ) : (
-                    <MinusCircle className="size-5 text-muted-foreground shrink-0" />
+                    <MinusCircle size={20} color="var(--mui-palette-text-secondary, #6f6b7d)" style={{ flexShrink: 0 }} />
                   )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="font-medium">@{l.ig_username ?? l.ig_user_id ?? "—"}</span>
-                      <span className="text-muted-foreground">·</span>
-                      <span className="text-muted-foreground truncate">{l.flow_automations?.name ?? "Automação removida"}</span>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>@{l.ig_username ?? l.ig_user_id ?? "—"}</Typography>
+                      <Typography variant="body2" color="text.secondary">·</Typography>
+                      <Typography variant="body2" color="text.secondary" noWrap>{l.flow_automations?.name ?? "Automação removida"}</Typography>
                       {l.matched_keyword && (
-                        <span className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">{l.matched_keyword}</span>
+                        <Chip size="small" label={l.matched_keyword} sx={{ fontFamily: "monospace", fontSize: 11 }} />
                       )}
-                    </div>
-                    {l.error_message && <p className="text-xs text-critical mt-0.5 truncate">{l.error_message}</p>}
-                  </div>
-                  <span className="text-xs text-muted-foreground shrink-0">
+                    </Stack>
+                    {l.error_message && <Typography variant="caption" color="error" noWrap sx={{ display: "block", mt: 0.25 }}>{l.error_message}</Typography>}
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
                     {formatDistanceToNow(new Date(l.created_at), { locale: ptBR, addSuffix: true })}
-                  </span>
-                </div>
+                  </Typography>
+                </Stack>
               ))}
-            </div>
+            </Stack>
           )}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -375,79 +376,76 @@ function AutomationCard({
   onToggleStatus: (active: boolean) => void;
 }) {
   const s = stats ?? { sent: 0, delivered: 0, opened: 0, clicked: 0 };
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+
   return (
-    <div className="group relative rounded-xl border border-border bg-card p-5 hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between mb-3">
-        <div className="size-9 rounded-lg bg-brand-soft text-brand grid place-items-center">
-          <MessageSquare className="size-4" />
-        </div>
-        <div className="flex items-center gap-2">
+    <Box sx={{ position: "relative", borderRadius: 3, border: "1px solid", borderColor: "divider", p: 2.5, "&:hover": { boxShadow: 2 } }}>
+      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "flex-start", mb: 1.5 }}>
+        <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: "primary.50", color: "primary.main", display: "grid", placeItems: "center" }}>
+          <MessageSquare size={16} />
+        </Box>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
           <StatusBadge status={a.status} />
           <Switch
+            size="small"
             checked={a.status === "active"}
-            onCheckedChange={onToggleStatus}
+            onChange={(e) => onToggleStatus(e.target.checked)}
             onClick={(e) => e.stopPropagation()}
             title={a.status === "active" ? "Pausar automação" : "Ativar automação"}
           />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-7">
-                <MoreVertical className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem asChild>
-                <Link to="/flow/$id" params={{ id: a.id }} className="flex items-center">
-                  <Pencil className="size-4 mr-2" />
-                  Editar
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onDuplicate}>
-                <Copy className="size-4 mr-2" />
-                Duplicar
-              </DropdownMenuItem>
-              <DropdownMenuItem className="text-critical" onClick={onDelete}>
-                <Trash2 className="size-4 mr-2" />
-                Excluir
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
+          <IconButton size="small" onClick={(e) => setAnchorEl(e.currentTarget)}>
+            <MoreVertical size={16} />
+          </IconButton>
+          <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
+            <LinkMenuItem to="/flow/$id" params={{ id: a.id }} onClick={() => setAnchorEl(null)}>
+              <ListItemIcon><Pencil size={16} /></ListItemIcon>
+              Editar
+            </LinkMenuItem>
+            <MenuItem onClick={() => { setAnchorEl(null); onDuplicate(); }}>
+              <ListItemIcon><Copy size={16} /></ListItemIcon>
+              Duplicar
+            </MenuItem>
+            <MenuItem sx={{ color: "error.main" }} onClick={() => { setAnchorEl(null); onDelete(); }}>
+              <ListItemIcon><Trash2 size={16} color="var(--mui-palette-error-main, #EA5455)" /></ListItemIcon>
+              Excluir
+            </MenuItem>
+          </Menu>
+        </Stack>
+      </Stack>
 
-      <Link to="/flow/$id" params={{ id: a.id }} className="block">
-        <h3 className="font-semibold mb-1 truncate">{a.name}</h3>
-        <p className="text-xs text-muted-foreground mb-4">
+      <LinkBox to="/flow/$id" params={{ id: a.id }} sx={{ display: "block", textDecoration: "none", color: "inherit" }}>
+        <Typography sx={{ fontWeight: 600, mb: 0.5 }} noWrap>{a.name}</Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
           {a.keywords.length > 0
             ? a.keywords.slice(0, 3).map((k) => `"${k}"`).join(", ")
             : a.match_any_comment
               ? "Qualquer comentário"
               : "Sem palavras-chave"}
-        </p>
+        </Typography>
 
-        <div className="grid grid-cols-4 gap-1 text-center py-2.5 rounded-lg bg-muted/30 mb-3">
+        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 0.5, textAlign: "center", py: 1.5, borderRadius: 2, bgcolor: "action.hover", mb: 1.5 }}>
           <StatCell icon={Send} label="Enviado" value={s.sent} />
           <StatCell icon={Inbox} label="Entregue" value={s.delivered} />
           <StatCell icon={Eye} label="Aberto" value={s.opened} />
           <StatCell icon={MousePointerClick} label="Clicado" value={s.clicked} />
-        </div>
+        </Box>
 
-        <div className="flex justify-between text-xs text-muted-foreground pt-3 border-t border-border">
-          <span>{a.dispatch_count} disparos</span>
-          <span>Editado {formatDistanceToNow(new Date(a.updated_at), { locale: ptBR, addSuffix: true })}</span>
-        </div>
-      </Link>
-    </div>
+        <Stack direction="row" sx={{ justifyContent: "space-between", pt: 1.5, borderTop: "1px solid", borderColor: "divider" }}>
+          <Typography variant="caption" color="text.secondary">{a.dispatch_count} disparos</Typography>
+          <Typography variant="caption" color="text.secondary">Editado {formatDistanceToNow(new Date(a.updated_at), { locale: ptBR, addSuffix: true })}</Typography>
+        </Stack>
+      </LinkBox>
+    </Box>
   );
 }
 
 function StatCell({ icon: Icon, label, value }: { icon: typeof Send; label: string; value: number }) {
   return (
-    <div className="flex flex-col items-center gap-0.5">
-      <Icon className="size-3 text-muted-foreground" />
-      <span className="text-sm font-semibold">{value}</span>
-      <span className="text-[9px] text-muted-foreground uppercase tracking-wide">{label}</span>
-    </div>
+    <Stack spacing={0.25} sx={{ alignItems: "center" }}>
+      <Icon size={12} color="var(--mui-palette-text-secondary, #6f6b7d)" />
+      <Typography variant="body2" sx={{ fontWeight: 700 }}>{value}</Typography>
+      <Typography sx={{ fontSize: 9, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>{label}</Typography>
+    </Stack>
   );
 }
 
@@ -471,33 +469,23 @@ function ContactRow({
   }
 
   return (
-    <tr>
-      <td className="px-4 py-3 font-medium align-top">
+    <TableRow>
+      <TableCell sx={{ verticalAlign: "top", fontWeight: 600 }}>
         {contact.username ? (
-          <a
-            href={`https://instagram.com/${contact.username}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-brand hover:underline"
-          >
+          <Box component="a" href={`https://instagram.com/${contact.username}`} target="_blank" rel="noopener noreferrer" sx={{ color: "primary.main", textDecoration: "none", "&:hover": { textDecoration: "underline" } }}>
             @{contact.username}
-          </a>
+          </Box>
         ) : (
-          <span className="text-muted-foreground">@{contact.ig_user_id}</span>
+          <Typography variant="body2" color="text.secondary">@{contact.ig_user_id}</Typography>
         )}
-      </td>
-      <td className="px-4 py-3 align-top">
-        <div className="flex flex-wrap items-center gap-1">
+      </TableCell>
+      <TableCell sx={{ verticalAlign: "top" }}>
+        <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", alignItems: "center" }}>
           {contact.tags.map((t) => (
-            <Badge key={t} variant="secondary" className="gap-1 pr-1 text-xs">
-              {t}
-              <button onClick={() => onRemoveTag(t)} className="rounded-full hover:bg-muted-foreground/20 p-0.5">
-                <X className="size-2.5" />
-              </button>
-            </Badge>
+            <Chip key={t} size="small" label={t} onDelete={() => onRemoveTag(t)} deleteIcon={<X size={12} />} />
           ))}
           {adding ? (
-            <Input
+            <TextField
               autoFocus
               value={value}
               onChange={(e) => setValue(e.target.value)}
@@ -510,49 +498,45 @@ function ContactRow({
               }}
               onBlur={submit}
               placeholder="tag…"
-              className="h-6 w-24 text-xs px-1.5"
+              size="small"
+              sx={{ width: 100, "& .MuiInputBase-input": { fontSize: 12, py: 0.5 } }}
             />
           ) : (
-            <button
-              onClick={() => setAdding(true)}
-              className="grid size-6 place-items-center rounded-full border border-dashed text-muted-foreground hover:bg-muted"
-              title="Adicionar tag"
-            >
-              <Plus className="size-3" />
-            </button>
+            <IconButton size="small" onClick={() => setAdding(true)} title="Adicionar tag" sx={{ border: "1px dashed", borderColor: "divider" }}>
+              <Plus size={12} />
+            </IconButton>
           )}
-        </div>
-      </td>
-      <td className="px-4 py-3 text-muted-foreground align-top">
+        </Stack>
+      </TableCell>
+      <TableCell sx={{ verticalAlign: "top", color: "text.secondary" }}>
         {formatDistanceToNow(new Date(contact.first_seen_at), { locale: ptBR, addSuffix: true })}
-      </td>
-      <td className="px-4 py-3 text-muted-foreground align-top">
+      </TableCell>
+      <TableCell sx={{ verticalAlign: "top", color: "text.secondary" }}>
         {formatDistanceToNow(new Date(contact.last_seen_at), { locale: ptBR, addSuffix: true })}
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }
 
 function StatusBadge({ status }: { status: FlowAutomation["status"] }) {
-  if (status === "active") return <Badge className="bg-success-soft text-success border-transparent hover:bg-success-soft">Ativa</Badge>;
-  if (status === "paused") return <Badge variant="outline">Pausada</Badge>;
-  return <Badge variant="secondary">Rascunho</Badge>;
+  if (status === "active") return <Chip size="small" color="success" label="Ativa" />;
+  if (status === "paused") return <Chip size="small" variant="outlined" label="Pausada" />;
+  return <Chip size="small" label="Rascunho" />;
 }
 
 function EmptyState({ onCreate, loading }: { onCreate: () => void; loading: boolean }) {
   return (
-    <div className="rounded-xl border border-dashed p-16 text-center max-w-xl mx-auto mt-8">
-      <div className="size-12 rounded-xl bg-brand-soft text-brand grid place-items-center mx-auto mb-4">
-        <MessageSquare className="size-6" />
-      </div>
-      <h2 className="text-lg font-semibold mb-1">Nenhuma automação ainda</h2>
-      <p className="text-sm text-muted-foreground mb-6">
+    <Box sx={{ border: "1px dashed", borderColor: "divider", borderRadius: 3, p: 8, textAlign: "center", maxWidth: 480, mx: "auto", mt: 4 }}>
+      <Box sx={{ width: 48, height: 48, borderRadius: 3, bgcolor: "primary.50", color: "primary.main", display: "grid", placeItems: "center", mx: "auto", mb: 2 }}>
+        <MessageSquare size={24} />
+      </Box>
+      <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>Nenhuma automação ainda</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         Crie um fluxo: alguém comenta no seu Reel → recebe DM automática com o link.
-      </p>
-      <Button onClick={onCreate} disabled={loading} className="gap-2">
-        <Plus className="size-4" />
+      </Typography>
+      <Button variant="contained" startIcon={<Plus size={16} />} onClick={onCreate} disabled={loading}>
         Criar primeira automação
       </Button>
-    </div>
+    </Box>
   );
 }

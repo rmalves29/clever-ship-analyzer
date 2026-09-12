@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getFlowAutomation, updateFlowAutomation, getFlowNodeStats } from "@/lib/flow.functions";
@@ -26,10 +26,17 @@ import { ConditionNode } from "@/components/flow/ConditionNode";
 import { RandomizerNode } from "@/components/flow/RandomizerNode";
 import { SmartDelayNode } from "@/components/flow/SmartDelayNode";
 import { AddStepMenu } from "@/components/flow/AddStepMenu";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ArrowLeft, Save } from "lucide-react";
 import { toast } from "sonner";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import IconButton from "@mui/material/IconButton";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import { createLink } from "@tanstack/react-router";
+
+const LinkIconButton = createLink(IconButton);
 
 export const Route = createFileRoute("/flow/$id")({
   component: Editor,
@@ -192,32 +199,34 @@ function Editor() {
   });
 
   if (isLoading) {
-    return <div className="p-8 text-sm text-muted-foreground">Carregando…</div>;
+    return <Typography variant="body2" color="text.secondary" sx={{ p: 4 }}>Carregando…</Typography>;
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
-      <header className="h-16 shrink-0 border-b border-border bg-card px-6 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <Button variant="ghost" size="icon" asChild>
-            <Link to="/flow">
-              <ArrowLeft className="size-4" />
-            </Link>
-          </Button>
-          <Input value={name} onChange={(e) => setName(e.target.value)} className="max-w-md font-semibold" />
-        </div>
-        <div className="flex items-center gap-2">
+    <Box sx={{ display: "flex", height: "100vh", flexDirection: "column", overflow: "hidden" }}>
+      <Stack
+        component="header"
+        direction="row"
+        sx={{ height: 64, flexShrink: 0, borderBottom: "1px solid", borderColor: "divider", bgcolor: "background.paper", px: 3, alignItems: "center", justifyContent: "space-between", gap: 2 }}
+      >
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", flex: 1, minWidth: 0 }}>
+          <LinkIconButton to="/flow">
+            <ArrowLeft size={16} />
+          </LinkIconButton>
+          <TextField value={name} onChange={(e) => setName(e.target.value)} size="small" sx={{ maxWidth: 400, "& .MuiInputBase-input": { fontWeight: 600 } }} />
+        </Stack>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
           <AddStepMenu onAdd={addNode} />
-          <Button variant="ghost" onClick={() => saveMut.mutate("draft" as never)} disabled={saveMut.isPending} className="gap-2">
-            <Save className="size-4" /> Rascunho
+          <Button variant="text" startIcon={<Save size={16} />} onClick={() => saveMut.mutate("draft" as never)} disabled={saveMut.isPending}>
+            Rascunho
           </Button>
-          <Button onClick={() => saveMut.mutate("active" as never)} disabled={saveMut.isPending}>
+          <Button variant="contained" onClick={() => saveMut.mutate("active" as never)} disabled={saveMut.isPending}>
             Publicar
           </Button>
-        </div>
-      </header>
+        </Stack>
+      </Stack>
 
-      <div className="flex-1 bg-canvas">
+      <Box className="bg-canvas" sx={{ flex: 1 }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -232,7 +241,7 @@ function Editor() {
           <Background variant={BackgroundVariant.Dots} gap={16} size={1.2} color="oklch(0.85 0.01 260)" />
           <Controls className="!bg-card !border !border-border !shadow-sm" />
         </ReactFlow>
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

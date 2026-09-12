@@ -2,10 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Activity, RefreshCw, BarChart3, ShoppingBag, CreditCard, ShoppingCart, ArrowUpRight, MapPin } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { lazy, Suspense } from "react";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Grid from "@mui/material/Grid";
+import LinearProgress from "@mui/material/LinearProgress";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import { getLiveViewData } from "@/lib/shopify-live-view.functions";
 import { brl } from "@/lib/crm-mock";
 import { syncShopifyData } from "@/lib/crm-sync.functions";
@@ -45,278 +49,313 @@ function LiveViewPage() {
   const funilTotal = data ? Math.max(data.carrinhosAtivosHoje, 1) : 1;
 
   return (
-    <div className="min-h-screen bg-background pb-8">
-      <div className="mx-auto max-w-[1400px] px-4 py-8 md:px-8">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <span className="gradient-brand flex size-11 items-center justify-center rounded-2xl text-primary-foreground">
-              <Activity className="size-5" />
-            </span>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Live View</h1>
-              <p className="text-sm text-muted-foreground flex items-center gap-2">
-                <span className="size-2 rounded-full bg-success animate-pulse"></span>
-                Dados reais da Shopify (sessões via ShopifyQL, pedidos sincronizados)
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={() => fetchSync({ data: { fullSync: false } })}
-          >
-            <RefreshCw className="size-4" /> Atualizar agora
+    <Box sx={{ minHeight: "100vh", pb: 4 }}>
+      <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
+        <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 4 }}>
+          <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 44,
+                height: 44,
+                borderRadius: 4,
+                background: "linear-gradient(135deg, #7367F0, #9C93F3)",
+                color: "#fff",
+              }}
+            >
+              <Activity size={20} />
+            </Box>
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>Live View</Typography>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                <Box
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    bgcolor: "success.main",
+                    animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+                    "@keyframes pulse": { "0%, 100%": { opacity: 1 }, "50%": { opacity: 0.4 } },
+                  }}
+                />
+                <Typography variant="body2" color="text.secondary">
+                  Dados reais da Shopify (sessões via ShopifyQL, pedidos sincronizados)
+                </Typography>
+              </Stack>
+            </Box>
+          </Stack>
+          <Button variant="outline" size="small" startIcon={<RefreshCw size={16} />} onClick={() => fetchSync({ data: { fullSync: false } })}>
+            Atualizar agora
           </Button>
-        </div>
+        </Stack>
 
         {data?.sessoesIndisponiveis && (
-          <div className="mb-6 rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs text-warning">
-            Sessões, visitantes e o funil de carrinho/checkout estão marcados como <strong>indisponível</strong> —
-            a consulta de sessões (ShopifyQL) não retornou dados dessa vez, provavelmente um erro temporário da API
-            ou de credenciais. Pedidos, vendas, produtos e atividade recente abaixo continuam 100% reais (vêm da
-            base sincronizada, não dependem dessa consulta). Tente atualizar a página em alguns minutos.
-          </div>
+          <Box sx={{ mb: 3, border: "1px solid", borderColor: "warning.main", bgcolor: "warning.50", borderRadius: 2, p: 1.5 }}>
+            <Typography variant="caption" color="warning.main">
+              Sessões, visitantes e o funil de carrinho/checkout estão marcados como <strong>indisponível</strong> —
+              a consulta de sessões (ShopifyQL) não retornou dados dessa vez, provavelmente um erro temporário da API
+              ou de credenciais. Pedidos, vendas, produtos e atividade recente abaixo continuam 100% reais (vêm da
+              base sincronizada, não dependem dessa consulta). Tente atualizar a página em alguns minutos.
+            </Typography>
+          </Box>
         )}
 
-        {/* Top Row Cards */}
-        <div className="grid gap-6 md:grid-cols-4 mb-8">
-          <div className="surface-card p-5 border-l-4 border-success">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Visitantes agora</p>
-            <div className="flex items-end justify-between mt-2">
-              <h3 className="text-3xl font-bold leading-none">
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderLeft: "4px solid", borderLeftColor: "success.main", borderRadius: 3, p: 2.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+                Visitantes agora
+              </Typography>
+              <Typography variant="h4" sx={{ fontWeight: 700, mt: 1, lineHeight: 1 }}>
                 {data?.sessoesIndisponiveis ? "—" : (data?.visitantesAgora ?? (isLoading ? "…" : 0))}
-              </h3>
-            </div>
-            <p className="mt-2 text-[10px] text-muted-foreground">
-              {data?.sessoesIndisponiveis
-                ? "Indisponível — ver aviso acima."
-                : "Estimativa: sessões iniciadas nos últimos 30 min — a Shopify usa um contador ao vivo interno que nenhuma API pública expõe, então esse número pode divergir do admin."}
-            </p>
-          </div>
-          <div className="surface-card p-5 border-l-4 border-brand">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total de vendas (hoje)</p>
-            <div className="flex items-end justify-between mt-2">
-              <h3 className="text-3xl font-bold leading-none">{data ? brl(data.faturamentoHoje) : "R$ 0"}</h3>
-            </div>
-          </div>
-          <div className="surface-card p-5 border-l-4 border-warning">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Sessões (hoje)</p>
-            <div className="flex items-end justify-between mt-2">
-              <h3 className="text-3xl font-bold leading-none">{data?.sessoesIndisponiveis ? "—" : (data?.sessoesHoje ?? 0)}</h3>
-            </div>
-            <p className="mt-2 text-[10px] text-muted-foreground">
-              {data?.sessoesIndisponiveis ? "Indisponível" : `${data?.visitantesUnicosHoje ?? 0} visitantes únicos`}
-            </p>
-          </div>
-          <div className="surface-card p-5 border-l-4 border-info">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pedidos (hoje)</p>
-            <div className="flex items-end justify-between mt-2">
-              <h3 className="text-3xl font-bold leading-none">{data?.pedidosHoje ?? 0}</h3>
-            </div>
-          </div>
-        </div>
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1, fontSize: 10 }}>
+                {data?.sessoesIndisponiveis
+                  ? "Indisponível — ver aviso acima."
+                  : "Estimativa: sessões iniciadas nos últimos 30 min — a Shopify usa um contador ao vivo interno que nenhuma API pública expõe, então esse número pode divergir do admin."}
+              </Typography>
+            </Box>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderLeft: "4px solid", borderLeftColor: "primary.main", borderRadius: 3, p: 2.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+                Total de vendas (hoje)
+              </Typography>
+              <Typography variant="h4" sx={{ fontWeight: 700, mt: 1, lineHeight: 1 }}>{data ? brl(data.faturamentoHoje) : "R$ 0"}</Typography>
+            </Box>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderLeft: "4px solid", borderLeftColor: "warning.main", borderRadius: 3, p: 2.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+                Sessões (hoje)
+              </Typography>
+              <Typography variant="h4" sx={{ fontWeight: 700, mt: 1, lineHeight: 1 }}>{data?.sessoesIndisponiveis ? "—" : (data?.sessoesHoje ?? 0)}</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1, fontSize: 10 }}>
+                {data?.sessoesIndisponiveis ? "Indisponível" : `${data?.visitantesUnicosHoje ?? 0} visitantes únicos`}
+              </Typography>
+            </Box>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderLeft: "4px solid", borderLeftColor: "info.main", borderRadius: 3, p: 2.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+                Pedidos (hoje)
+              </Typography>
+              <Typography variant="h4" sx={{ fontWeight: 700, mt: 1, lineHeight: 1 }}>{data?.pedidosHoje ?? 0}</Typography>
+            </Box>
+          </Grid>
+        </Grid>
 
-        <div className="grid gap-6 lg:grid-cols-3 mb-8">
-          {/* Main Map Area */}
-          <div className="lg:col-span-2 surface-card p-0 overflow-hidden relative min-h-[500px] flex flex-col bg-muted/5 border-none">
-            <div className="absolute top-6 left-6 z-20">
-              <Badge variant="outline" className="bg-background/80 backdrop-blur-sm border-border/50 text-xs px-3 py-1">
-                Sessões e pedidos reais de hoje
-              </Badge>
-            </div>
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid size={{ xs: 12, lg: 8 }}>
+            <Box sx={{ position: "relative", minHeight: 500, borderRadius: 3, overflow: "hidden", display: "flex", flexDirection: "column", bgcolor: "action.hover" }}>
+              <Box sx={{ position: "absolute", top: 24, left: 24, zIndex: 2 }}>
+                <Chip
+                  variant="outlined"
+                  label="Sessões e pedidos reais de hoje"
+                  sx={{ bgcolor: "rgba(255,255,255,0.85)", backdropFilter: "blur(4px)", fontSize: 12 }}
+                />
+              </Box>
 
-            <div className="flex-1 w-full h-full min-h-[500px] flex items-center justify-center">
-              <Suspense
-                fallback={
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <RefreshCw className="size-8 animate-spin" />
-                    <p className="text-sm">Iniciando globo 3D...</p>
-                  </div>
-                }
-              >
-                <LiveGlobe markers={data?.marcadoresGlobo ?? []} />
-              </Suspense>
-            </div>
+              <Box sx={{ flex: 1, width: "100%", minHeight: 500, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Suspense
+                  fallback={
+                    <Stack spacing={1} sx={{ alignItems: "center", color: "text.secondary" }}>
+                      <RefreshCw size={32} className="animate-spin" />
+                      <Typography variant="body2">Iniciando globo 3D...</Typography>
+                    </Stack>
+                  }
+                >
+                  <LiveGlobe markers={data?.marcadoresGlobo ?? []} />
+                </Suspense>
+              </Box>
 
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex gap-4">
-              <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm px-3 py-1 rounded-full border border-border/50 text-[10px] font-medium">
-                <span className="size-2 rounded-full" style={{ backgroundColor: '#ef4444' }}></span> Sessões
-              </div>
-              <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm px-3 py-1 rounded-full border border-border/50 text-[10px] font-medium">
-                <span className="size-2 rounded-full" style={{ backgroundColor: '#9333ea' }}></span> Pedidos
-              </div>
-            </div>
-          </div>
+              <Stack direction="row" spacing={2} sx={{ position: "absolute", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 2 }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center", bgcolor: "rgba(255,255,255,0.85)", backdropFilter: "blur(4px)", px: 1.5, py: 0.5, borderRadius: 999, border: "1px solid", borderColor: "divider" }}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "#ef4444" }} />
+                  <Typography variant="caption" sx={{ fontWeight: 500, fontSize: 10 }}>Sessões</Typography>
+                </Stack>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center", bgcolor: "rgba(255,255,255,0.85)", backdropFilter: "blur(4px)", px: 1.5, py: 0.5, borderRadius: 999, border: "1px solid", borderColor: "divider" }}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "#9333ea" }} />
+                  <Typography variant="caption" sx={{ fontWeight: 500, fontSize: 10 }}>Pedidos</Typography>
+                </Stack>
+              </Stack>
+            </Box>
+          </Grid>
 
-          {/* Side Info Panel */}
-          <div className="flex flex-col gap-6">
-            {/* Customer Behavior Funnel */}
-            <div className="surface-card p-6">
-              <h4 className="text-sm font-bold mb-6">Comportamento do cliente (hoje)</h4>
-              {data?.sessoesIndisponiveis ? (
-                <p className="text-xs text-muted-foreground">Indisponível — ver aviso no topo da página.</p>
-              ) : (
-                <div className="space-y-6">
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-xs text-muted-foreground">Carrinhos com adição</span>
-                      <span className="text-sm font-bold">{data?.carrinhosAtivosHoje ?? 0}</span>
-                    </div>
-                    <Progress value={100} className="h-1.5 bg-muted" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-xs text-muted-foreground">Chegaram no checkout</span>
-                      <span className="text-sm font-bold">{data?.noCheckoutHoje ?? 0}</span>
-                    </div>
-                    <Progress value={data ? Math.min(100, (data.noCheckoutHoje / funilTotal) * 100) : 0} className="h-1.5 bg-muted" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-xs text-muted-foreground">Comprado</span>
-                      <span className="text-sm font-bold">{data?.compradoHoje ?? 0}</span>
-                    </div>
-                    <Progress value={data ? Math.min(100, (data.compradoHoje / funilTotal) * 100) : 0} className="h-1.5 bg-muted" />
-                  </div>
-                </div>
-              )}
-            </div>
+          <Grid size={{ xs: 12, lg: 4 }}>
+            <Stack spacing={3}>
+              <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, mb: 3 }}>Comportamento do cliente (hoje)</Typography>
+                {data?.sessoesIndisponiveis ? (
+                  <Typography variant="caption" color="text.secondary">Indisponível — ver aviso no topo da página.</Typography>
+                ) : (
+                  <Stack spacing={3}>
+                    <Box>
+                      <Stack direction="row" sx={{ justifyContent: "space-between", mb: 1 }}>
+                        <Typography variant="caption" color="text.secondary">Carrinhos com adição</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{data?.carrinhosAtivosHoje ?? 0}</Typography>
+                      </Stack>
+                      <LinearProgress variant="determinate" value={100} sx={{ height: 6, borderRadius: 999 }} />
+                    </Box>
+                    <Box>
+                      <Stack direction="row" sx={{ justifyContent: "space-between", mb: 1 }}>
+                        <Typography variant="caption" color="text.secondary">Chegaram no checkout</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{data?.noCheckoutHoje ?? 0}</Typography>
+                      </Stack>
+                      <LinearProgress variant="determinate" value={data ? Math.min(100, (data.noCheckoutHoje / funilTotal) * 100) : 0} sx={{ height: 6, borderRadius: 999 }} />
+                    </Box>
+                    <Box>
+                      <Stack direction="row" sx={{ justifyContent: "space-between", mb: 1 }}>
+                        <Typography variant="caption" color="text.secondary">Comprado</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{data?.compradoHoje ?? 0}</Typography>
+                      </Stack>
+                      <LinearProgress variant="determinate" value={data ? Math.min(100, (data.compradoHoje / funilTotal) * 100) : 0} sx={{ height: 6, borderRadius: 999 }} />
+                    </Box>
+                  </Stack>
+                )}
+              </Box>
 
-            {/* New vs Recurring */}
-            <div className="surface-card p-6">
-              <h4 className="text-sm font-bold mb-4">Clientes novos x recorrentes (hoje)</h4>
-              <div className="flex gap-6 mb-4">
-                <div className="flex items-center gap-2">
-                  <span className="size-2 rounded-full bg-info"></span>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-muted-foreground">Novo</span>
-                    <span className="text-sm font-bold">{data?.clientesNovosHoje ?? 0}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="size-2 rounded-full bg-brand"></span>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-muted-foreground">Recorrente</span>
-                    <span className="text-sm font-bold">{data?.clientesRecorrentesHoje ?? 0}</span>
-                  </div>
-                </div>
-              </div>
-              {data && data.clientesNovosHoje + data.clientesRecorrentesHoje > 0 && (
-                <div className="w-full h-8 flex rounded-sm overflow-hidden mb-2">
-                  <div
-                    className="h-full bg-info"
-                    style={{ width: `${(data.clientesNovosHoje / (data.clientesNovosHoje + data.clientesRecorrentesHoje)) * 100}%` }}
-                  ></div>
-                  <div
-                    className="h-full bg-brand"
-                    style={{ width: `${(data.clientesRecorrentesHoje / (data.clientesNovosHoje + data.clientesRecorrentesHoje)) * 100}%` }}
-                  ></div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+              <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, mb: 2 }}>Clientes novos x recorrentes (hoje)</Typography>
+                <Stack direction="row" spacing={3} sx={{ mb: 2 }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "info.main" }} />
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>Novo</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{data?.clientesNovosHoje ?? 0}</Typography>
+                    </Box>
+                  </Stack>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "primary.main" }} />
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontSize: 10 }}>Recorrente</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{data?.clientesRecorrentesHoje ?? 0}</Typography>
+                    </Box>
+                  </Stack>
+                </Stack>
+                {data && data.clientesNovosHoje + data.clientesRecorrentesHoje > 0 && (
+                  <Stack direction="row" sx={{ width: "100%", height: 32, borderRadius: 1, overflow: "hidden" }}>
+                    <Box sx={{ height: "100%", bgcolor: "info.main", width: `${(data.clientesNovosHoje / (data.clientesNovosHoje + data.clientesRecorrentesHoje)) * 100}%` }} />
+                    <Box sx={{ height: "100%", bgcolor: "primary.main", width: `${(data.clientesRecorrentesHoje / (data.clientesNovosHoje + data.clientesRecorrentesHoje)) * 100}%` }} />
+                  </Stack>
+                )}
+              </Box>
+            </Stack>
+          </Grid>
+        </Grid>
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {/* Recent Activity */}
-          <div className="surface-card p-6 flex flex-col">
-            <h4 className="font-bold mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Activity className="size-4 text-success" /> Atividade Recente
-              </div>
-              <ArrowUpRight className="size-4 text-muted-foreground" />
-            </h4>
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-              {(data?.atividadeRecente ?? []).length === 0 && (
-                <p className="text-xs text-muted-foreground">Nenhuma atividade ainda hoje.</p>
-              )}
-              {(data?.atividadeRecente ?? []).map((a, i) => (
-                <div key={i} className="flex items-start gap-3 text-sm pb-3 border-b border-border/40">
-                  <div
-                    className={`size-8 rounded-full flex items-center justify-center shrink-0 ${
-                      a.tipo === "pedido" ? "bg-success/10" : "bg-warning/10"
-                    }`}
-                  >
-                    {a.tipo === "pedido" ? (
-                      <ShoppingBag className="size-4 text-success" />
-                    ) : (
-                      <ShoppingCart className="size-4 text-warning" />
-                    )}
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="font-medium text-xs">
-                      {a.tipo === "pedido" ? "Novo pedido" : "Carrinho abandonado"}
-                      {a.cidade ? ` de ${a.cidade}` : ""}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground mt-0.5">
-                      {relativeTime(a.createdAt)}
-                      {a.valor != null ? ` · ${brl(a.valor)}` : ""}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        <Grid container spacing={3}>
+          <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3, display: "flex", flexDirection: "column", height: "100%" }}>
+              <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <Activity size={16} color="var(--mui-palette-success-main, #28C76F)" />
+                  <Typography sx={{ fontWeight: 700 }}>Atividade Recente</Typography>
+                </Stack>
+                <ArrowUpRight size={16} color="var(--mui-palette-text-secondary)" />
+              </Stack>
+              <Stack spacing={2} sx={{ flex: 1, overflowY: "auto", pr: 1 }}>
+                {(data?.atividadeRecente ?? []).length === 0 && (
+                  <Typography variant="caption" color="text.secondary">Nenhuma atividade ainda hoje.</Typography>
+                )}
+                {(data?.atividadeRecente ?? []).map((a, i) => (
+                  <Stack key={i} direction="row" spacing={1.5} sx={{ alignItems: "flex-start", pb: 1.5, borderBottom: "1px solid", borderColor: "divider" }}>
+                    <Box
+                      sx={{
+                        width: 32,
+                        height: 32,
+                        flexShrink: 0,
+                        borderRadius: "50%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        bgcolor: a.tipo === "pedido" ? "success.50" : "warning.50",
+                      }}
+                    >
+                      {a.tipo === "pedido" ? <ShoppingBag size={16} color="var(--mui-palette-success-main, #28C76F)" /> : <ShoppingCart size={16} color="var(--mui-palette-warning-main, #FF9F43)" />}
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" sx={{ fontWeight: 500, display: "block" }}>
+                        {a.tipo === "pedido" ? "Novo pedido" : "Carrinho abandonado"}
+                        {a.cidade ? ` de ${a.cidade}` : ""}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+                        {relativeTime(a.createdAt)}
+                        {a.valor != null ? ` · ${brl(a.valor)}` : ""}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                ))}
+              </Stack>
+            </Box>
+          </Grid>
 
-          {/* Sessions by Location */}
-          <div className="surface-card p-6">
-            <h4 className="font-bold mb-6 flex items-center gap-2">
-              <MapPin className="size-4 text-brand" /> Sessões por local (hoje)
-            </h4>
-            <div className="space-y-5">
-              {data?.sessoesIndisponiveis && (
-                <p className="text-xs text-muted-foreground">Indisponível — ver aviso no topo da página.</p>
-              )}
-              {!data?.sessoesIndisponiveis && (data?.sessoesPorLocal ?? []).length === 0 && (
-                <p className="text-xs text-muted-foreground">Sem sessões registradas hoje ainda.</p>
-              )}
-              {(data?.sessoesPorLocal ?? []).slice(0, 5).map((s, i) => {
-                const max = data?.sessoesPorLocal[0]?.sessoes || 1;
-                return (
-                  <div key={i} className="space-y-2">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-muted-foreground">
-                        Brazil · {s.regiao} · {s.cidade}
-                      </span>
-                      <span className="font-bold">{s.sessoes}</span>
-                    </div>
-                    <Progress value={(s.sessoes / max) * 100} className="h-1.5 bg-muted" />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 3 }}>
+                <MapPin size={16} color="var(--mui-palette-primary-main, #7367F0)" />
+                <Typography sx={{ fontWeight: 700 }}>Sessões por local (hoje)</Typography>
+              </Stack>
+              <Stack spacing={2.5}>
+                {data?.sessoesIndisponiveis && (
+                  <Typography variant="caption" color="text.secondary">Indisponível — ver aviso no topo da página.</Typography>
+                )}
+                {!data?.sessoesIndisponiveis && (data?.sessoesPorLocal ?? []).length === 0 && (
+                  <Typography variant="caption" color="text.secondary">Sem sessões registradas hoje ainda.</Typography>
+                )}
+                {(data?.sessoesPorLocal ?? []).slice(0, 5).map((s, i) => {
+                  const max = data?.sessoesPorLocal[0]?.sessoes || 1;
+                  return (
+                    <Box key={i}>
+                      <Stack direction="row" sx={{ justifyContent: "space-between", mb: 1 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          Brazil · {s.regiao} · {s.cidade}
+                        </Typography>
+                        <Typography variant="caption" sx={{ fontWeight: 700 }}>{s.sessoes}</Typography>
+                      </Stack>
+                      <LinearProgress variant="determinate" value={(s.sessoes / max) * 100} sx={{ height: 6, borderRadius: 999 }} />
+                    </Box>
+                  );
+                })}
+              </Stack>
+            </Box>
+          </Grid>
 
-          {/* Top Products */}
-          <div className="surface-card p-6">
-            <h4 className="font-bold mb-4 flex items-center gap-2">
-              <BarChart3 className="size-4 text-brand" /> Total de vendas por produto (hoje)
-            </h4>
-            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
-              {(data?.topProdutosHoje ?? []).length === 0 && (
-                <p className="text-xs text-muted-foreground">Nenhuma venda ainda hoje.</p>
-              )}
-              {(data?.topProdutosHoje ?? []).map((item, i) => (
-                <div key={i} className="flex items-center justify-between text-[11px] pb-2 border-b border-border/40 last:border-0">
-                  <div className="flex items-center gap-2 truncate max-w-[180px]">
-                    <div className="size-8 rounded bg-muted flex items-center justify-center shrink-0">
-                      <ShoppingBag className="size-3 text-muted-foreground" />
-                    </div>
-                    <span className="truncate">{item.nome}</span>
-                  </div>
-                  <span className="font-bold shrink-0">{brl(item.total)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+          <Grid size={{ xs: 12, lg: 4 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 2 }}>
+                <BarChart3 size={16} color="var(--mui-palette-primary-main, #7367F0)" />
+                <Typography sx={{ fontWeight: 700 }}>Total de vendas por produto (hoje)</Typography>
+              </Stack>
+              <Stack spacing={2} sx={{ maxHeight: 300, overflowY: "auto", pr: 1 }}>
+                {(data?.topProdutosHoje ?? []).length === 0 && (
+                  <Typography variant="caption" color="text.secondary">Nenhuma venda ainda hoje.</Typography>
+                )}
+                {(data?.topProdutosHoje ?? []).map((item, i) => (
+                  <Stack key={i} direction="row" sx={{ justifyContent: "space-between", alignItems: "center", pb: 1, borderBottom: "1px solid", borderColor: "divider", "&:last-of-type": { border: "none", pb: 0 } }}>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: "center", minWidth: 0, maxWidth: 180 }}>
+                      <Box sx={{ width: 32, height: 32, flexShrink: 0, borderRadius: 1, bgcolor: "action.hover", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <ShoppingBag size={14} color="var(--mui-palette-text-secondary)" />
+                      </Box>
+                      <Typography variant="caption" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.nome}</Typography>
+                    </Stack>
+                    <Typography variant="caption" sx={{ fontWeight: 700, flexShrink: 0 }}>{brl(item.total)}</Typography>
+                  </Stack>
+                ))}
+              </Stack>
+            </Box>
+          </Grid>
+        </Grid>
 
-        <div className="mt-4 flex items-center gap-2 text-[10px] text-muted-foreground">
-          <CreditCard className="size-3" />
-          Sessões, funil e local via ShopifyQL (Shopify) · pedidos, produtos e novo/recorrente via base sincronizada.
-        </div>
-      </div>
-    </div>
+        <Stack direction="row" spacing={1} sx={{ mt: 2, alignItems: "center", color: "text.secondary" }}>
+          <CreditCard size={12} />
+          <Typography variant="caption" sx={{ fontSize: 10 }}>
+            Sessões, funil e local via ShopifyQL (Shopify) · pedidos, produtos e novo/recorrente via base sincronizada.
+          </Typography>
+        </Stack>
+      </Box>
+    </Box>
   );
 }

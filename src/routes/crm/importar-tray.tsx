@@ -11,9 +11,15 @@ import {
   Loader2,
   Upload,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Grid from "@mui/material/Grid";
+import IconButton from "@mui/material/IconButton";
+import LinearProgress from "@mui/material/LinearProgress";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import {
   buildTrayImportDataset,
   decodeTrayCsvBytes,
@@ -184,121 +190,152 @@ function TrayImportPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-6xl px-4 py-8 md:px-8">
-        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
+    <Box sx={{ minHeight: "100vh" }}>
+      <Box sx={{ maxWidth: 1152, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
+        <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", mb: 4 }}>
+          <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
             <Link to="/crm" search={{ tab: "contatos" }}>
-              <Button variant="outline" size="icon">
-                <ArrowLeft className="size-4" />
-              </Button>
+              <IconButton sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
+                <ArrowLeft size={16} />
+              </IconButton>
             </Link>
-            <span className="gradient-brand flex size-11 items-center justify-center rounded-2xl text-primary-foreground">
-              <Database className="size-5" />
-            </span>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Importar histórico da Tray</h1>
-              <p className="text-sm text-muted-foreground">
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 44,
+                height: 44,
+                borderRadius: 4,
+                background: "linear-gradient(135deg, #7367F0, #9C93F3)",
+                color: "#fff",
+              }}
+            >
+              <Database size={20} />
+            </Box>
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>Importar histórico da Tray</Typography>
+              <Typography variant="body2" color="text.secondary">
                 Pedidos + produtos vendidos são unidos pelo código do pedido antes de entrar no CRM.
-              </p>
-            </div>
-          </div>
-          <Badge variant="outline" className="px-3 py-1.5">
-            Origem preservada: TRAY
-          </Badge>
-        </div>
+              </Typography>
+            </Box>
+          </Stack>
+          <Chip variant="outlined" label="Origem preservada: TRAY" sx={{ px: 1 }} />
+        </Stack>
 
-        <div className="mb-6 grid gap-4 md:grid-cols-3">
-          <div className="surface-card p-5">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Já no CRM</p>
-            <p className="mt-2 text-3xl font-bold">{formatNumber(currentStatus?.trayOrders ?? 0)}</p>
-            <p className="mt-1 text-xs text-muted-foreground">pedidos históricos da Tray</p>
-          </div>
-          <div className="surface-card p-5">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Itens históricos</p>
-            <p className="mt-2 text-3xl font-bold">{formatNumber(currentStatus?.trayItems ?? 0)}</p>
-            <p className="mt-1 text-xs text-muted-foreground">linhas de produtos importadas</p>
-          </div>
-          <div className="surface-card p-5">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Vendas válidas</p>
-            <p className="mt-2 text-3xl font-bold">{formatNumber(currentStatus?.trayPaidOrders ?? 0)}</p>
-            <p className="mt-1 text-xs text-muted-foreground">pedidos Tray considerados no RFM</p>
-          </div>
-        </div>
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>Já no CRM</Typography>
+              <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>{formatNumber(currentStatus?.trayOrders ?? 0)}</Typography>
+              <Typography variant="caption" color="text.secondary">pedidos históricos da Tray</Typography>
+            </Box>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>Itens históricos</Typography>
+              <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>{formatNumber(currentStatus?.trayItems ?? 0)}</Typography>
+              <Typography variant="caption" color="text.secondary">linhas de produtos importadas</Typography>
+            </Box>
+          </Grid>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>Vendas válidas</Typography>
+              <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>{formatNumber(currentStatus?.trayPaidOrders ?? 0)}</Typography>
+              <Typography variant="caption" color="text.secondary">pedidos Tray considerados no RFM</Typography>
+            </Box>
+          </Grid>
+        </Grid>
 
-        <div className="surface-card p-6">
-          <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-4 text-sm">
-            <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-success" />
-            <div>
-              <p className="font-semibold">A importação acontece somente no banco interno do CRM.</p>
-              <p className="mt-1 text-muted-foreground">
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
+          <Stack direction="row" spacing={1.5} sx={{ border: "1px solid", borderColor: "divider", bgcolor: "action.hover", borderRadius: 3, p: 2 }}>
+            <CheckCircle2 size={20} style={{ marginTop: 2, flexShrink: 0 }} color="var(--mui-palette-success-main, #28C76F)" />
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>A importação acontece somente no banco interno do CRM.</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                 Nenhum pedido é criado na Shopify. CPF, CNPJ, endereço completo e observações dos pedidos também não são importados.
-              </p>
-            </div>
-          </div>
+              </Typography>
+            </Box>
+          </Stack>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <label className="rounded-xl border border-dashed border-border p-5">
-              <span className="flex items-center gap-2 font-semibold">
-                <FileSpreadsheet className="size-4" /> Arquivo de Pedidos
-              </span>
-              <span className="mt-1 block text-xs text-muted-foreground">CSV exportado pela Tray com cliente, data, valor e status.</span>
-              <input
-                className="mt-4 block w-full text-sm"
-                type="file"
-                accept=".csv,text/csv"
-                onChange={(event) => {
-                  setOrdersFile(event.target.files?.[0] ?? null);
-                  setDataset(null);
-                }}
-              />
-              {ordersFile && <p className="mt-2 text-xs font-medium text-brand">{ordersFile.name}</p>}
-            </label>
+          <Grid container spacing={2} sx={{ mt: 0.5 }}>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Box component="label" sx={{ display: "block", border: "1px dashed", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <FileSpreadsheet size={16} />
+                  <Typography sx={{ fontWeight: 600 }}>Arquivo de Pedidos</Typography>
+                </Stack>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                  CSV exportado pela Tray com cliente, data, valor e status.
+                </Typography>
+                <Box
+                  component="input"
+                  type="file"
+                  accept=".csv,text/csv"
+                  sx={{ mt: 2, display: "block", width: "100%", fontSize: 14 }}
+                  onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+                    setOrdersFile(event.target.files?.[0] ?? null);
+                    setDataset(null);
+                  }}
+                />
+                {ordersFile && <Typography variant="caption" sx={{ display: "block", mt: 1, fontWeight: 600, color: "primary.main" }}>{ordersFile.name}</Typography>}
+              </Box>
+            </Grid>
 
-            <label className="rounded-xl border border-dashed border-border p-5">
-              <span className="flex items-center gap-2 font-semibold">
-                <FileSpreadsheet className="size-4" /> Arquivo de Produtos vendidos
-              </span>
-              <span className="mt-1 block text-xs text-muted-foreground">CSV com Código pedido, Código produto, referência, quantidade e preço.</span>
-              <input
-                className="mt-4 block w-full text-sm"
-                type="file"
-                accept=".csv,text/csv"
-                onChange={(event) => {
-                  setItemsFile(event.target.files?.[0] ?? null);
-                  setDataset(null);
-                }}
-              />
-              {itemsFile && <p className="mt-2 text-xs font-medium text-brand">{itemsFile.name}</p>}
-            </label>
-          </div>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Box component="label" sx={{ display: "block", border: "1px dashed", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <FileSpreadsheet size={16} />
+                  <Typography sx={{ fontWeight: 600 }}>Arquivo de Produtos vendidos</Typography>
+                </Stack>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                  CSV com Código pedido, Código produto, referência, quantidade e preço.
+                </Typography>
+                <Box
+                  component="input"
+                  type="file"
+                  accept=".csv,text/csv"
+                  sx={{ mt: 2, display: "block", width: "100%", fontSize: 14 }}
+                  onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+                    setItemsFile(event.target.files?.[0] ?? null);
+                    setDataset(null);
+                  }}
+                />
+                {itemsFile && <Typography variant="caption" sx={{ display: "block", mt: 1, fontWeight: 600, color: "primary.main" }}>{itemsFile.name}</Typography>}
+              </Box>
+            </Grid>
+          </Grid>
 
-          <div className="mt-5 flex justify-end">
-            <Button onClick={analyze} disabled={!ordersFile || !itemsFile || isAnalyzing || isImporting} className="gap-2">
-              {isAnalyzing ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+          <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 2.5 }}>
+            <Button
+              variant="contained"
+              startIcon={isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+              onClick={analyze}
+              disabled={!ordersFile || !itemsFile || isAnalyzing || isImporting}
+            >
               {isAnalyzing ? "Conferindo arquivos..." : "Analisar antes de importar"}
             </Button>
-          </div>
-        </div>
+          </Box>
+        </Box>
 
         {dataset && (
-          <div className="mt-6 space-y-6">
-            <div className="surface-card p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-bold">Conferência concluída</h2>
-                  <p className="text-sm text-muted-foreground">
+          <Stack spacing={3} sx={{ mt: 3 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
+              <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>Conferência concluída</Typography>
+                  <Typography variant="body2" color="text.secondary">
                     Período: {formatDate(dataset.stats.periodStart)} até {formatDate(dataset.stats.periodEnd)}
-                  </p>
-                </div>
+                  </Typography>
+                </Box>
                 {hasBlockingWarnings ? (
-                  <Badge variant="destructive">Divergências encontradas</Badge>
+                  <Chip color="error" label="Divergências encontradas" />
                 ) : (
-                  <Badge className="bg-success-soft text-success hover:bg-success-soft">Arquivos consistentes</Badge>
+                  <Chip color="success" label="Arquivos consistentes" />
                 )}
-              </div>
+              </Stack>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
                 {[
                   ["Pedidos", dataset.stats.orderCount],
                   ["Clientes", dataset.stats.customerCount],
@@ -309,79 +346,81 @@ function TrayImportPage() {
                   ["Pendentes", dataset.stats.pendingOrderCount],
                   ["Diferenças de subtotal", dataset.stats.subtotalMismatchCount],
                 ].map(([label, value]) => (
-                  <div key={String(label)} className="rounded-xl border border-border p-4">
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className="mt-1 text-xl font-bold">{formatNumber(Number(value))}</p>
-                  </div>
+                  <Grid key={String(label)} size={{ xs: 6, sm: 3 }}>
+                    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+                      <Typography variant="caption" color="text.secondary">{label}</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.5 }}>{formatNumber(Number(value))}</Typography>
+                    </Box>
+                  </Grid>
                 ))}
-              </div>
+              </Grid>
 
               {dataset.warnings.length > 0 && (
-                <div className="mt-5 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
-                  <div className="flex gap-2">
-                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
-                    <div className="space-y-1 text-sm">
-                      {dataset.warnings.map((warning) => (
-                        <p key={warning}>{warning}</p>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                <Stack direction="row" spacing={1} sx={{ mt: 2.5, border: "1px solid", borderColor: "error.main", bgcolor: "error.50", borderRadius: 3, p: 2 }}>
+                  <AlertTriangle size={16} style={{ marginTop: 2, flexShrink: 0 }} color="var(--mui-palette-error-main, #EA5455)" />
+                  <Stack spacing={0.5}>
+                    {dataset.warnings.map((warning) => (
+                      <Typography key={warning} variant="body2">{warning}</Typography>
+                    ))}
+                  </Stack>
+                </Stack>
               )}
 
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-5">
-                <p className="max-w-2xl text-xs text-muted-foreground">
+              <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", mt: 3, borderTop: "1px solid", borderColor: "divider", pt: 2.5 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 480 }}>
                   A importação é idempotente: executar novamente os mesmos arquivos atualiza os registros TRAY existentes em vez de duplicá-los. O RFM é recalculado somente ao final.
-                </p>
-                <Button onClick={importHistory} disabled={isImporting || hasBlockingWarnings} className="gap-2 bg-brand text-white hover:bg-brand/90">
-                  {isImporting ? <Loader2 className="size-4 animate-spin" /> : <Database className="size-4" />}
+                </Typography>
+                <Button
+                  variant="contained"
+                  startIcon={isImporting ? <Loader2 size={16} className="animate-spin" /> : <Database size={16} />}
+                  onClick={importHistory}
+                  disabled={isImporting || hasBlockingWarnings}
+                >
                   {isImporting ? "Importando histórico..." : "Importar para o CRM"}
                 </Button>
-              </div>
+              </Stack>
 
               {isImporting && (
-                <div className="mt-5">
-                  <div className="mb-2 flex justify-between text-xs text-muted-foreground">
-                    <span>Importando clientes, pedidos e produtos</span>
-                    <span>{progress}%</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full bg-brand transition-all duration-300" style={{ width: `${progress}%` }} />
-                  </div>
-                </div>
+                <Box sx={{ mt: 2.5 }}>
+                  <Stack direction="row" sx={{ justifyContent: "space-between", mb: 1 }}>
+                    <Typography variant="caption" color="text.secondary">Importando clientes, pedidos e produtos</Typography>
+                    <Typography variant="caption" color="text.secondary">{progress}%</Typography>
+                  </Stack>
+                  <LinearProgress variant="determinate" value={progress} sx={{ height: 8, borderRadius: 999 }} />
+                </Box>
               )}
-            </div>
+            </Box>
 
             {result && (
-              <div className="surface-card border border-success/30 p-6">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-success" />
-                  <div className="flex-1">
-                    <h2 className="text-lg font-bold">Histórico Tray incorporado ao CRM</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
+              <Box sx={{ border: "1px solid", borderColor: "success.main", borderRadius: 3, p: 3 }}>
+                <Stack direction="row" spacing={1.5}>
+                  <CheckCircle2 size={24} style={{ marginTop: 2, flexShrink: 0 }} color="var(--mui-palette-success-main, #28C76F)" />
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700 }}>Histórico Tray incorporado ao CRM</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                       {formatNumber(result.trayOrders)} pedidos e {formatNumber(result.trayItems)} itens históricos estão disponíveis para RFM, recorrência, ticket e segmentação.
-                    </p>
-                    <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                      <Badge variant="outline">Novos pedidos: {formatNumber(result.newOrders)}</Badge>
-                      <Badge variant="outline">Reimportados: {formatNumber(result.reimportedOrders)}</Badge>
-                      <Badge variant="outline">Duplicidades evitadas: {formatNumber(result.skippedLikelyDuplicates)}</Badge>
-                      <Badge variant="outline">RFM atualizado: {formatNumber(result.rfm.updatedCustomers)} clientes</Badge>
-                    </div>
-                    <div className="mt-5 flex gap-2">
+                    </Typography>
+                    <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", mt: 2 }}>
+                      <Chip variant="outlined" label={`Novos pedidos: ${formatNumber(result.newOrders)}`} />
+                      <Chip variant="outlined" label={`Reimportados: ${formatNumber(result.reimportedOrders)}`} />
+                      <Chip variant="outlined" label={`Duplicidades evitadas: ${formatNumber(result.skippedLikelyDuplicates)}`} />
+                      <Chip variant="outlined" label={`RFM atualizado: ${formatNumber(result.rfm.updatedCustomers)} clientes`} />
+                    </Stack>
+                    <Stack direction="row" spacing={1} sx={{ mt: 2.5 }}>
                       <Link to="/crm" search={{ tab: "rfm" }}>
-                        <Button className="gap-2">Ver Análise RFM</Button>
+                        <Button variant="contained">Ver Análise RFM</Button>
                       </Link>
                       <Link to="/crm" search={{ tab: "contatos" }}>
                         <Button variant="outline">Ver contatos</Button>
                       </Link>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                    </Stack>
+                  </Box>
+                </Stack>
+              </Box>
             )}
-          </div>
+          </Stack>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

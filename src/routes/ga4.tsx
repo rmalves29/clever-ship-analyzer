@@ -17,35 +17,29 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import { LineChart } from "@mui/x-charts/LineChart";
 import { toast } from "sonner";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Alert from "@mui/material/Alert";
+import AlertTitle from "@mui/material/AlertTitle";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
+import Grid from "@mui/material/Grid";
+import Link from "@mui/material/Link";
+import Stack from "@mui/material/Stack";
+import Tab from "@mui/material/Tab";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Tabs from "@mui/material/Tabs";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import {
   getGa4HistoricalReport,
   getGa4RealtimeReport,
@@ -73,13 +67,11 @@ export const Route = createFileRoute("/ga4")({
   }),
 });
 
-type MetricRow = Record<string, string | number>;
-
-const chartConfig = {
-  sessions: { label: "Sessões", color: "hsl(var(--primary))" },
-  screenPageViews: { label: "Visualizações", color: "hsl(var(--chart-2))" },
-  activeUsers: { label: "Usuários ativos", color: "hsl(var(--chart-3))" },
-} satisfies ChartConfig;
+const TREND_SERIES = [
+  { key: "sessions" as const, label: "Sessões", color: "#7367F0" },
+  { key: "screenPageViews" as const, label: "Visualizações", color: "#00CFE8" },
+  { key: "activeUsers" as const, label: "Usuários ativos", color: "#28C76F" },
+];
 
 function isoDaysAgo(days: number, endDate = todayInSaoPaulo()) {
   const date = new Date(`${endDate}T12:00:00.000Z`);
@@ -124,21 +116,19 @@ function duration(value: unknown) {
 function ChangeBadge({ value }: { value: number | null | undefined }) {
   if (value == null)
     return (
-      <span className="text-xs text-muted-foreground">sem base anterior</span>
+      <Typography variant="caption" color="text.secondary">
+        sem base anterior
+      </Typography>
     );
   const positive = value >= 0;
   return (
-    <span
-      className={`inline-flex items-center gap-1 text-xs font-medium ${positive ? "text-emerald-600" : "text-red-600"}`}
-    >
-      {positive ? (
-        <TrendingUp className="size-3" />
-      ) : (
-        <TrendingDown className="size-3" />
-      )}
-      {positive ? "+" : ""}
-      {decimal(value * 100, 1)}%
-    </span>
+    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", color: positive ? "success.main" : "error.main" }}>
+      {positive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+      <Typography variant="caption" sx={{ fontWeight: 600 }}>
+        {positive ? "+" : ""}
+        {decimal(value * 100, 1)}%
+      </Typography>
+    </Stack>
   );
 }
 
@@ -154,16 +144,22 @@ function StatCard({
   hint?: string;
 }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+    <Card variant="outlined">
+      <CardContent>
+        <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
           {label}
-        </p>
-        <div className="mt-1 flex items-end justify-between gap-2">
-          <p className="text-2xl font-bold">{value}</p>
+        </Typography>
+        <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "flex-end", mt: 0.5 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>
+            {value}
+          </Typography>
           {change !== undefined && <ChangeBadge value={change} />}
-        </div>
-        {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+        </Stack>
+        {hint && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+            {hint}
+          </Typography>
+        )}
       </CardContent>
     </Card>
   );
@@ -172,10 +168,7 @@ function StatCard({
 function EmptyRows() {
   return (
     <TableRow>
-      <TableCell
-        colSpan={10}
-        className="h-24 text-center text-muted-foreground"
-      >
+      <TableCell colSpan={10} align="center" sx={{ height: 96, color: "text.secondary" }}>
         Nenhum dado retornado para este período.
       </TableCell>
     </TableRow>
@@ -233,150 +226,132 @@ function ConnectionPanel({ connected }: { connected: boolean }) {
   });
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {connected ? "Alterar conexão" : "Conectar propriedade GA4"}
-          </CardTitle>
-          <CardDescription>
-            A conta de serviço permite que os relatórios e as automações
-            consultem o GA4 sem depender de login manual.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="ga4-property-id">ID numérico da propriedade</Label>
-            <Input
-              id="ga4-property-id"
-              inputMode="numeric"
-              placeholder="123456789"
-              value={propertyId}
-              onChange={(event) => setPropertyId(event.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Administração → Detalhes da propriedade → ID da propriedade.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ga4-service-account">
-              JSON da conta de serviço
-            </Label>
-            <textarea
-              id="ga4-service-account"
-              className="min-h-44 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              placeholder={
-                '{\n  "type": "service_account",\n  "client_email": "...",\n  "private_key": "..."\n}'
-              }
-              value={serviceAccountJson}
-              onChange={(event) => setServiceAccountJson(event.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              A chave é processada e armazenada somente no servidor.
-            </p>
-          </div>
-          {connectionFeedback && (
-            <Alert
-              variant={
-                connectionFeedback.type === "error" ? "destructive" : "default"
-              }
-            >
-              {connectionFeedback.type === "error" ? (
-                <AlertTriangle className="size-4" />
-              ) : (
-                <CheckCircle2 className="size-4" />
-              )}
-              <AlertTitle>
-                {connectionFeedback.type === "error"
-                  ? "Não foi possível conectar"
-                  : "Conexão concluída"}
-              </AlertTitle>
-              <AlertDescription>{connectionFeedback.message}</AlertDescription>
-            </Alert>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              onClick={() => saveMutation.mutate()}
-              disabled={!canSave || saveMutation.isPending}
-              className="gap-2"
-            >
-              {saveMutation.isPending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Save className="size-4" />
-              )}
-              Salvar e testar
-            </Button>
-            {connected && (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={() => testMutation.mutate()}
-                  disabled={testMutation.isPending}
-                >
-                  Testar conexão
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() => disconnectMutation.mutate()}
-                  disabled={disconnectMutation.isPending}
-                >
-                  Desconectar
-                </Button>
-              </>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {!canSave
-              ? "Preencha o ID da propriedade e o JSON para liberar o botão."
-              : saveMutation.isPending
-                ? "Testando o acesso no Google Analytics..."
-                : "O teste pode levar alguns segundos e o resultado aparecerá aqui."}
-          </p>
-        </CardContent>
-      </Card>
+    <Grid container spacing={3}>
+      <Grid size={{ xs: 12, lg: 7 }}>
+        <Card variant="outlined" sx={{ height: "100%" }}>
+          <CardContent>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+              {connected ? "Alterar conexão" : "Conectar propriedade GA4"}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
+              A conta de serviço permite que os relatórios e as automações
+              consultem o GA4 sem depender de login manual.
+            </Typography>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Como liberar o acesso</CardTitle>
-          <CardDescription>
-            Passos necessários uma única vez no Google.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ol className="space-y-4 text-sm">
-            <li>
-              <strong>1.</strong> Ative a Google Analytics Data API no seu
-              projeto do Google Cloud.
-            </li>
-            <li>
-              <strong>2.</strong> Crie uma conta de serviço e gere uma chave no
-              formato JSON.
-            </li>
-            <li>
-              <strong>3.</strong> Copie o <code>client_email</code> do JSON.
-            </li>
-            <li>
-              <strong>4.</strong> No GA4, adicione esse e-mail em Gerenciamento
-              de acesso à propriedade com função de Leitor.
-            </li>
-            <li>
-              <strong>5.</strong> Informe o ID numérico da propriedade e cole o
-              JSON ao lado.
-            </li>
-          </ol>
-          <a
-            href="https://console.cloud.google.com/apis/library/analyticsdata.googleapis.com"
-            target="_blank"
-            rel="noreferrer"
-            className="mt-6 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-          >
-            Abrir Google Cloud <ExternalLink className="size-3.5" />
-          </a>
-        </CardContent>
-      </Card>
-    </div>
+            <Stack spacing={2}>
+              <Box>
+                <TextField
+                  fullWidth
+                  label="ID numérico da propriedade"
+                  inputMode="numeric"
+                  placeholder="123456789"
+                  value={propertyId}
+                  onChange={(event) => setPropertyId(event.target.value)}
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                  Administração → Detalhes da propriedade → ID da propriedade.
+                </Typography>
+              </Box>
+              <Box>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={7}
+                  label="JSON da conta de serviço"
+                  placeholder={
+                    '{\n  "type": "service_account",\n  "client_email": "...",\n  "private_key": "..."\n}'
+                  }
+                  value={serviceAccountJson}
+                  onChange={(event) => setServiceAccountJson(event.target.value)}
+                  sx={{ "& textarea": { fontFamily: "monospace", fontSize: 12 } }}
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                  A chave é processada e armazenada somente no servidor.
+                </Typography>
+              </Box>
+
+              {connectionFeedback && (
+                <Alert severity={connectionFeedback.type === "error" ? "error" : "success"}>
+                  <AlertTitle>
+                    {connectionFeedback.type === "error"
+                      ? "Não foi possível conectar"
+                      : "Conexão concluída"}
+                  </AlertTitle>
+                  {connectionFeedback.message}
+                </Alert>
+              )}
+
+              <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+                <Button
+                  variant="contained"
+                  startIcon={saveMutation.isPending ? <CircularProgress size={16} color="inherit" /> : <Save size={16} />}
+                  onClick={() => saveMutation.mutate()}
+                  disabled={!canSave || saveMutation.isPending}
+                >
+                  Salvar e testar
+                </Button>
+                {connected && (
+                  <>
+                    <Button variant="outline" onClick={() => testMutation.mutate()} disabled={testMutation.isPending}>
+                      Testar conexão
+                    </Button>
+                    <Button variant="destructive" onClick={() => disconnectMutation.mutate()} disabled={disconnectMutation.isPending}>
+                      Desconectar
+                    </Button>
+                  </>
+                )}
+              </Stack>
+              <Typography variant="caption" color="text.secondary">
+                {!canSave
+                  ? "Preencha o ID da propriedade e o JSON para liberar o botão."
+                  : saveMutation.isPending
+                    ? "Testando o acesso no Google Analytics..."
+                    : "O teste pode levar alguns segundos e o resultado aparecerá aqui."}
+              </Typography>
+            </Stack>
+          </CardContent>
+        </Card>
+      </Grid>
+
+      <Grid size={{ xs: 12, lg: 5 }}>
+        <Card variant="outlined" sx={{ height: "100%" }}>
+          <CardContent>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+              Como liberar o acesso
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
+              Passos necessários uma única vez no Google.
+            </Typography>
+            <Stack spacing={1.5}>
+              <Typography variant="body2">
+                <strong>1.</strong> Ative a Google Analytics Data API no seu projeto do Google Cloud.
+              </Typography>
+              <Typography variant="body2">
+                <strong>2.</strong> Crie uma conta de serviço e gere uma chave no formato JSON.
+              </Typography>
+              <Typography variant="body2">
+                <strong>3.</strong> Copie o <code>client_email</code> do JSON.
+              </Typography>
+              <Typography variant="body2">
+                <strong>4.</strong> No GA4, adicione esse e-mail em Gerenciamento de acesso à propriedade com função de Leitor.
+              </Typography>
+              <Typography variant="body2">
+                <strong>5.</strong> Informe o ID numérico da propriedade e cole o JSON ao lado.
+              </Typography>
+            </Stack>
+            <Link
+              href="https://console.cloud.google.com/apis/library/analyticsdata.googleapis.com"
+              target="_blank"
+              rel="noreferrer"
+              underline="hover"
+              sx={{ mt: 3, display: "inline-flex", alignItems: "center", gap: 0.75, fontWeight: 500 }}
+            >
+              Abrir Google Cloud <ExternalLink size={14} />
+            </Link>
+          </CardContent>
+        </Card>
+      </Grid>
+    </Grid>
   );
 }
 
@@ -392,94 +367,169 @@ function RealtimePanel({ enabled }: { enabled: boolean }) {
 
   if (query.isLoading)
     return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="size-7 animate-spin" />
-      </div>
+      <Box sx={{ display: "flex", height: 256, alignItems: "center", justifyContent: "center" }}>
+        <CircularProgress size={28} />
+      </Box>
     );
   if (query.error)
     return (
-      <Alert variant="destructive">
-        <AlertTriangle className="size-4" />
+      <Alert severity="error">
         <AlertTitle>Falha no tempo real</AlertTitle>
-        <AlertDescription>{query.error.message}</AlertDescription>
+        {query.error.message}
       </Alert>
     );
   if (!data) return null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
+    <Stack spacing={3}>
+      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+        <Typography variant="body2" color="text.secondary">
           Últimos 30 minutos · atualização automática a cada minuto
-        </p>
+        </Typography>
         <Button
           variant="outline"
-          size="sm"
+          size="small"
+          startIcon={<RefreshCw size={14} className={query.isFetching ? "animate-spin" : undefined} />}
           onClick={() => query.refetch()}
-          className="gap-2"
         >
-          <RefreshCw
-            className={`size-3.5 ${query.isFetching ? "animate-spin" : ""}`}
-          />{" "}
           Atualizar
         </Button>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Usuários ativos agora"
-          value={integer(data.summary.activeUsers)}
-          hint="Usuários distintos nos últimos 30 minutos"
-        />
-        <StatCard
-          label="Visualizações online"
-          value={integer(data.summary.screenPageViews)}
-        />
-        <StatCard
-          label="Eventos online"
-          value={integer(data.summary.eventCount)}
-        />
-        <StatCard
-          label="Conversões online"
-          value={integer(data.summary.keyEvents)}
-          hint="Eventos marcados como principais"
-        />
-      </div>
+      </Stack>
+
+      <Grid container spacing={1.5}>
+        <Grid size={{ xs: 6, xl: 3 }}>
+          <StatCard label="Usuários ativos agora" value={integer(data.summary.activeUsers)} hint="Usuários distintos nos últimos 30 minutos" />
+        </Grid>
+        <Grid size={{ xs: 6, xl: 3 }}>
+          <StatCard label="Visualizações online" value={integer(data.summary.screenPageViews)} />
+        </Grid>
+        <Grid size={{ xs: 6, xl: 3 }}>
+          <StatCard label="Eventos online" value={integer(data.summary.eventCount)} />
+        </Grid>
+        <Grid size={{ xs: 6, xl: 3 }}>
+          <StatCard label="Conversões online" value={integer(data.summary.keyEvents)} hint="Eventos marcados como principais" />
+        </Grid>
+      </Grid>
+
       {data.warnings.map((warning) => (
-        <Alert key={warning}>
-          <AlertTriangle className="size-4" />
-          <AlertDescription>{warning}</AlertDescription>
+        <Alert key={warning} severity="info">
+          {warning}
         </Alert>
       ))}
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Páginas visualizadas agora</CardTitle>
-            <CardDescription>
-              Títulos das páginas com usuários ativos.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Página</TableHead>
-                  <TableHead className="text-right">Usuários</TableHead>
-                  <TableHead className="text-right">Views</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.pages.length ? (
-                  data.pages.map((row, index) => (
-                    <TableRow key={`${row.unifiedScreenName}-${index}`}>
-                      <TableCell className="max-w-sm truncate font-medium">
-                        {row.unifiedScreenName || "Sem título"}
-                      </TableCell>
-                      <TableCell className="text-right">
+
+      <Grid container spacing={3}>
+        <Grid size={{ xs: 12, xl: 6 }}>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                Páginas visualizadas agora
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                Títulos das páginas com usuários ativos.
+              </Typography>
+              <TableContainer sx={{ overflowX: "auto" }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Página</TableCell>
+                      <TableCell align="right">Usuários</TableCell>
+                      <TableCell align="right">Views</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {data.pages.length ? (
+                      data.pages.map((row, index) => (
+                        <TableRow key={`${row.unifiedScreenName}-${index}`}>
+                          <TableCell sx={{ maxWidth: 320, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {row.unifiedScreenName || "Sem título"}
+                          </TableCell>
+                          <TableCell align="right">{integer(row.activeUsers)}</TableCell>
+                          <TableCell align="right">{integer(row.screenPageViews)}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <EmptyRows />
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, xl: 6 }}>
+          <Stack spacing={3}>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                  Dispositivos online
+                </Typography>
+                <Stack spacing={1}>
+                  {data.devices.map((row) => (
+                    <Stack
+                      key={String(row.deviceCategory)}
+                      direction="row"
+                      sx={{ justifyContent: "space-between", pb: 1, borderBottom: "1px solid", borderColor: "divider", "&:last-of-type": { border: "none", pb: 0 } }}
+                    >
+                      <Typography variant="body2" sx={{ textTransform: "capitalize" }}>
+                        {row.deviceCategory}
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
                         {integer(row.activeUsers)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {integer(row.screenPageViews)}
-                      </TableCell>
+                      </Typography>
+                    </Stack>
+                  ))}
+                </Stack>
+              </CardContent>
+            </Card>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                  Países online
+                </Typography>
+                <Stack spacing={1}>
+                  {data.countries.slice(0, 10).map((row) => (
+                    <Stack
+                      key={String(row.country)}
+                      direction="row"
+                      sx={{ justifyContent: "space-between", pb: 1, borderBottom: "1px solid", borderColor: "divider", "&:last-of-type": { border: "none", pb: 0 } }}
+                    >
+                      <Typography variant="body2">{row.country}</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        {integer(row.activeUsers)}
+                      </Typography>
+                    </Stack>
+                  ))}
+                </Stack>
+              </CardContent>
+            </Card>
+          </Stack>
+        </Grid>
+      </Grid>
+
+      <Card variant="outlined">
+        <CardContent>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+            Eventos acontecendo agora
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            Ajuda a conferir navegação, carrinho, checkout e compras em tempo real.
+          </Typography>
+          <TableContainer sx={{ overflowX: "auto" }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Evento</TableCell>
+                  <TableCell align="right">Ocorrências</TableCell>
+                  <TableCell align="right">Usuários</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data.events.length ? (
+                  data.events.map((row) => (
+                    <TableRow key={String(row.eventName)}>
+                      <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>{row.eventName}</TableCell>
+                      <TableCell align="right">{integer(row.eventCount)}</TableCell>
+                      <TableCell align="right">{integer(row.activeUsers)}</TableCell>
                     </TableRow>
                   ))
                 ) : (
@@ -487,83 +537,10 @@ function RealtimePanel({ enabled }: { enabled: boolean }) {
                 )}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
-        <div className="grid gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Dispositivos online</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {data.devices.map((row) => (
-                <div
-                  key={String(row.deviceCategory)}
-                  className="flex justify-between border-b pb-2 last:border-0"
-                >
-                  <span className="capitalize">{row.deviceCategory}</span>
-                  <strong>{integer(row.activeUsers)}</strong>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Países online</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {data.countries.slice(0, 10).map((row) => (
-                <div
-                  key={String(row.country)}
-                  className="flex justify-between border-b pb-2 last:border-0"
-                >
-                  <span>{row.country}</span>
-                  <strong>{integer(row.activeUsers)}</strong>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Eventos acontecendo agora</CardTitle>
-          <CardDescription>
-            Ajuda a conferir navegação, carrinho, checkout e compras em tempo
-            real.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Evento</TableHead>
-                <TableHead className="text-right">Ocorrências</TableHead>
-                <TableHead className="text-right">Usuários</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.events.length ? (
-                data.events.map((row) => (
-                  <TableRow key={String(row.eventName)}>
-                    <TableCell className="font-mono text-xs">
-                      {row.eventName}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {integer(row.eventCount)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {integer(row.activeUsers)}
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <EmptyRows />
-              )}
-            </TableBody>
-          </Table>
+          </TableContainer>
         </CardContent>
       </Card>
-    </div>
+    </Stack>
   );
 }
 
@@ -609,528 +586,450 @@ function HistoricalPanel({ enabled }: { enabled: boolean }) {
   }, [data]);
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 p-4">
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => applyPreset(1)}>
-              Hoje
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => applyPreset(7)}>
-              7 dias
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => applyPreset(30)}>
-              30 dias
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => applyPreset(90)}>
-              90 dias
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => applyPreset(365)}
-            >
-              12 meses
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => applyPreset("all")}
-            >
-              Todo período
-            </Button>
-          </div>
-          <div className="ml-auto flex flex-wrap items-end gap-2">
-            <div>
-              <Label htmlFor="ga4-start" className="text-xs">
-                De
-              </Label>
-              <Input
-                id="ga4-start"
+    <Stack spacing={3}>
+      <Card variant="outlined">
+        <CardContent>
+          <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", alignItems: "flex-end" }}>
+            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+              <Button variant="outline" size="small" onClick={() => applyPreset(1)}>Hoje</Button>
+              <Button variant="outline" size="small" onClick={() => applyPreset(7)}>7 dias</Button>
+              <Button variant="outline" size="small" onClick={() => applyPreset(30)}>30 dias</Button>
+              <Button variant="outline" size="small" onClick={() => applyPreset(90)}>90 dias</Button>
+              <Button variant="outline" size="small" onClick={() => applyPreset(365)}>12 meses</Button>
+              <Button variant="outline" size="small" onClick={() => applyPreset("all")}>Todo período</Button>
+            </Stack>
+            <Stack direction="row" spacing={1} sx={{ ml: "auto", flexWrap: "wrap", alignItems: "flex-end" }}>
+              <TextField
+                size="small"
                 type="date"
+                label="De"
                 value={startDate}
-                max={endDate}
+                slotProps={{ htmlInput: { max: endDate }, inputLabel: { shrink: true } }}
                 onChange={(event) => setStartDate(event.target.value)}
               />
-            </div>
-            <div>
-              <Label htmlFor="ga4-end" className="text-xs">
-                Até
-              </Label>
-              <Input
-                id="ga4-end"
+              <TextField
+                size="small"
                 type="date"
+                label="Até"
                 value={endDate}
-                min={startDate}
-                max={today}
+                slotProps={{ htmlInput: { min: startDate, max: today }, inputLabel: { shrink: true } }}
                 onChange={(event) => setEndDate(event.target.value)}
               />
-            </div>
-            <Button
-              onClick={() => setAppliedRange({ startDate, endDate })}
-              disabled={!startDate || !endDate || startDate > endDate}
-            >
-              Aplicar
-            </Button>
-          </div>
+              <Button
+                variant="contained"
+                onClick={() => setAppliedRange({ startDate, endDate })}
+                disabled={!startDate || !endDate || startDate > endDate}
+              >
+                Aplicar
+              </Button>
+            </Stack>
+          </Stack>
         </CardContent>
       </Card>
 
       {query.isLoading && (
-        <div className="flex h-72 items-center justify-center">
-          <Loader2 className="size-8 animate-spin" />
-        </div>
+        <Box sx={{ display: "flex", height: 288, alignItems: "center", justifyContent: "center" }}>
+          <CircularProgress size={32} />
+        </Box>
       )}
       {query.error && (
-        <Alert variant="destructive">
-          <AlertTriangle className="size-4" />
+        <Alert severity="error">
           <AlertTitle>Não foi possível carregar o relatório</AlertTitle>
-          <AlertDescription>{query.error.message}</AlertDescription>
+          {query.error.message}
         </Alert>
       )}
       {data && (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <StatCard
-              label="Usuários"
-              value={integer(data.summary.totalUsers)}
-              change={data.changes.totalUsers}
-            />
-            <StatCard
-              label="Sessões"
-              value={integer(data.summary.sessions)}
-              change={data.changes.sessions}
-            />
-            <StatCard
-              label="Visualizações"
-              value={integer(data.summary.screenPageViews)}
-              change={data.changes.screenPageViews}
-            />
-            <StatCard
-              label="Engajamento"
-              value={percent(data.summary.engagementRate)}
-              change={data.changes.engagementRate}
-            />
-            <StatCard
-              label="Receita GA4"
-              value={currency(data.summary.purchaseRevenue)}
-              change={data.changes.purchaseRevenue}
-            />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <StatCard
-              label="Novos usuários"
-              value={integer(data.summary.newUsers)}
-              change={data.changes.newUsers}
-            />
-            <StatCard
-              label="Usuários ativos"
-              value={integer(data.summary.activeUsers)}
-              change={data.changes.activeUsers}
-            />
-            <StatCard
-              label="Tempo médio"
-              value={duration(data.summary.averageSessionDuration)}
-              change={data.changes.averageSessionDuration}
-            />
-            <StatCard
-              label="Conversões"
-              value={integer(data.summary.keyEvents)}
-              change={data.changes.keyEvents}
-            />
-            <StatCard
-              label="Compras"
-              value={integer(data.summary.ecommercePurchases)}
-              change={data.changes.ecommercePurchases}
-            />
-          </div>
+          <Grid container spacing={1.5}>
+            <Grid size={{ xs: 6, xl: 12 / 5 }}>
+              <StatCard label="Usuários" value={integer(data.summary.totalUsers)} change={data.changes.totalUsers} />
+            </Grid>
+            <Grid size={{ xs: 6, xl: 12 / 5 }}>
+              <StatCard label="Sessões" value={integer(data.summary.sessions)} change={data.changes.sessions} />
+            </Grid>
+            <Grid size={{ xs: 6, xl: 12 / 5 }}>
+              <StatCard label="Visualizações" value={integer(data.summary.screenPageViews)} change={data.changes.screenPageViews} />
+            </Grid>
+            <Grid size={{ xs: 6, xl: 12 / 5 }}>
+              <StatCard label="Engajamento" value={percent(data.summary.engagementRate)} change={data.changes.engagementRate} />
+            </Grid>
+            <Grid size={{ xs: 6, xl: 12 / 5 }}>
+              <StatCard label="Receita GA4" value={currency(data.summary.purchaseRevenue)} change={data.changes.purchaseRevenue} />
+            </Grid>
+          </Grid>
+          <Grid container spacing={1.5}>
+            <Grid size={{ xs: 6, xl: 12 / 5 }}>
+              <StatCard label="Novos usuários" value={integer(data.summary.newUsers)} change={data.changes.newUsers} />
+            </Grid>
+            <Grid size={{ xs: 6, xl: 12 / 5 }}>
+              <StatCard label="Usuários ativos" value={integer(data.summary.activeUsers)} change={data.changes.activeUsers} />
+            </Grid>
+            <Grid size={{ xs: 6, xl: 12 / 5 }}>
+              <StatCard label="Tempo médio" value={duration(data.summary.averageSessionDuration)} change={data.changes.averageSessionDuration} />
+            </Grid>
+            <Grid size={{ xs: 6, xl: 12 / 5 }}>
+              <StatCard label="Conversões" value={integer(data.summary.keyEvents)} change={data.changes.keyEvents} />
+            </Grid>
+            <Grid size={{ xs: 6, xl: 12 / 5 }}>
+              <StatCard label="Compras" value={integer(data.summary.ecommercePurchases)} change={data.changes.ecommercePurchases} />
+            </Grid>
+          </Grid>
 
           {data.warnings.map((warning) => (
-            <Alert key={warning}>
-              <AlertTriangle className="size-4" />
-              <AlertDescription>{warning}</AlertDescription>
+            <Alert key={warning} severity="info">
+              {warning}
             </Alert>
           ))}
 
           {observations.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Pontos de evolução e retração</CardTitle>
-                <CardDescription>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Pontos de evolução e retração
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                   Comparação automática com o período anterior de mesma duração.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {observations.map((item) => {
-                  const positive = (item.value || 0) >= 0;
-                  return (
-                    <div
-                      key={item.key}
-                      className={`rounded-lg border p-3 ${positive ? "border-emerald-500/30 bg-emerald-500/5" : "border-red-500/30 bg-red-500/5"}`}
-                    >
-                      <p className="text-sm font-medium">{item.label}</p>
-                      <p
-                        className={`mt-1 text-xl font-bold ${positive ? "text-emerald-600" : "text-red-600"}`}
-                      >
-                        {positive ? "+" : ""}
-                        {decimal((item.value || 0) * 100, 1)}%
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        vs. período anterior
-                      </p>
-                    </div>
-                  );
-                })}
+                </Typography>
+                <Grid container spacing={1.5}>
+                  {observations.map((item) => {
+                    const positive = (item.value || 0) >= 0;
+                    return (
+                      <Grid key={item.key} size={{ xs: 12, md: 6, xl: 3 }}>
+                        <Box
+                          sx={{
+                            border: "1px solid",
+                            borderColor: positive ? "success.main" : "error.main",
+                            bgcolor: positive ? "success.50" : "error.50",
+                            borderRadius: 2,
+                            p: 1.5,
+                          }}
+                        >
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {item.label}
+                          </Typography>
+                          <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.5, color: positive ? "success.main" : "error.main" }}>
+                            {positive ? "+" : ""}
+                            {decimal((item.value || 0) * 100, 1)}%
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            vs. período anterior
+                          </Typography>
+                        </Box>
+                      </Grid>
+                    );
+                  })}
+                </Grid>
               </CardContent>
             </Card>
           )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Evolução diária</CardTitle>
-              <CardDescription>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                Evolução diária
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                 Sessões, visualizações e usuários ativos ao longo do período.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ChartContainer config={chartConfig} className="h-80 w-full">
-                <LineChart data={data.trend} margin={{ left: 4, right: 12 }}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    tickLine={false}
-                    axisLine={false}
-                    minTickGap={24}
-                    tickFormatter={(value) =>
-                      `${String(value).slice(6, 8)}/${String(value).slice(4, 6)}`
-                    }
-                  />
-                  <YAxis tickLine={false} axisLine={false} width={42} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Line
-                    dataKey="sessions"
-                    type="monotone"
-                    stroke="var(--color-sessions)"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line
-                    dataKey="screenPageViews"
-                    type="monotone"
-                    stroke="var(--color-screenPageViews)"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line
-                    dataKey="activeUsers"
-                    type="monotone"
-                    stroke="var(--color-activeUsers)"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ChartContainer>
+              </Typography>
+              <LineChart
+                height={320}
+                xAxis={[
+                  {
+                    data: data.trend.map((d) => String(d.date)),
+                    scaleType: "point",
+                    valueFormatter: (v: string) => `${v.slice(6, 8)}/${v.slice(4, 6)}`,
+                  },
+                ]}
+                series={TREND_SERIES.map((s) => ({
+                  data: data.trend.map((d) => Number((d as MetricRow)[s.key] ?? 0)),
+                  label: s.label,
+                  color: s.color,
+                  showMark: false,
+                }))}
+                grid={{ horizontal: true }}
+                margin={{ left: 48, right: 16, top: 24, bottom: 32 }}
+              />
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Páginas mais visualizadas</CardTitle>
-              <CardDescription>
-                Todas as pageviews, inclusive quando a página não foi a entrada
-                da sessão.
-              </CardDescription>
-            </CardHeader>
+          <Card variant="outlined">
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Página</TableHead>
-                    <TableHead className="text-right">Views</TableHead>
-                    <TableHead className="text-right">Usuários</TableHead>
-                    <TableHead className="text-right">Engajamento</TableHead>
-                    <TableHead className="text-right">Tempo médio</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.pages.length ? (
-                    data.pages.map((row, index) => (
-                      <TableRow key={`${row.pagePathPlusQueryString}-${index}`}>
-                        <TableCell>
-                          <p className="max-w-xl truncate font-medium">
-                            {row.pageTitle || "Sem título"}
-                          </p>
-                          <p className="max-w-xl truncate text-xs text-muted-foreground">
-                            {row.pagePathPlusQueryString}
-                          </p>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {integer(row.screenPageViews)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {integer(row.activeUsers)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {percent(row.engagementRate)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {duration(row.averageSessionDuration)}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <EmptyRows />
-                  )}
-                </TableBody>
-              </Table>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                Páginas mais visualizadas
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                Todas as pageviews, inclusive quando a página não foi a entrada da sessão.
+              </Typography>
+              <TableContainer sx={{ overflowX: "auto" }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Página</TableCell>
+                      <TableCell align="right">Views</TableCell>
+                      <TableCell align="right">Usuários</TableCell>
+                      <TableCell align="right">Engajamento</TableCell>
+                      <TableCell align="right">Tempo médio</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {data.pages.length ? (
+                      data.pages.map((row, index) => (
+                        <TableRow key={`${row.pagePathPlusQueryString}-${index}`}>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ fontWeight: 500, maxWidth: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {row.pageTitle || "Sem título"}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ display: "block", maxWidth: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {row.pagePathPlusQueryString}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">{integer(row.screenPageViews)}</TableCell>
+                          <TableCell align="right">{integer(row.activeUsers)}</TableCell>
+                          <TableCell align="right">{percent(row.engagementRate)}</TableCell>
+                          <TableCell align="right">{duration(row.averageSessionDuration)}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <EmptyRows />
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Produtos mais visualizados</CardTitle>
-              <CardDescription>
-                Funil do evento view_item até a compra; estes dados alimentarão
-                os criativos automáticos.
-              </CardDescription>
-            </CardHeader>
+          <Card variant="outlined">
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Produto</TableHead>
-                    <TableHead className="text-right">Vistos</TableHead>
-                    <TableHead className="text-right">Carrinho</TableHead>
-                    <TableHead className="text-right">Checkout</TableHead>
-                    <TableHead className="text-right">Comprados</TableHead>
-                    <TableHead className="text-right">Receita</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.products.length ? (
-                    data.products.map((row, index) => (
-                      <TableRow key={`${row.itemId}-${index}`}>
-                        <TableCell>
-                          <p className="font-medium">
-                            {row.itemName || "Produto sem nome"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {row.itemId}
-                          </p>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {integer(row.itemsViewed)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {integer(row.itemsAddedToCart)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {integer(row.itemsCheckedOut)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {integer(row.itemsPurchased)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {currency(row.itemRevenue)}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <EmptyRows />
-                  )}
-                </TableBody>
-              </Table>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                Produtos mais visualizados
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                Funil do evento view_item até a compra; estes dados alimentarão os criativos automáticos.
+              </Typography>
+              <TableContainer sx={{ overflowX: "auto" }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Produto</TableCell>
+                      <TableCell align="right">Vistos</TableCell>
+                      <TableCell align="right">Carrinho</TableCell>
+                      <TableCell align="right">Checkout</TableCell>
+                      <TableCell align="right">Comprados</TableCell>
+                      <TableCell align="right">Receita</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {data.products.length ? (
+                      data.products.map((row, index) => (
+                        <TableRow key={`${row.itemId}-${index}`}>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                              {row.itemName || "Produto sem nome"}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {row.itemId}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">{integer(row.itemsViewed)}</TableCell>
+                          <TableCell align="right">{integer(row.itemsAddedToCart)}</TableCell>
+                          <TableCell align="right">{integer(row.itemsCheckedOut)}</TableCell>
+                          <TableCell align="right">{integer(row.itemsPurchased)}</TableCell>
+                          <TableCell align="right">{currency(row.itemRevenue)}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <EmptyRows />
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </CardContent>
           </Card>
 
-          <div className="grid gap-6 xl:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Canais de aquisição</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Canal</TableHead>
-                      <TableHead className="text-right">Sessões</TableHead>
-                      <TableHead className="text-right">Receita</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.channels.length ? (
-                      data.channels.map((row) => (
-                        <TableRow key={String(row.sessionDefaultChannelGroup)}>
-                          <TableCell>
-                            {row.sessionDefaultChannelGroup}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {integer(row.sessions)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {currency(row.purchaseRevenue)}
-                          </TableCell>
+          <Grid container spacing={3}>
+            <Grid size={{ xs: 12, xl: 6 }}>
+              <Card variant="outlined">
+                <CardContent>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
+                    Canais de aquisição
+                  </Typography>
+                  <TableContainer sx={{ overflowX: "auto" }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Canal</TableCell>
+                          <TableCell align="right">Sessões</TableCell>
+                          <TableCell align="right">Receita</TableCell>
                         </TableRow>
-                      ))
-                    ) : (
-                      <EmptyRows />
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Origens e mídias</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Origem / mídia</TableHead>
-                      <TableHead className="text-right">Sessões</TableHead>
-                      <TableHead className="text-right">Conversões</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.sources.length ? (
-                      data.sources.slice(0, 20).map((row) => (
-                        <TableRow key={String(row.sessionSourceMedium)}>
-                          <TableCell>{row.sessionSourceMedium}</TableCell>
-                          <TableCell className="text-right">
-                            {integer(row.sessions)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {integer(row.keyEvents)}
-                          </TableCell>
+                      </TableHead>
+                      <TableBody>
+                        {data.channels.length ? (
+                          data.channels.map((row) => (
+                            <TableRow key={String(row.sessionDefaultChannelGroup)}>
+                              <TableCell>{row.sessionDefaultChannelGroup}</TableCell>
+                              <TableCell align="right">{integer(row.sessions)}</TableCell>
+                              <TableCell align="right">{currency(row.purchaseRevenue)}</TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <EmptyRows />
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid size={{ xs: 12, xl: 6 }}>
+              <Card variant="outlined">
+                <CardContent>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
+                    Origens e mídias
+                  </Typography>
+                  <TableContainer sx={{ overflowX: "auto" }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Origem / mídia</TableCell>
+                          <TableCell align="right">Sessões</TableCell>
+                          <TableCell align="right">Conversões</TableCell>
                         </TableRow>
-                      ))
-                    ) : (
-                      <EmptyRows />
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Campanhas</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Campanha</TableHead>
-                      <TableHead className="text-right">Sessões</TableHead>
-                      <TableHead className="text-right">Receita</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.campaigns.length ? (
-                      data.campaigns.slice(0, 20).map((row, index) => (
-                        <TableRow key={`${row.sessionCampaignName}-${index}`}>
-                          <TableCell>
-                            <p>{row.sessionCampaignName}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {row.sessionSourceMedium}
-                            </p>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {integer(row.sessions)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {currency(row.purchaseRevenue)}
-                          </TableCell>
+                      </TableHead>
+                      <TableBody>
+                        {data.sources.length ? (
+                          data.sources.slice(0, 20).map((row) => (
+                            <TableRow key={String(row.sessionSourceMedium)}>
+                              <TableCell>{row.sessionSourceMedium}</TableCell>
+                              <TableCell align="right">{integer(row.sessions)}</TableCell>
+                              <TableCell align="right">{integer(row.keyEvents)}</TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <EmptyRows />
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid size={{ xs: 12, xl: 6 }}>
+              <Card variant="outlined">
+                <CardContent>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
+                    Campanhas
+                  </Typography>
+                  <TableContainer sx={{ overflowX: "auto" }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Campanha</TableCell>
+                          <TableCell align="right">Sessões</TableCell>
+                          <TableCell align="right">Receita</TableCell>
                         </TableRow>
-                      ))
-                    ) : (
-                      <EmptyRows />
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Dispositivos</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Dispositivo</TableHead>
-                      <TableHead>Navegador / SO</TableHead>
-                      <TableHead className="text-right">Sessões</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.devices.length ? (
-                      data.devices.slice(0, 20).map((row, index) => (
-                        <TableRow key={`${row.deviceCategory}-${index}`}>
-                          <TableCell className="capitalize">
-                            {row.deviceCategory}
-                          </TableCell>
-                          <TableCell>
-                            {row.browser} / {row.operatingSystem}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {integer(row.sessions)}
-                          </TableCell>
+                      </TableHead>
+                      <TableBody>
+                        {data.campaigns.length ? (
+                          data.campaigns.slice(0, 20).map((row, index) => (
+                            <TableRow key={`${row.sessionCampaignName}-${index}`}>
+                              <TableCell>
+                                <Typography variant="body2">{row.sessionCampaignName}</Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {row.sessionSourceMedium}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right">{integer(row.sessions)}</TableCell>
+                              <TableCell align="right">{currency(row.purchaseRevenue)}</TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <EmptyRows />
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid size={{ xs: 12, xl: 6 }}>
+              <Card variant="outlined">
+                <CardContent>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
+                    Dispositivos
+                  </Typography>
+                  <TableContainer sx={{ overflowX: "auto" }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Dispositivo</TableCell>
+                          <TableCell>Navegador / SO</TableCell>
+                          <TableCell align="right">Sessões</TableCell>
                         </TableRow>
-                      ))
-                    ) : (
-                      <EmptyRows />
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </div>
+                      </TableHead>
+                      <TableBody>
+                        {data.devices.length ? (
+                          data.devices.slice(0, 20).map((row, index) => (
+                            <TableRow key={`${row.deviceCategory}-${index}`}>
+                              <TableCell sx={{ textTransform: "capitalize" }}>{row.deviceCategory}</TableCell>
+                              <TableCell>
+                                {row.browser} / {row.operatingSystem}
+                              </TableCell>
+                              <TableCell align="right">{integer(row.sessions)}</TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <EmptyRows />
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Localização dos acessos</CardTitle>
-            </CardHeader>
+          <Card variant="outlined">
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>País</TableHead>
-                    <TableHead>Estado / região</TableHead>
-                    <TableHead>Cidade</TableHead>
-                    <TableHead className="text-right">Usuários</TableHead>
-                    <TableHead className="text-right">Sessões</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.geography.length ? (
-                    data.geography.map((row, index) => (
-                      <TableRow
-                        key={`${row.country}-${row.region}-${row.city}-${index}`}
-                      >
-                        <TableCell>{row.country}</TableCell>
-                        <TableCell>{row.region}</TableCell>
-                        <TableCell>{row.city}</TableCell>
-                        <TableCell className="text-right">
-                          {integer(row.activeUsers)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {integer(row.sessions)}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <EmptyRows />
-                  )}
-                </TableBody>
-              </Table>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5 }}>
+                Localização dos acessos
+              </Typography>
+              <TableContainer sx={{ overflowX: "auto" }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>País</TableCell>
+                      <TableCell>Estado / região</TableCell>
+                      <TableCell>Cidade</TableCell>
+                      <TableCell align="right">Usuários</TableCell>
+                      <TableCell align="right">Sessões</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {data.geography.length ? (
+                      data.geography.map((row, index) => (
+                        <TableRow key={`${row.country}-${row.region}-${row.city}-${index}`}>
+                          <TableCell>{row.country}</TableCell>
+                          <TableCell>{row.region}</TableCell>
+                          <TableCell>{row.city}</TableCell>
+                          <TableCell align="right">{integer(row.activeUsers)}</TableCell>
+                          <TableCell align="right">{integer(row.sessions)}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <EmptyRows />
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </CardContent>
           </Card>
         </>
       )}
-    </div>
+    </Stack>
   );
 }
+
+type MetricRow = Record<string, string | number>;
 
 function GoogleAnalyticsPage() {
   const getStatus = useServerFn(getGa4Status);
@@ -1142,88 +1041,84 @@ function GoogleAnalyticsPage() {
   const status = statusQuery.data;
 
   return (
-    <div className="mx-auto max-w-[1700px] px-4 py-8 md:px-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600">
-              <BarChart3 className="size-5" />
-            </span>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">
-                Google Analytics 4
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Tempo real, histórico e oportunidades de melhoria do site.
-              </p>
-            </div>
-          </div>
-        </div>
+    <Box sx={{ maxWidth: 1700, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: 3,
+              bgcolor: "warning.50",
+              color: "warning.main",
+            }}
+          >
+            <BarChart3 size={20} />
+          </Box>
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 700 }}>
+              Google Analytics 4
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Tempo real, histórico e oportunidades de melhoria do site.
+            </Typography>
+          </Box>
+        </Stack>
         {statusQuery.isLoading ? (
-          <Badge variant="secondary">Verificando...</Badge>
+          <Chip label="Verificando..." />
         ) : status?.connected ? (
-          <Badge className="gap-1 bg-emerald-600">
-            <CheckCircle2 className="size-3" /> Conectado · {status.propertyId}
-          </Badge>
+          <Chip color="success" icon={<CheckCircle2 size={14} />} label={`Conectado · ${status.propertyId}`} />
         ) : (
-          <Badge variant="secondary">Não conectado</Badge>
+          <Chip label="Não conectado" />
         )}
-      </div>
+      </Stack>
 
       {!statusQuery.isLoading && !status?.connected ? (
         <ConnectionPanel connected={false} />
       ) : status?.connected ? (
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="mb-6">
-            <TabsTrigger value="historical" className="gap-2">
-              <Gauge className="size-4" /> Histórico
-            </TabsTrigger>
-            <TabsTrigger value="realtime" className="gap-2">
-              <Activity className="size-4" /> Tempo real
-            </TabsTrigger>
-            <TabsTrigger value="settings" className="gap-2">
-              <Settings className="size-4" /> Configuração
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="historical">
-            <HistoricalPanel enabled={tab === "historical"} />
-          </TabsContent>
-          <TabsContent value="realtime">
-            <RealtimePanel enabled={tab === "realtime"} />
-          </TabsContent>
-          <TabsContent value="settings">
-            <div className="mb-4 grid gap-3 sm:grid-cols-3">
-              <StatCard label="Propriedade" value={status.propertyId} />
-              <StatCard
-                label="Conta de serviço"
-                value="Ativa"
-                hint={status.serviceAccountEmail}
-              />
-              <StatCard
-                label="Último teste"
-                value={
-                  status.lastTestedAt
-                    ? new Date(status.lastTestedAt).toLocaleDateString("pt-BR")
-                    : "—"
-                }
-                hint={status.lastError || "Sem erro registrado"}
-              />
-            </div>
-            <ConnectionPanel connected />
-          </TabsContent>
-        </Tabs>
+        <>
+          <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
+            <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+              <Tab value="historical" icon={<Gauge size={16} />} iconPosition="start" label="Histórico" sx={{ minHeight: 40 }} />
+              <Tab value="realtime" icon={<Activity size={16} />} iconPosition="start" label="Tempo real" sx={{ minHeight: 40 }} />
+              <Tab value="settings" icon={<Settings size={16} />} iconPosition="start" label="Configuração" sx={{ minHeight: 40 }} />
+            </Tabs>
+          </Box>
+          {tab === "historical" && <HistoricalPanel enabled={tab === "historical"} />}
+          {tab === "realtime" && <RealtimePanel enabled={tab === "realtime"} />}
+          {tab === "settings" && (
+            <Stack spacing={2}>
+              <Grid container spacing={1.5}>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <StatCard label="Propriedade" value={status.propertyId} />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <StatCard label="Conta de serviço" value="Ativa" hint={status.serviceAccountEmail} />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <StatCard
+                    label="Último teste"
+                    value={status.lastTestedAt ? new Date(status.lastTestedAt).toLocaleDateString("pt-BR") : "—"}
+                    hint={status.lastError || "Sem erro registrado"}
+                  />
+                </Grid>
+              </Grid>
+              <ConnectionPanel connected />
+            </Stack>
+          )}
+        </>
       ) : null}
 
-      <Alert className="mt-6">
-        <Clock3 className="size-4" />
+      <Alert severity="info" icon={<Clock3 size={18} />} sx={{ mt: 3 }}>
         <AlertTitle>Sobre o histórico máximo</AlertTitle>
-        <AlertDescription>
-          O filtro aceita qualquer intervalo desde o início do GA4. O relatório
-          exibirá somente dados realmente existentes e disponíveis na
-          propriedade; datas anteriores à instalação da tag não podem ser
-          recuperadas.
-        </AlertDescription>
+        O filtro aceita qualquer intervalo desde o início do GA4. O relatório
+        exibirá somente dados realmente existentes e disponíveis na
+        propriedade; datas anteriores à instalação da tag não podem ser
+        recuperadas.
       </Alert>
-    </div>
+    </Box>
   );
 }

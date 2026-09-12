@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import Stack from "@mui/material/Stack";
 import { ReportsTab } from "@/components/whatsapp/ReportsTab";
 import { QueueHealthPanel } from "@/components/whatsapp/QueueHealthPanel";
 
@@ -14,9 +15,9 @@ export const Route = createFileRoute("/whatsapp/relatorios")({
     ],
   }),
   component: () => (
-    <div className="space-y-6">
+    <Stack spacing={3}>
       <QueueHealthPanel />
       <ReportsTab />
-    </div>
+    </Stack>
   ),
 });

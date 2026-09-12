@@ -3,8 +3,17 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Pause, Play, RefreshCw, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Typography from "@mui/material/Typography";
 import {
   getWhatsappQueueHealth,
   pauseWhatsappCampaign,
@@ -85,116 +94,114 @@ export function QueueHealthPanel() {
   };
 
   return (
-    <section className="surface-card p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="font-semibold">Saúde da fila do WhatsApp</h3>
-          <p className="text-sm text-muted-foreground">
+    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <Box>
+          <Typography sx={{ fontWeight: 600 }}>Saúde da fila do WhatsApp</Typography>
+          <Typography variant="body2" color="text.secondary">
             Estado real dos jobs do worker. Pausar não apaga mensagens: apenas impede novas reivindicações até retomar.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" className="gap-1.5" disabled={isFetching} onClick={() => refetch()}>
-          <RefreshCw className={`size-3.5 ${isFetching ? "animate-spin" : ""}`} /> Atualizar
+          </Typography>
+        </Box>
+        <Button size="small" variant="outlined" startIcon={<RefreshCw size={14} className={isFetching ? "animate-spin" : undefined} />} disabled={isFetching} onClick={() => refetch()}>
+          Atualizar
         </Button>
-      </div>
+      </Stack>
 
-      {isLoading && <p className="mt-4 text-sm text-muted-foreground">Carregando fila...</p>}
-      {isError && <p className="mt-4 text-sm text-critical">Não foi possível carregar a fila.</p>}
+      {isLoading && <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>Carregando fila...</Typography>}
+      {isError && <Typography variant="body2" color="error" sx={{ mt: 2 }}>Não foi possível carregar a fila.</Typography>}
 
       {data && (
         <>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+          <Box sx={{ mt: 2, display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr 1fr", lg: "repeat(4, 1fr)", xl: "repeat(7, 1fr)" } }}>
             {STATUS_CARDS.map(([key, label]) => (
-              <div key={key} className="rounded-xl border border-border p-3">
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className="mt-1 text-2xl font-bold">{data.byStatus[key].toLocaleString("pt-BR")}</p>
-              </div>
+              <Box key={key} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 1.5 }}>
+                <Typography variant="caption" color="text.secondary">{label}</Typography>
+                <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>{data.byStatus[key].toLocaleString("pt-BR")}</Typography>
+              </Box>
             ))}
-          </div>
+          </Box>
 
-          <div className="mt-4 flex flex-wrap gap-2 text-xs">
-            <Badge variant="outline">Total: {data.total.toLocaleString("pt-BR")}</Badge>
-            <Badge variant="outline">Pendentes: {data.pending.toLocaleString("pt-BR")}</Badge>
-            <Badge variant="outline">Finalizados: {data.finished.toLocaleString("pt-BR")}</Badge>
-            <Badge variant="outline">Sucesso provider: {data.successRate.toFixed(1)}%</Badge>
-          </div>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", mt: 2 }}>
+            <Chip variant="outlined" label={`Total: ${data.total.toLocaleString("pt-BR")}`} />
+            <Chip variant="outlined" label={`Pendentes: ${data.pending.toLocaleString("pt-BR")}`} />
+            <Chip variant="outlined" label={`Finalizados: ${data.finished.toLocaleString("pt-BR")}`} />
+            <Chip variant="outlined" label={`Sucesso provider: ${data.successRate.toFixed(1)}%`} />
+          </Stack>
 
-          <div className="mt-5 overflow-x-auto rounded-xl border border-border">
-            <table className="w-full min-w-[980px] text-sm">
-              <thead className="bg-muted/50 text-left text-xs uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2.5">Campanha</th>
-                  <th className="px-3 py-2.5">Status</th>
-                  <th className="px-3 py-2.5">Fila</th>
-                  <th className="px-3 py-2.5">Enviando</th>
-                  <th className="px-3 py-2.5">Retry</th>
-                  <th className="px-3 py-2.5">Enviadas</th>
-                  <th className="px-3 py-2.5">Falhas</th>
-                  <th className="px-3 py-2.5 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
+          <TableContainer sx={{ mt: 2.5, border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
+            <Table sx={{ minWidth: 980 }} size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Campanha</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Fila</TableCell>
+                  <TableCell>Enviando</TableCell>
+                  <TableCell>Retry</TableCell>
+                  <TableCell>Enviadas</TableCell>
+                  <TableCell>Falhas</TableCell>
+                  <TableCell align="right">Ações</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {data.campaigns.map((campaign: QueueCampaign) => (
-                  <tr key={campaign.id} className="border-t border-border">
-                    <td className="px-3 py-2.5">
-                      <p className="font-medium">{campaign.nome}</p>
-                      <p className="text-xs text-muted-foreground">{campaign.messageType === "utility" ? "Utilidade" : "Marketing"}</p>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex flex-wrap gap-1.5">
-                        <Badge variant="outline">{campaign.status || "—"}</Badge>
-                        {campaign.paused && <Badge className="bg-warning-soft text-warning">Fila pausada</Badge>}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5">{campaign.queue.queued}</td>
-                    <td className="px-3 py-2.5">{campaign.queue.sending}</td>
-                    <td className="px-3 py-2.5">{campaign.queue.retry}</td>
-                    <td className="px-3 py-2.5">{campaign.queue.sent}</td>
-                    <td className="px-3 py-2.5 font-semibold">{campaign.queue.failed}</td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex justify-end gap-1.5">
+                  <TableRow key={campaign.id}>
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{campaign.nome}</Typography>
+                      <Typography variant="caption" color="text.secondary">{campaign.messageType === "utility" ? "Utilidade" : "Marketing"}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap" }}>
+                        <Chip size="small" variant="outlined" label={campaign.status || "—"} />
+                        {campaign.paused && <Chip size="small" color="warning" label="Fila pausada" />}
+                      </Stack>
+                    </TableCell>
+                    <TableCell>{campaign.queue.queued}</TableCell>
+                    <TableCell>{campaign.queue.sending}</TableCell>
+                    <TableCell>{campaign.queue.retry}</TableCell>
+                    <TableCell>{campaign.queue.sent}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{campaign.queue.failed}</TableCell>
+                    <TableCell align="right">
+                      <Stack direction="row" spacing={0.75} sx={{ justifyContent: "flex-end" }}>
                         {campaign.paused ? (
-                          <Button size="sm" variant="outline" className="gap-1" disabled={busyId === campaign.id} onClick={() => mutate(campaign.id, "resume")}>
-                            <Play className="size-3.5" /> Retomar
+                          <Button size="small" variant="outlined" startIcon={<Play size={14} />} disabled={busyId === campaign.id} onClick={() => mutate(campaign.id, "resume")}>
+                            Retomar
                           </Button>
                         ) : campaign.queue.queued + campaign.queue.retry > 0 ? (
-                          <Button size="sm" variant="outline" className="gap-1" disabled={busyId === campaign.id} onClick={() => mutate(campaign.id, "pause")}>
-                            <Pause className="size-3.5" /> Pausar
+                          <Button size="small" variant="outlined" startIcon={<Pause size={14} />} disabled={busyId === campaign.id} onClick={() => mutate(campaign.id, "pause")}>
+                            Pausar
                           </Button>
                         ) : null}
                         {campaign.queue.failed > 0 && (
-                          <Button size="sm" variant="outline" className="gap-1" disabled={busyId === campaign.id} onClick={() => mutate(campaign.id, "retry")}>
-                            <RotateCcw className="size-3.5" /> Tentar falhas
+                          <Button size="small" variant="outlined" startIcon={<RotateCcw size={14} />} disabled={busyId === campaign.id} onClick={() => mutate(campaign.id, "retry")}>
+                            Tentar falhas
                           </Button>
                         )}
-                      </div>
-                    </td>
-                  </tr>
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
                 ))}
                 {data.campaigns.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">Nenhuma campanha encontrada.</td>
-                  </tr>
+                  <TableRow><TableCell colSpan={8} align="center" sx={{ py: 4, color: "text.secondary" }}>Nenhuma campanha encontrada.</TableCell></TableRow>
                 )}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+            </Table>
+          </TableContainer>
 
           {data.failureReasons.length > 0 && (
-            <div className="mt-5">
-              <p className="text-sm font-semibold">Falhas atuais da fila</p>
-              <div className="mt-2 grid gap-2 md:grid-cols-2">
+            <Box sx={{ mt: 2.5 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>Falhas atuais da fila</Typography>
+              <Box sx={{ mt: 1, display: "grid", gap: 1, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
                 {data.failureReasons.slice(0, 8).map((failure) => (
-                  <div key={failure.reason} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm">
-                    <span className="truncate" title={failure.reason}>{failure.reason}</span>
-                    <Badge variant="outline">{failure.count}</Badge>
-                  </div>
+                  <Stack key={failure.reason} direction="row" spacing={1.5} sx={{ justifyContent: "space-between", alignItems: "center", border: "1px solid", borderColor: "divider", borderRadius: 2, px: 1.5, py: 1 }}>
+                    <Typography variant="body2" noWrap title={failure.reason}>{failure.reason}</Typography>
+                    <Chip size="small" variant="outlined" label={failure.count} />
+                  </Stack>
                 ))}
-              </div>
-            </div>
+              </Box>
+            </Box>
           )}
         </>
       )}
-    </section>
+    </Box>
   );
 }

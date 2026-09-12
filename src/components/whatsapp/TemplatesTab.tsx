@@ -3,11 +3,22 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Eye, BarChart3, Copy, Pencil, Trash2, RefreshCw, Plus, X, Clock } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Dialog from "@mui/material/Dialog";
+import DialogContent from "@mui/material/DialogContent";
+import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import {
   listMetaTemplates,
   getTemplateStats,
@@ -52,11 +63,11 @@ function bodyText(t: TemplateRow) {
   return t.components.find((c) => c.type === "BODY")?.text ?? "";
 }
 
-const STATUS_CLASS: Record<string, string> = {
-  APPROVED: "bg-success-soft text-success",
-  PENDING: "bg-warning-soft text-warning",
-  REJECTED: "bg-critical-soft text-critical",
-  PAUSED: "bg-muted text-muted-foreground",
+const STATUS_COLOR: Record<string, "success" | "warning" | "error" | "default"> = {
+  APPROVED: "success",
+  PENDING: "warning",
+  REJECTED: "error",
+  PAUSED: "default",
 };
 
 export function TemplatesTab() {
@@ -244,206 +255,188 @@ export function TemplatesTab() {
   };
 
   return (
-    <div className="mt-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Input placeholder="Buscar por nome..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
-            <RefreshCw className="size-3.5" /> Atualizar
+    <Box sx={{ mt: 2 }}>
+      <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+        <TextField placeholder="Buscar por nome..." value={search} onChange={(e) => setSearch(e.target.value)} size="small" sx={{ maxWidth: 320 }} />
+        <Stack direction="row" spacing={1}>
+          <Button size="small" variant="outlined" startIcon={<RefreshCw size={14} />} onClick={() => refetch()}>
+            Atualizar
           </Button>
-          <Button size="sm" onClick={() => setNewOpen(true)} className="gap-2">
-            <Plus className="size-3.5" /> Novo template
+          <Button size="small" variant="contained" startIcon={<Plus size={14} />} onClick={() => setNewOpen(true)}>
+            Novo template
           </Button>
-        </div>
-      </div>
+        </Stack>
+      </Stack>
 
       {events && events.length > 0 && (
-        <div className="mt-3 rounded-xl border border-border bg-muted/30 p-3">
-          <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            <Clock className="size-3.5" /> Últimas atualizações da Meta
-          </p>
-          <ul className="space-y-1 text-sm">
+        <Box sx={{ mt: 1.5, border: "1px solid", borderColor: "divider", bgcolor: "action.hover", borderRadius: 3, p: 1.5 }}>
+          <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", mb: 1 }}>
+            <Clock size={14} />
+            <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+              Últimas atualizações da Meta
+            </Typography>
+          </Stack>
+          <Stack spacing={0.5}>
             {events.slice(0, 5).map((e) => (
-              <li key={e.id} className="flex flex-wrap items-baseline gap-x-2 text-muted-foreground">
-                <span className="font-medium text-foreground">{e.template_name}</span>
-                <span>{EVENT_LABEL[e.event] ?? e.event.toLowerCase()}</span>
-                {e.reason && <span className="text-xs">— {e.reason}</span>}
-                <span className="text-xs">{new Date(e.received_at).toLocaleString("pt-BR")}</span>
-              </li>
+              <Stack key={e.id} direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "baseline", color: "text.secondary" }}>
+                <Typography variant="body2" sx={{ fontWeight: 600, color: "text.primary" }}>{e.template_name}</Typography>
+                <Typography variant="body2">{EVENT_LABEL[e.event] ?? e.event.toLowerCase()}</Typography>
+                {e.reason && <Typography variant="caption">— {e.reason}</Typography>}
+                <Typography variant="caption">{new Date(e.received_at).toLocaleString("pt-BR")}</Typography>
+              </Stack>
             ))}
-          </ul>
-        </div>
+          </Stack>
+        </Box>
       )}
 
-      <div className="mt-4 overflow-x-auto rounded-xl border border-border">
-        <table className="w-full min-w-[720px] text-sm">
-          <thead className="bg-muted/60 text-left text-xs uppercase tracking-wider text-muted-foreground">
-            <tr>
-              <th className="px-4 py-3 font-medium">Nome</th>
-              <th className="px-4 py-3 font-medium">Categoria</th>
-              <th className="px-4 py-3 font-medium">Idioma</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 text-right font-medium">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
+      <TableContainer sx={{ mt: 2, border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
+        <Table sx={{ minWidth: 720 }} size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Nome</TableCell>
+              <TableCell>Categoria</TableCell>
+              <TableCell>Idioma</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="right">Ações</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {isLoading && (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">Carregando...</td>
-              </tr>
+              <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4, color: "text.secondary" }}>Carregando...</TableCell></TableRow>
             )}
             {!isLoading && templatesResult && !templatesResult.success && (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">{templatesResult.error}</td>
-              </tr>
+              <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4, color: "text.secondary" }}>{templatesResult.error}</TableCell></TableRow>
             )}
             {!isLoading && templatesResult?.success && templates.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center">
-                  <p className="text-muted-foreground">Nenhum template encontrado na conta Meta.</p>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="mt-4 gap-2"
+              <TableRow>
+                <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                  <Typography color="text.secondary">Nenhum template encontrado na conta Meta.</Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    sx={{ mt: 2 }}
                     onClick={() => window.open("https://business.facebook.com/wa/manage/message-templates/", "_blank")}
                   >
                     Gerenciar Templates na Meta
                   </Button>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
             {templates.map((t) => (
-              <tr key={t.id} className="border-t border-border">
-                <td className="px-4 py-3 font-medium">{t.name}</td>
-                <td className="px-4 py-3 text-muted-foreground">{t.category}</td>
-                <td className="px-4 py-3 text-muted-foreground">{t.language}</td>
-                <td className="px-4 py-3">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_CLASS[t.status] ?? "bg-muted text-muted-foreground"}`}>
-                    {t.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center justify-end gap-1">
-                    <Button variant="ghost" size="icon" className="size-8" title="Ver mensagem" onClick={() => setPreviewTemplate(t)}>
-                      <Eye className="size-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="size-8" title="Estatísticas" onClick={() => setStatsTemplate(t)}>
-                      <BarChart3 className="size-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="size-8" title="Editar" onClick={() => openEdit(t)}>
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="size-8" title="Duplicar" onClick={() => handleDuplicate(t)}>
-                      <Copy className="size-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="size-8 text-critical" title="Excluir" onClick={() => handleDelete(t)}>
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                </td>
-              </tr>
+              <TableRow key={t.id}>
+                <TableCell sx={{ fontWeight: 600 }}>{t.name}</TableCell>
+                <TableCell sx={{ color: "text.secondary" }}>{t.category}</TableCell>
+                <TableCell sx={{ color: "text.secondary" }}>{t.language}</TableCell>
+                <TableCell>
+                  <Chip size="small" color={STATUS_COLOR[t.status] ?? "default"} label={t.status} />
+                </TableCell>
+                <TableCell align="right">
+                  <Stack direction="row" spacing={0.5} sx={{ justifyContent: "flex-end" }}>
+                    <IconButton size="small" title="Ver mensagem" onClick={() => setPreviewTemplate(t)}><Eye size={16} /></IconButton>
+                    <IconButton size="small" title="Estatísticas" onClick={() => setStatsTemplate(t)}><BarChart3 size={16} /></IconButton>
+                    <IconButton size="small" title="Editar" onClick={() => openEdit(t)}><Pencil size={16} /></IconButton>
+                    <IconButton size="small" title="Duplicar" onClick={() => handleDuplicate(t)}><Copy size={16} /></IconButton>
+                    <IconButton size="small" title="Excluir" color="error" onClick={() => handleDelete(t)}><Trash2 size={16} /></IconButton>
+                  </Stack>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </TableContainer>
 
-      <Dialog open={Boolean(previewTemplate)} onOpenChange={(v) => !v && setPreviewTemplate(null)}>
-        <DialogContent className="max-w-md">
-          <h2 className="text-lg font-semibold">{previewTemplate?.name}</h2>
-          <div className="rounded-xl bg-[#075E54] p-4 text-white">
+      <Dialog open={Boolean(previewTemplate)} onClose={() => setPreviewTemplate(null)} maxWidth="sm" fullWidth>
+        <DialogContent>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>{previewTemplate?.name}</Typography>
+          <Box sx={{ mt: 1.5, borderRadius: 3, bgcolor: "#075E54", p: 2, color: "#fff" }}>
             {previewTemplate?.components
               .filter((c) => c.type === "HEADER" && c.format !== "IMAGE" && c.text)
-              .map((c, i) => <p key={i} className="font-semibold">{c.text}</p>)}
-            <p className="mt-1 whitespace-pre-wrap text-sm">{previewTemplate ? bodyText(previewTemplate) : ""}</p>
+              .map((c, i) => <Typography key={i} sx={{ fontWeight: 700 }}>{c.text}</Typography>)}
+            <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: "pre-wrap" }}>{previewTemplate ? bodyText(previewTemplate) : ""}</Typography>
             {previewTemplate?.components
               .filter((c) => c.type === "FOOTER" && c.text)
-              .map((c, i) => <p key={i} className="mt-1 text-xs text-white/70">{c.text}</p>)}
-          </div>
+              .map((c, i) => <Typography key={i} variant="caption" sx={{ mt: 0.5, display: "block", color: "rgba(255,255,255,0.7)" }}>{c.text}</Typography>)}
+          </Box>
         </DialogContent>
       </Dialog>
 
       <TemplateStatsDialog template={statsTemplate} onOpenChange={(v) => !v && setStatsTemplate(null)} />
 
-      <Dialog open={Boolean(editTemplate)} onOpenChange={(v) => !v && setEditTemplate(null)}>
-        <DialogContent className="max-w-md">
-          <h2 className="text-lg font-semibold">Editar template</h2>
-          {editTemplate?.status === "APPROVED" && (
-            <p className="text-sm text-warning">Esse template já está aprovado — editar reenvia ele pra revisão da Meta.</p>
-          )}
-          <Textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} rows={5} />
-          <Button onClick={handleSaveEdit} disabled={savingEdit} className="w-full">
-            {savingEdit ? "Salvando..." : "Salvar"}
-          </Button>
+      <Dialog open={Boolean(editTemplate)} onClose={() => setEditTemplate(null)} maxWidth="sm" fullWidth>
+        <DialogContent>
+          <Stack spacing={2}>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>Editar template</Typography>
+            {editTemplate?.status === "APPROVED" && (
+              <Typography variant="body2" color="warning.main">Esse template já está aprovado — editar reenvia ele pra revisão da Meta.</Typography>
+            )}
+            <TextField value={editBody} onChange={(e) => setEditBody(e.target.value)} multiline minRows={5} fullWidth />
+            <Button variant="contained" fullWidth onClick={handleSaveEdit} disabled={savingEdit}>
+              {savingEdit ? "Salvando..." : "Salvar"}
+            </Button>
+          </Stack>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={newOpen} onOpenChange={(v) => { setNewOpen(v); if (!v) resetNewForm(); }}>
-        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
-          <h2 className="text-lg font-semibold">Novo template</h2>
-          <p className="text-sm text-muted-foreground">
-            Ao salvar, o template é enviado direto pra revisão da Meta. Se usar variáveis, informe exemplos reais abaixo — eles servem apenas para a aprovação e não serão enviados aos clientes.
-          </p>
+      <Dialog open={newOpen} onClose={() => { setNewOpen(false); resetNewForm(); }} maxWidth="md" fullWidth scroll="paper">
+        <DialogContent>
+          <Stack spacing={2.5}>
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>Novo template</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                Ao salvar, o template é enviado direto pra revisão da Meta. Se usar variáveis, informe exemplos reais abaixo — eles servem apenas para a aprovação e não serão enviados aos clientes.
+              </Typography>
+            </Box>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Nome (sem espaços/acentos)</label>
-              <Input
+            <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "1fr 1fr" }}>
+              <TextField
+                label="Nome (sem espaços/acentos)"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_"))}
                 placeholder="ex: carrinho_abandonado_v1"
+                fullWidth
               />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Idioma</label>
-              <Select value={newLanguage} onValueChange={setNewLanguage}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {LANGUAGES.map((l) => <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+              <TextField select label="Idioma" value={newLanguage} onChange={(e) => setNewLanguage(e.target.value)} fullWidth>
+                {LANGUAGES.map((l) => <MenuItem key={l.value} value={l.value}>{l.label}</MenuItem>)}
+              </TextField>
+            </Box>
 
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Categoria</label>
-            <Select value={newCategory} onValueChange={(v) => setNewCategory(v as typeof newCategory)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="MARKETING">Marketing (promoções, novidades)</SelectItem>
-                <SelectItem value="UTILITY">Utilidade (atualização de pedido, cobrança)</SelectItem>
-                <SelectItem value="AUTHENTICATION">Autenticação (código de verificação)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            <TextField select label="Categoria" value={newCategory} onChange={(e) => setNewCategory(e.target.value as typeof newCategory)} fullWidth>
+              <MenuItem value="MARKETING">Marketing (promoções, novidades)</MenuItem>
+              <MenuItem value="UTILITY">Utilidade (atualização de pedido, cobrança)</MenuItem>
+              <MenuItem value="AUTHENTICATION">Autenticação (código de verificação)</MenuItem>
+            </TextField>
 
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Cabeçalho (opcional)</label>
-            <Input value={newHeader} onChange={(e) => setNewHeader(e.target.value)} placeholder="Título curto em negrito" maxLength={60} />
-          </div>
+            <TextField label="Cabeçalho (opcional)" value={newHeader} onChange={(e) => setNewHeader(e.target.value)} placeholder="Título curto em negrito" slotProps={{ htmlInput: { maxLength: 60 } }} fullWidth />
 
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground">
-              Corpo — use {"{{1}}"}, {"{{2}}"}... pra variáveis
-            </label>
-            <Textarea value={newBody} onChange={(e) => setNewBody(e.target.value)} rows={4} placeholder="Oi {{1}}, seu pedido {{2}} foi enviado!" maxLength={1024} />
-            {!newVariableValidation.valid && (
-              <p className="text-xs text-critical">{newVariableValidation.error}</p>
-            )}
-          </div>
+            <Box>
+              <TextField
+                label={`Corpo — use {{1}}, {{2}}... pra variáveis`}
+                value={newBody}
+                onChange={(e) => setNewBody(e.target.value)}
+                multiline
+                minRows={4}
+                placeholder="Oi {{1}}, seu pedido {{2}} foi enviado!"
+                slotProps={{ htmlInput: { maxLength: 1024 } }}
+                fullWidth
+              />
+              {!newVariableValidation.valid && (
+                <Typography variant="caption" color="error" sx={{ mt: 0.5, display: "block" }}>{newVariableValidation.error}</Typography>
+              )}
+            </Box>
 
-          {newVariableValidation.valid && newVariableCount > 0 && (
-            <div className="rounded-xl border border-brand/20 bg-brand/5 p-4 space-y-3">
-              <div>
-                <p className="text-sm font-semibold">Exemplos das variáveis</p>
-                <p className="text-xs text-muted-foreground">
-                  A Meta usa estes valores somente para entender e aprovar o template. No disparo, cada cliente receberá os dados dinâmicos configurados na campanha ou automação.
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {newVariableValidation.indexes.map((variableNumber, index) => (
-                  <div key={variableNumber} className="space-y-1">
-                    <label className="text-xs font-semibold">{`Variável {{${variableNumber}}}`}</label>
-                    <Input
+            {newVariableValidation.valid && newVariableCount > 0 && (
+              <Stack spacing={1.5} sx={{ border: "1px solid", borderColor: "primary.light", bgcolor: "primary.50", borderRadius: 3, p: 2 }}>
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>Exemplos das variáveis</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    A Meta usa estes valores somente para entender e aprovar o template. No disparo, cada cliente receberá os dados dinâmicos configurados na campanha ou automação.
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}>
+                  {newVariableValidation.indexes.map((variableNumber, index) => (
+                    <TextField
+                      key={variableNumber}
+                      label={`Variável {{${variableNumber}}}`}
                       value={newVariableExamples[index] ?? ""}
                       onChange={(e) => {
                         const next = [...newVariableExamples];
@@ -451,140 +444,127 @@ export function TemplatesTab() {
                         setNewVariableExamples(next);
                       }}
                       placeholder={index === 0 ? "Ex: Maria" : index === 1 ? "Ex: #1548" : "Exemplo real"}
+                      fullWidth
                     />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Rodapé (opcional)</label>
-            <Input value={newFooter} onChange={(e) => setNewFooter(e.target.value)} placeholder="ex: Responda STOP para sair" maxLength={60} />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Botões de resposta rápida (opcional)</label>
-            <div className="mt-1 space-y-2">
-              {newButtons.map((b, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Input
-                    value={b}
-                    onChange={(e) => setNewButtons((prev) => prev.map((x, xi) => (xi === i ? e.target.value : x)))}
-                    placeholder="ex: Quero saber mais"
-                    maxLength={25}
-                  />
-                  <Button variant="ghost" size="icon" className="size-8 shrink-0" onClick={() => setNewButtons((prev) => prev.filter((_, xi) => xi !== i))}>
-                    <X className="size-4" />
-                  </Button>
-                </div>
-              ))}
-              {newButtons.length < 3 && (
-                <Button variant="outline" size="sm" className="gap-1" onClick={() => setNewButtons((prev) => [...prev, ""])}>
-                  <Plus className="size-3.5" /> Adicionar botão
-                </Button>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground">Botões de link (opcional, máx. 2)</label>
-            <p className="text-xs text-muted-foreground">
-              Pra um link que muda por cliente (ex: pagamento), a Meta só aceita variável no FINAL de uma URL com domínio
-              fixo — ex: <code>https://minhaloja.com.br/pedido/{"{{1}}"}</code>. Um link totalmente diferente por pedido
-              (como o de status da Shopify) não cabe nesse formato — nesses casos, continue mandando o link como texto no
-              corpo da mensagem.
-            </p>
-            <div className="space-y-3">
-              {newLinkButtons.map((linkButton, i) => {
-                const hasVariable = linkButton.url.includes("{{1}}");
-                return (
-                  <div key={i} className="space-y-2 rounded-lg border border-border p-3">
-                    <div className="flex items-start gap-2">
-                      <div className="grid flex-1 gap-2 sm:grid-cols-2">
-                        <Input
-                          value={linkButton.text}
-                          onChange={(e) =>
-                            setNewLinkButtons((prev) => prev.map((b, bi) => (bi === i ? { ...b, text: e.target.value } : b)))
-                          }
-                          placeholder="Texto do botão (ex: Pagar agora)"
-                          maxLength={25}
-                        />
-                        <Input
-                          value={linkButton.url}
-                          onChange={(e) =>
-                            setNewLinkButtons((prev) => prev.map((b, bi) => (bi === i ? { ...b, url: e.target.value } : b)))
-                          }
-                          placeholder="https://... (ou termine com {{1}} pra um link diferente por cliente)"
-                        />
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 shrink-0"
-                        onClick={() => setNewLinkButtons((prev) => prev.filter((_, bi) => bi !== i))}
-                      >
-                        <X className="size-4" />
-                      </Button>
-                    </div>
-                    {hasVariable && (
-                      <div className="space-y-1">
-                        <label className="text-xs font-semibold">Exemplo de URL completa (só pra Meta aprovar)</label>
-                        <Input
-                          value={linkButton.example}
-                          onChange={(e) =>
-                            setNewLinkButtons((prev) => prev.map((b, bi) => (bi === i ? { ...b, example: e.target.value } : b)))
-                          }
-                          placeholder="https://minhaloja.com.br/pedido/1548"
-                        />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {newLinkButtons.length < 2 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1"
-                  onClick={() => setNewLinkButtons((prev) => [...prev, { text: "", url: "", example: "" }])}
-                >
-                  <Plus className="size-3.5" /> Adicionar botão de link
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {(newHeader || newBody || newFooter) && (
-            <div className="rounded-xl bg-[#075E54] p-4 text-white">
-              {newHeader && <p className="font-semibold">{newHeader}</p>}
-              <p className="mt-1 whitespace-pre-wrap text-sm">{renderTemplateVariablePreview(newBody, newVariableExamples)}</p>
-              {newFooter && <p className="mt-1 text-xs text-white/70">{newFooter}</p>}
-              {(newButtons.filter(Boolean).length > 0 || newLinkButtons.some((b) => b.text.trim())) && (
-                <div className="mt-2 space-y-1 border-t border-white/20 pt-2">
-                  {newButtons.filter(Boolean).map((b, i) => (
-                    <p key={i} className="text-center text-sm text-[#53bdeb]">{b}</p>
                   ))}
-                  {newLinkButtons
-                    .filter((b) => b.text.trim())
-                    .map((b, i) => (
-                      <p key={i} className="text-center text-sm text-[#53bdeb]">🔗 {b.text}</p>
-                    ))}
-                </div>
-              )}
-            </div>
-          )}
+                </Box>
+              </Stack>
+            )}
 
-          <Button
-            onClick={handleCreate}
-            disabled={creating || !newName || !newBody || !variableExamplesReady || !linkButtonsReady}
-            className="w-full"
-          >
-            {creating ? "Enviando pra Meta..." : "Enviar pra aprovação"}
-          </Button>
+            <TextField label="Rodapé (opcional)" value={newFooter} onChange={(e) => setNewFooter(e.target.value)} placeholder="ex: Responda STOP para sair" slotProps={{ htmlInput: { maxLength: 60 } }} fullWidth />
+
+            <Box>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary" }}>Botões de resposta rápida (opcional)</Typography>
+              <Stack spacing={1} sx={{ mt: 1 }}>
+                {newButtons.map((b, i) => (
+                  <Stack key={i} direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <TextField
+                      value={b}
+                      onChange={(e) => setNewButtons((prev) => prev.map((x, xi) => (xi === i ? e.target.value : x)))}
+                      placeholder="ex: Quero saber mais"
+                      slotProps={{ htmlInput: { maxLength: 25 } }}
+                      fullWidth
+                    />
+                    <IconButton size="small" onClick={() => setNewButtons((prev) => prev.filter((_, xi) => xi !== i))}><X size={16} /></IconButton>
+                  </Stack>
+                ))}
+                {newButtons.length < 3 && (
+                  <Button size="small" variant="outlined" startIcon={<Plus size={14} />} sx={{ width: "fit-content" }} onClick={() => setNewButtons((prev) => [...prev, ""])}>
+                    Adicionar botão
+                  </Button>
+                )}
+              </Stack>
+            </Box>
+
+            <Box>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary" }}>Botões de link (opcional, máx. 2)</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                Pra um link que muda por cliente (ex: pagamento), a Meta só aceita variável no FINAL de uma URL com domínio
+                fixo — ex: <code>https://minhaloja.com.br/pedido/{"{{1}}"}</code>. Um link totalmente diferente por pedido
+                (como o de status da Shopify) não cabe nesse formato — nesses casos, continue mandando o link como texto no
+                corpo da mensagem.
+              </Typography>
+              <Stack spacing={1.5} sx={{ mt: 1 }}>
+                {newLinkButtons.map((linkButton, i) => {
+                  const hasVariable = linkButton.url.includes("{{1}}");
+                  return (
+                    <Stack key={i} spacing={1} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+                      <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start" }}>
+                        <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, flex: 1 }}>
+                          <TextField
+                            value={linkButton.text}
+                            onChange={(e) => setNewLinkButtons((prev) => prev.map((b, bi) => (bi === i ? { ...b, text: e.target.value } : b)))}
+                            placeholder="Texto do botão (ex: Pagar agora)"
+                            slotProps={{ htmlInput: { maxLength: 25 } }}
+                            fullWidth
+                          />
+                          <TextField
+                            value={linkButton.url}
+                            onChange={(e) => setNewLinkButtons((prev) => prev.map((b, bi) => (bi === i ? { ...b, url: e.target.value } : b)))}
+                            placeholder="https://... (ou termine com {{1}} pra um link diferente por cliente)"
+                            fullWidth
+                          />
+                        </Box>
+                        <IconButton size="small" onClick={() => setNewLinkButtons((prev) => prev.filter((_, bi) => bi !== i))}><X size={16} /></IconButton>
+                      </Stack>
+                      {hasVariable && (
+                        <TextField
+                          label="Exemplo de URL completa (só pra Meta aprovar)"
+                          value={linkButton.example}
+                          onChange={(e) => setNewLinkButtons((prev) => prev.map((b, bi) => (bi === i ? { ...b, example: e.target.value } : b)))}
+                          placeholder="https://minhaloja.com.br/pedido/1548"
+                          fullWidth
+                        />
+                      )}
+                    </Stack>
+                  );
+                })}
+                {newLinkButtons.length < 2 && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<Plus size={14} />}
+                    sx={{ width: "fit-content" }}
+                    onClick={() => setNewLinkButtons((prev) => [...prev, { text: "", url: "", example: "" }])}
+                  >
+                    Adicionar botão de link
+                  </Button>
+                )}
+              </Stack>
+            </Box>
+
+            {(newHeader || newBody || newFooter) && (
+              <Box sx={{ borderRadius: 3, bgcolor: "#075E54", p: 2, color: "#fff" }}>
+                {newHeader && <Typography sx={{ fontWeight: 700 }}>{newHeader}</Typography>}
+                <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: "pre-wrap" }}>{renderTemplateVariablePreview(newBody, newVariableExamples)}</Typography>
+                {newFooter && <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "rgba(255,255,255,0.7)" }}>{newFooter}</Typography>}
+                {(newButtons.filter(Boolean).length > 0 || newLinkButtons.some((b) => b.text.trim())) && (
+                  <Stack spacing={0.5} sx={{ mt: 1, borderTop: "1px solid rgba(255,255,255,0.2)", pt: 1 }}>
+                    {newButtons.filter(Boolean).map((b, i) => (
+                      <Typography key={i} variant="body2" sx={{ textAlign: "center", color: "#53bdeb" }}>{b}</Typography>
+                    ))}
+                    {newLinkButtons
+                      .filter((b) => b.text.trim())
+                      .map((b, i) => (
+                        <Typography key={i} variant="body2" sx={{ textAlign: "center", color: "#53bdeb" }}>🔗 {b.text}</Typography>
+                      ))}
+                  </Stack>
+                )}
+              </Box>
+            )}
+
+            <Button
+              variant="contained"
+              fullWidth
+              onClick={handleCreate}
+              disabled={creating || !newName || !newBody || !variableExamplesReady || !linkButtonsReady}
+            >
+              {creating ? "Enviando pra Meta..." : "Enviar pra aprovação"}
+            </Button>
+          </Stack>
         </DialogContent>
       </Dialog>
-    </div>
+    </Box>
   );
 }
 
@@ -599,54 +579,54 @@ function TemplateStatsDialog({ template, onOpenChange }: { template: TemplateRow
   const rate = (n: number, total: number) => (total > 0 ? `${((n / total) * 100).toFixed(1)}%` : "0.0%");
 
   return (
-    <Dialog open={Boolean(template)} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[80vh] max-w-lg overflow-y-auto">
-        <h2 className="text-lg font-semibold">{template?.name}</h2>
-        {data && (
-          <>
-            <div className="grid grid-cols-3 gap-3 text-center">
-              <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-2xl font-bold">{data.enviados}</p>
-                <p className="text-xs text-muted-foreground">Enviados</p>
-              </div>
-              <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-2xl font-bold">{data.entregues}</p>
-                <p className="text-xs text-muted-foreground">Entregues ({rate(data.entregues, data.enviados)})</p>
-              </div>
-              <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-2xl font-bold">{data.lidos}</p>
-                <p className="text-xs text-muted-foreground">Lidos ({rate(data.lidos, data.enviados)})</p>
-              </div>
-            </div>
-            <div className="mt-3 max-h-48 overflow-y-auto rounded-lg border border-border">
-              <table className="w-full text-xs">
-                <thead className="bg-muted/60 text-left uppercase tracking-wider text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2">Data</th>
-                    <th className="px-3 py-2">Env</th>
-                    <th className="px-3 py-2">Ent</th>
-                    <th className="px-3 py-2">Lid</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.porDia.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">Sem envios ainda.</td>
-                    </tr>
-                  )}
-                  {data.porDia.map((d) => (
-                    <tr key={d.data} className="border-t border-border">
-                      <td className="px-3 py-1.5">{d.data}</td>
-                      <td className="px-3 py-1.5">{d.env}</td>
-                      <td className="px-3 py-1.5">{d.ent}</td>
-                      <td className="px-3 py-1.5">{d.lid}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
+    <Dialog open={Boolean(template)} onClose={() => onOpenChange(false)} maxWidth="sm" fullWidth scroll="paper">
+      <DialogContent>
+        <Stack spacing={2}>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>{template?.name}</Typography>
+          {data && (
+            <>
+              <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "repeat(3, 1fr)", textAlign: "center" }}>
+                <Box sx={{ bgcolor: "action.hover", borderRadius: 2, p: 1.5 }}>
+                  <Typography variant="h5" sx={{ fontWeight: 700 }}>{data.enviados}</Typography>
+                  <Typography variant="caption" color="text.secondary">Enviados</Typography>
+                </Box>
+                <Box sx={{ bgcolor: "action.hover", borderRadius: 2, p: 1.5 }}>
+                  <Typography variant="h5" sx={{ fontWeight: 700 }}>{data.entregues}</Typography>
+                  <Typography variant="caption" color="text.secondary">Entregues ({rate(data.entregues, data.enviados)})</Typography>
+                </Box>
+                <Box sx={{ bgcolor: "action.hover", borderRadius: 2, p: 1.5 }}>
+                  <Typography variant="h5" sx={{ fontWeight: 700 }}>{data.lidos}</Typography>
+                  <Typography variant="caption" color="text.secondary">Lidos ({rate(data.lidos, data.enviados)})</Typography>
+                </Box>
+              </Box>
+              <TableContainer sx={{ maxHeight: 192, border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Data</TableCell>
+                      <TableCell>Env</TableCell>
+                      <TableCell>Ent</TableCell>
+                      <TableCell>Lid</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {data.porDia.length === 0 && (
+                      <TableRow><TableCell colSpan={4} align="center" sx={{ py: 2, color: "text.secondary" }}>Sem envios ainda.</TableCell></TableRow>
+                    )}
+                    {data.porDia.map((d) => (
+                      <TableRow key={d.data}>
+                        <TableCell>{d.data}</TableCell>
+                        <TableCell>{d.env}</TableCell>
+                        <TableCell>{d.ent}</TableCell>
+                        <TableCell>{d.lid}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </>
+          )}
+        </Stack>
       </DialogContent>
     </Dialog>
   );

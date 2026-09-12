@@ -1,11 +1,18 @@
-import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, createLink, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { MessageCircle, Megaphone, Inbox, FileText, Workflow, BarChart3, Settings } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import AppBar from "@mui/material/AppBar";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import IconButton from "@mui/material/IconButton";
+import Stack from "@mui/material/Stack";
+import Toolbar from "@mui/material/Toolbar";
+import Typography from "@mui/material/Typography";
 
 export const Route = createFileRoute("/whatsapp")({
   component: WhatsappLayout,
 });
+
+const NavButton = createLink(Button);
 
 const NAV: { to: any; label: string; icon: any; exact?: boolean }[] = [
   { to: "/whatsapp", label: "Campanhas", icon: Megaphone, exact: true },
@@ -19,44 +26,58 @@ function WhatsappLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
-        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-4 px-4 py-4 md:px-8">
-          <span className="gradient-brand flex size-10 items-center justify-center rounded-2xl text-primary-foreground">
-            <MessageCircle className="size-5" />
-          </span>
-          <div className="mr-auto">
-            <h1 className="text-lg font-bold leading-tight tracking-tight">WhatsApp</h1>
-            <p className="text-xs text-muted-foreground">API oficial da Meta — campanhas, conversas e modelos.</p>
-          </div>
-          <nav className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card p-1">
+    <Box sx={{ minHeight: "100vh" }}>
+      <AppBar
+        position="sticky"
+        color="transparent"
+        elevation={0}
+        sx={{ borderBottom: "1px solid", borderColor: "divider", backdropFilter: "blur(8px)", bgcolor: "background.default" }}
+      >
+        <Toolbar sx={{ maxWidth: 1400, width: "100%", mx: "auto", gap: 2, flexWrap: "wrap", py: 1.5, px: { xs: 2, md: 4 } }} disableGutters>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: 3,
+              background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+              color: "primary.contrastText",
+            }}
+          >
+            <MessageCircle size={20} />
+          </Box>
+          <Box sx={{ mr: "auto" }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>WhatsApp</Typography>
+            <Typography variant="caption" color="text.secondary">API oficial da Meta — campanhas, conversas e modelos.</Typography>
+          </Box>
+          <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", border: "1px solid", borderColor: "divider", borderRadius: 3, p: 0.5, bgcolor: "background.paper" }}>
             {NAV.map((item) => {
               const active = item.exact ? pathname === item.to : pathname.startsWith(item.to);
               return (
-                <Link
+                <NavButton
                   key={item.to}
                   to={item.to}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-                    active ? "gradient-brand text-primary-foreground" : "text-muted-foreground hover:bg-accent",
-                  )}
+                  size="small"
+                  variant={active ? "contained" : "text"}
+                  color={active ? "primary" : "inherit"}
+                  startIcon={<item.icon size={14} />}
+                  sx={{ borderRadius: 2 }}
                 >
-                  <item.icon className="size-3.5" />
                   {item.label}
-                </Link>
+                </NavButton>
               );
             })}
-          </nav>
-          <Button variant="outline" size="icon" asChild className="size-9 rounded-full">
-            <Link to="/configuracoes">
-              <Settings className="size-4" />
-            </Link>
-          </Button>
-        </div>
-      </header>
-      <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-8">
+          </Stack>
+          <IconButton component={Link} to="/configuracoes" sx={{ border: "1px solid", borderColor: "divider" }}>
+            <Settings size={16} />
+          </IconButton>
+        </Toolbar>
+      </AppBar>
+      <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, md: 4 }, py: 3 }}>
         <Outlet />
-      </main>
-    </div>
+      </Box>
+    </Box>
   );
 }

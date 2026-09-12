@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, createLink, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Plus, RefreshCw, Search, Check, X, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
@@ -9,12 +9,19 @@ import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import IconButton from "@mui/material/IconButton";
+import InputAdornment from "@mui/material/InputAdornment";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import { listWaCampaigns, type WaCampaignListRow } from "@/lib/wa-campaigns.functions";
 import { approveCampaign, rejectCampaign } from "@/lib/whatsapp-meta.functions";
+
+const LinkTypography = createLink(Typography);
+const LinkIconButton = createLink(IconButton);
 
 export const Route = createFileRoute("/whatsapp/")({
   head: () => ({
@@ -40,14 +47,14 @@ const STATUS_LABEL: Record<string, string> = {
   cancelada: "Cancelada",
 };
 
-const STATUS_CLASS: Record<string, string> = {
-  aguardando_aprovacao: "bg-warning-soft text-warning",
-  rejeitada: "bg-critical-soft text-critical",
-  enviando: "bg-warning-soft text-warning",
-  agendada: "bg-brand-soft text-brand",
-  finalizada: "bg-success-soft text-success",
-  erro: "bg-critical-soft text-critical",
-  cancelada: "bg-muted text-muted-foreground",
+const STATUS_COLOR: Record<string, "warning" | "error" | "info" | "success" | "default"> = {
+  aguardando_aprovacao: "warning",
+  rejeitada: "error",
+  enviando: "warning",
+  agendada: "info",
+  finalizada: "success",
+  erro: "error",
+  cancelada: "default",
 };
 
 const FILTERS = [
@@ -109,11 +116,11 @@ function pct(part: number, total: number): string {
 
 function Metric({ label, value, hint }: { label: string; value: string; hint?: string | undefined }) {
   return (
-    <div className="text-right">
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground xl:hidden">{label}</p>
-      <p className="text-lg font-semibold leading-tight">{value}</p>
-      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
-    </div>
+    <Box sx={{ textAlign: "right" }}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: { xl: "none" }, textTransform: "uppercase", fontSize: 11 }}>{label}</Typography>
+      <Typography sx={{ fontWeight: 600, lineHeight: 1.2 }}>{value}</Typography>
+      {hint && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>{hint}</Typography>}
+    </Box>
   );
 }
 
@@ -193,65 +200,70 @@ function CampaignsPage() {
   };
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-        <div className="surface-card border-success/30 bg-success-soft/40 p-4 lg:col-span-2">
-          <p className="text-xs font-medium text-success">Valor vendido (30 dias após o envio)</p>
-          <p className="mt-1 text-2xl font-bold tracking-tight text-success">{money(totals.revenue)}</p>
-          <p className="text-[11px] text-muted-foreground">{totals.orders.toLocaleString("pt-BR")} pedidos atribuídos</p>
-        </div>
+    <Stack spacing={2.5}>
+      <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "repeat(2, 1fr)", lg: "repeat(6, 1fr)" } }}>
+        <Box sx={{ gridColumn: { lg: "span 2" }, border: "1px solid", borderColor: "success.light", bgcolor: "success.50", borderRadius: 3, p: 2 }}>
+          <Typography variant="caption" sx={{ fontWeight: 600, color: "success.dark" }}>Valor vendido (30 dias após o envio)</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: "success.dark", mt: 0.5 }}>{money(totals.revenue)}</Typography>
+          <Typography variant="caption" color="text.secondary">{totals.orders.toLocaleString("pt-BR")} pedidos atribuídos</Typography>
+        </Box>
         {[
           { label: "Enviadas", value: totals.sent },
           { label: "Entregues", value: totals.delivered },
           { label: "Lidas", value: totals.read },
           { label: "Falhas", value: totals.failed },
         ].map((card) => (
-          <div key={card.label} className="surface-card p-4">
-            <p className="text-xs text-muted-foreground">{card.label}</p>
-            <p className="mt-1 text-2xl font-bold tracking-tight">{card.value.toLocaleString("pt-BR")}</p>
-          </div>
+          <Box key={card.label} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+            <Typography variant="caption" color="text.secondary">{card.label}</Typography>
+            <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>{card.value.toLocaleString("pt-BR")}</Typography>
+          </Box>
         ))}
-      </div>
+      </Box>
 
-
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[220px] flex-1">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar campanha…" className="pl-9" />
-        </div>
-        <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card p-1">
+      <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
+        <TextField
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar campanha…"
+          size="small"
+          sx={{ minWidth: 220, flex: 1 }}
+          slotProps={{ input: { startAdornment: <InputAdornment position="start"><Search size={16} /></InputAdornment> } }}
+        />
+        <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", border: "1px solid", borderColor: "divider", borderRadius: 3, p: 0.5 }}>
           {FILTERS.map((f) => (
-            <button
+            <Button
               key={f.value}
+              size="small"
+              variant={filter === f.value ? "contained" : "text"}
+              color={filter === f.value ? "primary" : "inherit"}
+              sx={{ borderRadius: 2 }}
               onClick={() => setFilter(f.value)}
-              className={cn(
-                "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-                filter === f.value ? "gradient-brand text-primary-foreground" : "text-muted-foreground hover:bg-accent",
-              )}
             >
               {f.label}
-            </button>
+            </Button>
           ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card p-1">
+        </Stack>
+        <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", border: "1px solid", borderColor: "divider", borderRadius: 3, p: 0.5 }}>
           {DATE_PERIODS.map((p) => (
-            <button
+            <Button
               key={p.key}
+              size="small"
+              variant={datePeriod === p.key ? "contained" : "text"}
+              color={datePeriod === p.key ? "primary" : "inherit"}
+              sx={{ borderRadius: 2 }}
               onClick={() => setDatePeriod(p.key)}
-              className={cn(
-                "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-                datePeriod === p.key ? "gradient-brand text-primary-foreground" : "text-muted-foreground hover:bg-accent",
-              )}
             >
               {p.label}
-            </button>
+            </Button>
           ))}
-        </div>
+        </Stack>
+        {/* Popover/Calendar (shadcn) mantidos de propósito: date-range picker não tem
+            equivalente MUI instalado (precisaria de @mui/x-date-pickers, fora do escopo
+            desta migração de biblioteca de componentes de UI). */}
         {datePeriod === "personalizado" && (
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="gap-2">
-                <CalendarIcon className="size-4" />
+              <Button variant="outlined" startIcon={<CalendarIcon size={16} />}>
                 {range?.from
                   ? range.to
                     ? `${format(range.from, "dd/MM", { locale: ptBR })} – ${format(range.to, "dd/MM", { locale: ptBR })}`
@@ -271,101 +283,100 @@ function CampaignsPage() {
             </PopoverContent>
           </Popover>
         )}
-        <Button variant="outline" onClick={() => refetch()} disabled={isFetching} className="gap-2">
-          <RefreshCw className={cn("size-3.5", isFetching && "animate-spin")} /> Atualizar
+        <Button variant="outlined" startIcon={<RefreshCw size={14} className={isFetching ? "animate-spin" : undefined} />} onClick={() => refetch()} disabled={isFetching}>
+          Atualizar
         </Button>
-        <Button className="gap-2" onClick={() => navigate({ to: "/whatsapp/nova" })}>
-          <Plus className="size-4" /> Nova campanha
+        <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => navigate({ to: "/whatsapp/nova" })}>
+          Nova campanha
         </Button>
-      </div>
+      </Stack>
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Carregando campanhas…</p>
+        <Typography variant="body2" color="text.secondary">Carregando campanhas…</Typography>
       ) : filtered.length === 0 ? (
-        <div className="surface-card p-10 text-center">
-          <p className="font-medium">Nenhuma campanha aqui.</p>
-          <p className="mt-1 text-sm text-muted-foreground">Crie a primeira e acompanhe entrega e leitura em tempo real.</p>
-          <Button className="mt-4 gap-2" onClick={() => navigate({ to: "/whatsapp/nova" })}>
-            <Plus className="size-4" /> Nova campanha
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 5, textAlign: "center" }}>
+          <Typography sx={{ fontWeight: 600 }}>Nenhuma campanha aqui.</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Crie a primeira e acompanhe entrega e leitura em tempo real.</Typography>
+          <Button variant="contained" startIcon={<Plus size={16} />} sx={{ mt: 2 }} onClick={() => navigate({ to: "/whatsapp/nova" })}>
+            Nova campanha
           </Button>
-        </div>
+        </Box>
       ) : (
-        <div className="surface-card overflow-hidden p-0">
-          <div className="hidden items-center gap-4 border-b border-border bg-muted/40 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground xl:flex">
-            <div className="min-w-[220px] flex-1">Campanha</div>
-            <div className="grid w-[560px] shrink-0 grid-cols-5 gap-3 text-right">
-              <span>Público</span>
-              <span>Enviadas</span>
-              <span>Entregues</span>
-              <span>Lidas</span>
-              <span>Falhas</span>
-            </div>
-            <div className="w-[130px] shrink-0 text-right">Valor vendido</div>
-            <div className="w-[120px] shrink-0" />
-          </div>
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, overflow: "hidden" }}>
+          <Stack
+            direction="row"
+            spacing={2}
+            sx={{ display: { xs: "none", xl: "flex" }, alignItems: "center", borderBottom: "1px solid", borderColor: "divider", bgcolor: "action.hover", px: 2, py: 1.25 }}
+          >
+            <Box sx={{ minWidth: 220, flex: 1 }}><Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", color: "text.secondary" }}>Campanha</Typography></Box>
+            <Box sx={{ width: 560, flexShrink: 0, display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 1.5, textAlign: "right" }}>
+              {["Público", "Enviadas", "Entregues", "Lidas", "Falhas"].map((label) => (
+                <Typography key={label} variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", color: "text.secondary" }}>{label}</Typography>
+              ))}
+            </Box>
+            <Box sx={{ width: 130, flexShrink: 0, textAlign: "right" }}><Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", color: "text.secondary" }}>Valor vendido</Typography></Box>
+            <Box sx={{ width: 120, flexShrink: 0 }} />
+          </Stack>
 
-          <div className="divide-y divide-border">
+          <Stack divider={<Box sx={{ borderBottom: "1px solid", borderColor: "divider" }} />}>
             {filtered.map((c) => (
-              <div key={c.id} className="flex flex-wrap items-center gap-4 px-4 py-3.5 transition-colors hover:bg-muted/40">
-                <div className="min-w-[220px] flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link to="/whatsapp/$campaignId" params={{ campaignId: c.id }} className="font-semibold hover:underline">
+              <Stack
+                key={c.id}
+                direction="row"
+                spacing={2}
+                sx={{ flexWrap: "wrap", alignItems: "center", px: 2, py: 1.75, "&:hover": { bgcolor: "action.hover" } }}
+              >
+                <Box sx={{ minWidth: 220, flex: 1 }}>
+                  <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
+                    <LinkTypography to="/whatsapp/$campaignId" params={{ campaignId: c.id }} sx={{ fontWeight: 600, textDecoration: "none", color: "text.primary", "&:hover": { textDecoration: "underline" } }}>
                       {c.name}
-                    </Link>
-                    <Badge className={cn("border-0", STATUS_CLASS[c.status] ?? "bg-muted text-muted-foreground")}>
-                      {STATUS_LABEL[c.status] ?? c.status}
-                    </Badge>
-                    {c.origin === "automacao" && <Badge variant="outline">Automação</Badge>}
-                    {c.queuePaused && <Badge variant="outline">Pausada</Badge>}
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
+                    </LinkTypography>
+                    <Chip size="small" color={STATUS_COLOR[c.status] ?? "default"} label={STATUS_LABEL[c.status] ?? c.status} />
+                    {c.origin === "automacao" && <Chip size="small" variant="outlined" label="Automação" />}
+                    {c.queuePaused && <Chip size="small" variant="outlined" label="Pausada" />}
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
                     {c.audienceLabel ?? "Público"} · modelo {c.templateName || "—"} ·{" "}
                     {new Date(c.sentAt ?? c.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
-                  </p>
-                </div>
+                  </Typography>
+                </Box>
 
-                <div className="grid w-full shrink-0 grid-cols-5 gap-3 text-right xl:w-[560px]">
+                <Box sx={{ width: { xs: "100%", xl: 560 }, flexShrink: 0, display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 1.5, textAlign: "right" }}>
                   <Metric label="Público" value={c.total.toLocaleString("pt-BR")} />
                   <Metric label="Enviadas" value={c.sent.toLocaleString("pt-BR")} hint={pct(c.sent, c.total)} />
                   <Metric label="Entregues" value={c.delivered.toLocaleString("pt-BR")} hint={pct(c.delivered, c.sent)} />
                   <Metric label="Lidas" value={c.read.toLocaleString("pt-BR")} hint={pct(c.read, c.delivered)} />
-                  <Metric
-                    label="Falhas"
-                    value={c.failed.toLocaleString("pt-BR")}
-                    hint={c.pending ? `${c.pending} na fila` : undefined}
-                  />
-                </div>
+                  <Metric label="Falhas" value={c.failed.toLocaleString("pt-BR")} hint={c.pending ? `${c.pending} na fila` : undefined} />
+                </Box>
 
-                <div className="w-[130px] shrink-0 text-right">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground xl:hidden">Valor vendido</p>
-                  <p className={cn("text-lg font-semibold leading-tight", c.revenue > 0 ? "text-success" : "text-muted-foreground")}>
+                <Box sx={{ width: 130, flexShrink: 0, textAlign: "right" }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: { xl: "none" }, textTransform: "uppercase", fontSize: 11 }}>Valor vendido</Typography>
+                  <Typography sx={{ fontWeight: 600, lineHeight: 1.2, color: c.revenue > 0 ? "success.main" : "text.secondary" }}>
                     {c.revenue > 0 ? money(c.revenue) : "—"}
-                  </p>
-                  {c.orders > 0 && <p className="text-[11px] text-muted-foreground">{c.orders} pedidos</p>}
-                </div>
+                  </Typography>
+                  {c.orders > 0 && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>{c.orders} pedidos</Typography>}
+                </Box>
 
-                <div className="flex min-w-[120px] shrink-0 items-center justify-end gap-2">
+                <Stack direction="row" spacing={1} sx={{ minWidth: 120, flexShrink: 0, alignItems: "center", justifyContent: "flex-end" }}>
                   {c.status === "aguardando_aprovacao" && (
                     <>
-                      <Button size="sm" className="gap-1.5" disabled={busyId === c.id} onClick={() => approve(c.id)}>
-                        <Check className="size-3.5" /> Aprovar
+                      <Button size="small" variant="contained" startIcon={<Check size={14} />} disabled={busyId === c.id} onClick={() => approve(c.id)}>
+                        Aprovar
                       </Button>
-                      <Button size="sm" variant="outline" className="gap-1.5" disabled={busyId === c.id} onClick={() => reject(c.id)}>
-                        <X className="size-3.5" /> Rejeitar
+                      <Button size="small" variant="outlined" startIcon={<X size={14} />} disabled={busyId === c.id} onClick={() => reject(c.id)}>
+                        Rejeitar
                       </Button>
                     </>
                   )}
-                  <Button size="icon" variant="ghost" asChild>
-                    <Link to="/whatsapp/$campaignId" params={{ campaignId: c.id }}>
-                      <ChevronRight className="size-4" />
-                    </Link>
-                  </Button>
-                </div>
-              </div>
+                  <LinkIconButton to="/whatsapp/$campaignId" params={{ campaignId: c.id }} size="small">
+                    <ChevronRight size={16} />
+                  </LinkIconButton>
+                </Stack>
+              </Stack>
             ))}
-          </div>
-        </div>
+          </Stack>
+        </Box>
       )}
-    </div>
+    </Stack>
   );
 }

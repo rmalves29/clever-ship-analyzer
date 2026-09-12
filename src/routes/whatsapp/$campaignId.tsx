@@ -1,12 +1,21 @@
 import { useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, createLink } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronLeft, RefreshCw, RotateCcw, Ban, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import IconButton from "@mui/material/IconButton";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Typography from "@mui/material/Typography";
 import { getWaCampaign, waCampaignAction } from "@/lib/wa-campaigns.functions";
 
 export const Route = createFileRoute("/whatsapp/$campaignId")({
@@ -20,10 +29,12 @@ export const Route = createFileRoute("/whatsapp/$campaignId")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  errorComponent: ({ error }) => <p className="p-8 text-sm text-critical">{error.message}</p>,
-  notFoundComponent: () => <p className="p-8 text-sm text-muted-foreground">Campanha não encontrada.</p>,
+  errorComponent: ({ error }) => <Typography variant="body2" color="error" sx={{ p: 4 }}>{error.message}</Typography>,
+  notFoundComponent: () => <Typography variant="body2" color="text.secondary" sx={{ p: 4 }}>Campanha não encontrada.</Typography>,
   component: CampaignDetailPage,
 });
+
+const LinkIconButton = createLink(IconButton);
 
 const RECIPIENT_LABEL: Record<string, string> = {
   queued: "Na fila",
@@ -35,14 +46,14 @@ const RECIPIENT_LABEL: Record<string, string> = {
   cancelled: "Cancelada",
 };
 
-const RECIPIENT_CLASS: Record<string, string> = {
-  queued: "bg-muted text-muted-foreground",
-  sending: "bg-warning-soft text-warning",
-  sent: "bg-brand-soft text-brand",
-  delivered: "bg-success-soft text-success",
-  read: "bg-success-soft text-success",
-  failed: "bg-critical-soft text-critical",
-  cancelled: "bg-muted text-muted-foreground",
+const RECIPIENT_COLOR: Record<string, "default" | "warning" | "info" | "success" | "error"> = {
+  queued: "default",
+  sending: "warning",
+  sent: "info",
+  delivered: "success",
+  read: "success",
+  failed: "error",
+  cancelled: "default",
 };
 
 const STATUS_TABS = ["todos", "queued", "sent", "delivered", "read", "failed"] as const;
@@ -73,44 +84,43 @@ function CampaignDetailPage() {
     }
   };
 
-  if (isLoading || !data) return <p className="text-sm text-muted-foreground">Carregando campanha…</p>;
+  if (isLoading || !data) return <Typography variant="body2" color="text.secondary">Carregando campanha…</Typography>;
   const c = data.campaign;
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
-          <Link to="/whatsapp">
-            <ChevronLeft className="size-5" />
-          </Link>
-        </Button>
-        <div className="mr-auto">
-          <h2 className="text-xl font-bold tracking-tight">{c.name}</h2>
-          <p className="text-xs text-muted-foreground">
+    <Stack spacing={2.5}>
+      <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap", alignItems: "center" }}>
+        <LinkIconButton to="/whatsapp">
+          <ChevronLeft size={20} />
+        </LinkIconButton>
+        <Box sx={{ mr: "auto" }}>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>{c.name}</Typography>
+          <Typography variant="caption" color="text.secondary">
             {c.audienceLabel ?? "Público"} · modelo {c.templateName || "—"} ({c.templateLanguage}) ·{" "}
             {new Date(c.sentAt ?? c.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
-          </p>
-        </div>
-        <Button variant="outline" className="gap-2" disabled={busy || isFetching} onClick={() => act("refresh")}>
-          <RefreshCw className={cn("size-3.5", isFetching && "animate-spin")} /> Atualizar
+          </Typography>
+        </Box>
+        <Button variant="outlined" startIcon={<RefreshCw size={14} className={isFetching ? "animate-spin" : undefined} />} disabled={busy || isFetching} onClick={() => act("refresh")}>
+          Atualizar
         </Button>
-        <Button variant="outline" className="gap-2" disabled={busy} onClick={() => act(c.queuePaused ? "resume" : "pause")}>
-          {c.queuePaused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
+        <Button variant="outlined" startIcon={c.queuePaused ? <Play size={14} /> : <Pause size={14} />} disabled={busy} onClick={() => act(c.queuePaused ? "resume" : "pause")}>
           {c.queuePaused ? "Retomar" : "Pausar"}
         </Button>
-        <Button variant="outline" className="gap-2" disabled={busy || c.failed === 0} onClick={() => act("retry")}>
-          <RotateCcw className="size-3.5" /> Repetir falhas
+        <Button variant="outlined" startIcon={<RotateCcw size={14} />} disabled={busy || c.failed === 0} onClick={() => act("retry")}>
+          Repetir falhas
         </Button>
-        <Button variant="outline" className="gap-2 text-critical" disabled={busy || c.pending === 0} onClick={() => act("cancel")}>
-          <Ban className="size-3.5" /> Cancelar restante
+        <Button variant="outlined" color="error" startIcon={<Ban size={14} />} disabled={busy || c.pending === 0} onClick={() => act("cancel")}>
+          Cancelar restante
         </Button>
-      </div>
+      </Stack>
 
       {(data.lastError || data.rejectReason) && (
-        <div className="surface-card border-critical/40 p-4 text-sm text-critical">{data.rejectReason ?? data.lastError}</div>
+        <Box sx={{ border: "1px solid", borderColor: "error.main", borderRadius: 3, p: 2 }}>
+          <Typography variant="body2" color="error">{data.rejectReason ?? data.lastError}</Typography>
+        </Box>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "repeat(3, 1fr)", lg: "repeat(6, 1fr)" } }}>
         {[
           { label: "Destinatários", value: c.total },
           { label: "Enviadas", value: c.sent },
@@ -119,49 +129,47 @@ function CampaignDetailPage() {
           { label: "Falhas", value: c.failed },
           { label: "Na fila", value: c.pending },
         ].map((card) => (
-          <div key={card.label} className="surface-card p-4">
-            <p className="text-xs text-muted-foreground">{card.label}</p>
-            <p className="mt-1 text-2xl font-bold tracking-tight">{card.value.toLocaleString("pt-BR")}</p>
-          </div>
+          <Box key={card.label} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+            <Typography variant="caption" color="text.secondary">{card.label}</Typography>
+            <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>{card.value.toLocaleString("pt-BR")}</Typography>
+          </Box>
         ))}
-      </div>
+      </Box>
 
-      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card p-1 w-fit">
+      <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", border: "1px solid", borderColor: "divider", borderRadius: 3, p: 0.5, width: "fit-content" }}>
         {STATUS_TABS.map((s) => (
-          <button
+          <Button
             key={s}
+            size="small"
+            variant={statusTab === s ? "contained" : "text"}
+            color={statusTab === s ? "primary" : "inherit"}
+            sx={{ borderRadius: 2 }}
             onClick={() => setStatusTab(s)}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
-              statusTab === s ? "gradient-brand text-primary-foreground" : "text-muted-foreground hover:bg-accent",
-            )}
           >
             {s === "todos" ? "Todos" : RECIPIENT_LABEL[s]}
-          </button>
+          </Button>
         ))}
-      </div>
+      </Stack>
 
-      <div className="surface-card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-4 py-2">Cliente</th>
-              <th className="px-4 py-2">Telefone</th>
-              <th className="px-4 py-2">Situação</th>
-              <th className="px-4 py-2">Motivo / horário</th>
-            </tr>
-          </thead>
-          <tbody>
+      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Cliente</TableCell>
+              <TableCell>Telefone</TableCell>
+              <TableCell>Situação</TableCell>
+              <TableCell>Motivo / horário</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {data.recipients.map((r) => (
-              <tr key={r.id} className="border-t border-border/60">
-                <td className="px-4 py-2">{r.name ?? "—"}</td>
-                <td className="px-4 py-2 font-mono text-xs">{r.phone}</td>
-                <td className="px-4 py-2">
-                  <Badge className={cn("border-0", RECIPIENT_CLASS[r.status] ?? "bg-muted text-muted-foreground")}>
-                    {RECIPIENT_LABEL[r.status] ?? r.status}
-                  </Badge>
-                </td>
-                <td className="px-4 py-2 text-xs text-muted-foreground">
+              <TableRow key={r.id}>
+                <TableCell>{r.name ?? "—"}</TableCell>
+                <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>{r.phone}</TableCell>
+                <TableCell>
+                  <Chip size="small" color={RECIPIENT_COLOR[r.status] ?? "default"} label={RECIPIENT_LABEL[r.status] ?? r.status} />
+                </TableCell>
+                <TableCell sx={{ fontSize: 12, color: "text.secondary" }}>
                   {r.errorMessage
                     ? `${r.errorMessage}${r.errorCode ? ` (${r.errorCode})` : ""}`
                     : r.readAt
@@ -171,19 +179,19 @@ function CampaignDetailPage() {
                         : r.sentAt
                           ? `Enviada em ${new Date(r.sentAt).toLocaleString("pt-BR")}`
                           : "—"}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
             {data.recipients.length === 0 && (
-              <tr>
-                <td className="px-4 py-6 text-center text-muted-foreground" colSpan={4}>
+              <TableRow>
+                <TableCell colSpan={4} align="center" sx={{ py: 4, color: "text.secondary" }}>
                   Nenhum destinatário nessa situação.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Stack>
   );
 }

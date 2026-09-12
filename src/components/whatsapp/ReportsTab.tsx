@@ -1,26 +1,44 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { LineChart } from "@mui/x-charts/LineChart";
+import Box from "@mui/material/Box";
+import LinearProgress from "@mui/material/LinearProgress";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Typography from "@mui/material/Typography";
 import { getCampaigns, getCampaignsFailureBreakdown, listAutomations } from "@/lib/whatsapp-meta.functions";
 import { brl, brlCents } from "@/lib/crm-mock";
 import { AutomationReentryControl } from "@/components/whatsapp/AutomationReentryControl";
 import { QueueHealthPanel } from "@/components/whatsapp/QueueHealthPanel";
 import { PresendAuditPanel } from "@/components/whatsapp/PresendAuditPanel";
 
-function FunnelRow({ label, value, pct, tone }: { label: string; value: number; pct: number; tone: string }) {
+const TREND_SERIES = [
+  { key: "enviadas", label: "Enviadas", color: "#7367F0" },
+  { key: "lidas", label: "Lidas", color: "#00CFE8" },
+  { key: "vendas", label: "Pedidos", color: "#28C76F" },
+] as const;
+
+function FunnelRow({ label, value, pct, color }: { label: string; value: number; pct: number; color: string }) {
   return (
-    <div>
-      <div className="flex items-center justify-between text-sm">
-        <span className="font-medium">{label}</span>
-        <span className="font-semibold">
-          {value.toLocaleString("pt-BR")} <span className="text-xs text-muted-foreground">{pct.toFixed(1)}%</span>
-        </span>
-      </div>
-      <div className="mt-1.5 h-2 rounded-full bg-muted">
-        <div className={`h-2 rounded-full ${tone}`} style={{ width: `${Math.min(100, pct)}%` }} />
-      </div>
-    </div>
+    <Box>
+      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>{label}</Typography>
+        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+          {value.toLocaleString("pt-BR")} <Typography component="span" variant="caption" color="text.secondary">{pct.toFixed(1)}%</Typography>
+        </Typography>
+      </Stack>
+      <LinearProgress
+        variant="determinate"
+        value={Math.min(100, pct)}
+        sx={{ mt: 0.75, height: 8, borderRadius: 4, bgcolor: "action.hover", "& .MuiLinearProgress-bar": { bgcolor: color, borderRadius: 4 } }}
+      />
+    </Box>
   );
 }
 
@@ -83,38 +101,38 @@ export function ReportsTab() {
   }, [list]);
 
   return (
-    <div className="mt-4 space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="surface-card p-5">
-          <p className="text-xs text-muted-foreground">Campanhas</p>
-          <p className="mt-2 text-3xl font-bold">{list.length}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{totals.enviadas.toLocaleString("pt-BR")} envios</p>
-        </div>
-        <div className="surface-card p-5">
-          <p className="text-xs text-muted-foreground">Receita</p>
-          <p className="mt-2 text-3xl font-bold">{brl(totals.receita)}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{totals.vendas} pedidos atribuídos</p>
-        </div>
-        <div className="surface-card p-5">
-          <p className="text-xs text-muted-foreground">Leitura</p>
-          <p className="mt-2 text-3xl font-bold">{leituraPct.toFixed(1)}%</p>
-          <p className="mt-1 text-xs text-muted-foreground">{totals.lidas.toLocaleString("pt-BR")} mensagens lidas</p>
-        </div>
-        <div className="rounded-xl border border-foreground/10 !bg-foreground p-5 !text-white shadow-sm">
-          <p className="text-xs !text-white/70">ROAS estimado</p>
-          <p className="mt-2 text-3xl font-bold !text-white">{roas !== null ? `${roas.toFixed(1)}x` : "—"}</p>
-          <p className="mt-1 text-xs !text-white/70">{brlCents(totals.custo)} de custo estimado</p>
-        </div>
-      </div>
+    <Stack spacing={2.5} sx={{ mt: 2 }}>
+      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr 1fr", xl: "repeat(4, 1fr)" } }}>
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+          <Typography variant="caption" color="text.secondary">Campanhas</Typography>
+          <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>{list.length}</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>{totals.enviadas.toLocaleString("pt-BR")} envios</Typography>
+        </Box>
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+          <Typography variant="caption" color="text.secondary">Receita</Typography>
+          <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>{brl(totals.receita)}</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>{totals.vendas} pedidos atribuídos</Typography>
+        </Box>
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+          <Typography variant="caption" color="text.secondary">Leitura</Typography>
+          <Typography variant="h4" sx={{ fontWeight: 700, mt: 1 }}>{leituraPct.toFixed(1)}%</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>{totals.lidas.toLocaleString("pt-BR")} mensagens lidas</Typography>
+        </Box>
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5, bgcolor: "text.primary", color: "background.paper" }}>
+          <Typography variant="caption" sx={{ color: "background.paper", opacity: 0.7 }}>ROAS estimado</Typography>
+          <Typography variant="h4" sx={{ fontWeight: 700, mt: 1, color: "background.paper" }}>{roas !== null ? `${roas.toFixed(1)}x` : "—"}</Typography>
+          <Typography variant="caption" sx={{ color: "background.paper", opacity: 0.7, mt: 0.5, display: "block" }}>{brlCents(totals.custo)} de custo estimado</Typography>
+        </Box>
+      </Box>
 
-      <div className="rounded-xl border border-brand/20 bg-brand-soft/50 px-4 py-3 text-sm">
-        <p className="font-semibold text-foreground">Como a receita é atribuída</p>
-        <p className="mt-1 text-muted-foreground">
+      <Box sx={{ border: "1px solid", borderColor: "primary.light", bgcolor: "primary.50", borderRadius: 3, px: 2, py: 1.5 }}>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>Como a receita é atribuída</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
           Cupom identificado confirma a campanha. Sem cupom, o pedido é atribuído ao primeiro envio feito para o cliente nas 72 horas anteriores à compra. Cada pedido entra em apenas uma campanha.
-        </p>
-      </div>
+        </Typography>
+      </Box>
 
-      <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-6">
+      <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(3, 1fr)", xl: "repeat(6, 1fr)" } }}>
         {[
           { label: "Entrega", value: `${entregaPct.toFixed(1)}%` },
           { label: "Conversão", value: `${conversao.toFixed(1)}%` },
@@ -123,165 +141,161 @@ export function ReportsTab() {
           { label: "Receita assistida", value: brl(totals.receita) },
           { label: "Falhas", value: `${taxaFalha.toFixed(1)}%` },
         ].map((m) => (
-          <div key={m.label} className="surface-card p-4">
-            <p className="text-xs text-muted-foreground">{m.label}</p>
-            <p className="mt-1 text-lg font-semibold">{m.value}</p>
-          </div>
+          <Box key={m.label} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+            <Typography variant="caption" color="text.secondary">{m.label}</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 700, mt: 0.5 }}>{m.value}</Typography>
+          </Box>
         ))}
-      </div>
+      </Box>
 
       {trackedCouponCodes.length > 0 && (
-        <section className="surface-card p-5">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <h3 className="font-semibold">Conversões confirmadas por cupom</h3>
-              <p className="text-sm text-muted-foreground">Somente pedidos válidos em que a Shopify registrou o código usado.</p>
-            </div>
-            <p className="text-xs font-semibold text-muted-foreground">{trackedCouponCodes.join(" · ")}</p>
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-border p-4">
-              <p className="text-xs text-muted-foreground">Pedidos com cupom</p>
-              <p className="mt-1 text-2xl font-bold">{totals.couponOrders}</p>
-            </div>
-            <div className="rounded-xl border border-border p-4">
-              <p className="text-xs text-muted-foreground">Clientes identificados</p>
-              <p className="mt-1 text-2xl font-bold">{totals.couponCustomers}</p>
-            </div>
-            <div className="rounded-xl border border-border p-4">
-              <p className="text-xs text-muted-foreground">Receita confirmada</p>
-              <p className="mt-1 text-2xl font-bold">{brl(totals.couponRevenue)}</p>
-            </div>
-          </div>
-        </section>
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <Box>
+              <Typography sx={{ fontWeight: 600 }}>Conversões confirmadas por cupom</Typography>
+              <Typography variant="body2" color="text.secondary">Somente pedidos válidos em que a Shopify registrou o código usado.</Typography>
+            </Box>
+            <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary" }}>{trackedCouponCodes.join(" · ")}</Typography>
+          </Stack>
+          <Box sx={{ mt: 2, display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" } }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+              <Typography variant="caption" color="text.secondary">Pedidos com cupom</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>{totals.couponOrders}</Typography>
+            </Box>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+              <Typography variant="caption" color="text.secondary">Clientes identificados</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>{totals.couponCustomers}</Typography>
+            </Box>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+              <Typography variant="caption" color="text.secondary">Receita confirmada</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>{brl(totals.couponRevenue)}</Typography>
+            </Box>
+          </Box>
+        </Box>
       )}
 
       <PresendAuditPanel />
       <QueueHealthPanel />
 
       {(automations ?? []).length > 0 && (
-        <section className="surface-card p-5">
-          <h3 className="font-semibold">Reentrada das automações</h3>
-          <p className="text-sm text-muted-foreground">
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+          <Typography sx={{ fontWeight: 600 }}>Reentrada das automações</Typography>
+          <Typography variant="body2" color="text.secondary">
             Controle quando um cliente pode iniciar novamente cada jornada, sem criar execuções simultâneas.
-          </p>
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          </Typography>
+          <Box sx={{ mt: 2, display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
             {(automations ?? []).map((automation) => (
-              <div key={automation.id} className="rounded-xl border border-border p-3">
-                <p className="mb-2 text-sm font-semibold">{automation.nome}</p>
+              <Box key={automation.id} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 1.5 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>{automation.nome}</Typography>
                 <AutomationReentryControl automationId={automation.id} />
-              </div>
+              </Box>
             ))}
-          </div>
-        </section>
+          </Box>
+        </Box>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="surface-card p-5">
-          <h3 className="font-semibold">Funil consolidado</h3>
-          <p className="text-sm text-muted-foreground">Avanço dos contatos até o pedido atribuído.</p>
-          <div className="mt-4 space-y-4">
-            <FunnelRow label="Enviadas" value={totals.enviadas} pct={100} tone="bg-foreground" />
-            <FunnelRow label="Entregues" value={totals.entregues} pct={entregaPct} tone="bg-brand" />
-            <FunnelRow label="Lidas" value={totals.lidas} pct={leituraPct} tone="bg-brand" />
-            <FunnelRow label="Pedidos" value={totals.vendas} pct={conversao} tone="bg-success" />
-          </div>
-        </section>
+      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+          <Typography sx={{ fontWeight: 600 }}>Funil consolidado</Typography>
+          <Typography variant="body2" color="text.secondary">Avanço dos contatos até o pedido atribuído.</Typography>
+          <Stack spacing={2} sx={{ mt: 2 }}>
+            <FunnelRow label="Enviadas" value={totals.enviadas} pct={100} color="var(--mui-palette-text-primary, #2f2b3d)" />
+            <FunnelRow label="Entregues" value={totals.entregues} pct={entregaPct} color="#7367F0" />
+            <FunnelRow label="Lidas" value={totals.lidas} pct={leituraPct} color="#7367F0" />
+            <FunnelRow label="Pedidos" value={totals.vendas} pct={conversao} color="#28C76F" />
+          </Stack>
+        </Box>
 
-        <section className="surface-card p-5">
-          <h3 className="font-semibold">Evolução no período</h3>
-          <p className="text-sm text-muted-foreground">Volume enviado, leitura e pedidos por campanha.</p>
-          <div className="mt-4 h-[220px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={evolucao}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                <XAxis dataKey="data" tickLine={false} axisLine={false} fontSize={11} />
-                <YAxis tickLine={false} axisLine={false} fontSize={11} width={40} />
-                <Tooltip contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 12, fontSize: 12 }} />
-                <Line type="monotone" dataKey="enviadas" name="Enviadas" stroke="var(--color-chart-1)" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="lidas" name="Lidas" stroke="var(--color-chart-3)" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="vendas" name="Pedidos" stroke="var(--color-chart-5)" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-      </div>
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+          <Typography sx={{ fontWeight: 600 }}>Evolução no período</Typography>
+          <Typography variant="body2" color="text.secondary">Volume enviado, leitura e pedidos por campanha.</Typography>
+          <Box sx={{ mt: 2, height: 220 }}>
+            <LineChart
+              dataset={evolucao}
+              xAxis={[{ dataKey: "data", scaleType: "point" }]}
+              series={TREND_SERIES.map((s) => ({ dataKey: s.key, label: s.label, color: s.color, showMark: false }))}
+              height={220}
+              margin={{ left: 40, right: 10, top: 10, bottom: 30 }}
+            />
+          </Box>
+        </Box>
+      </Box>
 
-      <section className="surface-card p-5">
-        <h3 className="font-semibold">Melhores campanhas</h3>
-        <p className="text-sm text-muted-foreground">Ranking por receita.</p>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[600px] text-sm">
-            <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="py-2">Campanha</th>
-                <th className="py-2">Enviadas</th>
-                <th className="py-2">Leitura</th>
-                <th className="py-2">Pedidos</th>
-                <th className="py-2">Receita</th>
-                <th className="py-2">ROAS</th>
-              </tr>
-            </thead>
-            <tbody>
+      <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+        <Typography sx={{ fontWeight: 600 }}>Melhores campanhas</Typography>
+        <Typography variant="body2" color="text.secondary">Ranking por receita.</Typography>
+        <TableContainer sx={{ mt: 2 }}>
+          <Table sx={{ minWidth: 600 }} size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Campanha</TableCell>
+                <TableCell>Enviadas</TableCell>
+                <TableCell>Leitura</TableCell>
+                <TableCell>Pedidos</TableCell>
+                <TableCell>Receita</TableCell>
+                <TableCell>ROAS</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {ranking.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="py-6 text-center text-muted-foreground">Sem dados ainda.</td>
-                </tr>
+                <TableRow><TableCell colSpan={6} align="center" sx={{ py: 3, color: "text.secondary" }}>Sem dados ainda.</TableCell></TableRow>
               )}
               {ranking.map((c) => (
-                <tr key={c.id} className="border-t border-border">
-                  <td className="py-2 font-medium">{c.nome}</td>
-                  <td className="py-2">{c.enviadas}</td>
-                  <td className="py-2">{c.enviadas > 0 ? `${((c.lidas / c.enviadas) * 100).toFixed(1)}%` : "0.0%"}</td>
-                  <td className="py-2">{c.vendas}</td>
-                  <td className="py-2 font-semibold">{brl(c.receita)}</td>
-                  <td className="py-2">{c.custo > 0 ? `${(c.receita / c.custo).toFixed(1)}x` : "—"}</td>
-                </tr>
+                <TableRow key={c.id}>
+                  <TableCell sx={{ fontWeight: 600 }}>{c.nome}</TableCell>
+                  <TableCell>{c.enviadas}</TableCell>
+                  <TableCell>{c.enviadas > 0 ? `${((c.lidas / c.enviadas) * 100).toFixed(1)}%` : "0.0%"}</TableCell>
+                  <TableCell>{c.vendas}</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{brl(c.receita)}</TableCell>
+                  <TableCell>{c.custo > 0 ? `${(c.receita / c.custo).toFixed(1)}x` : "—"}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="surface-card p-5">
-          <h3 className="font-semibold">Categorias</h3>
-          <p className="text-sm text-muted-foreground">Contribuição das categorias pra receita e conversão.</p>
-          <div className="mt-4 space-y-3">
-            {byCategory.length === 0 && <p className="text-sm text-muted-foreground">Sem dados ainda.</p>}
+      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+          <Typography sx={{ fontWeight: 600 }}>Categorias</Typography>
+          <Typography variant="body2" color="text.secondary">Contribuição das categorias pra receita e conversão.</Typography>
+          <Stack spacing={1.5} sx={{ mt: 2 }}>
+            {byCategory.length === 0 && <Typography variant="body2" color="text.secondary">Sem dados ainda.</Typography>}
             {byCategory.map(([cat, agg]) => (
-              <div key={cat} className="flex items-center justify-between rounded-lg border border-border p-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase text-muted-foreground">{cat}</p>
-                  <p className="text-xs text-muted-foreground">
+              <Stack key={cat} direction="row" sx={{ justifyContent: "space-between", alignItems: "center", border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+                <Box>
+                  <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", color: "text.secondary" }}>{cat}</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                     {agg.enviadas} envios · {agg.enviadas > 0 ? ((agg.leitura / agg.enviadas) * 100).toFixed(1) : "0.0"}% leitura · {agg.vendas} pedidos
-                  </p>
-                </div>
-                <p className="font-semibold text-brand">{brl(agg.receita)}</p>
-              </div>
+                  </Typography>
+                </Box>
+                <Typography sx={{ fontWeight: 700, color: "primary.main" }}>{brl(agg.receita)}</Typography>
+              </Stack>
             ))}
-          </div>
-        </section>
+          </Stack>
+        </Box>
 
-        <section className="surface-card p-5">
-          <h3 className="font-semibold">Principais falhas</h3>
-          <p className="text-sm text-muted-foreground">Motivos reais retornados pela Meta nos envios que falharam.</p>
-          <div className="mt-4 space-y-3">
-            {(!failures || failures.length === 0) && <p className="text-sm text-muted-foreground">Nenhuma falha registrada.</p>}
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+          <Typography sx={{ fontWeight: 600 }}>Principais falhas</Typography>
+          <Typography variant="body2" color="text.secondary">Motivos reais retornados pela Meta nos envios que falharam.</Typography>
+          <Stack spacing={1.5} sx={{ mt: 2 }}>
+            {(!failures || failures.length === 0) && <Typography variant="body2" color="text.secondary">Nenhuma falha registrada.</Typography>}
             {failures?.map((f) => (
-              <div key={f.motivo} className="rounded-lg border border-border p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">{f.motivo}</p>
-                  <p className="text-sm font-semibold">{f.count}</p>
-                </div>
-                <div className="mt-1.5 h-1.5 rounded-full bg-muted">
-                  <div className="h-1.5 rounded-full bg-critical" style={{ width: `${f.pct}%` }} />
-                </div>
-              </div>
+              <Box key={f.motivo} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+                <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{f.motivo}</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>{f.count}</Typography>
+                </Stack>
+                <LinearProgress
+                  variant="determinate"
+                  value={f.pct}
+                  sx={{ mt: 0.75, height: 6, borderRadius: 3, bgcolor: "action.hover", "& .MuiLinearProgress-bar": { bgcolor: "error.main", borderRadius: 3 } }}
+                />
+              </Box>
             ))}
-          </div>
-        </section>
-      </div>
-    </div>
+          </Stack>
+        </Box>
+      </Box>
+    </Stack>
   );
 }

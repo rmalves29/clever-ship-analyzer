@@ -5,9 +5,17 @@ import { useServerFn } from "@tanstack/react-start";
 import { Copy, Pencil, Play, Plus, Sparkles, Trash2 } from "lucide-react";
 import { AUTOMATION_RECIPES } from "@/components/whatsapp/flowRecipes";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import IconButton from "@mui/material/IconButton";
+import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
+import Typography from "@mui/material/Typography";
+// AutomationDialog e ConversationalFlowsTab (com o ConversationalFlowDialog interno) ainda são
+// shadcn de propósito: são editores grandes (1370+ linhas, com step builder e integração
+// @xyflow/react) compartilhados entre CRM e WhatsApp — tratados como sua própria migração
+// dedicada depois desta tela, e não migrados às pressas aqui dentro.
 import { AutomationDialog, SEGMENT_LABEL, type AutomationSeed } from "@/components/crm/AutomationDialog";
 import { ConversationalFlowsTab } from "@/components/whatsapp/ConversationalFlowsTab";
 import { deleteAutomation, listAutomations, runAutomationNow, toggleAutomation } from "@/lib/whatsapp-meta.functions";
@@ -49,72 +57,83 @@ function AutomacoesPage() {
   };
 
   return (
-    <div className="space-y-8">
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">Réguas automáticas</h2>
-            <p className="text-xs text-muted-foreground">Disparos por comportamento do cliente, sem ninguém apertar botão.</p>
-          </div>
+    <Stack spacing={5}>
+      <Stack spacing={1.5}>
+        <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>Réguas automáticas</Typography>
+            <Typography variant="caption" color="text.secondary">Disparos por comportamento do cliente, sem ninguém apertar botão.</Typography>
+          </Box>
           <Button
-            className="gap-2"
+            variant="contained"
+            startIcon={<Plus size={16} />}
             onClick={() => {
               setSeed({ nome: "Nova régua", segmentType: "sem_recompra", oferta: "" } as AutomationSeed);
               setOpen(true);
             }}
           >
-            <Plus className="size-4" /> Nova régua
+            Nova régua
           </Button>
-        </div>
+        </Stack>
 
-        <div className="rounded-xl border border-border bg-muted/30 p-4">
-          <p className="flex items-center gap-1.5 text-sm font-semibold">
-            <Sparkles className="size-3.5 text-brand" /> Começar de um modelo pronto
-          </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+        <Box sx={{ border: "1px solid", borderColor: "divider", bgcolor: "action.hover", borderRadius: 3, p: 2 }}>
+          <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+            <Sparkles size={14} color="var(--mui-palette-primary-main, #7367F0)" />
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>Começar de um modelo pronto</Typography>
+          </Stack>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
             A régua abre com público e etapas já montados — escolha os modelos de mensagem e salve.
-          </p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          </Typography>
+          <Box sx={{ mt: 1.5, display: "grid", gap: 1, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", xl: "repeat(4, 1fr)" } }}>
             {AUTOMATION_RECIPES.map((recipe) => (
-              <button
+              <Box
                 key={recipe.key}
+                component="button"
                 type="button"
                 onClick={() => {
                   setSeed(recipe.build());
                   setOpen(true);
                 }}
-                className="rounded-lg border border-border bg-card p-3 text-left transition-colors hover:border-primary hover:bg-accent"
+                sx={{
+                  textAlign: "left",
+                  border: "1px solid",
+                  borderColor: "divider",
+                  bgcolor: "background.paper",
+                  borderRadius: 2,
+                  p: 1.5,
+                  cursor: "pointer",
+                  "&:hover": { borderColor: "primary.main", bgcolor: "action.hover" },
+                }}
               >
-                <p className="text-sm font-medium">{recipe.title}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">{recipe.description}</p>
-              </button>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>{recipe.title}</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>{recipe.description}</Typography>
+              </Box>
             ))}
-          </div>
-        </div>
+          </Box>
+        </Box>
 
-
-        <div className="space-y-2">
+        <Stack spacing={1}>
           {(automations ?? []).map((a: any) => (
-            <div key={a.id} className="surface-card flex flex-wrap items-center gap-4 p-4">
-              <div className="min-w-[200px] flex-1">
-                <p className="font-semibold">{a.nome}</p>
-                <p className="text-xs text-muted-foreground">
+            <Stack key={a.id} direction="row" spacing={2} sx={{ flexWrap: "wrap", alignItems: "center", border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+              <Box sx={{ minWidth: 200, flex: 1 }}>
+                <Typography sx={{ fontWeight: 600 }}>{a.nome}</Typography>
+                <Typography variant="caption" color="text.secondary">
                   {SEGMENT_LABEL[a.segmentType as keyof typeof SEGMENT_LABEL] ?? a.segmentType} · {a.steps?.length ?? 0} etapa(s)
-                </p>
-              </div>
-              <Badge variant="outline">{a.ativo ? "Ativa" : "Pausada"}</Badge>
+                </Typography>
+              </Box>
+              <Chip size="small" variant="outlined" label={a.ativo ? "Ativa" : "Pausada"} />
               <Switch
                 checked={Boolean(a.ativo)}
                 disabled={busyId === a.id}
-                onCheckedChange={(v) => wrap(a.id, () => runToggle({ data: { id: a.id, ativo: v } }))}
+                onChange={(e) => wrap(a.id, () => runToggle({ data: { id: a.id, ativo: e.target.checked } }))}
               />
-              <Button variant="outline" size="sm" className="gap-1.5" disabled={busyId === a.id} onClick={() => wrap(a.id, () => runNow({ data: { id: a.id } }))}>
-                <Play className="size-3.5" /> Rodar agora
+              <Button size="small" variant="outlined" startIcon={<Play size={14} />} disabled={busyId === a.id} onClick={() => wrap(a.id, () => runNow({ data: { id: a.id } }))}>
+                Rodar agora
               </Button>
               <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
+                size="small"
+                variant="outlined"
+                startIcon={<Pencil size={14} />}
                 onClick={() => {
                   setSeed({
                     id: a.id,
@@ -129,12 +148,12 @@ function AutomacoesPage() {
                   setOpen(true);
                 }}
               >
-                <Pencil className="size-3.5" /> Editar
+                Editar
               </Button>
               <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
+                size="small"
+                variant="outlined"
+                startIcon={<Copy size={14} />}
                 onClick={() => {
                   setSeed({
                     nome: `${a.nome} (cópia)`,
@@ -148,33 +167,31 @@ function AutomacoesPage() {
                   setOpen(true);
                 }}
               >
-                <Copy className="size-3.5" /> Duplicar
+                Duplicar
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
+              <IconButton
                 disabled={busyId === a.id}
                 onClick={() => {
                   if (confirm(`Apagar a régua "${a.nome}"?`)) wrap(a.id, () => runDelete({ data: { id: a.id } }));
                 }}
               >
-                <Trash2 className="size-4 text-critical" />
-              </Button>
-            </div>
+                <Trash2 size={16} color="var(--mui-palette-error-main, #EA5455)" />
+              </IconButton>
+            </Stack>
           ))}
-          {(automations ?? []).length === 0 && <p className="text-sm text-muted-foreground">Nenhuma régua criada ainda.</p>}
-        </div>
-      </section>
+          {(automations ?? []).length === 0 && <Typography variant="body2" color="text.secondary">Nenhuma régua criada ainda.</Typography>}
+        </Stack>
+      </Stack>
 
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-lg font-semibold">Fluxos conversacionais</h2>
-          <p className="text-xs text-muted-foreground">Respostas automáticas quando o cliente escreve para a loja.</p>
-        </div>
+      <Stack spacing={1.5}>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>Fluxos conversacionais</Typography>
+          <Typography variant="caption" color="text.secondary">Respostas automáticas quando o cliente escreve para a loja.</Typography>
+        </Box>
         <ConversationalFlowsTab />
-      </section>
+      </Stack>
 
       <AutomationDialog seed={seed} open={open} onOpenChange={setOpen} onSaved={() => refetch()} />
-    </div>
+    </Stack>
   );
 }

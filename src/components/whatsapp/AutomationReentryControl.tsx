@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import Box from "@mui/material/Box";
+import MenuItem from "@mui/material/MenuItem";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import { getAutomationReentry, updateAutomationReentry } from "@/lib/whatsapp-automation-reentry.functions";
 import type { AutomationReentryMode } from "@/lib/whatsapp-automation-reentry";
 
@@ -53,49 +56,45 @@ export function AutomationReentryControl({ automationId }: { automationId: strin
   };
 
   return (
-    <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
-      <div>
-        <p className="text-xs font-semibold">Política de reentrada</p>
-        <p className="text-[11px] text-muted-foreground">Define quando o mesmo cliente pode iniciar uma nova jornada.</p>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Select
+    <Stack spacing={1} sx={{ border: "1px solid", borderColor: "divider", bgcolor: "action.hover", borderRadius: 2, p: 1.5 }}>
+      <Box>
+        <Typography variant="caption" sx={{ fontWeight: 600, display: "block" }}>Política de reentrada</Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>Define quando o mesmo cliente pode iniciar uma nova jornada.</Typography>
+      </Box>
+      <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+        <TextField
+          select
+          size="small"
           disabled={busy}
           value={mode}
-          onValueChange={(value) => {
-            const next = value as AutomationReentryMode;
+          onChange={(e) => {
+            const next = e.target.value as AutomationReentryMode;
             setMode(next);
             void persist(next);
           }}
+          sx={{ minWidth: 190, flex: 1 }}
         >
-          <SelectTrigger className="h-8 min-w-[190px] flex-1">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          {Object.entries(LABELS).map(([value, label]) => (
+            <MenuItem key={value} value={value}>{label}</MenuItem>
+          ))}
+        </TextField>
         {mode === "after_days" && (
-          <Input
+          <TextField
+            size="small"
             disabled={busy}
-            className="h-8 w-24"
             type="number"
-            min={1}
-            max={3650}
+            slotProps={{ htmlInput: { min: 1, max: 3650 } }}
             value={days}
             onChange={(event) => setDays(Math.max(1, Number(event.target.value) || 1))}
             onBlur={() => void persist("after_days", days)}
             aria-label="Dias para reentrada"
+            sx={{ width: 96 }}
           />
         )}
-      </div>
-      <p className="text-[11px] text-muted-foreground">
+      </Stack>
+      <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
         Uma nova jornada nunca é criada enquanto já existir outra execução ativa para esse cliente.
-      </p>
-    </div>
+      </Typography>
+    </Stack>
   );
 }

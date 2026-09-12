@@ -2,8 +2,12 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertTriangle, CheckCircle2, ShieldCheck, Users } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
+import MenuItem from "@mui/material/MenuItem";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import { getSegmentsList } from "@/lib/crm-segmentation.functions";
 import { previewWhatsappPresendAudit } from "@/lib/whatsapp-presend-audit.functions";
 
@@ -38,58 +42,48 @@ export function PresendAuditPanel() {
     : 0;
 
   return (
-    <section className="surface-card p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h3 className="font-semibold flex items-center gap-2">
-            <ShieldCheck className="size-4" /> Auditoria pré-envio
-          </h3>
-          <p className="text-sm text-muted-foreground">
+    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <Box>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <ShieldCheck size={16} />
+            <Typography sx={{ fontWeight: 600 }}>Auditoria pré-envio</Typography>
+          </Stack>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             Simula o público final sem criar campanha, sem enfileirar e sem chamar a API da Meta.
-          </p>
-        </div>
+          </Typography>
+        </Box>
         {audit && (
-          <Badge className={audit.eligibleRecipients > 0 ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}>
-            {audit.eligibleRecipients > 0 ? "Público pronto" : "Sem destinatários elegíveis"}
-          </Badge>
+          <Chip
+            color={audit.eligibleRecipients > 0 ? "success" : "warning"}
+            label={audit.eligibleRecipients > 0 ? "Público pronto" : "Sem destinatários elegíveis"}
+          />
         )}
-      </div>
+      </Stack>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <div>
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">Público</p>
-          <Select value={segmentValue} onValueChange={setSegmentValue}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="sem_recompra">Sem recompra</SelectItem>
-              <SelectItem value="recorrencia">Recorrência</SelectItem>
-              <SelectItem value="recompra_30d">Recompra 30d</SelectItem>
-              <SelectItem value="recompra_60d">Recompra 60d</SelectItem>
-              <SelectItem value="carrinho">Carrinho abandonado</SelectItem>
-              {customSegments.map((segment) => (
-                <SelectItem key={segment.id} value={segment.id}>{segment.nome}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">Tipo da mensagem</p>
-          <Select value={messageType} onValueChange={(value) => setMessageType(value as "marketing" | "utility")}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="marketing">Marketing</SelectItem>
-              <SelectItem value="utility">Utilidade</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      <Box sx={{ mt: 2, display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+        <TextField select label="Público" value={segmentValue} onChange={(e) => setSegmentValue(e.target.value)} fullWidth>
+          <MenuItem value="sem_recompra">Sem recompra</MenuItem>
+          <MenuItem value="recorrencia">Recorrência</MenuItem>
+          <MenuItem value="recompra_30d">Recompra 30d</MenuItem>
+          <MenuItem value="recompra_60d">Recompra 60d</MenuItem>
+          <MenuItem value="carrinho">Carrinho abandonado</MenuItem>
+          {customSegments.map((segment) => (
+            <MenuItem key={segment.id} value={segment.id}>{segment.nome}</MenuItem>
+          ))}
+        </TextField>
+        <TextField select label="Tipo da mensagem" value={messageType} onChange={(e) => setMessageType(e.target.value as "marketing" | "utility")} fullWidth>
+          <MenuItem value="marketing">Marketing</MenuItem>
+          <MenuItem value="utility">Utilidade</MenuItem>
+        </TextField>
+      </Box>
 
-      {isLoading && <p className="mt-4 text-sm text-muted-foreground">Auditando público...</p>}
-      {isError && <p className="mt-4 text-sm text-critical">Não foi possível concluir a auditoria.</p>}
+      {isLoading && <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>Auditando público...</Typography>}
+      {isError && <Typography variant="body2" color="error" sx={{ mt: 2 }}>Não foi possível concluir a auditoria.</Typography>}
 
       {audit && (
         <>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <Box sx={{ mt: 2, display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(3, 1fr)", xl: "repeat(6, 1fr)" } }}>
             <Metric label="No segmento" value={audit.clientes} />
             <Metric label="Com telefone" value={audit.comTelefone} />
             <Metric label="Telefone inválido/ausente" value={audit.invalidPhone} warning={audit.invalidPhone > 0} />
@@ -100,30 +94,30 @@ export function PresendAuditPanel() {
               warning={messageType === "marketing" && audit.marketingOptOuts > 0}
             />
             <Metric label="Elegíveis finais" value={audit.eligibleRecipients} success />
-          </div>
+          </Box>
 
-          <div className="mt-4 flex items-start gap-2 rounded-xl border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-            {exclusions > 0 ? <AlertTriangle className="mt-0.5 size-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />}
-            <span>
+          <Stack direction="row" spacing={1} sx={{ mt: 2, alignItems: "flex-start", border: "1px solid", borderColor: "divider", bgcolor: "action.hover", borderRadius: 3, p: 1.5 }}>
+            {exclusions > 0 ? <AlertTriangle size={16} style={{ marginTop: 2, flexShrink: 0 }} /> : <CheckCircle2 size={16} style={{ marginTop: 2, flexShrink: 0 }} color="var(--mui-palette-success-main, #28C76F)" />}
+            <Typography variant="caption" color="text.secondary">
               {messageType === "marketing"
                 ? `${exclusions} registro(s) serão excluídos antes/do processamento por telefone inválido, duplicidade ou opt-out de marketing.`
                 : `${exclusions} registro(s) serão excluídos por telefone inválido ou duplicidade. Opt-out de marketing não bloqueia mensagens de utilidade.`}
-            </span>
-          </div>
+            </Typography>
+          </Stack>
         </>
       )}
-    </section>
+    </Box>
   );
 }
 
 function Metric({ label, value, warning, success }: { label: string; value: number; warning?: boolean; success?: boolean }) {
   return (
-    <div className="rounded-xl border border-border p-3">
-      <p className="text-[11px] text-muted-foreground">{label}</p>
-      <div className="mt-1 flex items-center gap-2">
-        {success ? <Users className="size-4 text-success" /> : warning ? <AlertTriangle className="size-4 text-warning" /> : null}
-        <p className="text-2xl font-bold">{value.toLocaleString("pt-BR")}</p>
-      </div>
-    </div>
+    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 1.5 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>{label}</Typography>
+      <Stack direction="row" spacing={1} sx={{ alignItems: "center", mt: 0.5 }}>
+        {success ? <Users size={16} color="var(--mui-palette-success-main, #28C76F)" /> : warning ? <AlertTriangle size={16} color="var(--mui-palette-warning-main, #FF9F43)" /> : null}
+        <Typography variant="h6" sx={{ fontWeight: 700 }}>{value.toLocaleString("pt-BR")}</Typography>
+      </Stack>
+    </Box>
   );
 }

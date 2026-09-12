@@ -3,9 +3,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { MessageSquare, RefreshCw, Search, Send } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import IconButton from "@mui/material/IconButton";
+import InputAdornment from "@mui/material/InputAdornment";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import {
   listInboxThreads,
   listInboxMessages,
@@ -91,87 +96,106 @@ export function InboxTab() {
   };
 
   return (
-    <div className="mt-4 grid gap-4 lg:grid-cols-[320px_1fr]">
-      <div className="surface-card flex h-[600px] flex-col p-3">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar nome ou telefone" className="pl-7" />
-          </div>
-          <Button variant="outline" size="icon" onClick={() => refetch()} aria-label="Atualizar conversas">
-            <RefreshCw className="size-4" />
-          </Button>
-        </div>
+    <Box sx={{ mt: 2, display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "320px 1fr" } }}>
+      <Stack sx={{ height: 600, border: "1px solid", borderColor: "divider", borderRadius: 3, p: 1.5 }}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <TextField
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar nome ou telefone"
+            size="small"
+            fullWidth
+            slotProps={{ input: { startAdornment: <InputAdornment position="start"><Search size={14} /></InputAdornment> } }}
+          />
+          <IconButton onClick={() => refetch()} aria-label="Atualizar conversas" sx={{ border: "1px solid", borderColor: "divider" }}>
+            <RefreshCw size={16} />
+          </IconButton>
+        </Stack>
 
-        <div className="mt-3 flex-1 overflow-y-auto">
-          {isLoading && <p className="p-4 text-center text-sm text-muted-foreground">Carregando conversas...</p>}
+        <Box sx={{ mt: 1.5, flex: 1, overflowY: "auto" }}>
+          {isLoading && <Typography variant="body2" color="text.secondary" sx={{ p: 2, textAlign: "center" }}>Carregando conversas...</Typography>}
           {!isLoading && filtered.length === 0 && (
-            <p className="p-4 text-center text-sm text-muted-foreground">
+            <Typography variant="body2" color="text.secondary" sx={{ p: 2, textAlign: "center" }}>
               {debouncedSearch
                 ? "Nenhuma conversa encontrada com esse nome ou telefone."
                 : "Nenhuma conversa ainda. Assim que um cliente enviar mensagem para o número conectado, ela aparece aqui."}
-            </p>
+            </Typography>
           )}
           {filtered.map((t) => (
-            <button
+            <Box
               key={t.id}
+              component="button"
               onClick={() => openThread(t.id)}
-              className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${t.id === selectedId ? "bg-muted" : "hover:bg-muted/60"}`}
+              sx={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                border: "none",
+                cursor: "pointer",
+                borderRadius: 2,
+                px: 1.5,
+                py: 1,
+                bgcolor: t.id === selectedId ? "action.selected" : "transparent",
+                "&:hover": { bgcolor: t.id === selectedId ? "action.selected" : "action.hover" },
+              }}
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-sm font-medium">{t.contact_name ?? t.phone}</span>
+              <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "center" }}>
+                <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>{t.contact_name ?? t.phone}</Typography>
                 {t.unread_count > 0 && (
-                  <span className="rounded-full bg-success px-1.5 py-0.5 text-[10px] font-semibold text-background">{t.unread_count}</span>
+                  <Chip size="small" color="success" label={t.unread_count} sx={{ height: 18, "& .MuiChip-label": { px: 0.75, fontSize: 10, fontWeight: 700 } }} />
                 )}
-              </div>
-              <p className="truncate text-xs text-muted-foreground">{t.last_message_preview ?? "—"}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">{formatTime(t.last_message_at)}</p>
-            </button>
+              </Stack>
+              <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>{t.last_message_preview ?? "—"}</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>{formatTime(t.last_message_at)}</Typography>
+            </Box>
           ))}
-        </div>
-      </div>
+        </Box>
+      </Stack>
 
-      <div className="surface-card flex h-[600px] flex-col p-4">
+      <Stack sx={{ height: 600, border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
         {!selected && (
-          <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
-            <MessageSquare className="size-8" />
-            <p className="mt-2 text-sm">Selecione uma conversa para ler e responder.</p>
-          </div>
+          <Stack sx={{ flex: 1, alignItems: "center", justifyContent: "center", color: "text.secondary" }}>
+            <MessageSquare size={32} />
+            <Typography variant="body2" sx={{ mt: 1 }}>Selecione uma conversa para ler e responder.</Typography>
+          </Stack>
         )}
 
         {selected && (
           <>
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div>
-                <p className="font-semibold">{selected.contact_name ?? selected.phone}</p>
-                <p className="text-xs text-muted-foreground">{selected.phone}</p>
-              </div>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${wnd.open ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}>
-                {wnd.label}
-              </span>
-            </div>
+            <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid", borderColor: "divider", pb: 1.5 }}>
+              <Box>
+                <Typography sx={{ fontWeight: 600 }}>{selected.contact_name ?? selected.phone}</Typography>
+                <Typography variant="caption" color="text.secondary">{selected.phone}</Typography>
+              </Box>
+              <Chip size="small" color={wnd.open ? "success" : "warning"} label={wnd.label} />
+            </Stack>
 
-            <div className="flex-1 space-y-2 overflow-y-auto py-4">
+            <Stack spacing={1} sx={{ flex: 1, overflowY: "auto", py: 2 }}>
               {(messages ?? []).map((m) => (
-                <div key={m.id} className={m.direction === "outbound" ? "flex justify-end" : "flex justify-start"}>
-                  <div
-                    className={`max-w-[75%] rounded-xl px-3 py-2 text-sm ${
-                      m.direction === "outbound" ? "bg-brand-soft text-foreground" : "bg-muted text-foreground"
-                    }`}
+                <Box key={m.id} sx={{ display: "flex", justifyContent: m.direction === "outbound" ? "flex-end" : "flex-start" }}>
+                  <Box
+                    sx={{
+                      maxWidth: "75%",
+                      borderRadius: 3,
+                      px: 1.5,
+                      py: 1,
+                      fontSize: 14,
+                      bgcolor: m.direction === "outbound" ? "primary.50" : "action.hover",
+                    }}
                   >
-                    <p className="whitespace-pre-wrap break-words">{m.body}</p>
-                    <p className="mt-1 text-[10px] text-muted-foreground">
+                    <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.body}</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, display: "block", mt: 0.5 }}>
                       {formatTime(m.sent_at)}
                       {m.status === "failed" ? ` · falhou: ${m.error ?? ""}` : ""}
-                    </p>
-                  </div>
-                </div>
+                    </Typography>
+                  </Box>
+                </Box>
               ))}
               <div ref={bottomRef} />
-            </div>
+            </Stack>
 
-            <div className="border-t border-border pt-3">
-              <Textarea
+            <Box sx={{ borderTop: "1px solid", borderColor: "divider", pt: 1.5 }}>
+              <TextField
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
@@ -182,17 +206,19 @@ export function InboxTab() {
                 }}
                 placeholder={wnd.open ? "Escreva sua resposta... (Enter envia)" : "Janela de 24h encerrada — use um template na aba Campanhas."}
                 disabled={!wnd.open || sending}
-                rows={2}
+                multiline
+                minRows={2}
+                fullWidth
               />
-              <div className="mt-2 flex justify-end">
-                <Button onClick={handleSend} disabled={!wnd.open || sending || !draft.trim()} className="gap-2">
-                  <Send className="size-4" /> Enviar
+              <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 1 }}>
+                <Button variant="contained" startIcon={<Send size={16} />} onClick={handleSend} disabled={!wnd.open || sending || !draft.trim()}>
+                  Enviar
                 </Button>
-              </div>
-            </div>
+              </Box>
+            </Box>
           </>
         )}
-      </div>
-    </div>
+      </Stack>
+    </Box>
   );
 }

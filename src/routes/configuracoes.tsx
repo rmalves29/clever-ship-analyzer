@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Settings,
   Store,
   ShieldCheck,
   AlertCircle,
@@ -14,12 +13,20 @@ import {
   MessageCircle,
   Link2,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import Alert from "@mui/material/Alert";
+import AlertTitle from "@mui/material/AlertTitle";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardActions from "@mui/material/CardActions";
+import CardContent from "@mui/material/CardContent";
+import CardHeader from "@mui/material/CardHeader";
+import Chip from "@mui/material/Chip";
+import Divider from "@mui/material/Divider";
+import IconButton from "@mui/material/IconButton";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import { toast } from "sonner";
 import { testShopifyConnection } from "@/lib/shopify-operations.functions";
 import { syncShopifyData } from "@/lib/crm-sync.functions";
@@ -38,7 +45,7 @@ function Configuracoes() {
   const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     domain: "",
     clientId: "",
@@ -233,9 +240,9 @@ function Configuracoes() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <RefreshCw className="size-8 animate-spin text-primary" />
-      </div>
+      <Box sx={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center" }}>
+        <RefreshCw size={32} className="animate-spin" color="var(--mui-palette-primary-main, #7367F0)" />
+      </Box>
     );
   }
 
@@ -245,522 +252,506 @@ function Configuracoes() {
   const renderScopesStatus = () => {
     if (!testResult?.scopes) return null;
     return (
-      <div className="mt-4 space-y-2">
-        <p className="text-sm font-medium">Permissões (Scopes):</p>
-        <div className="flex flex-wrap gap-2">
+      <Stack spacing={1} sx={{ mt: 2 }}>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>Permissões (Scopes):</Typography>
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
           {testResult.scopes.map((scope: any) => (
-            <Badge 
-              key={typeof scope === 'string' ? scope : scope.handle} 
-              variant="outline" 
-              className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/20 dark:text-green-400 dark:border-green-900"
-              title={typeof scope === 'object' ? scope.description : undefined}
-            >
-              {typeof scope === 'string' ? scope : scope.handle}
-            </Badge>
+            <Chip
+              key={typeof scope === "string" ? scope : scope.handle}
+              size="small"
+              variant="outlined"
+              color="success"
+              title={typeof scope === "object" ? scope.description : undefined}
+              label={typeof scope === "string" ? scope : scope.handle}
+            />
           ))}
           {testResult.missingScopes?.map((scope: string) => (
-            <Badge key={scope} variant="destructive">
-              Faltando: {scope}
-            </Badge>
+            <Chip key={scope} size="small" color="error" label={`Faltando: ${scope}`} />
           ))}
-        </div>
-      </div>
+        </Stack>
+      </Stack>
     );
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-4xl px-4 py-8 md:px-8">
-        <div className="mb-8 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate({ to: "/" })}>
-              <ChevronLeft className="size-5" />
-            </Button>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Qual banco de dados está sendo usado no projeto?</h1>
-              <p className="text-muted-foreground">Exibir qual banco de dados está sendo usado nas configurações do sistema para eu conferir facilmente.</p>
-            </div>
-          </div>
-          <Badge variant={settings?.syncStatus === "connected" ? "default" : "secondary"} className="h-6">
-            {settings?.syncStatus === "connected" ? "Conectado" : "Não configurado"}
-          </Badge>
-        </div>
+    <Box sx={{ minHeight: "100vh" }}>
+      <Box sx={{ maxWidth: 900, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
+        <Stack direction="row" sx={{ mb: 4, alignItems: "center", justifyContent: "space-between" }}>
+          <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+            <IconButton onClick={() => navigate({ to: "/" })}>
+              <ChevronLeft size={20} />
+            </IconButton>
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>Qual banco de dados está sendo usado no projeto?</Typography>
+              <Typography variant="body2" color="text.secondary">Exibir qual banco de dados está sendo usado nas configurações do sistema para eu conferir facilmente.</Typography>
+            </Box>
+          </Stack>
+          <Chip
+            color={settings?.syncStatus === "connected" ? "primary" : "default"}
+            label={settings?.syncStatus === "connected" ? "Conectado" : "Não configurado"}
+          />
+        </Stack>
 
-        <div className="grid gap-8">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Store className="size-5 text-primary" />
-                <CardTitle>Credenciais Shopify Admin API</CardTitle>
-              </div>
-              <CardDescription>
-                Use o fluxo oficial client_credentials. Crie um App Customizado no Admin da Shopify para obter estas chaves.
-              </CardDescription>
-            </CardHeader>
-            <form onSubmit={handleSave}>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="domain">Domínio da Loja (.myshopify.com)</Label>
-                  <Input 
-                    id="domain" 
-                    placeholder="minha-loja.myshopify.com"
-                    value={formData.domain}
-                    onChange={(e) => setFormData(prev => ({ ...prev, domain: e.target.value }))}
-                    required
+        <Stack spacing={4}>
+          <Card component="form" onSubmit={handleSave} variant="outlined">
+            <CardHeader
+              title={
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <Store size={20} color="var(--mui-palette-primary-main, #7367F0)" />
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>Credenciais Shopify Admin API</Typography>
+                </Stack>
+              }
+              subheader="Use o fluxo oficial client_credentials. Crie um App Customizado no Admin da Shopify para obter estas chaves."
+            />
+            <CardContent>
+              <Stack spacing={2}>
+                <TextField
+                  label="Domínio da Loja (.myshopify.com)"
+                  placeholder="minha-loja.myshopify.com"
+                  value={formData.domain}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, domain: e.target.value }))}
+                  required
+                  fullWidth
+                />
+                <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+                  <TextField
+                    label="API Key (Client ID)"
+                    type="password"
+                    placeholder={settings?.hasClientId ? "•••••••• (salvo)" : ""}
+                    value={formData.clientId}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, clientId: e.target.value }))}
+                    fullWidth
                   />
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="clientId">API Key (Client ID)</Label>
-                    <Input 
-                      id="clientId" 
-                      type="password"
-                      placeholder={settings?.hasClientId ? "•••••••• (salvo)" : ""}
-                      value={formData.clientId}
-                      onChange={(e) => setFormData(prev => ({ ...prev, clientId: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="clientSecret">API Secret Key (Client Secret)</Label>
-                    <Input 
-                      id="clientSecret" 
-                      type="password"
-                      placeholder={settings?.hasClientSecret ? "•••••••• (salvo)" : ""}
-                      value={formData.clientSecret}
-                      onChange={(e) => setFormData(prev => ({ ...prev, clientSecret: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <Alert variant="default" className="bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
-                  <ShieldCheck className="size-4 text-blue-600 dark:text-blue-400" />
+                  <TextField
+                    label="API Secret Key (Client Secret)"
+                    type="password"
+                    placeholder={settings?.hasClientSecret ? "•••••••• (salvo)" : ""}
+                    value={formData.clientSecret}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, clientSecret: e.target.value }))}
+                    fullWidth
+                  />
+                </Box>
+                <Alert severity="info" icon={<ShieldCheck size={18} />}>
                   <AlertTitle>Segurança</AlertTitle>
-                  <AlertDescription className="text-xs">
+                  <Typography variant="caption">
                     Suas credenciais são armazenadas com segurança e nunca expostas ao navegador. A autenticação é realizada exclusivamente no servidor.
-                  </AlertDescription>
+                  </Typography>
                 </Alert>
                 {renderScopesStatus()}
-                <div className="mt-6 rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-900/50 dark:bg-orange-950/20">
-                  <div className="flex gap-3">
-                    <AlertCircle className="size-5 text-orange-600 dark:text-orange-400" />
-                    <div className="space-y-2">
-                      <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">
+                <Box sx={{ mt: 1, borderRadius: 3, border: "1px solid", borderColor: "warning.light", bgcolor: "warning.50", p: 2 }}>
+                  <Stack direction="row" spacing={1.5}>
+                    <AlertCircle size={20} color="var(--mui-palette-warning-main, #FF9F43)" style={{ flexShrink: 0, marginTop: 2 }} />
+                    <Stack spacing={1}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: "warning.dark" }}>
                         Permissões Necessárias na Shopify
-                      </p>
-                      <p className="text-xs text-orange-800 dark:text-orange-200">
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: "warning.dark" }}>
                         Para o sistema funcionar perfeitamente, você precisa liberar as seguintes permissões (Scopes) no seu App Customizado da Shopify:
-                      </p>
-                      <ul className="list-inside list-disc space-y-1 text-xs text-orange-800 dark:text-orange-200">
-                        <li><strong>read_orders</strong>: Para importar e analisar seus pedidos e vendas.</li>
-                        <li><strong>read_customers</strong>: Para gerenciar o CRM e criar segmentações.</li>
-                        <li><strong>read_products</strong>: Para identificar quais produtos seus clientes estão comprando.</li>
-                        <li><strong>read_fulfillments</strong>: Para calcular o tempo médio de envio e rastreio.</li>
-                        <li><strong>read_all_orders</strong>: Recomendado para acessar histórico completo.</li>
-                        <li><strong>read_checkouts</strong>: Necessário para importar checkouts abandonados e recuperar clientes.</li>
-                      </ul>
-
-                      <p className="mt-2 text-[10px] text-orange-700 dark:text-orange-300 italic">
+                      </Typography>
+                      <Box component="ul" sx={{ m: 0, pl: 2.5, color: "warning.dark" }}>
+                        <Typography component="li" variant="caption"><strong>read_orders</strong>: Para importar e analisar seus pedidos e vendas.</Typography>
+                        <Typography component="li" variant="caption"><strong>read_customers</strong>: Para gerenciar o CRM e criar segmentações.</Typography>
+                        <Typography component="li" variant="caption"><strong>read_products</strong>: Para identificar quais produtos seus clientes estão comprando.</Typography>
+                        <Typography component="li" variant="caption"><strong>read_fulfillments</strong>: Para calcular o tempo médio de envio e rastreio.</Typography>
+                        <Typography component="li" variant="caption"><strong>read_all_orders</strong>: Recomendado para acessar histórico completo.</Typography>
+                        <Typography component="li" variant="caption"><strong>read_checkouts</strong>: Necessário para importar checkouts abandonados e recuperar clientes.</Typography>
+                      </Box>
+                      <Typography variant="caption" sx={{ fontStyle: "italic", fontSize: 10, color: "warning.dark" }}>
                         Configurações &gt; Apps e canais de vendas &gt; Desenvolver apps &gt; [Seu App] &gt; Configuração da API Admin.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter className="flex justify-between border-t px-6 py-4">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={async (e) => {
-                    e.preventDefault();
-                    await testConnectionMutation.mutateAsync();
-                  }} 
-                  disabled={isTesting || (!settings?.hasClientSecret && !formData.clientSecret)}
-                >
-                  {isTesting ? <RefreshCw className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}
-                  Testar Conexão
-                </Button>
-                <Button type="submit" disabled={isSaving}>
-                  {isSaving ? <RefreshCw className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
-                  Salvar Configurações
-                </Button>
-              </CardFooter>
-            </form>
+                      </Typography>
+                    </Stack>
+                  </Stack>
+                </Box>
+              </Stack>
+            </CardContent>
+            <Divider />
+            <CardActions sx={{ justifyContent: "space-between", px: 3, py: 2 }}>
+              <Button
+                type="button"
+                variant="outlined"
+                startIcon={<RefreshCw size={16} className={isTesting ? "animate-spin" : undefined} />}
+                onClick={async (e) => {
+                  e.preventDefault();
+                  await testConnectionMutation.mutateAsync();
+                }}
+                disabled={isTesting || (!settings?.hasClientSecret && !formData.clientSecret)}
+              >
+                Testar Conexão
+              </Button>
+              <Button type="submit" variant="contained" startIcon={isSaving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />} disabled={isSaving}>
+                Salvar Configurações
+              </Button>
+            </CardActions>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Sparkles className="size-5 text-primary" />
-                <CardTitle>Análise por IA (ChatGPT)</CardTitle>
-              </div>
-              <CardDescription>
-                Usada pelo botão "Refazer análise" no dashboard para gerar o resumo executivo e as ações
-                sugeridas a partir dos dados reais da Shopify.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="openaiKey">API Key da OpenAI</Label>
-                <Input
-                  id="openaiKey"
+          <Card variant="outlined">
+            <CardHeader
+              title={
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <Sparkles size={20} color="var(--mui-palette-primary-main, #7367F0)" />
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>Análise por IA (ChatGPT)</Typography>
+                </Stack>
+              }
+              subheader='Usada pelo botão "Refazer análise" no dashboard para gerar o resumo executivo e as ações sugeridas a partir dos dados reais da Shopify.'
+            />
+            <CardContent>
+              <Stack spacing={1.5}>
+                <TextField
+                  label="API Key da OpenAI"
                   type="password"
                   placeholder={aiStatus?.hasApiKey ? "•••••••• (salva)" : "sk-..."}
                   value={openAiKey}
                   onChange={(e) => setOpenAiKey(e.target.value)}
+                  fullWidth
                 />
-              </div>
-              {aiStatus?.generatedAt && (
-                <p className="text-xs text-muted-foreground">
-                  Última análise gerada em {new Date(aiStatus.generatedAt).toLocaleString("pt-BR")}.
-                </p>
-              )}
+                {aiStatus?.generatedAt && (
+                  <Typography variant="caption" color="text.secondary">
+                    Última análise gerada em {new Date(aiStatus.generatedAt).toLocaleString("pt-BR")}.
+                  </Typography>
+                )}
+              </Stack>
             </CardContent>
-            <CardFooter className="flex justify-between border-t px-6 py-4">
-              <a
+            <Divider />
+            <CardActions sx={{ justifyContent: "space-between", px: 3, py: 2 }}>
+              <Stack
+                component="a"
+                direction="row"
+                spacing={0.5}
                 href="https://platform.openai.com/api-keys"
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+                sx={{ alignItems: "center", color: "text.secondary", textDecoration: "none", fontSize: 14, "&:hover": { textDecoration: "underline" } }}
               >
-                Gerar uma API key <ExternalLink className="size-3" />
-              </a>
+                <span>Gerar uma API key</span> <ExternalLink size={12} />
+              </Stack>
               <Button
                 type="button"
+                variant="contained"
+                startIcon={saveOpenAiMutation.isPending ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
                 onClick={() => saveOpenAiMutation.mutate()}
                 disabled={saveOpenAiMutation.isPending || openAiKey.trim().length < 20}
               >
-                {saveOpenAiMutation.isPending ? (
-                  <RefreshCw className="mr-2 size-4 animate-spin" />
-                ) : (
-                  <Save className="mr-2 size-4" />
-                )}
                 Salvar API Key
               </Button>
-            </CardFooter>
+            </CardActions>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Link2 className="size-5 text-primary" />
-                <CardTitle>Live Launchpad (Fluxo de Envio)</CardTitle>
-              </div>
-              <CardDescription>
-                Conexão com o banco do live-launchpad-79 (OrderZaps) — é de lá que o Fluxo de Envio lê e escreve
-                grupos e campanhas de verdade, escopado ao tenant Mania de Mulher. Chave service_role do projeto
-                Supabase <code className="rounded bg-muted px-1">hxtbsieodbtzgcvvkeqx</code>.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="llUrl">URL do projeto Supabase</Label>
-                <Input
-                  id="llUrl"
+          <Card variant="outlined">
+            <CardHeader
+              title={
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <Link2 size={20} color="var(--mui-palette-primary-main, #7367F0)" />
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>Live Launchpad (Fluxo de Envio)</Typography>
+                </Stack>
+              }
+              subheader={
+                <>
+                  Conexão com o banco do live-launchpad-79 (OrderZaps) — é de lá que o Fluxo de Envio lê e escreve
+                  grupos e campanhas de verdade, escopado ao tenant Mania de Mulher. Chave service_role do projeto
+                  Supabase <Box component="code" sx={{ borderRadius: 1, bgcolor: "action.hover", px: 0.5 }}>hxtbsieodbtzgcvvkeqx</Box>.
+                </>
+              }
+            />
+            <CardContent>
+              <Stack spacing={2}>
+                <TextField
+                  label="URL do projeto Supabase"
                   value={liveLaunchpadForm.url}
                   onChange={(e) => setLiveLaunchpadForm((prev) => ({ ...prev, url: e.target.value }))}
+                  fullWidth
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="llKey">Service Role Key</Label>
-                <Input
-                  id="llKey"
+                <TextField
+                  label="Service Role Key"
                   type="password"
                   placeholder={liveLaunchpadStatus?.hasKey ? "•••••••• (salva)" : "eyJ..."}
                   value={liveLaunchpadForm.key}
                   onChange={(e) => setLiveLaunchpadForm((prev) => ({ ...prev, key: e.target.value }))}
+                  fullWidth
                 />
-              </div>
+              </Stack>
             </CardContent>
-            <CardFooter className="flex justify-between border-t px-6 py-4">
-              <a
+            <Divider />
+            <CardActions sx={{ justifyContent: "space-between", px: 3, py: 2 }}>
+              <Stack
+                component="a"
+                direction="row"
+                spacing={0.5}
                 href="https://supabase.com/dashboard/project/hxtbsieodbtzgcvvkeqx/settings/api"
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+                sx={{ alignItems: "center", color: "text.secondary", textDecoration: "none", fontSize: 14, "&:hover": { textDecoration: "underline" } }}
               >
-                Pegar a chave no Supabase <ExternalLink className="size-3" />
-              </a>
+                <span>Pegar a chave no Supabase</span> <ExternalLink size={12} />
+              </Stack>
               <Button
                 type="button"
+                variant="contained"
+                startIcon={saveLiveLaunchpadMutation.isPending ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
                 onClick={() => saveLiveLaunchpadMutation.mutate()}
                 disabled={saveLiveLaunchpadMutation.isPending || !liveLaunchpadForm.url.trim() || !liveLaunchpadForm.key.trim()}
               >
-                {saveLiveLaunchpadMutation.isPending ? (
-                  <RefreshCw className="mr-2 size-4 animate-spin" />
-                ) : (
-                  <Save className="mr-2 size-4" />
-                )}
                 Salvar
               </Button>
-            </CardFooter>
+            </CardActions>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <MessageCircle className="size-5 text-primary" />
-                <CardTitle>WhatsApp — API Oficial da Meta</CardTitle>
-              </div>
-              <CardDescription>
-                Usada pelo botão "Aplicar ação" no dashboard pra disparar campanhas de WhatsApp pros clientes reais de
-                cada segmento. Requer um app no Meta for Developers com o produto WhatsApp, um número verificado e
-                pelo menos 1 template de mensagem (categoria Marketing) já aprovado pela Meta — o corpo do template
-                deve ter no máximo 1 variável (ex: {"{{1}}"} = oferta).
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4 rounded-xl border border-border bg-muted/30 p-4">
-                <div>
-                  <p className="text-sm font-semibold">Conexão automática (recomendado)</p>
-                  <p className="text-xs text-muted-foreground">
-                    Configure seu app da Meta uma vez (App ID, App Secret e Config ID do Cadastro Incorporado) e depois
-                    conecte com um clique — sem copiar token, WABA ID ou Phone Number ID manualmente.
-                  </p>
-                </div>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="waAppId">App ID</Label>
-                    <Input
-                      id="waAppId"
+          <Card variant="outlined">
+            <CardHeader
+              title={
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <MessageCircle size={20} color="var(--mui-palette-primary-main, #7367F0)" />
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>WhatsApp — API Oficial da Meta</Typography>
+                </Stack>
+              }
+              subheader={
+                <>
+                  Usada pelo botão "Aplicar ação" no dashboard pra disparar campanhas de WhatsApp pros clientes reais de
+                  cada segmento. Requer um app no Meta for Developers com o produto WhatsApp, um número verificado e
+                  pelo menos 1 template de mensagem (categoria Marketing) já aprovado pela Meta — o corpo do template
+                  deve ter no máximo 1 variável (ex: {"{{1}}"} = oferta).
+                </>
+              }
+            />
+            <CardContent>
+              <Stack spacing={3}>
+                <Stack spacing={2} sx={{ border: "1px solid", borderColor: "divider", bgcolor: "action.hover", borderRadius: 3, p: 2 }}>
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>Conexão automática (recomendado)</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Configure seu app da Meta uma vez (App ID, App Secret e Config ID do Cadastro Incorporado) e depois
+                      conecte com um clique — sem copiar token, WABA ID ou Phone Number ID manualmente.
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" } }}>
+                    <TextField
+                      label="App ID"
                       placeholder={waStatus?.appId ? waStatus.appId : "ex: 2358751441288240"}
                       value={waForm.appId}
                       onChange={(e) => setWaForm((prev) => ({ ...prev, appId: e.target.value }))}
+                      fullWidth
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="waAppSecret">App Secret</Label>
-                    <Input
-                      id="waAppSecret"
+                    <TextField
+                      label="App Secret"
                       type="password"
                       placeholder={waStatus?.hasAppSecret ? "•••••••• (salvo)" : "Configurações do app → Básico"}
                       value={waForm.appSecret}
                       onChange={(e) => setWaForm((prev) => ({ ...prev, appSecret: e.target.value }))}
+                      fullWidth
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="waConfigId">Config ID (Cadastro Incorporado)</Label>
-                    <Input
-                      id="waConfigId"
+                    <TextField
+                      label="Config ID (Cadastro Incorporado)"
                       placeholder={waStatus?.configId ? waStatus.configId : "ex: 2595083274228237"}
                       value={waForm.configId}
                       onChange={(e) => setWaForm((prev) => ({ ...prev, configId: e.target.value }))}
+                      fullWidth
                     />
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => saveWaMutation.mutate()}
-                    disabled={saveWaMutation.isPending}
-                  >
-                    Salvar App ID / Secret / Config ID
-                  </Button>
-                  {waStatus?.appId && waStatus?.configId && (
-                    <EmbeddedSignupButton appId={waStatus.appId} configId={waStatus.configId} onConnected={() => refetchWaStatus()} />
-                  )}
-                </div>
-              </div>
+                  </Box>
+                  <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap", alignItems: "center" }}>
+                    <Button
+                      type="button"
+                      variant="outlined"
+                      onClick={() => saveWaMutation.mutate()}
+                      disabled={saveWaMutation.isPending}
+                    >
+                      Salvar App ID / Secret / Config ID
+                    </Button>
+                    {waStatus?.appId && waStatus?.configId && (
+                      <EmbeddedSignupButton appId={waStatus.appId} configId={waStatus.configId} onConnected={() => refetchWaStatus()} />
+                    )}
+                  </Stack>
+                </Stack>
 
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ou configure manualmente</p>
+                <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>Ou configure manualmente</Typography>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="waToken">Token de Acesso Permanente</Label>
-                  <Input
-                    id="waToken"
+                <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+                  <TextField
+                    label="Token de Acesso Permanente"
                     type="password"
                     placeholder={waStatus?.hasAccessToken ? "•••••••• (salvo)" : "EAAG..."}
                     value={waForm.accessToken}
                     onChange={(e) => setWaForm((prev) => ({ ...prev, accessToken: e.target.value }))}
+                    fullWidth
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="waPhoneId">Phone Number ID</Label>
-                  <Input
-                    id="waPhoneId"
+                  <TextField
+                    label="Phone Number ID"
                     type="password"
                     placeholder={waStatus?.hasPhoneNumberId ? "•••••••• (salvo)" : "1234567890"}
                     value={waForm.phoneNumberId}
                     onChange={(e) => setWaForm((prev) => ({ ...prev, phoneNumberId: e.target.value }))}
+                    fullWidth
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="waTemplate">Nome do Template Aprovado</Label>
-                  <Input
-                    id="waTemplate"
+                  <TextField
+                    label="Nome do Template Aprovado"
                     placeholder="ex: oferta_recompra"
                     value={waForm.templateName}
                     onChange={(e) => setWaForm((prev) => ({ ...prev, templateName: e.target.value }))}
+                    fullWidth
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="waLang">Idioma do Template</Label>
-                  <Input
-                    id="waLang"
+                  <TextField
+                    label="Idioma do Template"
                     placeholder="pt_BR"
                     value={waForm.templateLanguage}
                     onChange={(e) => setWaForm((prev) => ({ ...prev, templateLanguage: e.target.value }))}
+                    fullWidth
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="waWaba">WABA ID</Label>
-                  <Input
-                    id="waWaba"
+                  <TextField
+                    label="WABA ID"
                     placeholder={waStatus?.hasWabaId ? "•••••••• (salvo)" : "ID da WhatsApp Business Account"}
                     value={waForm.wabaId}
                     onChange={(e) => setWaForm((prev) => ({ ...prev, wabaId: e.target.value }))}
+                    helperText="Usado pra listar os templates aprovados na aba Templates."
+                    fullWidth
                   />
-                  <p className="text-xs text-muted-foreground">Usado pra listar os templates aprovados na aba Templates.</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="waVerify">Verify Token do Webhook</Label>
-                  <Input
-                    id="waVerify"
+                  <TextField
+                    label="Verify Token do Webhook"
                     type="password"
                     placeholder={waStatus?.hasVerifyToken ? "•••••••• (salvo)" : "escolha uma string qualquer"}
                     value={waForm.verifyToken}
                     onChange={(e) => setWaForm((prev) => ({ ...prev, verifyToken: e.target.value }))}
+                    helperText={
+                      <>
+                        Configure o mesmo valor no painel da Meta, junto com a URL{" "}
+                        <Box component="code" sx={{ borderRadius: 0.5, bgcolor: "action.hover", px: 0.5 }}>/api/whatsapp-webhook</Box> — é assim que Entregues/Lidas
+                        são atualizados em tempo real.
+                      </>
+                    }
+                    fullWidth
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Configure o mesmo valor no painel da Meta, junto com a URL{" "}
-                    <code className="rounded bg-muted px-1">/api/whatsapp-webhook</code> — é assim que Entregues/Lidas
-                    são atualizados em tempo real.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="waCostMkt">Custo por mensagem — Marketing (R$)</Label>
-                  <Input
-                    id="waCostMkt"
+                  <TextField
+                    label="Custo por mensagem — Marketing (R$)"
                     type="number"
-                    step="0.01"
-                    min="0"
+                    slotProps={{ htmlInput: { step: "0.01", min: "0" } }}
                     placeholder="0.00"
                     value={waForm.costMarketing}
                     onChange={(e) => setWaForm((prev) => ({ ...prev, costMarketing: e.target.value }))}
+                    fullWidth
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="waCostUtil">Custo por mensagem — Utilidade (R$)</Label>
-                  <Input
-                    id="waCostUtil"
+                  <TextField
+                    label="Custo por mensagem — Utilidade (R$)"
                     type="number"
-                    step="0.01"
-                    min="0"
+                    slotProps={{ htmlInput: { step: "0.01", min: "0" } }}
                     placeholder="0.00"
                     value={waForm.costUtility}
                     onChange={(e) => setWaForm((prev) => ({ ...prev, costUtility: e.target.value }))}
+                    fullWidth
                   />
-                </div>
-              </div>
+                </Box>
+              </Stack>
             </CardContent>
-            <CardFooter className="flex justify-between border-t px-6 py-4">
-              <a
+            <Divider />
+            <CardActions sx={{ justifyContent: "space-between", px: 3, py: 2, flexWrap: "wrap", gap: 1 }}>
+              <Stack
+                component="a"
+                direction="row"
+                spacing={0.5}
                 href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+                sx={{ alignItems: "center", color: "text.secondary", textDecoration: "none", fontSize: 14, "&:hover": { textDecoration: "underline" } }}
               >
-                Guia de configuração da Meta <ExternalLink className="size-3" />
-              </a>
-              <div className="flex items-center gap-2">
+                <span>Guia de configuração da Meta</span> <ExternalLink size={12} />
+              </Stack>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="outlined"
+                  startIcon={activateTemplateWebhookMutation.isPending ? <RefreshCw size={16} className="animate-spin" /> : undefined}
                   onClick={() => activateTemplateWebhookMutation.mutate()}
                   disabled={activateTemplateWebhookMutation.isPending}
                   title="Liga o aviso automático de aprovação/rejeição de template (rodar 1x, depois de salvar Verify Token e App Secret)"
                 >
-                  {activateTemplateWebhookMutation.isPending && <RefreshCw className="mr-2 size-4 animate-spin" />}
                   Ativar notificações de aprovação
                 </Button>
-                <Button type="button" onClick={() => saveWaMutation.mutate()} disabled={saveWaMutation.isPending}>
-                  {saveWaMutation.isPending ? (
-                    <RefreshCw className="mr-2 size-4 animate-spin" />
-                  ) : (
-                    <Save className="mr-2 size-4" />
-                  )}
+                <Button
+                  type="button"
+                  variant="contained"
+                  startIcon={saveWaMutation.isPending ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                  onClick={() => saveWaMutation.mutate()}
+                  disabled={saveWaMutation.isPending}
+                >
                   Salvar
                 </Button>
-              </div>
-            </CardFooter>
+              </Stack>
+            </CardActions>
           </Card>
 
           {(settings?.syncStatus === "connected" || settings?.syncStatus === "error") && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <RefreshCw className="size-5 text-primary" />
-                  <CardTitle>Sincronização de Dados</CardTitle>
-                </div>
-                <CardDescription>
-                  Importe pedidos, clientes e informações de rastreio da sua loja.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                  <div className="rounded-lg border bg-card p-3">
-                    <p className="text-xs text-muted-foreground">Status</p>
-                    <p className="mt-1 text-sm font-semibold capitalize">{settings.syncStatus}</p>
-                  </div>
-                  <div className="rounded-lg border bg-card p-3">
-                    <p className="text-xs text-muted-foreground">Última Sinc.</p>
-                    <p className="mt-1 text-sm font-semibold">
-                      {settings.lastSyncAt ? new Date(settings.lastSyncAt).toLocaleString("pt-BR") : "Nunca"}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border bg-card p-3">
-                    <p className="text-xs text-muted-foreground">Loja</p>
-                    <p className="mt-1 text-sm font-semibold truncate">{testResult?.shopName || settings.domain}</p>
-                  </div>
-                  <div className="rounded-lg border bg-card p-3">
-                    <p className="text-xs text-muted-foreground">Timezone</p>
-                    <p className="mt-1 text-sm font-semibold">America/Sao_Paulo</p>
-                  </div>
-                </div>
+            <Card variant="outlined">
+              <CardHeader
+                title={
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <RefreshCw size={20} color="var(--mui-palette-primary-main, #7367F0)" />
+                    <Typography variant="h6" sx={{ fontWeight: 700 }}>Sincronização de Dados</Typography>
+                  </Stack>
+                }
+                subheader="Importe pedidos, clientes e informações de rastreio da sua loja."
+              />
+              <CardContent>
+                <Stack spacing={3}>
+                  <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(4, 1fr)" } }}>
+                    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+                      <Typography variant="caption" color="text.secondary">Status</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.5, textTransform: "capitalize" }}>{settings.syncStatus}</Typography>
+                    </Box>
+                    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+                      <Typography variant="caption" color="text.secondary">Última Sinc.</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.5 }}>
+                        {settings.lastSyncAt ? new Date(settings.lastSyncAt).toLocaleString("pt-BR") : "Nunca"}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+                      <Typography variant="caption" color="text.secondary">Loja</Typography>
+                      <Typography variant="body2" noWrap sx={{ fontWeight: 700, mt: 0.5 }}>{testResult?.shopName || settings.domain}</Typography>
+                    </Box>
+                    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+                      <Typography variant="caption" color="text.secondary">Timezone</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.5 }}>America/Sao_Paulo</Typography>
+                    </Box>
+                  </Box>
 
-                {testResult?.scopes && (
-                  <div className="space-y-2">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">Permissões (Scopes)</Label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {testResult.scopes.map((s: string) => (
-                        <Badge key={s} variant="outline" className="text-[10px] font-normal">
-                          {s}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                  {testResult?.scopes && (
+                    <Stack spacing={1}>
+                      <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>Permissões (Scopes)</Typography>
+                      <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap" }}>
+                        {testResult.scopes.map((s: string) => (
+                          <Chip key={s} size="small" variant="outlined" label={s} sx={{ fontSize: 10 }} />
+                        ))}
+                      </Stack>
+                    </Stack>
+                  )}
 
-                {settings.lastSyncError && (
-                  <Alert variant="destructive">
-                    <AlertCircle className="size-4" />
-                    <AlertTitle>Erro na última sincronização</AlertTitle>
-                    <AlertDescription>{settings.lastSyncError}</AlertDescription>
-                  </Alert>
-                )}
+                  {settings.lastSyncError && (
+                    <Alert severity="error" icon={<AlertCircle size={18} />}>
+                      <AlertTitle>Erro na última sincronização</AlertTitle>
+                      {settings.lastSyncError}
+                    </Alert>
+                  )}
+                </Stack>
               </CardContent>
-              <CardFooter className="border-t px-6 py-4">
-                <Button 
-                  className="w-full sm:w-auto" 
-                  onClick={handleSync} 
+              <Divider />
+              <CardActions sx={{ px: 3, py: 2 }}>
+                <Button
+                  variant="contained"
+                  startIcon={<RefreshCw size={16} className={isSyncing ? "animate-spin" : undefined} />}
+                  onClick={handleSync}
                   disabled={isSyncing}
+                  sx={{ width: { xs: "100%", sm: "auto" } }}
                 >
-                  {isSyncing ? <RefreshCw className="mr-2 size-4 animate-spin" /> : <RefreshCw className="mr-2 size-4" />}
                   Sincronizar Agora
                 </Button>
-              </CardFooter>
+              </CardActions>
             </Card>
           )}
 
-          <div className="flex justify-center gap-4 text-sm text-muted-foreground">
-            <a href="https://help.shopify.com/en/manual/apps/custom-apps" target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:underline">
-              Como criar um app <ExternalLink className="size-3" />
-            </a>
+          <Stack direction="row" spacing={2} sx={{ justifyContent: "center", color: "text.secondary", fontSize: 14 }}>
+            <Stack component="a" direction="row" spacing={0.5} href="https://help.shopify.com/en/manual/apps/custom-apps" target="_blank" rel="noreferrer" sx={{ alignItems: "center", color: "inherit", textDecoration: "none", "&:hover": { textDecoration: "underline" } }}>
+              <span>Como criar um app</span> <ExternalLink size={12} />
+            </Stack>
             <span>•</span>
-            <a href="#" className="hover:underline">Suporte</a>
-          </div>
-        </div>
-      </div>
-    </div>
+            <Box component="a" href="#" sx={{ color: "inherit", textDecoration: "none", "&:hover": { textDecoration: "underline" } }}>Suporte</Box>
+          </Stack>
+        </Stack>
+      </Box>
+    </Box>
   );
 }

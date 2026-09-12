@@ -3,9 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { CheckCircle2, MessageCircle, RefreshCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import IconButton from "@mui/material/IconButton";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import {
   completeWhatsappEmbeddedSignup,
   getWhatsappPhoneRegistrationState,
@@ -285,88 +289,86 @@ export function EmbeddedSignupButton({
   const ready = configuredState?.ready === true;
 
   return (
-    <div className="w-full space-y-3">
+    <Stack spacing={1.5} sx={{ width: "100%" }}>
       {configuredState && (
-        <div className="rounded-lg border border-border bg-background/70 p-3 text-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              {ready ? <CheckCircle2 className="size-4 text-success" /> : <ShieldCheck className="size-4 text-warning" />}
-              <span className="font-semibold">{configuredState.displayPhoneNumber || "Número conectado"}</span>
-            </div>
-            <Badge variant="outline">{ready ? "Pronto para uso" : "Registro pendente"}</Badge>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
-            <span>API: {configuredState.apiVersion}</span>
-            <span>Verificação: {configuredState.codeVerificationStatus || "—"}</span>
-            <span>Plataforma: {configuredState.platformType || "—"}</span>
-            <span>Webhook: {configuredState.webhookSubscribed === true ? "inscrito" : configuredState.webhookSubscribed === false ? "não inscrito" : "não confirmado"}</span>
-          </div>
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5, fontSize: 12 }}>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+              {ready ? <CheckCircle2 size={16} color="var(--mui-palette-success-main, #28C76F)" /> : <ShieldCheck size={16} color="var(--mui-palette-warning-main, #FF9F43)" />}
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>{configuredState.displayPhoneNumber || "Número conectado"}</Typography>
+            </Stack>
+            <Chip size="small" variant="outlined" label={ready ? "Pronto para uso" : "Registro pendente"} />
+          </Stack>
+          <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", mt: 1, color: "text.secondary" }}>
+            <Typography variant="caption">API: {configuredState.apiVersion}</Typography>
+            <Typography variant="caption">Verificação: {configuredState.codeVerificationStatus || "—"}</Typography>
+            <Typography variant="caption">Plataforma: {configuredState.platformType || "—"}</Typography>
+            <Typography variant="caption">Webhook: {configuredState.webhookSubscribed === true ? "inscrito" : configuredState.webhookSubscribed === false ? "não inscrito" : "não confirmado"}</Typography>
+          </Stack>
           {configuredState.issues?.length > 0 && (
-            <p className="mt-2 text-warning-foreground">{configuredState.issues[0]}</p>
+            <Typography variant="caption" color="warning.main" sx={{ mt: 1, display: "block" }}>{configuredState.issues[0]}</Typography>
           )}
-        </div>
+        </Box>
       )}
 
       {phoneState && !phoneState.success && (
-        <p className="text-xs text-critical">Não foi possível consultar o número na Meta: {phoneState.error}</p>
+        <Typography variant="caption" color="error">Não foi possível consultar o número na Meta: {phoneState.error}</Typography>
       )}
 
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-[190px] flex-1 space-y-1">
-          <label htmlFor="waRegistrationPin" className="text-xs font-medium">PIN de registro (6 números)</label>
-          <Input
-            id="waRegistrationPin"
+      <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "flex-end" }}>
+        <Box sx={{ minWidth: 190, flex: 1 }}>
+          <TextField
+            label="PIN de registro (6 números)"
             type="password"
             inputMode="numeric"
             autoComplete="off"
-            maxLength={6}
+            slotProps={{ htmlInput: { maxLength: 6 } }}
             placeholder="••••••"
             value={pin}
             onChange={(event) => setPin(normalizeWhatsappRegistrationPin(event.target.value))}
+            fullWidth
           />
-          <p className="text-[10px] text-muted-foreground">O PIN é enviado somente à Meta no momento do registro e não é salvo no sistema.</p>
-        </div>
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, display: "block", mt: 0.5 }}>
+            O PIN é enviado somente à Meta no momento do registro e não é salvo no sistema.
+          </Typography>
+        </Box>
 
         <Button
-          type="button"
+          variant="contained"
+          startIcon={<MessageCircle size={16} />}
           onClick={handleConnect}
           disabled={!sdkReady || connecting || registering || !isValidWhatsappRegistrationPin(pin)}
-          className="gap-2"
         >
-          <MessageCircle className="size-4" />
           {!sdkReady ? "Carregando Meta..." : connecting ? "Conectando e registrando..." : "Conectar novo número"}
         </Button>
 
         {configuredState && !ready && (
           <Button
-            type="button"
-            variant="outline"
+            variant="outlined"
+            startIcon={registering ? <RefreshCw size={16} className="animate-spin" /> : undefined}
             onClick={handleRegisterCurrent}
             disabled={registering || connecting || !isValidWhatsappRegistrationPin(pin)}
           >
-            {registering && <RefreshCw className="mr-2 size-4 animate-spin" />}
             Registrar número atual
           </Button>
         )}
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
+        <IconButton
+          size="small"
           onClick={() => refetchPhoneState()}
           disabled={refreshingPhoneState}
           title="Consultar novamente o estado do número na Meta"
         >
-          <RefreshCw className={`size-4 ${refreshingPhoneState ? "animate-spin" : ""}`} />
-        </Button>
-      </div>
+          <RefreshCw size={16} className={refreshingPhoneState ? "animate-spin" : undefined} />
+        </IconButton>
+      </Stack>
 
       {sdkError && (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-critical">
-          <span>Não foi possível carregar o SDK da Meta. Desative bloqueadores para connect.facebook.net e tente novamente.</span>
-          <Button type="button" variant="outline" size="sm" onClick={handleRetrySdk}>Tentar de novo</Button>
-        </div>
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center", color: "error.main" }}>
+          <Typography variant="caption" color="error">Não foi possível carregar o SDK da Meta. Desative bloqueadores para connect.facebook.net e tente novamente.</Typography>
+          <Button size="small" variant="outlined" onClick={handleRetrySdk}>Tentar de novo</Button>
+        </Stack>
       )}
-    </div>
+    </Stack>
   );
 }

@@ -20,9 +20,19 @@ import {
   Tags,
   UserRound,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Grid from "@mui/material/Grid";
+import IconButton from "@mui/material/IconButton";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Typography from "@mui/material/Typography";
 import { getCustomer360 } from "@/lib/crm-customer-360.functions";
 import { RFM_SEGMENTS_CONFIG } from "@/lib/crm-rfm-shared";
 import { brl } from "@/lib/crm-mock";
@@ -48,16 +58,18 @@ function datePt(value: string | null | undefined, withTime = false) {
 
 function MetricCard({ icon: Icon, label, value, hint }: any) {
   return (
-    <div className="surface-card p-5">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
-        <span className="flex size-9 items-center justify-center rounded-xl bg-muted/60 text-muted-foreground">
-          <Icon className="size-4" />
-        </span>
-      </div>
-      <p className="mt-3 text-2xl font-bold tracking-tight">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
-    </div>
+    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+      <Stack direction="row" spacing={1.5} sx={{ justifyContent: "space-between", alignItems: "center" }}>
+        <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+          {label}
+        </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, borderRadius: 2, bgcolor: "action.hover", color: "text.secondary" }}>
+          <Icon size={16} />
+        </Box>
+      </Stack>
+      <Typography variant="h5" sx={{ fontWeight: 700, mt: 1.5 }}>{value}</Typography>
+      <Typography variant="caption" color="text.secondary">{hint}</Typography>
+    </Box>
   );
 }
 
@@ -88,35 +100,37 @@ function Customer360Page() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background p-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="surface-card flex min-h-72 items-center justify-center text-sm text-muted-foreground">
-            Carregando ficha 360 da cliente...
-          </div>
-        </div>
-      </div>
+      <Box sx={{ minHeight: "100vh", p: 4 }}>
+        <Box sx={{ maxWidth: 1400, mx: "auto" }}>
+          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, display: "flex", minHeight: 288, alignItems: "center", justifyContent: "center" }}>
+            <Typography variant="body2" color="text.secondary">Carregando ficha 360 da cliente...</Typography>
+          </Box>
+        </Box>
+      </Box>
     );
   }
 
   if (isError || !data) {
     return (
-      <div className="min-h-screen bg-background p-8">
-        <div className="mx-auto max-w-4xl">
-          <div className="surface-card border border-destructive/30 p-6">
-            <div className="flex gap-3">
-              <AlertTriangle className="mt-0.5 size-5 text-destructive" />
-              <div>
-                <h1 className="font-bold">Não foi possível abrir a cliente</h1>
-                <p className="mt-1 text-sm text-muted-foreground">{(error as any)?.message ?? "Falha ao carregar a ficha 360."}</p>
-                <div className="mt-4 flex gap-2">
+      <Box sx={{ minHeight: "100vh", p: 4 }}>
+        <Box sx={{ maxWidth: 768, mx: "auto" }}>
+          <Box sx={{ border: "1px solid", borderColor: "error.main", borderRadius: 3, p: 3 }}>
+            <Stack direction="row" spacing={1.5}>
+              <AlertTriangle size={20} style={{ marginTop: 2, flexShrink: 0 }} color="var(--mui-palette-error-main, #EA5455)" />
+              <Box>
+                <Typography variant="h6" sx={{ fontWeight: 700 }}>Não foi possível abrir a cliente</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{(error as any)?.message ?? "Falha ao carregar a ficha 360."}</Typography>
+                <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
                   <Button variant="outline" onClick={() => refetch()}>Tentar novamente</Button>
-                  <Link to="/crm" search={{ tab: "contatos" }}><Button>Voltar aos contatos</Button></Link>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+                  <Link to="/crm" search={{ tab: "contatos" }}>
+                    <Button variant="contained">Voltar aos contatos</Button>
+                  </Link>
+                </Stack>
+              </Box>
+            </Stack>
+          </Box>
+        </Box>
+      </Box>
     );
   }
 
@@ -132,193 +146,269 @@ function Customer360Page() {
     .join("") || "CL";
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-7xl px-4 py-8 md:px-8">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-start gap-4">
+    <Box sx={{ minHeight: "100vh" }}>
+      <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
+        <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <Stack direction="row" spacing={2} sx={{ alignItems: "flex-start" }}>
             <Link to="/crm" search={{ tab: "contatos" }}>
-              <Button variant="outline" size="icon"><ArrowLeft className="size-4" /></Button>
+              <IconButton sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
+                <ArrowLeft size={16} />
+              </IconButton>
             </Link>
-            <div className="flex size-14 items-center justify-center rounded-2xl bg-brand/10 text-lg font-bold text-brand">{initials}</div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight">{customer.name}</h1>
+            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", width: 56, height: 56, borderRadius: 4, bgcolor: "action.hover", color: "primary.main", fontSize: 18, fontWeight: 700 }}>
+              {initials}
+            </Box>
+            <Box>
+              <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
+                <Typography variant="h5" sx={{ fontWeight: 700 }}>{customer.name}</Typography>
                 {customer.rfmSegment && (
-                  <Badge
-                    variant="outline"
-                    className="font-bold"
-                    style={{ color: rfmColor, borderColor: rfmColor ? `${rfmColor}50` : undefined }}
-                  >
-                    {customer.rfmSegment}
-                  </Badge>
+                  <Chip
+                    variant="outlined"
+                    label={customer.rfmSegment}
+                    sx={{ fontWeight: 700, color: rfmColor, borderColor: rfmColor ? `${rfmColor}80` : undefined }}
+                  />
                 )}
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">Ficha 360 · histórico comercial unificado do CRM</p>
-              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1.5"><Mail className="size-3.5" /> {customer.email || "Sem e-mail"}</span>
-                <span className="flex items-center gap-1.5"><Phone className="size-3.5" /> {customer.phone || "Sem telefone"}</span>
-                <span className="flex items-center gap-1.5"><MapPin className="size-3.5" /> {[customer.city, customer.province].filter(Boolean).join(" / ") || "Localização não informada"}</span>
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary" className="px-3 py-1.5">{stageLabel(metrics.purchaseStage)}</Badge>
-            {metrics.recurrence && <Badge className="bg-success-soft text-success hover:bg-success-soft">Recorrente</Badge>}
-          </div>
-        </div>
+              </Stack>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Ficha 360 · histórico comercial unificado do CRM</Typography>
+              <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", mt: 1.5, color: "text.secondary" }}>
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}><Mail size={14} /><Typography variant="body2">{customer.email || "Sem e-mail"}</Typography></Stack>
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}><Phone size={14} /><Typography variant="body2">{customer.phone || "Sem telefone"}</Typography></Stack>
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}><MapPin size={14} /><Typography variant="body2">{[customer.city, customer.province].filter(Boolean).join(" / ") || "Localização não informada"}</Typography></Stack>
+              </Stack>
+            </Box>
+          </Stack>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+            <Chip label={stageLabel(metrics.purchaseStage)} sx={{ px: 1 }} />
+            {metrics.recurrence && <Chip color="success" label="Recorrente" />}
+          </Stack>
+        </Stack>
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard icon={ShoppingBag} label="Compras válidas" value={metrics.totalOrders} hint={`${metrics.trayOrders} Tray · ${metrics.shopifyOrders} Shopify`} />
-          <MetricCard icon={DollarSign} label="Total gasto" value={brl(metrics.totalSpent)} hint="Somente pedidos válidos para receita" />
-          <MetricCard icon={ReceiptText} label="Ticket médio" value={brl(metrics.averageTicket)} hint="Média por compra válida" />
-          <MetricCard icon={Clock3} label="Última compra" value={datePt(metrics.lastOrderAt)} hint={metrics.daysSinceLastPurchase == null ? "Sem compra válida" : `${metrics.daysSinceLastPurchase} dia(s) desde a compra`} />
-        </div>
+        <Grid container spacing={2} sx={{ mt: 3 }}>
+          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+            <MetricCard icon={ShoppingBag} label="Compras válidas" value={metrics.totalOrders} hint={`${metrics.trayOrders} Tray · ${metrics.shopifyOrders} Shopify`} />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+            <MetricCard icon={DollarSign} label="Total gasto" value={brl(metrics.totalSpent)} hint="Somente pedidos válidos para receita" />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+            <MetricCard icon={ReceiptText} label="Ticket médio" value={brl(metrics.averageTicket)} hint="Média por compra válida" />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+            <MetricCard icon={Clock3} label="Última compra" value={datePt(metrics.lastOrderAt)} hint={metrics.daysSinceLastPurchase == null ? "Sem compra válida" : `${metrics.daysSinceLastPurchase} dia(s) desde a compra`} />
+          </Grid>
+        </Grid>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.4fr]">
-          <div className="space-y-6">
-            <section className="surface-card p-6">
-              <div className="flex items-center gap-2">
-                <UserRound className="size-5 text-brand" />
-                <h2 className="text-lg font-bold">Perfil comercial</h2>
-              </div>
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <div><p className="text-xs text-muted-foreground">Primeira compra</p><p className="mt-1 font-semibold">{datePt(metrics.firstOrderAt)}</p></div>
-                <div><p className="text-xs text-muted-foreground">Última compra</p><p className="mt-1 font-semibold">{datePt(metrics.lastOrderAt)}</p></div>
-                <div><p className="text-xs text-muted-foreground">Origem Tray</p><p className="mt-1 font-semibold">{metrics.trayOrders} compra(s)</p></div>
-                <div><p className="text-xs text-muted-foreground">Origem Shopify</p><p className="mt-1 font-semibold">{metrics.shopifyOrders} compra(s)</p></div>
-                <div><p className="text-xs text-muted-foreground">Situação de recompra</p><p className="mt-1 font-semibold">{stageLabel(metrics.purchaseStage)}</p></div>
-                <div><p className="text-xs text-muted-foreground">Tempo até 2ª compra</p><p className="mt-1 font-semibold">{metrics.daysToSecondPurchase == null ? "—" : `${metrics.daysToSecondPurchase} dia(s)`}</p></div>
-              </div>
+        <Grid container spacing={3} sx={{ mt: 0.5 }}>
+          <Grid size={{ xs: 12, lg: 5 }}>
+            <Stack spacing={3}>
+              <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <UserRound size={20} color="var(--mui-palette-primary-main, #7367F0)" />
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>Perfil comercial</Typography>
+                </Stack>
+                <Grid container spacing={2} sx={{ mt: 1 }}>
+                  <Grid size={6}><Typography variant="caption" color="text.secondary">Primeira compra</Typography><Typography sx={{ fontWeight: 600 }}>{datePt(metrics.firstOrderAt)}</Typography></Grid>
+                  <Grid size={6}><Typography variant="caption" color="text.secondary">Última compra</Typography><Typography sx={{ fontWeight: 600 }}>{datePt(metrics.lastOrderAt)}</Typography></Grid>
+                  <Grid size={6}><Typography variant="caption" color="text.secondary">Origem Tray</Typography><Typography sx={{ fontWeight: 600 }}>{metrics.trayOrders} compra(s)</Typography></Grid>
+                  <Grid size={6}><Typography variant="caption" color="text.secondary">Origem Shopify</Typography><Typography sx={{ fontWeight: 600 }}>{metrics.shopifyOrders} compra(s)</Typography></Grid>
+                  <Grid size={6}><Typography variant="caption" color="text.secondary">Situação de recompra</Typography><Typography sx={{ fontWeight: 600 }}>{stageLabel(metrics.purchaseStage)}</Typography></Grid>
+                  <Grid size={6}><Typography variant="caption" color="text.secondary">Tempo até 2ª compra</Typography><Typography sx={{ fontWeight: 600 }}>{metrics.daysToSecondPurchase == null ? "—" : `${metrics.daysToSecondPurchase} dia(s)`}</Typography></Grid>
+                </Grid>
 
-              <div className="mt-6 border-t border-border pt-5">
-                <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"><Tags className="size-3.5" /> Tags</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {[...(customer.tags || []), ...(customer.tagsCustom || [])].length === 0 ? (
-                    <span className="text-sm text-muted-foreground">Nenhuma tag.</span>
-                  ) : (
-                    [...new Set([...(customer.tags || []), ...(customer.tagsCustom || [])])].map((tag: string) => <Badge key={tag} variant="outline">{tag}</Badge>)
-                  )}
-                </div>
-              </div>
-            </section>
-
-            <section className="surface-card p-6">
-              <div className="flex items-center gap-2">
-                <Repeat2 className="size-5 text-brand" />
-                <h2 className="text-lg font-bold">Segmentos atuais</h2>
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">Calculados agora com as regras salvas no CRM.</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {segments.length === 0 ? <span className="text-sm text-muted-foreground">Esta cliente não está em nenhum segmento salvo.</span> : segments.map((segment: any) => (
-                  <Badge key={segment.id} variant="outline" className="border-brand/20 bg-brand/5 text-brand">{segment.name}</Badge>
-                ))}
-              </div>
-            </section>
-
-            <section className="surface-card p-6">
-              <div className="flex items-center gap-2">
-                <MessageCircle className="size-5 text-brand" />
-                <h2 className="text-lg font-bold">Relacionamento</h2>
-              </div>
-              <div className="mt-5 grid grid-cols-3 gap-3">
-                <div className="rounded-xl border border-border p-3 text-center"><p className="text-xl font-bold">{engagement.campaigns.length}</p><p className="text-[11px] text-muted-foreground">Campanhas</p></div>
-                <div className="rounded-xl border border-border p-3 text-center"><p className="text-xl font-bold">{engagement.automations.length}</p><p className="text-[11px] text-muted-foreground">Automações</p></div>
-                <div className="rounded-xl border border-border p-3 text-center"><p className="text-xl font-bold">{engagement.abandonedCheckouts.length}</p><p className="text-[11px] text-muted-foreground">Abandonos</p></div>
-              </div>
-
-              {engagement.campaigns.length > 0 && (
-                <div className="mt-5 space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Últimas campanhas</p>
-                  {engagement.campaigns.slice(0, 5).map((campaign: any, index: number) => (
-                    <div key={`${campaign.campaignId}-${index}`} className="flex items-center justify-between gap-3 rounded-xl bg-muted/30 px-3 py-2 text-sm">
-                      <div><p className="font-medium">{campaign.name}</p><p className="text-xs text-muted-foreground">{datePt(campaign.sentAt, true)}</p></div>
-                      <Badge variant="outline">{campaign.status || "—"}</Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
-
-          <div className="space-y-6">
-            <section className="surface-card overflow-hidden">
-              <div className="border-b border-border p-6">
-                <div className="flex items-center gap-2"><Package className="size-5 text-brand" /><h2 className="text-lg font-bold">Produtos comprados</h2></div>
-                <p className="mt-1 text-sm text-muted-foreground">Tray e Shopify unificados por SKU quando disponível.</p>
-              </div>
-              <div className="max-h-[430px] overflow-auto">
-                <Table>
-                  <TableHeader><TableRow><TableHead>PRODUTO</TableHead><TableHead>ORIGEM</TableHead><TableHead className="text-center">QTD.</TableHead><TableHead className="text-right">GASTO</TableHead><TableHead className="text-right">ÚLTIMA</TableHead></TableRow></TableHeader>
-                  <TableBody>
-                    {products.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="h-24 text-center text-muted-foreground">Nenhum produto em pedido válido.</TableCell></TableRow>
-                    ) : products.map((product: any, index: number) => (
-                      <TableRow key={`${product.sku || product.productId || product.title}-${index}`}>
-                        <TableCell><p className="font-medium">{product.title}</p><p className="text-xs text-muted-foreground">{product.sku || "Sem SKU"} · {product.orderCount} pedido(s)</p></TableCell>
-                        <TableCell><div className="flex flex-wrap gap-1">{product.sources.map((source: string) => <Badge key={source} variant="outline" className="text-[10px]">{source}</Badge>)}</div></TableCell>
-                        <TableCell className="text-center font-semibold">{product.quantity}</TableCell>
-                        <TableCell className="text-right font-semibold">{brl(product.spent)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{datePt(product.lastPurchasedAt)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </section>
-
-            <section className="surface-card p-6">
-              <div className="flex items-center gap-2"><CalendarDays className="size-5 text-brand" /><h2 className="text-lg font-bold">Histórico de pedidos</h2></div>
-              <p className="mt-1 text-sm text-muted-foreground">Últimos pedidos registrados no CRM, incluindo status não válidos para receita.</p>
-              <div className="mt-5 space-y-3">
-                {recentOrders.length === 0 ? <p className="text-sm text-muted-foreground">Nenhum pedido encontrado.</p> : recentOrders.map((order: any) => (
-                  <div key={order.id} className="rounded-xl border border-border p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-bold">{order.orderNumber || order.id}</p>
-                          <Badge variant="outline" className={order.source === "TRAY" ? "border-amber-300/50 text-amber-700" : "border-brand/20 text-brand"}>{order.source}</Badge>
-                          <Badge variant={order.validRevenue ? "secondary" : "outline"}>{statusLabel(order.financialStatus)}</Badge>
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">{datePt(order.date, true)}{order.paymentType ? ` · ${order.paymentType}` : ""}{order.coupon ? ` · Cupom ${order.coupon}` : ""}</p>
-                      </div>
-                      <p className="text-lg font-bold">{brl(order.total)}</p>
-                    </div>
-                    {order.items.length > 0 && (
-                      <div className="mt-3 border-t border-border pt-3">
-                        {order.items.map((item: any) => (
-                          <div key={item.id} className="flex items-center justify-between gap-3 py-1 text-sm">
-                            <span className="text-muted-foreground">{item.quantity}× {item.title}{item.sku ? ` · ${item.sku}` : ""}</span>
-                            <span>{brl(item.unitPrice * item.quantity)}</span>
-                          </div>
-                        ))}
-                      </div>
+                <Box sx={{ mt: 3, borderTop: "1px solid", borderColor: "divider", pt: 2.5 }}>
+                  <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", color: "text.secondary" }}>
+                    <Tags size={14} />
+                    <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Tags</Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", mt: 1.5 }}>
+                    {[...(customer.tags || []), ...(customer.tagsCustom || [])].length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">Nenhuma tag.</Typography>
+                    ) : (
+                      [...new Set([...(customer.tags || []), ...(customer.tagsCustom || [])])].map((tag: string) => (
+                        <Chip key={tag} size="small" variant="outlined" label={tag} />
+                      ))
                     )}
-                  </div>
-                ))}
-              </div>
-            </section>
+                  </Stack>
+                </Box>
+              </Box>
 
-            {engagement.abandonedCheckouts.length > 0 && (
-              <section className="surface-card p-6">
-                <div className="flex items-center gap-2"><ShoppingCart className="size-5 text-brand" /><h2 className="text-lg font-bold">Checkouts abandonados</h2></div>
-                <div className="mt-4 space-y-2">
-                  {engagement.abandonedCheckouts.slice(0, 10).map((checkout: any) => (
-                    <div key={checkout.id} className="flex items-center justify-between rounded-xl bg-muted/30 px-3 py-2 text-sm">
-                      <span>{datePt(checkout.createdAt, true)}</span><span className="font-semibold">{brl(checkout.total)}</span>
-                    </div>
+              <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <Repeat2 size={20} color="var(--mui-palette-primary-main, #7367F0)" />
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>Segmentos atuais</Typography>
+                </Stack>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Calculados agora com as regras salvas no CRM.</Typography>
+                <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", mt: 1.5 }}>
+                  {segments.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">Esta cliente não está em nenhum segmento salvo.</Typography>
+                  ) : segments.map((segment: any) => (
+                    <Chip key={segment.id} size="small" variant="outlined" color="primary" label={segment.name} />
                   ))}
-                </div>
-              </section>
-            )}
-          </div>
-        </div>
+                </Stack>
+              </Box>
 
-        <div className="mt-6 flex flex-wrap gap-2 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1"><Store className="size-3.5" /> Base comercial: Tray + Shopify</span>
-          <span>·</span>
-          <span>Atualizado no CRM: {datePt(customer.updatedAt, true)}</span>
-        </div>
-      </div>
-    </div>
+              <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <MessageCircle size={20} color="var(--mui-palette-primary-main, #7367F0)" />
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>Relacionamento</Typography>
+                </Stack>
+                <Grid container spacing={1.5} sx={{ mt: 1 }}>
+                  <Grid size={4}>
+                    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 1.5, textAlign: "center" }}>
+                      <Typography variant="h6" sx={{ fontWeight: 700 }}>{engagement.campaigns.length}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>Campanhas</Typography>
+                    </Box>
+                  </Grid>
+                  <Grid size={4}>
+                    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 1.5, textAlign: "center" }}>
+                      <Typography variant="h6" sx={{ fontWeight: 700 }}>{engagement.automations.length}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>Automações</Typography>
+                    </Box>
+                  </Grid>
+                  <Grid size={4}>
+                    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 1.5, textAlign: "center" }}>
+                      <Typography variant="h6" sx={{ fontWeight: 700 }}>{engagement.abandonedCheckouts.length}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>Abandonos</Typography>
+                    </Box>
+                  </Grid>
+                </Grid>
+
+                {engagement.campaigns.length > 0 && (
+                  <Stack spacing={1} sx={{ mt: 2.5 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>Últimas campanhas</Typography>
+                    {engagement.campaigns.slice(0, 5).map((campaign: any, index: number) => (
+                      <Stack key={`${campaign.campaignId}-${index}`} direction="row" spacing={1.5} sx={{ justifyContent: "space-between", alignItems: "center", borderRadius: 3, bgcolor: "action.hover", px: 1.5, py: 1 }}>
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>{campaign.name}</Typography>
+                          <Typography variant="caption" color="text.secondary">{datePt(campaign.sentAt, true)}</Typography>
+                        </Box>
+                        <Chip size="small" variant="outlined" label={campaign.status || "—"} />
+                      </Stack>
+                    ))}
+                  </Stack>
+                )}
+              </Box>
+            </Stack>
+          </Grid>
+
+          <Grid size={{ xs: 12, lg: 7 }}>
+            <Stack spacing={3}>
+              <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, overflow: "hidden" }}>
+                <Box sx={{ borderBottom: "1px solid", borderColor: "divider", p: 3 }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <Package size={20} color="var(--mui-palette-primary-main, #7367F0)" />
+                    <Typography variant="h6" sx={{ fontWeight: 700 }}>Produtos comprados</Typography>
+                  </Stack>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Tray e Shopify unificados por SKU quando disponível.</Typography>
+                </Box>
+                <TableContainer sx={{ maxHeight: 430, overflow: "auto" }}>
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>PRODUTO</TableCell>
+                        <TableCell>ORIGEM</TableCell>
+                        <TableCell align="center">QTD.</TableCell>
+                        <TableCell align="right">GASTO</TableCell>
+                        <TableCell align="right">ÚLTIMA</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {products.length === 0 ? (
+                        <TableRow><TableCell colSpan={5} align="center" sx={{ height: 96, color: "text.secondary" }}>Nenhum produto em pedido válido.</TableCell></TableRow>
+                      ) : products.map((product: any, index: number) => (
+                        <TableRow key={`${product.sku || product.productId || product.title}-${index}`}>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>{product.title}</Typography>
+                            <Typography variant="caption" color="text.secondary">{product.sku || "Sem SKU"} · {product.orderCount} pedido(s)</Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>
+                              {product.sources.map((source: string) => <Chip key={source} size="small" variant="outlined" label={source} sx={{ fontSize: 10, height: 20 }} />)}
+                            </Stack>
+                          </TableCell>
+                          <TableCell align="center" sx={{ fontWeight: 600 }}>{product.quantity}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 600 }}>{brl(product.spent)}</TableCell>
+                          <TableCell align="right" sx={{ color: "text.secondary" }}>{datePt(product.lastPurchasedAt)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+
+              <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <CalendarDays size={20} color="var(--mui-palette-primary-main, #7367F0)" />
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>Histórico de pedidos</Typography>
+                </Stack>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Últimos pedidos registrados no CRM, incluindo status não válidos para receita.</Typography>
+                <Stack spacing={1.5} sx={{ mt: 2 }}>
+                  {recentOrders.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">Nenhum pedido encontrado.</Typography>
+                  ) : recentOrders.map((order: any) => (
+                    <Box key={order.id} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+                      <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <Box>
+                          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
+                            <Typography sx={{ fontWeight: 700 }}>{order.orderNumber || order.id}</Typography>
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              label={order.source}
+                              sx={order.source === "TRAY" ? { color: "#b45309", borderColor: "rgba(180,83,9,0.4)" } : { color: "primary.main", borderColor: "primary.light" }}
+                            />
+                            <Chip size="small" variant={order.validRevenue ? "filled" : "outlined"} label={statusLabel(order.financialStatus)} />
+                          </Stack>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                            {datePt(order.date, true)}{order.paymentType ? ` · ${order.paymentType}` : ""}{order.coupon ? ` · Cupom ${order.coupon}` : ""}
+                          </Typography>
+                        </Box>
+                        <Typography variant="h6" sx={{ fontWeight: 700 }}>{brl(order.total)}</Typography>
+                      </Stack>
+                      {order.items.length > 0 && (
+                        <Stack spacing={0.5} sx={{ mt: 1.5, borderTop: "1px solid", borderColor: "divider", pt: 1.5 }}>
+                          {order.items.map((item: any) => (
+                            <Stack key={item.id} direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+                              <Typography variant="body2" color="text.secondary">{item.quantity}× {item.title}{item.sku ? ` · ${item.sku}` : ""}</Typography>
+                              <Typography variant="body2">{brl(item.unitPrice * item.quantity)}</Typography>
+                            </Stack>
+                          ))}
+                        </Stack>
+                      )}
+                    </Box>
+                  ))}
+                </Stack>
+              </Box>
+
+              {engagement.abandonedCheckouts.length > 0 && (
+                <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <ShoppingCart size={20} color="var(--mui-palette-primary-main, #7367F0)" />
+                    <Typography variant="h6" sx={{ fontWeight: 700 }}>Checkouts abandonados</Typography>
+                  </Stack>
+                  <Stack spacing={1} sx={{ mt: 1.5 }}>
+                    {engagement.abandonedCheckouts.slice(0, 10).map((checkout: any) => (
+                      <Stack key={checkout.id} direction="row" sx={{ justifyContent: "space-between", alignItems: "center", borderRadius: 3, bgcolor: "action.hover", px: 1.5, py: 1 }}>
+                        <Typography variant="body2">{datePt(checkout.createdAt, true)}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{brl(checkout.total)}</Typography>
+                      </Stack>
+                    ))}
+                  </Stack>
+                </Box>
+              )}
+            </Stack>
+          </Grid>
+        </Grid>
+
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", mt: 3, alignItems: "center", color: "text.secondary" }}>
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+            <Store size={14} />
+            <Typography variant="caption">Base comercial: Tray + Shopify</Typography>
+          </Stack>
+          <Typography variant="caption">·</Typography>
+          <Typography variant="caption">Atualizado no CRM: {datePt(customer.updatedAt, true)}</Typography>
+        </Stack>
+      </Box>
+    </Box>
   );
 }

@@ -2,16 +2,25 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import Accordion from "@mui/material/Accordion";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import AccordionSummary from "@mui/material/AccordionSummary";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import FormControl from "@mui/material/FormControl";
+import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import Slider from "@mui/material/Slider";
+import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import {
   ArrowLeft,
   BadgePercent,
+  ChevronDown,
   Gift,
   Image as ImageIcon,
   Layers3,
@@ -44,6 +53,13 @@ import {
 } from "@/lib/popup-designer";
 import { PopupPreview, type PopupPreviewStage } from "./PopupPreview";
 import { WheelPrizesDialog } from "./WheelPrizesDialog";
+
+const CHECKER_BG = {
+  backgroundImage:
+    "linear-gradient(45deg,#f4f4f5 25%,transparent 25%),linear-gradient(-45deg,#f4f4f5 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#f4f4f5 75%),linear-gradient(-45deg,transparent 75%,#f4f4f5 75%)",
+  backgroundSize: "20px 20px",
+  backgroundPosition: "0 0, 0 10px, 10px -10px, -10px 0px",
+};
 
 type FormState = {
   id?: string;
@@ -136,91 +152,146 @@ function TemplateGallery({
 }) {
   const selectedPreset = getPopupTemplatePreset(selected);
   return (
-    <div className="min-h-[680px] overflow-hidden rounded-2xl border bg-background">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={onBack}><ArrowLeft className="size-4" /></Button>
-          <div>
-            <p className="font-semibold">Escolha um template</p>
-            <p className="text-xs text-muted-foreground">Use um modelo pronto e personalize tudo no editor.</p>
-          </div>
-        </div>
-        <Button onClick={onUse} className="gap-2"><Sparkles className="size-4" /> Usar este template</Button>
-      </div>
+    <Box sx={{ minHeight: 680, overflow: "hidden", borderRadius: 4, border: "1px solid", borderColor: "divider", bgcolor: "background.paper" }}>
+      <Stack
+        direction="row"
+        spacing={2}
+        sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid", borderColor: "divider", px: 2.5, py: 2 }}
+      >
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+          <IconButton onClick={onBack}>
+            <ArrowLeft size={16} />
+          </IconButton>
+          <Box>
+            <Typography sx={{ fontWeight: 600 }}>Escolha um template</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Use um modelo pronto e personalize tudo no editor.
+            </Typography>
+          </Box>
+        </Stack>
+        <Button variant="contained" startIcon={<Sparkles size={16} />} onClick={onUse}>
+          Usar este template
+        </Button>
+      </Stack>
 
-      <div className="grid gap-5 p-5 md:grid-cols-2 xl:grid-cols-4">
+      <Box sx={{ display: "grid", gap: 2.5, p: 2.5, gridTemplateColumns: { xs: "1fr", md: "repeat(2, 1fr)", xl: "repeat(4, 1fr)" } }}>
         {POPUP_TEMPLATE_PRESETS.map((preset) => {
           const draft = createEmptyForm(preset.key);
           const active = selected === preset.key;
           return (
-            <button
+            <Box
               key={preset.key}
+              component="button"
               type="button"
               onClick={() => onSelect(preset.key)}
-              className={`overflow-hidden rounded-2xl border bg-card text-left transition-all ${active ? "border-primary ring-2 ring-primary/20" : "hover:border-primary/50 hover:shadow-md"}`}
+              sx={{
+                overflow: "hidden",
+                borderRadius: 4,
+                border: "1px solid",
+                borderColor: active ? "primary.main" : "divider",
+                boxShadow: active ? (theme) => `0 0 0 2px ${theme.palette.primary.main}33` : "none",
+                bgcolor: "background.paper",
+                textAlign: "left",
+                cursor: "pointer",
+                transition: "all 0.15s",
+                p: 0,
+                "&:hover": active ? undefined : { borderColor: "primary.light" },
+              }}
             >
-              <div className="flex min-h-[230px] items-center justify-center overflow-hidden bg-[linear-gradient(45deg,#f4f4f5_25%,transparent_25%),linear-gradient(-45deg,#f4f4f5_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#f4f4f5_75%),linear-gradient(-45deg,transparent_75%,#f4f4f5_75%)] bg-[length:20px_20px] bg-[position:0_0,0_10px,10px_-10px,-10px_0px] p-4">
-                <div className="origin-center scale-[0.52]">
+              <Box sx={{ display: "flex", minHeight: 230, alignItems: "center", justifyContent: "center", overflow: "hidden", p: 2, ...CHECKER_BG }}>
+                <Box sx={{ transform: "scale(0.52)", transformOrigin: "center" }}>
                   <PopupPreview campaign={draft} design={draft.design_config} compact />
-                </div>
-              </div>
-              <div className="space-y-2 border-t p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="font-semibold">{preset.name}</p>
-                  <Badge variant="outline" className="text-[10px]">{preset.category}</Badge>
-                </div>
-                <p className="min-h-10 text-xs leading-relaxed text-muted-foreground">{preset.description}</p>
-              </div>
-            </button>
+                </Box>
+              </Box>
+              <Stack spacing={1} sx={{ borderTop: "1px solid", borderColor: "divider", p: 2 }}>
+                <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "flex-start" }} spacing={1}>
+                  <Typography sx={{ fontWeight: 600 }}>{preset.name}</Typography>
+                  <Chip size="small" variant="outlined" label={preset.category} sx={{ fontSize: 10 }} />
+                </Stack>
+                <Typography variant="caption" color="text.secondary" sx={{ minHeight: 40, lineHeight: 1.5 }}>
+                  {preset.description}
+                </Typography>
+              </Stack>
+            </Box>
           );
         })}
-        <button
+        <Box
+          component="button"
           type="button"
           onClick={onOpenSocialProof}
-          className="overflow-hidden rounded-2xl border bg-card text-left transition-all hover:border-primary/50 hover:shadow-md"
+          sx={{
+            overflow: "hidden",
+            borderRadius: 4,
+            border: "1px solid",
+            borderColor: "divider",
+            bgcolor: "background.paper",
+            textAlign: "left",
+            cursor: "pointer",
+            transition: "all 0.15s",
+            p: 0,
+            "&:hover": { borderColor: "primary.light" },
+          }}
         >
-          <div className="flex min-h-[230px] items-center justify-center overflow-hidden bg-[linear-gradient(45deg,#f4f4f5_25%,transparent_25%),linear-gradient(-45deg,#f4f4f5_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#f4f4f5_75%),linear-gradient(-45deg,transparent_75%,#f4f4f5_75%)] bg-[length:20px_20px] bg-[position:0_0,0_10px,10px_-10px,-10px_0px] p-4">
-            <div className="relative flex w-full max-w-[310px] gap-3 rounded-lg border bg-white p-2.5 pr-8 shadow-xl">
-              <span className="absolute right-2 top-1 text-xl text-muted-foreground">×</span>
-              <div className="grid size-20 shrink-0 place-items-center rounded bg-[#f6f1ef]"><ShoppingBag className="size-7 text-[#9b6f63]" /></div>
-              <div className="min-w-0 pt-1 text-xs leading-tight">
-                <p className="truncate font-semibold">Maria S. de Diamantina/MG</p>
-                <p className="mt-1 text-muted-foreground">comprou</p>
-                <p className="mt-0.5 line-clamp-2 font-medium">Kit Ayla Azul Turquesa</p>
-                <p className="mt-2 text-[10px] text-muted-foreground">ontem</p>
-              </div>
-            </div>
-          </div>
-          <div className="space-y-2 border-t p-4">
-            <div className="flex items-start justify-between gap-2">
-              <p className="font-semibold">Compras recentes</p>
-              <Badge variant="outline" className="text-[10px]">Prova social</Badge>
-            </div>
-            <p className="min-h-10 text-xs leading-relaxed text-muted-foreground">Pedidos pagos de ontem, exibidos aleatoriamente após fechar o pop-up principal.</p>
-          </div>
-        </button>
-      </div>
+          <Box sx={{ display: "flex", minHeight: 230, alignItems: "center", justifyContent: "center", overflow: "hidden", p: 2, ...CHECKER_BG }}>
+            <Box sx={{ position: "relative", display: "flex", width: "100%", maxWidth: 310, gap: 1.5, borderRadius: 2, border: "1px solid #e5e7eb", bgcolor: "#fff", p: "10px 32px 10px 10px", boxShadow: "0 10px 25px rgba(0,0,0,0.15)" }}>
+              <Typography sx={{ position: "absolute", right: 8, top: 4, fontSize: 20, color: "text.secondary" }}>×</Typography>
+              <Box sx={{ display: "grid", size: 80, width: 80, height: 80, flexShrink: 0, placeItems: "center", borderRadius: 1, bgcolor: "#f6f1ef" }}>
+                <ShoppingBag size={28} color="#9b6f63" />
+              </Box>
+              <Box sx={{ minWidth: 0, pt: 0.5, fontSize: 12, lineHeight: 1.3 }}>
+                <Typography sx={{ fontWeight: 600, fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Maria S. de Diamantina/MG</Typography>
+                <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: 12 }}>comprou</Typography>
+                <Typography sx={{ mt: 0.25, fontWeight: 500, fontSize: 12 }}>Kit Ayla Azul Turquesa</Typography>
+                <Typography color="text.secondary" sx={{ mt: 1, fontSize: 10 }}>ontem</Typography>
+              </Box>
+            </Box>
+          </Box>
+          <Stack spacing={1} sx={{ borderTop: "1px solid", borderColor: "divider", p: 2 }}>
+            <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "flex-start" }} spacing={1}>
+              <Typography sx={{ fontWeight: 600 }}>Compras recentes</Typography>
+              <Chip size="small" variant="outlined" label="Prova social" sx={{ fontSize: 10 }} />
+            </Stack>
+            <Typography variant="caption" color="text.secondary" sx={{ minHeight: 40, lineHeight: 1.5 }}>
+              Pedidos pagos de ontem, exibidos aleatoriamente após fechar o pop-up principal.
+            </Typography>
+          </Stack>
+        </Box>
+      </Box>
 
-      <div className="sticky bottom-0 flex items-center justify-between border-t bg-background/95 px-5 py-3 backdrop-blur">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Template selecionado</p>
-          <p className="font-semibold">{selectedPreset.name}</p>
-        </div>
-        <Button onClick={onUse}>Usar este template →</Button>
-      </div>
-    </div>
+      <Stack
+        direction="row"
+        sx={{ position: "sticky", bottom: 0, justifyContent: "space-between", alignItems: "center", borderTop: "1px solid", borderColor: "divider", bgcolor: "background.paper", px: 2.5, py: 1.5 }}
+      >
+        <Box>
+          <Typography variant="caption" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+            Template selecionado
+          </Typography>
+          <Typography sx={{ fontWeight: 600 }}>{selectedPreset.name}</Typography>
+        </Box>
+        <Button variant="contained" onClick={onUse}>
+          Usar este template →
+        </Button>
+      </Stack>
+    </Box>
   );
 }
 
 function ColorInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return (
-    <div className="space-y-1">
-      <Label className="text-xs">{label}</Label>
-      <div className="flex gap-2">
-        <Input type="color" className="h-9 w-12 p-1" value={value} onChange={(e) => onChange(e.target.value)} />
-        <Input className="h-9 font-mono text-xs uppercase" value={value} onChange={(e) => onChange(e.target.value)} />
-      </div>
-    </div>
+    <Box>
+      <Typography variant="caption" sx={{ display: "block", mb: 0.5 }}>
+        {label}
+      </Typography>
+      <Stack direction="row" spacing={1}>
+        <input
+          type="color"
+          style={{ height: 36, width: 48, padding: 4, border: "1px solid #d1d5db", borderRadius: 6 }}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <TextField size="small" fullWidth value={value} onChange={(e) => onChange(e.target.value)} sx={{ "& input": { fontFamily: "monospace", fontSize: 12, textTransform: "uppercase" } }} />
+      </Stack>
+    </Box>
   );
 }
 
@@ -318,7 +389,11 @@ export function PopupCampaignsManager({ onOpenSocialProof }: { onOpenSocialProof
   };
 
   if (mode === "templates") {
-    return <div className="py-4"><TemplateGallery selected={selectedPreset} onSelect={setSelectedPreset} onUse={startTemplate} onOpenSocialProof={() => onOpenSocialProof?.()} onBack={() => setMode("list")} /></div>;
+    return (
+      <Box sx={{ py: 2 }}>
+        <TemplateGallery selected={selectedPreset} onSelect={setSelectedPreset} onUse={startTemplate} onOpenSocialProof={() => onOpenSocialProof?.()} onBack={() => setMode("list")} />
+      </Box>
+    );
   }
 
   if (mode === "editor") {
@@ -333,217 +408,384 @@ export function PopupCampaignsManager({ onOpenSocialProof }: { onOpenSocialProof
       : [{ value: "capture", label: "Tela inicial" }, { value: "result", label: "Resultado" }];
 
     return (
-      <div className="py-4">
-        <div className="overflow-hidden rounded-2xl border bg-background">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <Button variant="ghost" size="icon" onClick={() => setMode("list")}><ArrowLeft className="size-4" /></Button>
-              <Input className="h-9 min-w-[220px] max-w-md font-semibold" value={form.name} onChange={(e) => patch({ name: e.target.value })} placeholder="Nome do pop-up (obrigatório)" />
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" className="gap-2" onClick={() => { setSelectedPreset(form.design_config.templateKey); setMode("templates"); }}><LayoutTemplate className="size-4" /> Trocar template</Button>
-              <Button className="gap-2" onClick={() => saveMut.mutate()} disabled={saveMut.isPending || !form.name.trim() || !form.headline.trim()}>
-                <Save className="size-4" /> {saveMut.isPending ? "Salvando..." : "Salvar"}
+      <Box sx={{ py: 2 }}>
+        <Box sx={{ overflow: "hidden", borderRadius: 4, border: "1px solid", borderColor: "divider", bgcolor: "background.paper" }}>
+          <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid", borderColor: "divider", px: 2, py: 1.5 }}>
+            <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", minWidth: 0 }}>
+              <IconButton onClick={() => setMode("list")}>
+                <ArrowLeft size={16} />
+              </IconButton>
+              <TextField
+                size="small"
+                sx={{ minWidth: 220, maxWidth: 400, "& input": { fontWeight: 600 } }}
+                value={form.name}
+                onChange={(e) => patch({ name: e.target.value })}
+                placeholder="Nome do pop-up (obrigatório)"
+              />
+            </Stack>
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="outline"
+                startIcon={<LayoutTemplate size={16} />}
+                onClick={() => { setSelectedPreset(form.design_config.templateKey); setMode("templates"); }}
+              >
+                Trocar template
               </Button>
-            </div>
-          </div>
+              <Button
+                variant="contained"
+                startIcon={<Save size={16} />}
+                onClick={() => saveMut.mutate()}
+                disabled={saveMut.isPending || !form.name.trim() || !form.headline.trim()}
+              >
+                {saveMut.isPending ? "Salvando..." : "Salvar"}
+              </Button>
+            </Stack>
+          </Stack>
 
-          <div className="grid min-h-[760px] xl:grid-cols-[285px_minmax(0,1fr)_330px]">
-            <aside className="border-r bg-muted/20">
-              <div className="grid grid-cols-2 gap-1 border-b p-3">
-                <Button size="sm" variant={sideTab === "elements" ? "default" : "ghost"} onClick={() => setSideTab("elements")}>Elementos</Button>
-                <Button size="sm" variant={sideTab === "rules" ? "default" : "ghost"} onClick={() => setSideTab("rules")}>Regras</Button>
-              </div>
+          <Box sx={{ display: "grid", minHeight: 760, gridTemplateColumns: { xs: "1fr", xl: "285px minmax(0,1fr) 330px" } }}>
+            <Box component="aside" sx={{ borderRight: { xl: "1px solid" }, borderColor: "divider", bgcolor: "action.hover" }}>
+              <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.5, borderBottom: "1px solid", borderColor: "divider", p: 1.5 }}>
+                <Button size="small" variant={sideTab === "elements" ? "contained" : "ghost"} onClick={() => setSideTab("elements")}>
+                  Elementos
+                </Button>
+                <Button size="small" variant={sideTab === "rules" ? "contained" : "ghost"} onClick={() => setSideTab("rules")}>
+                  Regras
+                </Button>
+              </Box>
 
-              <div className="max-h-[710px] space-y-4 overflow-y-auto p-4">
+              <Stack spacing={2} sx={{ maxHeight: 710, overflowY: "auto", p: 2 }}>
                 {sideTab === "elements" ? (
                   <>
-                    <div>
-                      <p className="text-sm font-semibold">Adicionar e configurar</p>
-                      <p className="text-xs text-muted-foreground">Os blocos abaixo atualizam a prévia em tempo real.</p>
-                    </div>
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        Adicionar e configurar
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Os blocos abaixo atualizam a prévia em tempo real.
+                      </Typography>
+                    </Box>
 
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
+                    <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
+                      {([
                         [Type, "Título"], [BadgePercent, "Badge"], [ImageIcon, "Imagem"], [MousePointerClick, "Botão"], [Gift, "Cupom"], [Timer, "Timer"], [Layers3, "Etapas"], [Palette, "Aparência"],
-                      ].map(([Icon, label]: any) => (
-                        <div key={label} className="flex min-h-20 flex-col items-center justify-center rounded-xl border bg-background p-2 text-center shadow-sm">
-                          <Icon className="mb-1 size-5 text-primary" /><span className="text-xs font-medium">{label}</span>
-                        </div>
+                      ] as const).map(([Icon, label]) => (
+                        <Box key={label} sx={{ display: "flex", minHeight: 80, flexDirection: "column", alignItems: "center", justifyContent: "center", borderRadius: 3, border: "1px solid", borderColor: "divider", bgcolor: "background.paper", p: 1, textAlign: "center", boxShadow: 1 }}>
+                          <Icon size={20} color="var(--mui-palette-primary-main, #7367F0)" style={{ marginBottom: 4 }} />
+                          <Typography variant="caption" sx={{ fontWeight: 500 }}>{label}</Typography>
+                        </Box>
                       ))}
-                    </div>
+                    </Box>
 
-                    <div className="space-y-2 rounded-xl border bg-background p-3">
-                      <Label className="text-xs">Badge superior</Label>
-                      <Input value={form.design_config.badgeText} onChange={(e) => patchDesign({ badgeText: e.target.value })} />
-                    </div>
+                    <Stack spacing={1} sx={{ borderRadius: 3, border: "1px solid", borderColor: "divider", bgcolor: "background.paper", p: 1.5 }}>
+                      <Typography variant="caption">Badge superior</Typography>
+                      <TextField size="small" value={form.design_config.badgeText} onChange={(e) => patchDesign({ badgeText: e.target.value })} />
+                    </Stack>
 
-                    <div className="space-y-2 rounded-xl border bg-background p-3">
-                      <div className="flex items-center justify-between">
-                        <div><p className="text-xs font-semibold">Pedir nome</p><p className="text-[10px] text-muted-foreground">Além do WhatsApp.</p></div>
-                        <Switch checked={form.collect_name} onCheckedChange={(value) => patch({ collect_name: value })} />
-                      </div>
-                      <Input value={form.design_config.namePlaceholder} onChange={(e) => patchDesign({ namePlaceholder: e.target.value })} placeholder="Placeholder do nome" />
-                      <Input value={form.design_config.inputPlaceholder} onChange={(e) => patchDesign({ inputPlaceholder: e.target.value })} placeholder="Placeholder do WhatsApp" />
-                    </div>
+                    <Stack spacing={1} sx={{ borderRadius: 3, border: "1px solid", borderColor: "divider", bgcolor: "background.paper", p: 1.5 }}>
+                      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+                        <Box>
+                          <Typography variant="caption" sx={{ fontWeight: 600, display: "block" }}>Pedir nome</Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>Além do WhatsApp.</Typography>
+                        </Box>
+                        <Switch checked={form.collect_name} onChange={(e) => patch({ collect_name: e.target.checked })} />
+                      </Stack>
+                      <TextField size="small" value={form.design_config.namePlaceholder} onChange={(e) => patchDesign({ namePlaceholder: e.target.value })} placeholder="Placeholder do nome" />
+                      <TextField size="small" value={form.design_config.inputPlaceholder} onChange={(e) => patchDesign({ inputPlaceholder: e.target.value })} placeholder="Placeholder do WhatsApp" />
+                    </Stack>
 
-                    <div className="space-y-2 rounded-xl border bg-background p-3">
-                      <Label className="text-xs">Imagem (URL)</Label>
-                      <Input value={form.image_url} onChange={(e) => patch({ image_url: e.target.value })} placeholder="https://..." />
-                      <Select value={form.design_config.imagePosition} onValueChange={(value: any) => patchDesign({ imagePosition: value })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Sem imagem</SelectItem><SelectItem value="left">Imagem à esquerda</SelectItem><SelectItem value="right">Imagem à direita</SelectItem><SelectItem value="top">Imagem no topo</SelectItem>
-                        </SelectContent>
+                    <Stack spacing={1} sx={{ borderRadius: 3, border: "1px solid", borderColor: "divider", bgcolor: "background.paper", p: 1.5 }}>
+                      <Typography variant="caption">Imagem (URL)</Typography>
+                      <TextField size="small" value={form.image_url} onChange={(e) => patch({ image_url: e.target.value })} placeholder="https://..." />
+                      <Select size="small" value={form.design_config.imagePosition} onChange={(e) => patchDesign({ imagePosition: e.target.value as any })}>
+                        <MenuItem value="none">Sem imagem</MenuItem>
+                        <MenuItem value="left">Imagem à esquerda</MenuItem>
+                        <MenuItem value="right">Imagem à direita</MenuItem>
+                        <MenuItem value="top">Imagem no topo</MenuItem>
                       </Select>
-                    </div>
+                    </Stack>
 
-                    <div className="space-y-2 rounded-xl border bg-background p-3">
-                      <Label className="text-xs">Jornada</Label>
-                      <Select value={form.design_config.journey} onValueChange={(value: any) => { patchDesign({ journey: value }); setPreviewStage(value === "progressive" ? (form.collect_name ? "name" : "phone") : "capture"); }}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent><SelectItem value="single">Formulário em uma tela</SelectItem><SelectItem value="progressive">Captação progressiva</SelectItem></SelectContent>
+                    <Stack spacing={1} sx={{ borderRadius: 3, border: "1px solid", borderColor: "divider", bgcolor: "background.paper", p: 1.5 }}>
+                      <Typography variant="caption">Jornada</Typography>
+                      <Select
+                        size="small"
+                        value={form.design_config.journey}
+                        onChange={(e) => { patchDesign({ journey: e.target.value as any }); setPreviewStage(e.target.value === "progressive" ? (form.collect_name ? "name" : "phone") : "capture"); }}
+                      >
+                        <MenuItem value="single">Formulário em uma tela</MenuItem>
+                        <MenuItem value="progressive">Captação progressiva</MenuItem>
                       </Select>
-                      <p className="text-[10px] text-muted-foreground">Progressiva separa nome, WhatsApp e resultado em até 3 telas.</p>
-                    </div>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+                        Progressiva separa nome, WhatsApp e resultado em até 3 telas.
+                      </Typography>
+                    </Stack>
 
-                    <div className="space-y-2 rounded-xl border bg-background p-3">
-                      <Label className="text-xs">Interação</Label>
-                      <Select value={form.design_config.interaction} onValueChange={(value: any) => patchDesign({ interaction: value, layout: value === "wheel" ? "split" : form.design_config.layout })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent><SelectItem value="form">Formulário clássico</SelectItem><SelectItem value="wheel">Roleta</SelectItem></SelectContent>
+                    <Stack spacing={1} sx={{ borderRadius: 3, border: "1px solid", borderColor: "divider", bgcolor: "background.paper", p: 1.5 }}>
+                      <Typography variant="caption">Interação</Typography>
+                      <Select
+                        size="small"
+                        value={form.design_config.interaction}
+                        onChange={(e) => patchDesign({ interaction: e.target.value as any, layout: e.target.value === "wheel" ? "split" : form.design_config.layout })}
+                      >
+                        <MenuItem value="form">Formulário clássico</MenuItem>
+                        <MenuItem value="wheel">Roleta</MenuItem>
                       </Select>
                       {form.design_config.interaction === "wheel" && (
-                        <div className="space-y-2 pt-2">
-                          <Button size="sm" variant="outline" className="w-full" onClick={() => setWheelDialogOpen(true)}>
+                        <Stack spacing={1} sx={{ pt: 1 }}>
+                          <Button size="small" variant="outline" fullWidth onClick={() => setWheelDialogOpen(true)}>
                             Configurar cores e prêmios da roleta ({form.design_config.wheelPrizes.length})
                           </Button>
-                          <p className="text-[10px] text-muted-foreground">Cada prêmio pode ter cor, cupom e probabilidade próprios — o sorteio é feito no servidor.</p>
-                        </div>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+                            Cada prêmio pode ter cor, cupom e probabilidade próprios — o sorteio é feito no servidor.
+                          </Typography>
+                        </Stack>
                       )}
-                    </div>
+                    </Stack>
                   </>
                 ) : (
                   <>
-                    <div><p className="text-sm font-semibold">Regras de exibição</p><p className="text-xs text-muted-foreground">Defina quando e com que frequência aparece.</p></div>
-                    <div className="space-y-2 rounded-xl border bg-background p-3">
-                      <Label className="text-xs">Aparecer após (segundos)</Label>
-                      <Input type="number" min={0} value={form.trigger_time_seconds} onChange={(e) => patch({ trigger_time_seconds: e.target.value })} placeholder="Em branco desativa" />
-                    </div>
-                    <div className="flex items-center justify-between rounded-xl border bg-background p-3">
-                      <div><p className="text-xs font-semibold">Exit intent</p><p className="text-[10px] text-muted-foreground">Mostra ao mover o mouse para sair.</p></div>
-                      <Switch checked={form.trigger_exit_intent} onCheckedChange={(value) => patch({ trigger_exit_intent: value })} />
-                    </div>
-                    <div className="space-y-2 rounded-xl border bg-background p-3">
-                      <Label className="text-xs">Se fechar sem cadastrar</Label>
-                      <Select value={form.reshow_mode} onValueChange={(value: any) => patch({ reshow_mode: value })}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent><SelectItem value="after_days">Reaparecer depois de N dias</SelectItem><SelectItem value="once_ever">Não mostrar novamente</SelectItem></SelectContent>
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>Regras de exibição</Typography>
+                      <Typography variant="caption" color="text.secondary">Defina quando e com que frequência aparece.</Typography>
+                    </Box>
+                    <Stack spacing={1} sx={{ borderRadius: 3, border: "1px solid", borderColor: "divider", bgcolor: "background.paper", p: 1.5 }}>
+                      <Typography variant="caption">Aparecer após (segundos)</Typography>
+                      <TextField size="small" type="number" slotProps={{ htmlInput: { min: 0 } }} value={form.trigger_time_seconds} onChange={(e) => patch({ trigger_time_seconds: e.target.value })} placeholder="Em branco desativa" />
+                    </Stack>
+                    <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", borderRadius: 3, border: "1px solid", borderColor: "divider", bgcolor: "background.paper", p: 1.5 }}>
+                      <Box>
+                        <Typography variant="caption" sx={{ fontWeight: 600, display: "block" }}>Exit intent</Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>Mostra ao mover o mouse para sair.</Typography>
+                      </Box>
+                      <Switch checked={form.trigger_exit_intent} onChange={(e) => patch({ trigger_exit_intent: e.target.checked })} />
+                    </Stack>
+                    <Stack spacing={1} sx={{ borderRadius: 3, border: "1px solid", borderColor: "divider", bgcolor: "background.paper", p: 1.5 }}>
+                      <Typography variant="caption">Se fechar sem cadastrar</Typography>
+                      <Select size="small" value={form.reshow_mode} onChange={(e) => patch({ reshow_mode: e.target.value as any })}>
+                        <MenuItem value="after_days">Reaparecer depois de N dias</MenuItem>
+                        <MenuItem value="once_ever">Não mostrar novamente</MenuItem>
                       </Select>
-                      {form.reshow_mode === "after_days" && <Input type="number" min={1} value={form.reshow_after_days} onChange={(e) => patch({ reshow_after_days: e.target.value })} />}
-                    </div>
+                      {form.reshow_mode === "after_days" && (
+                        <TextField size="small" type="number" slotProps={{ htmlInput: { min: 1 } }} value={form.reshow_after_days} onChange={(e) => patch({ reshow_after_days: e.target.value })} />
+                      )}
+                    </Stack>
                   </>
                 )}
-              </div>
-            </aside>
+              </Stack>
+            </Box>
 
-            <main className="flex min-w-0 flex-col bg-[#f5f6f7]">
-              <div className="flex flex-wrap items-center justify-center gap-3 border-b bg-background/70 px-4 py-3">
-                <div className="flex items-center rounded-lg border bg-background p-1">
-                  <Button size="sm" variant={viewport === "desktop" ? "default" : "ghost"} onClick={() => setViewport("desktop")} className="gap-1"><Monitor className="size-3.5" /> Desktop</Button>
-                  <Button size="sm" variant={viewport === "mobile" ? "default" : "ghost"} onClick={() => setViewport("mobile")} className="gap-1"><Smartphone className="size-3.5" /> Celular</Button>
-                </div>
-                <div className="flex flex-wrap items-center rounded-lg border bg-background p-1">
-                  {stageButtons.map((stage) => <Button key={stage.value} size="sm" variant={previewStage === stage.value ? "default" : "ghost"} onClick={() => setPreviewStage(stage.value)}>{stage.label}</Button>)}
-                </div>
-              </div>
-              <div className="flex flex-1 items-center justify-center overflow-auto p-8">
+            <Box component="main" sx={{ display: "flex", minWidth: 0, flexDirection: "column", bgcolor: "#f5f6f7" }}>
+              <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap", justifyContent: "center", alignItems: "center", borderBottom: "1px solid", borderColor: "divider", bgcolor: "background.paper", px: 2, py: 1.5 }}>
+                <Stack direction="row" sx={{ alignItems: "center", border: "1px solid", borderColor: "divider", borderRadius: 2, bgcolor: "background.paper", p: 0.5 }}>
+                  <Button size="small" variant={viewport === "desktop" ? "contained" : "ghost"} startIcon={<Monitor size={14} />} onClick={() => setViewport("desktop")}>
+                    Desktop
+                  </Button>
+                  <Button size="small" variant={viewport === "mobile" ? "contained" : "ghost"} startIcon={<Smartphone size={14} />} onClick={() => setViewport("mobile")}>
+                    Celular
+                  </Button>
+                </Stack>
+                <Stack direction="row" sx={{ flexWrap: "wrap", alignItems: "center", border: "1px solid", borderColor: "divider", borderRadius: 2, bgcolor: "background.paper", p: 0.5 }}>
+                  {stageButtons.map((stage) => (
+                    <Button key={stage.value} size="small" variant={previewStage === stage.value ? "contained" : "ghost"} onClick={() => setPreviewStage(stage.value)}>
+                      {stage.label}
+                    </Button>
+                  ))}
+                </Stack>
+              </Stack>
+              <Box sx={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", overflow: "auto", p: 4 }}>
                 <PopupPreview campaign={form} design={form.design_config} viewport={viewport} stage={previewStage} />
-              </div>
-            </main>
+              </Box>
+            </Box>
 
-            <aside className="border-l bg-background">
-              <div className="flex items-center gap-2 border-b px-4 py-3"><div className="rounded-lg border border-primary/30 bg-primary/10 p-2"><Palette className="size-4 text-primary" /></div><div><p className="text-sm font-semibold">Configurações do pop-up</p><p className="text-[10px] text-muted-foreground">Conteúdo, estrutura e aparência</p></div></div>
-              <div className="max-h-[710px] space-y-4 overflow-y-auto p-4">
-                <details open className="rounded-xl border p-3">
-                  <summary className="cursor-pointer text-sm font-semibold">Conteúdo</summary>
-                  <div className="mt-3 space-y-3">
-                    <div><Label className="text-xs">Título</Label><Textarea rows={2} value={form.headline} onChange={(e) => patch({ headline: e.target.value })} /></div>
-                    <div><Label className="text-xs">Texto</Label><Textarea rows={3} value={form.body_text} onChange={(e) => patch({ body_text: e.target.value })} /></div>
-                    <div><Label className="text-xs">Texto do botão</Label><Input value={form.button_text} onChange={(e) => patch({ button_text: e.target.value })} /></div>
-                  </div>
-                </details>
+            <Box component="aside" sx={{ borderLeft: { xl: "1px solid" }, borderColor: "divider", bgcolor: "background.paper" }}>
+              <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", borderBottom: "1px solid", borderColor: "divider", px: 2, py: 1.5 }}>
+                <Box sx={{ borderRadius: 2, border: "1px solid", borderColor: "primary.main", bgcolor: "action.hover", p: 1 }}>
+                  <Palette size={16} color="var(--mui-palette-primary-main, #7367F0)" />
+                </Box>
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Configurações do pop-up</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>Conteúdo, estrutura e aparência</Typography>
+                </Box>
+              </Stack>
+              <Stack spacing={1.5} sx={{ maxHeight: 710, overflowY: "auto", p: 2 }}>
+                <Accordion defaultExpanded disableGutters sx={{ borderRadius: 3, border: "1px solid", borderColor: "divider", "&:before": { display: "none" } }}>
+                  <AccordionSummary expandIcon={<ChevronDown size={16} />}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Conteúdo</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Stack spacing={1.5}>
+                      <TextField size="small" label="Título" multiline rows={2} fullWidth value={form.headline} onChange={(e) => patch({ headline: e.target.value })} />
+                      <TextField size="small" label="Texto" multiline rows={3} fullWidth value={form.body_text} onChange={(e) => patch({ body_text: e.target.value })} />
+                      <TextField size="small" label="Texto do botão" fullWidth value={form.button_text} onChange={(e) => patch({ button_text: e.target.value })} />
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
 
-                <details open className="rounded-xl border p-3">
-                  <summary className="cursor-pointer text-sm font-semibold">Dimensões e layout</summary>
-                  <div className="mt-3 space-y-3">
-                    <div><div className="flex justify-between text-xs"><Label>Largura no desktop</Label><span>{form.design_config.width}px</span></div><input className="w-full accent-primary" type="range" min={320} max={820} step={10} value={form.design_config.width} onChange={(e) => patchDesign({ width: Number(e.target.value) })} /></div>
-                    <div><div className="flex justify-between text-xs"><Label>Bordas arredondadas</Label><span>{form.design_config.borderRadius}px</span></div><input className="w-full accent-primary" type="range" min={0} max={48} value={form.design_config.borderRadius} onChange={(e) => patchDesign({ borderRadius: Number(e.target.value) })} /></div>
-                    <div><Label className="text-xs">Estrutura</Label><Select value={form.design_config.layout} onValueChange={(value: any) => patchDesign({ layout: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="centered">Centralizado</SelectItem><SelectItem value="split">Dividido em 2 colunas</SelectItem></SelectContent></Select></div>
-                  </div>
-                </details>
+                <Accordion defaultExpanded disableGutters sx={{ borderRadius: 3, border: "1px solid", borderColor: "divider", "&:before": { display: "none" } }}>
+                  <AccordionSummary expandIcon={<ChevronDown size={16} />}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Dimensões e layout</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Stack spacing={2}>
+                      <Box>
+                        <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                          <Typography variant="caption">Largura no desktop</Typography>
+                          <Typography variant="caption">{form.design_config.width}px</Typography>
+                        </Stack>
+                        <Slider size="small" min={320} max={820} step={10} value={form.design_config.width} onChange={(_, value) => patchDesign({ width: value as number })} />
+                      </Box>
+                      <Box>
+                        <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                          <Typography variant="caption">Bordas arredondadas</Typography>
+                          <Typography variant="caption">{form.design_config.borderRadius}px</Typography>
+                        </Stack>
+                        <Slider size="small" min={0} max={48} value={form.design_config.borderRadius} onChange={(_, value) => patchDesign({ borderRadius: value as number })} />
+                      </Box>
+                      <FormControl size="small" fullWidth>
+                        <Typography variant="caption" sx={{ mb: 0.5 }}>Estrutura</Typography>
+                        <Select value={form.design_config.layout} onChange={(e) => patchDesign({ layout: e.target.value as any })}>
+                          <MenuItem value="centered">Centralizado</MenuItem>
+                          <MenuItem value="split">Dividido em 2 colunas</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
 
-                <details open className="rounded-xl border p-3">
-                  <summary className="cursor-pointer text-sm font-semibold">Aparência</summary>
-                  <div className="mt-3 grid gap-3">
-                    <ColorInput label="Cor de fundo" value={form.design_config.backgroundColor} onChange={(value) => patchDesign({ backgroundColor: value })} />
-                    <ColorInput label="Cor de destaque" value={form.design_config.accentColor} onChange={(value) => patchDesign({ accentColor: value })} />
-                    <ColorInput label="Cor do texto" value={form.design_config.textColor} onChange={(value) => patchDesign({ textColor: value })} />
-                    <ColorInput label="Cor do botão" value={form.design_config.buttonColor} onChange={(value) => patchDesign({ buttonColor: value })} />
-                    {form.design_config.interaction === "wheel" && (
-                      <Button size="sm" variant="outline" onClick={() => setWheelDialogOpen(true)}>
-                        Cores e prêmios da roleta ({form.design_config.wheelPrizes.length})
-                      </Button>
-                    )}
-                  </div>
-                </details>
+                <Accordion defaultExpanded disableGutters sx={{ borderRadius: 3, border: "1px solid", borderColor: "divider", "&:before": { display: "none" } }}>
+                  <AccordionSummary expandIcon={<ChevronDown size={16} />}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Aparência</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Stack spacing={1.5}>
+                      <ColorInput label="Cor de fundo" value={form.design_config.backgroundColor} onChange={(value) => patchDesign({ backgroundColor: value })} />
+                      <ColorInput label="Cor de destaque" value={form.design_config.accentColor} onChange={(value) => patchDesign({ accentColor: value })} />
+                      <ColorInput label="Cor do texto" value={form.design_config.textColor} onChange={(value) => patchDesign({ textColor: value })} />
+                      <ColorInput label="Cor do botão" value={form.design_config.buttonColor} onChange={(value) => patchDesign({ buttonColor: value })} />
+                      {form.design_config.interaction === "wheel" && (
+                        <Button size="small" variant="outline" onClick={() => setWheelDialogOpen(true)}>
+                          Cores e prêmios da roleta ({form.design_config.wheelPrizes.length})
+                        </Button>
+                      )}
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
 
-                <details className="rounded-xl border p-3">
-                  <summary className="cursor-pointer text-sm font-semibold">Tela de resultado</summary>
-                  <div className="mt-3 space-y-2">
-                    <Input value={form.design_config.resultHeadline} onChange={(e) => patchDesign({ resultHeadline: e.target.value })} placeholder="Título do resultado" />
-                    <Textarea rows={2} value={form.design_config.resultBody} onChange={(e) => patchDesign({ resultBody: e.target.value })} />
-                    <Input value={form.design_config.resultButtonText} onChange={(e) => patchDesign({ resultButtonText: e.target.value })} />
-                    <Button size="sm" variant="outline" className="w-full" onClick={() => setPreviewStage("result")}>Ver tela de resultado</Button>
-                  </div>
-                </details>
+                <Accordion disableGutters sx={{ borderRadius: 3, border: "1px solid", borderColor: "divider", "&:before": { display: "none" } }}>
+                  <AccordionSummary expandIcon={<ChevronDown size={16} />}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Tela de resultado</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Stack spacing={1.5}>
+                      <TextField size="small" fullWidth value={form.design_config.resultHeadline} onChange={(e) => patchDesign({ resultHeadline: e.target.value })} placeholder="Título do resultado" />
+                      <TextField size="small" multiline rows={2} fullWidth value={form.design_config.resultBody} onChange={(e) => patchDesign({ resultBody: e.target.value })} />
+                      <TextField size="small" fullWidth value={form.design_config.resultButtonText} onChange={(e) => patchDesign({ resultButtonText: e.target.value })} />
+                      <Button size="small" variant="outline" fullWidth onClick={() => setPreviewStage("result")}>Ver tela de resultado</Button>
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
 
-                <details open className="rounded-xl border p-3">
-                  <summary className="cursor-pointer text-sm font-semibold">Cupom / benefício</summary>
-                  <div className="mt-3 space-y-2">
-                    <Select value={form.coupon_mode} onValueChange={(value: any) => patch({ coupon_mode: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Sem cupom</SelectItem><SelectItem value="fixed">Cupom fixo</SelectItem><SelectItem value="unique">Cupom único por lead</SelectItem></SelectContent></Select>
-                    {form.coupon_mode === "fixed" && <Input value={form.fixed_coupon_code} onChange={(e) => patch({ fixed_coupon_code: e.target.value.toUpperCase() })} placeholder="CÓDIGO" />}
-                    {form.coupon_mode === "unique" && <div className="grid grid-cols-2 gap-2"><Select value={form.discount_type} onValueChange={(value: any) => patch({ discount_type: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="percentage">% desconto</SelectItem><SelectItem value="fixed_amount">R$ fixo</SelectItem></SelectContent></Select><Input type="number" min={0} value={form.discount_value} onChange={(e) => patch({ discount_value: e.target.value })} /><div className="col-span-2"><Label className="text-[10px]">Validade em dias</Label><Input type="number" min={1} value={form.discount_expires_days} onChange={(e) => patch({ discount_expires_days: e.target.value })} /></div></div>}
-                  </div>
-                </details>
+                <Accordion defaultExpanded disableGutters sx={{ borderRadius: 3, border: "1px solid", borderColor: "divider", "&:before": { display: "none" } }}>
+                  <AccordionSummary expandIcon={<ChevronDown size={16} />}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Cupom / benefício</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Stack spacing={1.5}>
+                      <Select size="small" value={form.coupon_mode} onChange={(e) => patch({ coupon_mode: e.target.value as any })}>
+                        <MenuItem value="none">Sem cupom</MenuItem>
+                        <MenuItem value="fixed">Cupom fixo</MenuItem>
+                        <MenuItem value="unique">Cupom único por lead</MenuItem>
+                      </Select>
+                      {form.coupon_mode === "fixed" && (
+                        <TextField size="small" value={form.fixed_coupon_code} onChange={(e) => patch({ fixed_coupon_code: e.target.value.toUpperCase() })} placeholder="CÓDIGO" />
+                      )}
+                      {form.coupon_mode === "unique" && (
+                        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
+                          <Select size="small" value={form.discount_type} onChange={(e) => patch({ discount_type: e.target.value as any })}>
+                            <MenuItem value="percentage">% desconto</MenuItem>
+                            <MenuItem value="fixed_amount">R$ fixo</MenuItem>
+                          </Select>
+                          <TextField size="small" type="number" slotProps={{ htmlInput: { min: 0 } }} value={form.discount_value} onChange={(e) => patch({ discount_value: e.target.value })} />
+                          <Box sx={{ gridColumn: "span 2" }}>
+                            <Typography variant="caption" sx={{ fontSize: 10 }}>Validade em dias</Typography>
+                            <TextField size="small" fullWidth type="number" slotProps={{ htmlInput: { min: 1 } }} value={form.discount_expires_days} onChange={(e) => patch({ discount_expires_days: e.target.value })} />
+                          </Box>
+                        </Box>
+                      )}
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
 
-                <details className="rounded-xl border p-3">
-                  <summary className="cursor-pointer text-sm font-semibold">Mensagem de boas-vindas no WhatsApp</summary>
-                  <div className="mt-3 space-y-2">
-                    <p className="text-[10px] text-muted-foreground">Opcional. Usa apenas templates aprovados na Meta.</p>
-                    <Select value={form.template_name ? `${form.template_name}::${form.template_language}` : ""} onValueChange={(value) => { const [name, language] = value.split("::"); patch({ template_name: name ?? "", template_language: language ?? "", template_var_mapping: {} }); }}>
-                      <SelectTrigger><SelectValue placeholder="Escolha um template" /></SelectTrigger>
-                      <SelectContent>{approved.map((item: any) => <SelectItem key={`${item.name}-${item.language}`} value={`${item.name}::${item.language}`}>{item.name} ({item.language})</SelectItem>)}</SelectContent>
-                    </Select>
-                    {tokens.map((token) => {
-                      const mapped = form.template_var_mapping[token] ?? "";
-                      const source = mapped.startsWith("static:") ? "static" : mapped || "";
-                      const staticValue = mapped.startsWith("static:") ? mapped.slice("static:".length) : "";
-                      return <div key={token} className="space-y-1 rounded-lg border p-2"><span className="font-mono text-[10px]">{`{{${token}}}`}</span><Select value={source} onValueChange={(value) => { const next = { ...form.template_var_mapping }; next[token] = value === "static" ? "static:" : value; patch({ template_var_mapping: next }); }}><SelectTrigger className="h-8"><SelectValue placeholder="Origem" /></SelectTrigger><SelectContent><SelectItem value="name">Nome capturado</SelectItem><SelectItem value="coupon_code">Código do cupom</SelectItem><SelectItem value="static">Texto fixo</SelectItem></SelectContent></Select>{source === "static" && <Input className="h-8" value={staticValue} onChange={(e) => { const next = { ...form.template_var_mapping }; next[token] = `static:${e.target.value}`; patch({ template_var_mapping: next }); }} />}</div>;
-                    })}
-                  </div>
-                </details>
+                <Accordion disableGutters sx={{ borderRadius: 3, border: "1px solid", borderColor: "divider", "&:before": { display: "none" } }}>
+                  <AccordionSummary expandIcon={<ChevronDown size={16} />}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Mensagem de boas-vindas no WhatsApp</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Stack spacing={1.5}>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>Opcional. Usa apenas templates aprovados na Meta.</Typography>
+                      <Select
+                        size="small"
+                        displayEmpty
+                        value={form.template_name ? `${form.template_name}::${form.template_language}` : ""}
+                        onChange={(e) => { const [name, language] = e.target.value.split("::"); patch({ template_name: name ?? "", template_language: language ?? "", template_var_mapping: {} }); }}
+                      >
+                        <MenuItem value="">
+                          <em>Escolha um template</em>
+                        </MenuItem>
+                        {approved.map((item: any) => (
+                          <MenuItem key={`${item.name}-${item.language}`} value={`${item.name}::${item.language}`}>
+                            {item.name} ({item.language})
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {tokens.map((token) => {
+                        const mapped = form.template_var_mapping[token] ?? "";
+                        const source = mapped.startsWith("static:") ? "static" : mapped || "";
+                        const staticValue = mapped.startsWith("static:") ? mapped.slice("static:".length) : "";
+                        return (
+                          <Stack key={token} spacing={0.75} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider", p: 1 }}>
+                            <Typography sx={{ fontFamily: "monospace", fontSize: 10 }}>{`{{${token}}}`}</Typography>
+                            <Select
+                              size="small"
+                              displayEmpty
+                              value={source}
+                              onChange={(e) => { const next = { ...form.template_var_mapping }; next[token] = e.target.value === "static" ? "static:" : e.target.value; patch({ template_var_mapping: next }); }}
+                            >
+                              <MenuItem value="">
+                                <em>Origem</em>
+                              </MenuItem>
+                              <MenuItem value="name">Nome capturado</MenuItem>
+                              <MenuItem value="coupon_code">Código do cupom</MenuItem>
+                              <MenuItem value="static">Texto fixo</MenuItem>
+                            </Select>
+                            {source === "static" && (
+                              <TextField
+                                size="small"
+                                value={staticValue}
+                                onChange={(e) => { const next = { ...form.template_var_mapping }; next[token] = `static:${e.target.value}`; patch({ template_var_mapping: next }); }}
+                              />
+                            )}
+                          </Stack>
+                        );
+                      })}
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
 
-                <div className="flex items-center justify-between rounded-xl border p-3">
-                  <div><p className="text-xs font-semibold">Publicar este pop-up</p><p className="text-[10px] text-muted-foreground">Ao ativar, os outros são desativados.</p></div>
-                  <Switch checked={form.is_active} onCheckedChange={(value) => patch({ is_active: value })} />
-                </div>
+                <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", borderRadius: 3, border: "1px solid", borderColor: "divider", p: 1.5 }}>
+                  <Box>
+                    <Typography variant="caption" sx={{ fontWeight: 600, display: "block" }}>Publicar este pop-up</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>Ao ativar, os outros são desativados.</Typography>
+                  </Box>
+                  <Switch checked={form.is_active} onChange={(e) => patch({ is_active: e.target.checked })} />
+                </Stack>
 
-                <Button variant="outline" className="w-full gap-2" onClick={() => applyPresetToCurrent(form.design_config.templateKey)}><RotateCcw className="size-4" /> Restaurar visual do template</Button>
-              </div>
-            </aside>
-          </div>
-        </div>
+                <Button variant="outline" fullWidth startIcon={<RotateCcw size={16} />} onClick={() => applyPresetToCurrent(form.design_config.templateKey)}>
+                  Restaurar visual do template
+                </Button>
+              </Stack>
+            </Box>
+          </Box>
+        </Box>
 
         <WheelPrizesDialog
           open={wheelDialogOpen}
@@ -551,49 +793,77 @@ export function PopupCampaignsManager({ onOpenSocialProof }: { onOpenSocialProof
           prizes={form.design_config.wheelPrizes}
           onChange={(wheelPrizes) => patchDesign({ wheelPrizes })}
         />
-      </div>
+      </Box>
     );
   }
 
   return (
-    <div className="space-y-5 py-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="font-semibold">Pop-ups configurados</p>
-          <p className="text-xs text-muted-foreground">Crie campanhas visuais, capture WhatsApp e entregue benefícios automaticamente.</p>
-        </div>
-        <Button size="sm" className="gap-2" onClick={() => { setSelectedPreset("essential"); setMode("templates"); }}><Plus className="size-4" /> Novo pop-up</Button>
-      </div>
+    <Stack spacing={2.5} sx={{ py: 2 }}>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+        <Box>
+          <Typography sx={{ fontWeight: 600 }}>Pop-ups configurados</Typography>
+          <Typography variant="caption" color="text.secondary">Crie campanhas visuais, capture WhatsApp e entregue benefícios automaticamente.</Typography>
+        </Box>
+        <Button size="small" variant="contained" startIcon={<Plus size={16} />} onClick={() => { setSelectedPreset("essential"); setMode("templates"); }}>
+          Novo pop-up
+        </Button>
+      </Stack>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", xl: "1fr 1fr" } }}>
         {(campaigns ?? []).length === 0 && (
-          <div className="rounded-2xl border border-dashed px-6 py-14 text-center xl:col-span-2">
-            <LayoutTemplate className="mx-auto mb-3 size-8 text-muted-foreground" />
-            <p className="font-semibold">Nenhum pop-up ainda</p>
-            <p className="mt-1 text-sm text-muted-foreground">Comece escolhendo um dos templates prontos.</p>
-            <Button className="mt-4" onClick={() => setMode("templates")}>Escolher template</Button>
-          </div>
+          <Box sx={{ gridColumn: { xl: "span 2" }, borderRadius: 4, border: "1px dashed", borderColor: "divider", px: 3, py: 7, textAlign: "center" }}>
+            <LayoutTemplate size={32} color="var(--mui-palette-text-secondary)" style={{ margin: "0 auto 12px" }} />
+            <Typography sx={{ fontWeight: 600 }}>Nenhum pop-up ainda</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Comece escolhendo um dos templates prontos.</Typography>
+            <Button variant="contained" sx={{ mt: 2 }} onClick={() => setMode("templates")}>Escolher template</Button>
+          </Box>
         )}
         {(campaigns ?? []).map((campaign: any) => {
           const design = normalizePopupDesignConfig(campaign.design_config);
           const previewForm = rowToForm(campaign);
           return (
-            <article key={campaign.id} className="overflow-hidden rounded-2xl border bg-card">
-              <div className="flex min-h-[250px] items-center justify-center overflow-hidden bg-muted/30 p-4">
-                <div className="origin-center scale-[0.58]"><PopupPreview campaign={previewForm} design={design} compact /></div>
-              </div>
-              <div className="space-y-3 border-t p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div><p className="font-semibold">{campaign.name}</p><p className="text-sm text-muted-foreground">{campaign.headline}</p></div>
-                  <div className="flex items-center gap-2"><Badge variant={campaign.is_active ? "default" : "outline"}>{campaign.is_active ? "Ativo" : "Rascunho"}</Badge><Switch checked={campaign.is_active} onCheckedChange={(value) => toggleMut.mutate({ id: campaign.id, is_active: value })} /></div>
-                </div>
-                <div className="flex flex-wrap gap-2 text-xs"><Badge variant="outline">{getPopupTemplatePreset(design.templateKey === "custom" ? "essential" : design.templateKey).name}</Badge><Badge variant="outline">{campaign.coupon_mode === "none" ? "Sem cupom" : campaign.coupon_mode === "fixed" ? "Cupom fixo" : "Cupom único"}</Badge>{design.journey === "progressive" && <Badge variant="outline">{popupStageCount(design, campaign.collect_name)} etapas</Badge>}{design.interaction === "wheel" && <Badge variant="outline">Roleta</Badge>}</div>
-                <div className="flex gap-2"><Button size="sm" variant="outline" className="gap-1" onClick={() => { setForm(rowToForm(campaign)); setPreviewStage("capture"); setMode("editor"); }}><Pencil className="size-3.5" /> Editar</Button><Button size="sm" variant="ghost" className="gap-1 text-critical" onClick={() => { if (confirm(`Excluir o pop-up “${campaign.name}”?`)) deleteMut.mutate(campaign.id); }}><Trash2 className="size-3.5" /> Excluir</Button></div>
-              </div>
-            </article>
+            <Box key={campaign.id} sx={{ overflow: "hidden", borderRadius: 4, border: "1px solid", borderColor: "divider", bgcolor: "background.paper" }}>
+              <Box sx={{ display: "flex", minHeight: 250, alignItems: "center", justifyContent: "center", overflow: "hidden", bgcolor: "action.hover", p: 2 }}>
+                <Box sx={{ transform: "scale(0.58)", transformOrigin: "center" }}>
+                  <PopupPreview campaign={previewForm} design={design} compact />
+                </Box>
+              </Box>
+              <Stack spacing={1.5} sx={{ borderTop: "1px solid", borderColor: "divider", p: 2 }}>
+                <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "flex-start" }} spacing={1.5}>
+                  <Box>
+                    <Typography sx={{ fontWeight: 600 }}>{campaign.name}</Typography>
+                    <Typography variant="body2" color="text.secondary">{campaign.headline}</Typography>
+                  </Box>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <Chip size="small" color={campaign.is_active ? "success" : "default"} variant={campaign.is_active ? "filled" : "outlined"} label={campaign.is_active ? "Ativo" : "Rascunho"} />
+                    <Switch checked={campaign.is_active} onChange={(e) => toggleMut.mutate({ id: campaign.id, is_active: e.target.checked })} />
+                  </Stack>
+                </Stack>
+                <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+                  <Chip size="small" variant="outlined" label={getPopupTemplatePreset(design.templateKey === "custom" ? "essential" : design.templateKey).name} />
+                  <Chip size="small" variant="outlined" label={campaign.coupon_mode === "none" ? "Sem cupom" : campaign.coupon_mode === "fixed" ? "Cupom fixo" : "Cupom único"} />
+                  {design.journey === "progressive" && <Chip size="small" variant="outlined" label={`${popupStageCount(design, campaign.collect_name)} etapas`} />}
+                  {design.interaction === "wheel" && <Chip size="small" variant="outlined" label="Roleta" />}
+                </Stack>
+                <Stack direction="row" spacing={1}>
+                  <Button size="small" variant="outline" startIcon={<Pencil size={14} />} onClick={() => { setForm(rowToForm(campaign)); setPreviewStage("capture"); setMode("editor"); }}>
+                    Editar
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="ghost"
+                    startIcon={<Trash2 size={14} />}
+                    sx={{ color: "error.main" }}
+                    onClick={() => { if (confirm(`Excluir o pop-up "${campaign.name}"?`)) deleteMut.mutate(campaign.id); }}
+                  >
+                    Excluir
+                  </Button>
+                </Stack>
+              </Stack>
+            </Box>
           );
         })}
-      </div>
-    </div>
+      </Box>
+    </Stack>
   );
 }

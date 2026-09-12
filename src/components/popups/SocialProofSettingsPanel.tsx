@@ -3,12 +3,20 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Clock3, MapPin, Save, ShieldCheck, ShoppingBag, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Chip from "@mui/material/Chip";
+import FormControl from "@mui/material/FormControl";
+import Grid from "@mui/material/Grid";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import { getSocialProofSettings, saveSocialProofSettings } from "@/lib/popup.functions";
 import { DEFAULT_SOCIAL_PROOF_SETTINGS, type SocialProofSettings } from "@/lib/popup-social-proof";
 
@@ -47,86 +55,202 @@ export function SocialProofSettingsPanel() {
     setForm((current) => ({ ...current, [key]: Number(value) }));
   };
 
-  if (isPending) return <div className="py-12 text-center text-sm text-muted-foreground">Carregando configurações…</div>;
-  if (isError) return <div className="my-4 rounded-xl border border-critical/30 bg-critical/5 p-4 text-sm text-critical">Não foi possível carregar as configurações.</div>;
+  if (isPending) {
+    return (
+      <Typography align="center" color="text.secondary" sx={{ py: 6 }}>
+        Carregando configurações…
+      </Typography>
+    );
+  }
+  if (isError) {
+    return (
+      <Box sx={{ my: 2, border: "1px solid", borderColor: "error.main", bgcolor: "error.50", borderRadius: 2, p: 2 }}>
+        <Typography variant="body2" color="error.main">
+          Não foi possível carregar as configurações.
+        </Typography>
+      </Box>
+    );
+  }
 
   return (
-    <div className="grid gap-5 py-4 xl:grid-cols-[minmax(0,1fr)_440px]">
-      <section className="overflow-hidden rounded-2xl border bg-background">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b px-5 py-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <ShoppingBag className="size-5 text-primary" />
-              <h2 className="font-semibold">Compras recentes</h2>
-              <Badge variant={form.enabled ? "default" : "outline"}>{form.enabled ? "Ativo" : "Pausado"}</Badge>
+    <Grid container spacing={2.5} sx={{ py: 2 }}>
+      <Grid size={{ xs: 12, xl: 8 }}>
+        <Card variant="outlined">
+          <Stack
+            direction="row"
+            spacing={2}
+            sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid", borderColor: "divider", px: 2.5, py: 2 }}
+          >
+            <Box>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                <ShoppingBag size={18} color="var(--mui-palette-primary-main, #7367F0)" />
+                <Typography sx={{ fontWeight: 600 }}>Compras recentes</Typography>
+                <Chip size="small" color={form.enabled ? "success" : "default"} label={form.enabled ? "Ativo" : "Pausado"} />
+              </Stack>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                Mostra vendas pagas do dia anterior, em ordem aleatória.
+              </Typography>
+            </Box>
+            <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+              <Typography variant="body2">Publicar no site</Typography>
+              <Switch checked={form.enabled} onChange={(e) => setForm((current) => ({ ...current, enabled: e.target.checked }))} />
+            </Stack>
+          </Stack>
+
+          <CardContent>
+            <Grid container spacing={2.5}>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 2 }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1 }}>
+                    <Clock3 size={16} color="var(--mui-palette-primary-main, #7367F0)" />
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      Depois de fechar o pop-up principal
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <TextField
+                      type="number"
+                      size="small"
+                      slotProps={{ htmlInput: { min: 1, max: 300 } }}
+                      value={form.delayAfterCaptureSeconds}
+                      onChange={(e) => patchNumber("delayAfterCaptureSeconds", e.target.value)}
+                    />
+                    <Typography variant="body2" color="text.secondary">
+                      segundos
+                    </Typography>
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                    Primeira exibição. Padrão: 10 segundos.
+                  </Typography>
+                </Box>
+              </Grid>
+
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 2 }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1 }}>
+                    <Sparkles size={16} color="var(--mui-palette-primary-main, #7367F0)" />
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      Intervalo entre compras
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <TextField
+                      type="number"
+                      size="small"
+                      slotProps={{ htmlInput: { min: 10, max: 3600 } }}
+                      value={form.intervalSeconds}
+                      onChange={(e) => patchNumber("intervalSeconds", e.target.value)}
+                    />
+                    <Typography variant="body2" color="text.secondary">
+                      segundos
+                    </Typography>
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                    Repete com outra compra. Padrão: 50 segundos.
+                  </Typography>
+                </Box>
+              </Grid>
+
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 2 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
+                    Tempo visível
+                  </Typography>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <TextField
+                      type="number"
+                      size="small"
+                      slotProps={{ htmlInput: { min: 2, max: 30 } }}
+                      value={form.visibleSeconds}
+                      onChange={(e) => patchNumber("visibleSeconds", e.target.value)}
+                    />
+                    <Typography variant="body2" color="text.secondary">
+                      segundos
+                    </Typography>
+                  </Stack>
+                </Box>
+              </Grid>
+
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 2 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
+                    Posição no site
+                  </Typography>
+                  <FormControl size="small" fullWidth>
+                    <Select
+                      value={form.position}
+                      onChange={(e) => setForm((current) => ({ ...current, position: e.target.value as SocialProofSettings["position"] }))}
+                    >
+                      {Object.entries(POSITION_LABELS).map(([value, label]) => (
+                        <MenuItem key={value} value={value}>
+                          {label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Box>
+              </Grid>
+            </Grid>
+
+            <Stack
+              direction="row"
+              spacing={1.5}
+              sx={{ mt: 2.5, border: "1px solid", borderColor: "primary.main", bgcolor: "action.hover", borderRadius: 2, p: 2 }}
+            >
+              <ShieldCheck size={20} style={{ marginTop: 2, flexShrink: 0 }} color="var(--mui-palette-primary-main, #7367F0)" />
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  Privacidade protegida
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  O site recebe somente primeiro nome + inicial do sobrenome, cidade/UF, produto e imagem. E-mail, telefone e número do pedido não são enviados.
+                </Typography>
+              </Box>
+            </Stack>
+          </CardContent>
+
+          <Box sx={{ display: "flex", justifyContent: "flex-end", borderTop: "1px solid", borderColor: "divider", px: 2.5, py: 2 }}>
+            <Button
+              variant="contained"
+              startIcon={<Save size={16} />}
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending || form.visibleSeconds >= form.intervalSeconds}
+            >
+              {saveMutation.isPending ? "Salvando…" : "Salvar configurações"}
+            </Button>
+          </Box>
+        </Card>
+      </Grid>
+
+      <Grid size={{ xs: 12, xl: 4 }}>
+        <Box sx={{ borderRadius: 2, bgcolor: "#f5f6f7", p: 2.5, height: "100%" }}>
+          <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+            <Typography sx={{ fontWeight: 600 }}>Prévia no site</Typography>
+            <Chip size="small" variant="outlined" label="Pedidos de ontem" />
+          </Stack>
+          {/* Simulação do widget real exibido no site da cliente — mantém marcação/estilo próprios,
+             independentes do design system admin (MUI), propositalmente. */}
+          <Box sx={{ minHeight: 420, display: "flex", alignItems: "flex-start", borderRadius: 2, border: "1px solid", borderColor: "divider", bgcolor: "#fff", p: 2 }}>
+            <div style={{ position: "relative", display: "flex", width: "100%", maxWidth: 350, gap: 12, borderRadius: 8, border: "1px solid #e5e7eb", background: "#fff", padding: "10px 32px 10px 10px", boxShadow: "0 10px 25px rgba(0,0,0,0.1)" }}>
+              <button type="button" aria-label="Fechar prévia" style={{ position: "absolute", right: 8, top: 4, fontSize: 20, color: "#71717a", background: "none", border: "none", cursor: "default" }}>
+                ×
+              </button>
+              <div style={{ display: "grid", width: 96, height: 96, flexShrink: 0, placeItems: "center", overflow: "hidden", borderRadius: 4, background: "#f6f1ef" }}>
+                <ShoppingBag size={32} color="#9b6f63" />
+              </div>
+              <div style={{ minWidth: 0, paddingTop: 4, fontSize: 12, lineHeight: 1.4 }}>
+                <p style={{ margin: 0, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Maria S. de Diamantina/MG</p>
+                <p style={{ margin: "4px 0 0", color: "#dc2626" }}>comprou</p>
+                <p style={{ margin: "2px 0 0", fontWeight: 500 }}>Kit Ayla Azul Turquesa</p>
+              </div>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Mostra vendas pagas do dia anterior, em ordem aleatória.</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Label htmlFor="social-proof-enabled" className="text-sm">Publicar no site</Label>
-            <Switch id="social-proof-enabled" checked={form.enabled} onCheckedChange={(enabled) => setForm((current) => ({ ...current, enabled }))} />
-          </div>
-        </div>
-
-        <div className="grid gap-5 p-5 md:grid-cols-2">
-          <div className="space-y-2 rounded-xl border p-4">
-            <div className="flex items-center gap-2"><Clock3 className="size-4 text-primary" /><Label htmlFor="social-proof-delay">Depois de fechar o pop-up principal</Label></div>
-            <div className="flex items-center gap-2"><Input id="social-proof-delay" type="number" min={1} max={300} value={form.delayAfterCaptureSeconds} onChange={(event) => patchNumber("delayAfterCaptureSeconds", event.target.value)} /><span className="text-sm text-muted-foreground">segundos</span></div>
-            <p className="text-xs text-muted-foreground">Primeira exibição. Padrão: 10 segundos.</p>
-          </div>
-
-          <div className="space-y-2 rounded-xl border p-4">
-            <div className="flex items-center gap-2"><Sparkles className="size-4 text-primary" /><Label htmlFor="social-proof-interval">Intervalo entre compras</Label></div>
-            <div className="flex items-center gap-2"><Input id="social-proof-interval" type="number" min={10} max={3600} value={form.intervalSeconds} onChange={(event) => patchNumber("intervalSeconds", event.target.value)} /><span className="text-sm text-muted-foreground">segundos</span></div>
-            <p className="text-xs text-muted-foreground">Repete com outra compra. Padrão: 50 segundos.</p>
-          </div>
-
-          <div className="space-y-2 rounded-xl border p-4">
-            <Label htmlFor="social-proof-visible">Tempo visível</Label>
-            <div className="flex items-center gap-2"><Input id="social-proof-visible" type="number" min={2} max={30} value={form.visibleSeconds} onChange={(event) => patchNumber("visibleSeconds", event.target.value)} /><span className="text-sm text-muted-foreground">segundos</span></div>
-          </div>
-
-          <div className="space-y-2 rounded-xl border p-4">
-            <Label>Posição no site</Label>
-            <Select value={form.position} onValueChange={(position: SocialProofSettings["position"]) => setForm((current) => ({ ...current, position }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {Object.entries(POSITION_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="mx-5 mb-5 flex gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-          <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
-          <div>
-            <p className="text-sm font-medium">Privacidade protegida</p>
-            <p className="text-xs leading-relaxed text-muted-foreground">O site recebe somente primeiro nome + inicial do sobrenome, cidade/UF, produto e imagem. E-mail, telefone e número do pedido não são enviados.</p>
-          </div>
-        </div>
-
-        <div className="flex justify-end border-t px-5 py-4">
-          <Button className="gap-2" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || form.visibleSeconds >= form.intervalSeconds}>
-            <Save className="size-4" /> {saveMutation.isPending ? "Salvando…" : "Salvar configurações"}
-          </Button>
-        </div>
-      </section>
-
-      <aside className="rounded-2xl border bg-[#f5f6f7] p-5">
-        <div className="mb-4 flex items-center justify-between"><p className="font-semibold">Prévia no site</p><Badge variant="outline">Pedidos de ontem</Badge></div>
-        <div className="flex min-h-[420px] items-start rounded-xl border bg-white p-4 shadow-inner">
-          <div className="relative flex w-full max-w-[350px] gap-3 rounded-lg border bg-white p-2.5 pr-8 shadow-xl">
-            <button type="button" className="absolute right-2 top-1 text-xl text-muted-foreground" aria-label="Fechar prévia">×</button>
-            <div className="grid size-24 shrink-0 place-items-center overflow-hidden rounded bg-[#f6f1ef]"><ShoppingBag className="size-8 text-[#9b6f63]" /></div>
-            <div className="min-w-0 pt-1 text-xs leading-tight">
-              <p className="truncate font-semibold">Maria S. de Diamantina/MG</p>
-              <p className="mt-1 text-[#dc2626]">comprou</p>
-              <p className="mt-0.5 line-clamp-2 font-medium">Kit Ayla Azul Turquesa</p>
-            </div>
-          </div>
-        </div>
-        <div className="mt-4 flex gap-2 text-xs text-muted-foreground"><MapPin className="size-4 shrink-0" /><span>A posição escolhida será aplicada no desktop; no celular o aviso se adapta à largura da tela.</span></div>
-      </aside>
-    </div>
+          </Box>
+          <Stack direction="row" spacing={1} sx={{ mt: 2, color: "text.secondary" }}>
+            <MapPin size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+            <Typography variant="caption">A posição escolhida será aplicada no desktop; no celular o aviso se adapta à largura da tela.</Typography>
+          </Stack>
+        </Box>
+      </Grid>
+    </Grid>
   );
 }

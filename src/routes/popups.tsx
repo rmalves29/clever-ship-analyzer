@@ -1,5 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Box from "@mui/material/Box";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
+import Typography from "@mui/material/Typography";
 import { LayoutTemplate, Users, Code2, ShoppingBag } from "lucide-react";
 import { PopupCampaignsManager } from "@/components/popups/PopupCampaignsManager";
 import { PopupLeadsTable } from "@/components/popups/PopupLeadsTable";
@@ -27,33 +30,29 @@ function Popups() {
   const setTab = (value: string) => navigate({ to: "/popups", search: { tab: value } });
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-8 md:px-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">Pop-ups</h1>
-        <p className="text-sm text-muted-foreground">Crie experiências visuais, capture WhatsApp, entregue cupons e acompanhe as leads do site.</p>
-      </div>
+    <Box sx={{ maxWidth: 1600, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+          Pop-ups
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Crie experiências visuais, capture WhatsApp, entregue cupons e acompanhe as leads do site.
+        </Typography>
+      </Box>
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="popups" className="gap-1">
-            <LayoutTemplate className="size-4" /> Pop-ups
-          </TabsTrigger>
-          <TabsTrigger value="compras-recentes" className="gap-1">
-            <ShoppingBag className="size-4" /> Compras recentes
-          </TabsTrigger>
-          <TabsTrigger value="leads" className="gap-1">
-            <Users className="size-4" /> Leads Capturadas
-          </TabsTrigger>
-          <TabsTrigger value="instalacao" className="gap-1">
-            <Code2 className="size-4" /> Instalação
-          </TabsTrigger>
-        </TabsList>
+      <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+          <Tab value="popups" icon={<LayoutTemplate size={16} />} iconPosition="start" label="Pop-ups" sx={{ minHeight: 40 }} />
+          <Tab value="compras-recentes" icon={<ShoppingBag size={16} />} iconPosition="start" label="Compras recentes" sx={{ minHeight: 40 }} />
+          <Tab value="leads" icon={<Users size={16} />} iconPosition="start" label="Leads Capturadas" sx={{ minHeight: 40 }} />
+          <Tab value="instalacao" icon={<Code2 size={16} />} iconPosition="start" label="Instalação" sx={{ minHeight: 40 }} />
+        </Tabs>
+      </Box>
 
-        <TabsContent value="popups"><PopupCampaignsManager onOpenSocialProof={() => setTab("compras-recentes")} /></TabsContent>
-        <TabsContent value="compras-recentes"><SocialProofSettingsPanel /></TabsContent>
-        <TabsContent value="leads"><PopupLeadsTable /></TabsContent>
-        <TabsContent value="instalacao"><PopupInstallPanel /></TabsContent>
-      </Tabs>
-    </div>
+      {tab === "popups" && <PopupCampaignsManager onOpenSocialProof={() => setTab("compras-recentes")} />}
+      {tab === "compras-recentes" && <SocialProofSettingsPanel />}
+      {tab === "leads" && <PopupLeadsTable />}
+      {tab === "instalacao" && <PopupInstallPanel />}
+    </Box>
   );
 }

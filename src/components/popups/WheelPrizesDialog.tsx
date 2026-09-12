@@ -1,7 +1,20 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import Dialog from "@mui/material/Dialog";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogActions from "@mui/material/DialogActions";
+import Button from "@mui/material/Button";
+import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 import { Plus, Trash2 } from "lucide-react";
 import { WHEEL_PALETTE, type WheelPrize } from "@/lib/popup-designer";
 
@@ -41,102 +54,105 @@ export function WheelPrizesDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Configurar Prêmios da Roleta</DialogTitle>
-        </DialogHeader>
+    <Dialog open={open} onClose={() => onOpenChange(false)} maxWidth="md" fullWidth>
+      <DialogTitle>Configurar Prêmios da Roleta</DialogTitle>
+      <DialogContent>
+        <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, overflowX: "auto" }}>
+          <Table sx={{ minWidth: 640 }} size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Cor</TableCell>
+                <TableCell>Nome na Roleta</TableCell>
+                <TableCell>Tipo</TableCell>
+                <TableCell>Código do Cupom</TableCell>
+                <TableCell>Prob. %</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {prizes.map((prize, index) => (
+                <TableRow key={index}>
+                  <TableCell>
+                    <input
+                      type="color"
+                      style={{ height: 36, width: 48, padding: 4, border: "1px solid #d1d5db", borderRadius: 6 }}
+                      value={prize.color}
+                      onChange={(e) => updatePrize(index, { color: e.target.value })}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <TextField
+                      size="small"
+                      value={prize.label}
+                      onChange={(e) => updatePrize(index, { label: e.target.value })}
+                      placeholder="Ex.: 20% OFF"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Select
+                      size="small"
+                      sx={{ width: 144 }}
+                      value={prize.type}
+                      onChange={(e) =>
+                        updatePrize(index, {
+                          type: e.target.value as "coupon" | "no_prize",
+                          couponCode: e.target.value === "no_prize" ? "" : prize.couponCode,
+                        })
+                      }
+                    >
+                      <MenuItem value="coupon">Cupom</MenuItem>
+                      <MenuItem value="no_prize">Sem prêmio</MenuItem>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <TextField
+                      size="small"
+                      value={prize.couponCode}
+                      disabled={prize.type === "no_prize"}
+                      onChange={(e) => updatePrize(index, { couponCode: e.target.value.toUpperCase() })}
+                      placeholder={prize.type === "no_prize" ? "—" : "CÓDIGO"}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <TextField
+                      type="number"
+                      size="small"
+                      sx={{ width: 80 }}
+                      slotProps={{ htmlInput: { min: 0, max: 100 } }}
+                      value={prize.probability}
+                      onChange={(e) => updatePrize(index, { probability: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+                    />
+                  </TableCell>
+                  <TableCell align="right">
+                    <IconButton
+                      size="small"
+                      disabled={prizes.length <= MIN_PRIZES}
+                      onClick={() => removePrize(index)}
+                      title={prizes.length <= MIN_PRIZES ? `A roleta precisa de pelo menos ${MIN_PRIZES} prêmios` : "Remover"}
+                    >
+                      <Trash2 size={16} color="var(--mui-palette-error-main, #EA5455)" />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
 
-        <div className="space-y-3">
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full min-w-[640px] text-sm">
-              <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Cor</th>
-                  <th className="px-3 py-2 font-medium">Nome na Roleta</th>
-                  <th className="px-3 py-2 font-medium">Tipo</th>
-                  <th className="px-3 py-2 font-medium">Código do Cupom</th>
-                  <th className="px-3 py-2 font-medium">Prob. %</th>
-                  <th className="px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {prizes.map((prize, index) => (
-                  <tr key={index} className="border-t">
-                    <td className="px-3 py-2">
-                      <Input
-                        type="color"
-                        className="h-9 w-12 p-1"
-                        value={prize.color}
-                        onChange={(e) => updatePrize(index, { color: e.target.value })}
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <Input value={prize.label} onChange={(e) => updatePrize(index, { label: e.target.value })} placeholder="Ex.: 20% OFF" />
-                    </td>
-                    <td className="px-3 py-2">
-                      <Select
-                        value={prize.type}
-                        onValueChange={(value: "coupon" | "no_prize") =>
-                          updatePrize(index, { type: value, couponCode: value === "no_prize" ? "" : prize.couponCode })
-                        }
-                      >
-                        <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="coupon">Cupom</SelectItem>
-                          <SelectItem value="no_prize">Sem prêmio</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="px-3 py-2">
-                      <Input
-                        value={prize.couponCode}
-                        disabled={prize.type === "no_prize"}
-                        onChange={(e) => updatePrize(index, { couponCode: e.target.value.toUpperCase() })}
-                        placeholder={prize.type === "no_prize" ? "—" : "CÓDIGO"}
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        className="w-20"
-                        value={prize.probability}
-                        onChange={(e) => updatePrize(index, { probability: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        disabled={prizes.length <= MIN_PRIZES}
-                        onClick={() => removePrize(index)}
-                        title={prizes.length <= MIN_PRIZES ? `A roleta precisa de pelo menos ${MIN_PRIZES} prêmios` : "Remover"}
-                      >
-                        <Trash2 className="size-4 text-critical" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <Button variant="outline" size="sm" className="gap-2" disabled={prizes.length >= MAX_PRIZES} onClick={addPrize}>
-              <Plus className="size-4" /> Adicionar prêmio
-            </Button>
-            <p className={`text-sm font-medium ${isBalanced ? "text-success" : "text-critical"}`}>
-              Total: {totalProbability}% {isBalanced ? "✓" : "— ajuste para somar 100%"}
-            </p>
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button onClick={() => onOpenChange(false)}>Fechar</Button>
-        </DialogFooter>
+        <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mt: 1.5 }}>
+          <Button variant="outline" size="small" startIcon={<Plus size={16} />} disabled={prizes.length >= MAX_PRIZES} onClick={addPrize}>
+            Adicionar prêmio
+          </Button>
+          <Typography variant="body2" sx={{ fontWeight: 500, color: isBalanced ? "success.main" : "error.main" }}>
+            Total: {totalProbability}% {isBalanced ? "✓" : "— ajuste para somar 100%"}
+          </Typography>
+        </Stack>
       </DialogContent>
+      <DialogActions>
+        <Button variant="contained" onClick={() => onOpenChange(false)}>
+          Fechar
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 }

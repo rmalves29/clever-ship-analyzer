@@ -329,7 +329,7 @@ function SurveyEditorPage() {
                               onChange={(e) => updateQuestion(q.id, { shuffleOptions: e.target.checked })}
                             />
                           }
-                          label={<Typography variant="caption" color="text.secondary">Embaralhar ordem das opções para cada pessoa</Typography>}
+                          label={<Typography component="span" variant="caption" color="text.secondary">Embaralhar ordem das opções para cada pessoa</Typography>}
                         />
                       </Stack>
                     )}

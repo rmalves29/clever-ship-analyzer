@@ -14,6 +14,7 @@ import {
   RefreshCw,
   LayoutTemplate,
   Coins,
+  ClipboardList,
 } from "lucide-react";
 import Box from "@mui/material/Box";
 import Drawer from "@mui/material/Drawer";
@@ -54,7 +55,8 @@ type NavItem = {
     | "/fluxo-envio"
     | "/popups"
     | "/cashback"
-    | "/ga4";
+    | "/ga4"
+    | "/pesquisas";
   search?: Record<string, string>;
   icon: typeof LayoutDashboard;
 };
@@ -130,6 +132,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { label: "Cashback", to: "/cashback", icon: Coins },
       { label: "Google Analytics", to: "/ga4", icon: BarChart3 },
+      { label: "Pesquisas", to: "/pesquisas", icon: ClipboardList },
     ],
   },
   {

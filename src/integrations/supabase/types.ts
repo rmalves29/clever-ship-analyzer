@@ -1567,6 +1567,74 @@ export type Database = {
         }
         Relationships: []
       }
+      surveys: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          questions: Json
+          slug: string
+          thank_you_message: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          questions?: Json
+          slug: string
+          thank_you_message?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          questions?: Json
+          slug?: string
+          thank_you_message?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      survey_responses: {
+        Row: {
+          answers: Json
+          created_at: string
+          id: string
+          source: string | null
+          survey_id: string
+        }
+        Insert: {
+          answers?: Json
+          created_at?: string
+          id?: string
+          source?: string | null
+          survey_id: string
+        }
+        Update: {
+          answers?: Json
+          created_at?: string
+          id?: string
+          source?: string | null
+          survey_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "survey_responses_survey_id_fkey"
+            columns: ["survey_id"]
+            isOneToOne: false
+            referencedRelation: "surveys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shopify_abandoned_checkouts: {
         Row: {
           checkout_url: string | null

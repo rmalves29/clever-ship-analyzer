@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -146,21 +147,29 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // /pesquisa/$slug é a landing page pública de uma pesquisa (link ou etiqueta NFC) — sem
+  // o chrome do admin (Sidebar/Topbar), já que quem responde não é usuário logado do CRM.
+  const isPublicSurveyPage = pathname.startsWith("/pesquisa/");
 
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={materioTheme}>
         <Toaster position="top-right" />
-        <Box sx={{ display: "flex", minHeight: "100vh" }}>
-          <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
-          <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
-            <Topbar onMenuClick={() => setMobileOpen(true)} />
-            <Box component="main" sx={{ flex: 1, minWidth: 0 }}>
-              {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-              <Outlet />
+        {isPublicSurveyPage ? (
+          <Outlet />
+        ) : (
+          <Box sx={{ display: "flex", minHeight: "100vh" }}>
+            <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
+            <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
+              <Topbar onMenuClick={() => setMobileOpen(true)} />
+              <Box component="main" sx={{ flex: 1, minWidth: 0 }}>
+                {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+                <Outlet />
+              </Box>
             </Box>
           </Box>
-        </Box>
+        )}
       </ThemeProvider>
     </QueryClientProvider>
   );

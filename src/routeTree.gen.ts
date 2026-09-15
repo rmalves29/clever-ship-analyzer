@@ -30,6 +30,9 @@ import { Route as CrmSegmentosRouteImport } from './routes/crm/segmentos'
 import { Route as FlowIndexRouteImport } from './routes/flow/index'
 import { Route as FlowIdRouteImport } from './routes/flow/$id'
 import { Route as PerformanceMetaAdsRouteImport } from './routes/performance/meta-ads'
+import { Route as PesquisaSlugRouteImport } from './routes/pesquisa/$slug'
+import { Route as PesquisasIndexRouteImport } from './routes/pesquisas/index'
+import { Route as PesquisasSurveyIdRouteImport } from './routes/pesquisas/$surveyId'
 import { Route as WhatsappIndexRouteImport } from './routes/whatsapp/index'
 import { Route as WhatsappCampaignIdRouteImport } from './routes/whatsapp/$campaignId'
 import { Route as WhatsappAutomacoesRouteImport } from './routes/whatsapp/automacoes'
@@ -145,6 +148,21 @@ const PerformanceMetaAdsRoute = PerformanceMetaAdsRouteImport.update({
   path: '/performance/meta-ads',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PesquisaSlugRoute = PesquisaSlugRouteImport.update({
+  id: '/pesquisa/$slug',
+  path: '/pesquisa/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PesquisasIndexRoute = PesquisasIndexRouteImport.update({
+  id: '/pesquisas/',
+  path: '/pesquisas/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PesquisasSurveyIdRoute = PesquisasSurveyIdRouteImport.update({
+  id: '/pesquisas/$surveyId',
+  path: '/pesquisas/$surveyId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WhatsappIndexRoute = WhatsappIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -212,6 +230,8 @@ export interface FileRoutesByFullPath {
   '/crm/segmentos': typeof CrmSegmentosRoute
   '/flow/$id': typeof FlowIdRoute
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
+  '/pesquisa/$slug': typeof PesquisaSlugRoute
+  '/pesquisas/$surveyId': typeof PesquisasSurveyIdRoute
   '/whatsapp/$campaignId': typeof WhatsappCampaignIdRoute
   '/whatsapp/automacoes': typeof WhatsappAutomacoesRoute
   '/whatsapp/conversas': typeof WhatsappConversasRoute
@@ -220,6 +240,7 @@ export interface FileRoutesByFullPath {
   '/whatsapp/relatorios': typeof WhatsappRelatoriosRoute
   '/crm/': typeof CrmIndexRoute
   '/flow/': typeof FlowIndexRoute
+  '/pesquisas/': typeof PesquisasIndexRoute
   '/whatsapp/': typeof WhatsappIndexRoute
   '/crm/cliente/$customerId': typeof CrmClienteCustomerIdRoute
   '/crm/reguas/primeira-segunda': typeof CrmReguasPrimeiraSegundaRoute
@@ -243,6 +264,8 @@ export interface FileRoutesByTo {
   '/crm/segmentos': typeof CrmSegmentosRoute
   '/flow/$id': typeof FlowIdRoute
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
+  '/pesquisa/$slug': typeof PesquisaSlugRoute
+  '/pesquisas/$surveyId': typeof PesquisasSurveyIdRoute
   '/whatsapp/$campaignId': typeof WhatsappCampaignIdRoute
   '/whatsapp/automacoes': typeof WhatsappAutomacoesRoute
   '/whatsapp/conversas': typeof WhatsappConversasRoute
@@ -251,6 +274,7 @@ export interface FileRoutesByTo {
   '/whatsapp/relatorios': typeof WhatsappRelatoriosRoute
   '/crm': typeof CrmIndexRoute
   '/flow': typeof FlowIndexRoute
+  '/pesquisas': typeof PesquisasIndexRoute
   '/whatsapp': typeof WhatsappIndexRoute
   '/crm/cliente/$customerId': typeof CrmClienteCustomerIdRoute
   '/crm/reguas/primeira-segunda': typeof CrmReguasPrimeiraSegundaRoute
@@ -276,6 +300,8 @@ export interface FileRoutesById {
   '/crm/segmentos': typeof CrmSegmentosRoute
   '/flow/$id': typeof FlowIdRoute
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
+  '/pesquisa/$slug': typeof PesquisaSlugRoute
+  '/pesquisas/$surveyId': typeof PesquisasSurveyIdRoute
   '/whatsapp/$campaignId': typeof WhatsappCampaignIdRoute
   '/whatsapp/automacoes': typeof WhatsappAutomacoesRoute
   '/whatsapp/conversas': typeof WhatsappConversasRoute
@@ -284,6 +310,7 @@ export interface FileRoutesById {
   '/whatsapp/relatorios': typeof WhatsappRelatoriosRoute
   '/crm/': typeof CrmIndexRoute
   '/flow/': typeof FlowIndexRoute
+  '/pesquisas/': typeof PesquisasIndexRoute
   '/whatsapp/': typeof WhatsappIndexRoute
   '/crm/cliente/$customerId': typeof CrmClienteCustomerIdRoute
   '/crm/reguas/primeira-segunda': typeof CrmReguasPrimeiraSegundaRoute
@@ -310,6 +337,8 @@ export interface FileRouteTypes {
     | '/crm/segmentos'
     | '/flow/$id'
     | '/performance/meta-ads'
+    | '/pesquisa/$slug'
+    | '/pesquisas/$surveyId'
     | '/whatsapp/$campaignId'
     | '/whatsapp/automacoes'
     | '/whatsapp/conversas'
@@ -318,6 +347,7 @@ export interface FileRouteTypes {
     | '/whatsapp/relatorios'
     | '/crm/'
     | '/flow/'
+    | '/pesquisas/'
     | '/whatsapp/'
     | '/crm/cliente/$customerId'
     | '/crm/reguas/primeira-segunda'
@@ -341,6 +371,8 @@ export interface FileRouteTypes {
     | '/crm/segmentos'
     | '/flow/$id'
     | '/performance/meta-ads'
+    | '/pesquisa/$slug'
+    | '/pesquisas/$surveyId'
     | '/whatsapp/$campaignId'
     | '/whatsapp/automacoes'
     | '/whatsapp/conversas'
@@ -349,6 +381,7 @@ export interface FileRouteTypes {
     | '/whatsapp/relatorios'
     | '/crm'
     | '/flow'
+    | '/pesquisas'
     | '/whatsapp'
     | '/crm/cliente/$customerId'
     | '/crm/reguas/primeira-segunda'
@@ -373,6 +406,8 @@ export interface FileRouteTypes {
     | '/crm/segmentos'
     | '/flow/$id'
     | '/performance/meta-ads'
+    | '/pesquisa/$slug'
+    | '/pesquisas/$surveyId'
     | '/whatsapp/$campaignId'
     | '/whatsapp/automacoes'
     | '/whatsapp/conversas'
@@ -381,6 +416,7 @@ export interface FileRouteTypes {
     | '/whatsapp/relatorios'
     | '/crm/'
     | '/flow/'
+    | '/pesquisas/'
     | '/whatsapp/'
     | '/crm/cliente/$customerId'
     | '/crm/reguas/primeira-segunda'
@@ -406,8 +442,11 @@ export interface RootRouteChildren {
   CrmSegmentosRoute: typeof CrmSegmentosRoute
   FlowIdRoute: typeof FlowIdRoute
   PerformanceMetaAdsRoute: typeof PerformanceMetaAdsRoute
+  PesquisaSlugRoute: typeof PesquisaSlugRoute
+  PesquisasSurveyIdRoute: typeof PesquisasSurveyIdRoute
   CrmIndexRoute: typeof CrmIndexRoute
   FlowIndexRoute: typeof FlowIndexRoute
+  PesquisasIndexRoute: typeof PesquisasIndexRoute
   CrmClienteCustomerIdRoute: typeof CrmClienteCustomerIdRoute
   CrmReguasPrimeiraSegundaRoute: typeof CrmReguasPrimeiraSegundaRoute
 }
@@ -561,6 +600,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PerformanceMetaAdsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pesquisa/$slug': {
+      id: '/pesquisa/$slug'
+      path: '/pesquisa/$slug'
+      fullPath: '/pesquisa/$slug'
+      preLoaderRoute: typeof PesquisaSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pesquisas/': {
+      id: '/pesquisas/'
+      path: '/pesquisas'
+      fullPath: '/pesquisas/'
+      preLoaderRoute: typeof PesquisasIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pesquisas/$surveyId': {
+      id: '/pesquisas/$surveyId'
+      path: '/pesquisas/$surveyId'
+      fullPath: '/pesquisas/$surveyId'
+      preLoaderRoute: typeof PesquisasSurveyIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/whatsapp/': {
       id: '/whatsapp/'
       path: '/'
@@ -671,8 +731,11 @@ const rootRouteChildren: RootRouteChildren = {
   CrmSegmentosRoute: CrmSegmentosRoute,
   FlowIdRoute: FlowIdRoute,
   PerformanceMetaAdsRoute: PerformanceMetaAdsRoute,
+  PesquisaSlugRoute: PesquisaSlugRoute,
+  PesquisasSurveyIdRoute: PesquisasSurveyIdRoute,
   CrmIndexRoute: CrmIndexRoute,
   FlowIndexRoute: FlowIndexRoute,
+  PesquisasIndexRoute: PesquisasIndexRoute,
   CrmClienteCustomerIdRoute: CrmClienteCustomerIdRoute,
   CrmReguasPrimeiraSegundaRoute: CrmReguasPrimeiraSegundaRoute,
 }

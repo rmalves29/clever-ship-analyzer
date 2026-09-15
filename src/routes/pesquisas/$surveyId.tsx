@@ -321,6 +321,16 @@ function SurveyEditorPage() {
                         >
                           Adicionar opção
                         </Button>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              size="small"
+                              checked={Boolean(q.shuffleOptions)}
+                              onChange={(e) => updateQuestion(q.id, { shuffleOptions: e.target.checked })}
+                            />
+                          }
+                          label={<Typography variant="caption" color="text.secondary">Embaralhar ordem das opções para cada pessoa</Typography>}
+                        />
                       </Stack>
                     )}
                   </Stack>

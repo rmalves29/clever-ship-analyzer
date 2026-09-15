@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -29,6 +29,15 @@ export const Route = createFileRoute("/pesquisa/$slug")({
 
 type AnswerValue = string | string[];
 
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j]!, a[i]!];
+  }
+  return a;
+}
+
 function QuestionField({
   question,
   value,
@@ -38,6 +47,14 @@ function QuestionField({
   value: AnswerValue | undefined;
   onChange: (value: AnswerValue) => void;
 }) {
+  // Embaralha uma única vez por carregamento da página (não a cada re-render) — reduz viés
+  // de posição sem misturar a ordem enquanto a pessoa ainda está respondendo.
+  const displayOptions = useMemo(() => {
+    const opts = question.options ?? [];
+    return question.shuffleOptions ? shuffle(opts) : opts;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [question.id]);
+
   switch (question.type) {
     case "texto_curto":
       return <TextField value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} fullWidth />;
@@ -53,7 +70,7 @@ function QuestionField({
     case "escolha_unica":
       return (
         <RadioGroup value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)}>
-          {(question.options ?? []).map((opt) => (
+          {displayOptions.map((opt) => (
             <FormControlLabel key={opt} value={opt} control={<Radio />} label={opt} />
           ))}
         </RadioGroup>
@@ -62,7 +79,7 @@ function QuestionField({
       const selected = (value as string[]) ?? [];
       return (
         <FormGroup>
-          {(question.options ?? []).map((opt) => (
+          {displayOptions.map((opt) => (
             <FormControlLabel
               key={opt}
               control={

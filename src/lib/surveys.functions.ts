@@ -16,6 +16,8 @@ export type SurveyQuestion = {
   label: string;
   required: boolean;
   options?: string[];
+  /** Embaralha a ordem das opções a cada carregamento da pesquisa (reduz viés de posição). */
+  shuffleOptions?: boolean;
 };
 
 export type Survey = {
@@ -36,6 +38,7 @@ const questionSchema = z.object({
   label: z.string().min(1),
   required: z.boolean(),
   options: z.array(z.string().min(1)).optional(),
+  shuffleOptions: z.boolean().optional(),
 });
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

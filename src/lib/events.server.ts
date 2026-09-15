@@ -2,6 +2,7 @@ import { z } from "zod";
 import { format, subDays, addDays, startOfMonth, differenceInCalendarDays } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { getCommercialDateName } from "./commercial-dates";
+import { VALID_FINANCIAL_STATUSES } from "./crm-rfm-shared";
 
 const GRAPH_VERSION = "v21.0";
 const TZ = "America/Sao_Paulo";
@@ -203,8 +204,7 @@ export async function getEventsTimeline(range: { from: string; to: string }): Pr
     .select("total_price, processed_at")
     .gte("processed_at", fromISO)
     .lte("processed_at", toISO)
-    .neq("financial_status", "VOIDED")
-    .neq("financial_status", "REFUNDED");
+    .in("financial_status", [...VALID_FINANCIAL_STATUSES]);
 
   const byDate = new Map<string, { faturamento: number; pedidos: number }>();
   for (const o of orders ?? []) {
@@ -437,8 +437,7 @@ async function getOrderSourceBreakdown(dateISO: string): Promise<{ source: strin
     .select("source_name, total_price")
     .gte("processed_at", fromISO)
     .lte("processed_at", toISO)
-    .neq("financial_status", "VOIDED")
-    .neq("financial_status", "REFUNDED");
+    .in("financial_status", [...VALID_FINANCIAL_STATUSES]);
 
   const map = new Map<string, { pedidos: number; receita: number }>();
   for (const o of data ?? []) {
@@ -464,8 +463,7 @@ async function getNewVsReturningForDate(dateISO: string): Promise<{ novos: numbe
     .select("customer_id")
     .gte("processed_at", fromISO)
     .lte("processed_at", toISO)
-    .neq("financial_status", "VOIDED")
-    .neq("financial_status", "REFUNDED");
+    .in("financial_status", [...VALID_FINANCIAL_STATUSES]);
 
   const customerIds = Array.from(new Set((dayOrders ?? []).map((o: any) => o.customer_id).filter(Boolean)));
   if (customerIds.length === 0) return { novos: 0, recorrentes: 0 };

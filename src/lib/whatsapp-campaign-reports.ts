@@ -176,8 +176,18 @@ function buildTrend(rows: Array<Omit<CampaignReportRow, "roas">>): CampaignRepor
 function buildFailureBreakdown(rows: CampaignFailureInput[]): CampaignReportFailure[] {
   const counts = new Map<string, number>();
   for (const row of rows) {
-    const code = row.errorCode?.trim();
-    const message = row.errorMessage?.trim().replace(/\s+/g, " ") || "Falha não categorizada";
+    const originalMessage = row.errorMessage?.trim().replace(/\s+/g, " ") ?? "";
+    const leadingCode = originalMessage.match(/^\s*\(?#?(\d{3,})\)?(?:\s*[-—:])?\s*/)?.[1];
+    const rawCode = row.errorCode?.trim() || leadingCode || "";
+    const code = rawCode.match(/\d{3,}/)?.[0] ?? rawCode;
+    const escapedCode = code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const message =
+      (code
+        ? originalMessage.replace(
+            new RegExp(`^\\s*\\(?#?${escapedCode}\\)?(?:\\s*[-—:])?\\s*`, "i"),
+            "",
+          )
+        : originalMessage) || "Falha não categorizada";
     const reason = code ? `${code} — ${message}` : message;
     counts.set(reason, (counts.get(reason) ?? 0) + 1);
   }

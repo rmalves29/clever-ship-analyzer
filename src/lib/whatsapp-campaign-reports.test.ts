@@ -92,14 +92,15 @@ describe("relatório de campanhas manuais", () => {
       campaigns,
       failures: [
         { errorCode: "131047", errorMessage: "Re-engagement message" },
-        { errorCode: "131047", errorMessage: "Re-engagement   message" },
+        { errorCode: "131047", errorMessage: "131047 — Re-engagement   message" },
+        { errorCode: null, errorMessage: "(#131047) Re-engagement message" },
         { errorCode: null, errorMessage: null },
       ],
     });
 
     expect(report.failures).toEqual([
-      { reason: "131047 — Re-engagement message", count: 2, percentage: 66.67 },
-      { reason: "Falha não categorizada", count: 1, percentage: 33.33 },
+      { reason: "131047 — Re-engagement message", count: 3, percentage: 75 },
+      { reason: "Falha não categorizada", count: 1, percentage: 25 },
     ]);
   });
 

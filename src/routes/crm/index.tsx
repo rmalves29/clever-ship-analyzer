@@ -19,12 +19,18 @@ import {
   Download,
   BarChart3,
   Pencil,
+  ClipboardList,
+  ListPlus,
 } from "lucide-react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Checkbox from "@mui/material/Checkbox";
 import CircularProgress from "@mui/material/CircularProgress";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
@@ -40,6 +46,13 @@ import Tabs from "@mui/material/Tabs";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment, exportSegmentCustomers, saveSegment } from "@/lib/crm-segmentation.functions";
+import {
+  getStaticLists,
+  createStaticList,
+  renameStaticList,
+  deleteStaticList,
+  addCustomersToList,
+} from "@/lib/crm-static-lists.functions";
 import { syncShopifyData } from "@/lib/crm-sync.functions";
 import { RFMAnalysis } from "@/components/crm/RFMAnalysis";
 import { ImportContactsDialog } from "@/components/crm/ImportContactsDialog";
@@ -102,20 +115,34 @@ function CRMPage() {
 
   const [search, setSearch] = useState("");
   const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
+  const [selectedList, setSelectedList] = useState<string | null>(null);
   const [editingSegment, setEditingSegment] = useState<any>(null);
   const [showEditor, setShowEditor] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement | null>(null);
   const [rowMenu, setRowMenu] = useState<{ el: HTMLElement; customer: any } | null>(null);
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<Set<string>>(new Set());
+  const [addToListOpen, setAddToListOpen] = useState(false);
+  const [addToListChoice, setAddToListChoice] = useState<string>("__new__");
+  const [newListNameForAdd, setNewListNameForAdd] = useState("");
+  const [listDialogOpen, setListDialogOpen] = useState(false);
+  const [editingList, setEditingList] = useState<{ id: string; nome: string; descricao: string | null } | null>(null);
+  const [listNome, setListNome] = useState("");
+  const [listDescricao, setListDescricao] = useState("");
 
   const fetchList = useServerFn(getCustomersList);
   const fetchStats = useServerFn(getCRMStats);
   const fetchSegments = useServerFn(getSegmentsList);
+  const fetchStaticLists = useServerFn(getStaticLists);
   const runDeleteSegment = useServerFn(deleteSegment);
   const runFixPhone = useServerFn(fixCustomerPhone);
   const runDeepSync = useServerFn(deepSyncCustomer);
   const runExport = useServerFn(exportSegmentCustomers);
   const runSaveSegment = useServerFn(saveSegment);
+  const runCreateStaticList = useServerFn(createStaticList);
+  const runRenameStaticList = useServerFn(renameStaticList);
+  const runDeleteStaticList = useServerFn(deleteStaticList);
+  const runAddCustomersToList = useServerFn(addCustomersToList);
   const runNormalizePhones = useServerFn(normalizeAllPhones);
   const runIdentifyAbandoned = useServerFn(identifyAbandonedCheckouts);
   const runCheckSpecificAbandoned = useServerFn(checkSpecificAbandonedCheckout);
@@ -127,6 +154,7 @@ function CRMPage() {
       const { csv } = await runExport({
         data: {
           segmentId: selectedSegment || undefined,
+          listId: selectedList || undefined,
           search: search || undefined,
         },
       });
@@ -142,7 +170,9 @@ function CRMPage() {
       link.setAttribute("href", url);
       const filename = selectedSegment
         ? `segmento-${segments?.find((s) => s.id === selectedSegment)?.nome.toLowerCase().replace(/\s+/g, "-")}.csv`
-        : `contatos-crm-${new Date().toISOString().split("T")[0]}.csv`;
+        : selectedList
+          ? `lista-${staticLists?.find((l) => l.id === selectedList)?.nome.toLowerCase().replace(/\s+/g, "-")}.csv`
+          : `contatos-crm-${new Date().toISOString().split("T")[0]}.csv`;
       link.setAttribute("download", filename);
       link.style.visibility = "hidden";
       document.body.appendChild(link);
@@ -162,8 +192,8 @@ function CRMPage() {
   });
 
   const { data: listData, isLoading } = useQuery({
-    queryKey: ["crm-customers", search, selectedSegment],
-    queryFn: () => fetchList({ data: { search, segmentId: selectedSegment || undefined } }),
+    queryKey: ["crm-customers", search, selectedSegment, selectedList],
+    queryFn: () => fetchList({ data: { search, segmentId: selectedSegment || undefined, listId: selectedList || undefined } }),
   });
 
   const { data: segments, refetch: refetchSegments } = useQuery({
@@ -171,6 +201,100 @@ function CRMPage() {
     queryFn: () => fetchSegments(),
     enabled: tab === "segmentos",
   });
+
+  const { data: staticLists, refetch: refetchStaticLists } = useQuery({
+    queryKey: ["crm-static-lists"],
+    queryFn: () => fetchStaticLists(),
+    enabled: tab === "listas" || tab === "contatos",
+  });
+
+  const handleOpenCreateList = () => {
+    setEditingList(null);
+    setListNome("");
+    setListDescricao("");
+    setListDialogOpen(true);
+  };
+
+  const handleOpenRenameList = (list: { id: string; nome: string; descricao: string | null }) => {
+    setEditingList(list);
+    setListNome(list.nome);
+    setListDescricao(list.descricao ?? "");
+    setListDialogOpen(true);
+  };
+
+  const handleSaveList = async () => {
+    if (!listNome.trim()) return;
+    try {
+      if (editingList) {
+        await runRenameStaticList({ data: { id: editingList.id, nome: listNome.trim(), descricao: listDescricao.trim() || undefined } });
+        toast.success("Lista atualizada.");
+      } else {
+        await runCreateStaticList({ data: { nome: listNome.trim(), descricao: listDescricao.trim() || undefined } });
+        toast.success("Lista criada.");
+      }
+      setListDialogOpen(false);
+      refetchStaticLists();
+    } catch (err: any) {
+      toast.error("Erro ao salvar lista: " + err.message);
+    }
+  };
+
+  const handleDeleteList = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta lista? Os contatos não serão excluídos, só a lista.")) return;
+    try {
+      await runDeleteStaticList({ data: { id } });
+      if (selectedList === id) setSelectedList(null);
+      toast.success("Lista excluída.");
+      refetchStaticLists();
+    } catch (err: any) {
+      toast.error("Erro ao excluir lista: " + err.message);
+    }
+  };
+
+  const toggleCustomerSelected = (id: string) => {
+    setSelectedCustomerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleToggleSelectAllVisible = () => {
+    const visibleIds = (listData?.customers ?? []).map((c: any) => c.id as string);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedCustomerIds.has(id));
+    setSelectedCustomerIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) visibleIds.forEach((id) => next.delete(id));
+      else visibleIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const handleOpenAddToList = () => {
+    setAddToListChoice(staticLists && staticLists.length > 0 ? staticLists[0]!.id : "__new__");
+    setNewListNameForAdd("");
+    setAddToListOpen(true);
+  };
+
+  const handleConfirmAddToList = async () => {
+    if (selectedCustomerIds.size === 0) return;
+    try {
+      let listId = addToListChoice;
+      if (listId === "__new__") {
+        if (!newListNameForAdd.trim()) return;
+        const { id } = await runCreateStaticList({ data: { nome: newListNameForAdd.trim() } });
+        listId = id;
+      }
+      const { added } = await runAddCustomersToList({ data: { listId, customerIds: Array.from(selectedCustomerIds) } });
+      toast.success(`${added} contato(s) adicionados à lista.`);
+      setAddToListOpen(false);
+      setSelectedCustomerIds(new Set());
+      refetchStaticLists();
+    } catch (err: any) {
+      toast.error("Erro ao adicionar à lista: " + err.message);
+    }
+  };
 
   const handleDeleteSegment = async (id: string) => {
     if (!confirm("Tem certeza que deseja excluir este segmento?")) return;
@@ -400,6 +524,15 @@ function CRMPage() {
                         deleteIcon={<X size={12} />}
                       />
                     )}
+                    {selectedList && (
+                      <Chip
+                        color="secondary"
+                        variant="outlined"
+                        label={`Lista: ${staticLists?.find((l) => l.id === selectedList)?.nome}`}
+                        onDelete={() => setSelectedList(null)}
+                        deleteIcon={<X size={12} />}
+                      />
+                    )}
                     <Button
                       variant="outline"
                       size="small"
@@ -416,11 +549,39 @@ function CRMPage() {
                   </Stack>
                 </Stack>
 
+                {selectedCustomerIds.size > 0 && (
+                  <Stack
+                    direction="row"
+                    spacing={2}
+                    sx={{ alignItems: "center", px: 2, py: 1, bgcolor: "action.hover", borderBottom: "1px solid", borderColor: "divider" }}
+                  >
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {selectedCustomerIds.size} selecionado(s)
+                    </Typography>
+                    <Button size="small" variant="contained" startIcon={<ListPlus size={14} />} onClick={handleOpenAddToList}>
+                      Adicionar à lista
+                    </Button>
+                    <Button size="small" variant="text" onClick={() => setSelectedCustomerIds(new Set())}>
+                      Limpar seleção
+                    </Button>
+                  </Stack>
+                )}
+
                 <TableContainer sx={{ overflowX: "auto" }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow sx={{ bgcolor: "action.hover" }}>
-                        <TableCell padding="checkbox" />
+                        <TableCell padding="checkbox">
+                          <Checkbox
+                            size="small"
+                            checked={(listData?.customers ?? []).length > 0 && (listData?.customers ?? []).every((c: any) => selectedCustomerIds.has(c.id))}
+                            indeterminate={
+                              (listData?.customers ?? []).some((c: any) => selectedCustomerIds.has(c.id)) &&
+                              !(listData?.customers ?? []).every((c: any) => selectedCustomerIds.has(c.id))
+                            }
+                            onChange={handleToggleSelectAllVisible}
+                          />
+                        </TableCell>
                         <TableCell>NOME / E-MAIL</TableCell>
                         <TableCell>TELEFONE</TableCell>
                         <TableCell>TAGS</TableCell>
@@ -449,7 +610,7 @@ function CRMPage() {
                         listData?.customers.map((c: any) => (
                           <TableRow key={c.id} hover>
                             <TableCell padding="checkbox">
-                              <Checkbox size="small" />
+                              <Checkbox size="small" checked={selectedCustomerIds.has(c.id)} onChange={() => toggleCustomerSelected(c.id)} />
                             </TableCell>
                             <TableCell>
                               <Box
@@ -648,6 +809,7 @@ function CRMPage() {
                             variant="outline"
                             size="small"
                             onClick={() => {
+                              setSelectedList(null);
                               setSelectedSegment(seg.id);
                               setTab("contatos");
                             }}
@@ -678,14 +840,85 @@ function CRMPage() {
           )}
 
           {tab === "listas" && (
-            <Box sx={{ mt: 4, border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3, textAlign: "center", py: 8, borderStyle: "dashed" }}>
-              <Plus size={48} style={{ margin: "0 auto", opacity: 0.3 }} />
-              <Typography sx={{ fontWeight: 600, mt: 2 }}>Listas Estáticas</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 384, mx: "auto", mt: 0.5 }}>
-                Agrupe contatos manualmente para envios pontuais.
-              </Typography>
-              <Button variant="outline" sx={{ mt: 2 }}>Criar primeira lista</Button>
-            </Box>
+            <Stack spacing={3} sx={{ mt: 4 }}>
+              <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
+                <Stack direction="row" spacing={2} sx={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
+                  <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 700 }}>Listas Estáticas</Typography>
+                    <Typography variant="body2" color="text.secondary">Grupos de contatos montados manualmente para envios pontuais.</Typography>
+                  </Box>
+                  <Button variant="contained" startIcon={<Plus size={16} />} onClick={handleOpenCreateList}>
+                    Criar lista
+                  </Button>
+                </Stack>
+
+                <Box sx={{ mt: 4 }}>
+                  {(staticLists ?? []).length === 0 ? (
+                    <Box sx={{ textAlign: "center", py: 8, border: "2px dashed", borderColor: "divider", borderRadius: 3 }}>
+                      <ClipboardList size={48} style={{ margin: "0 auto", opacity: 0.3 }} />
+                      <Typography sx={{ fontWeight: 600, mt: 2 }}>Nenhuma lista estática</Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 384, mx: "auto", mt: 0.5 }}>
+                        Selecione contatos na aba Contatos e use "Adicionar à lista", ou crie uma lista vazia aqui.
+                      </Typography>
+                      <Button variant="outline" sx={{ mt: 2 }} onClick={handleOpenCreateList}>Criar primeira lista</Button>
+                    </Box>
+                  ) : (
+                    <Stack spacing={1}>
+                      {(staticLists ?? []).map((list) => (
+                        <Stack
+                          key={list.id}
+                          direction="row"
+                          spacing={2}
+                          sx={{
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                            border: "1px solid",
+                            borderColor: selectedList === list.id ? "primary.main" : "divider",
+                            bgcolor: selectedList === list.id ? "action.hover" : "transparent",
+                            borderRadius: 3,
+                            p: 2,
+                          }}
+                        >
+                          <Box sx={{ minWidth: 200, flex: 1 }}>
+                            <Typography sx={{ fontWeight: 600 }}>{list.nome}</Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                              {list.descricao || "Sem descrição."}
+                            </Typography>
+                          </Box>
+                          <Chip size="small" variant="outlined" color="secondary" label="LISTA ESTÁTICA" sx={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase" }} />
+                          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", color: "text.secondary" }}>
+                            <Users size={12} />
+                            <Typography variant="caption">{list.memberCount} contatos</Typography>
+                          </Stack>
+                          <Button
+                            variant="outline"
+                            size="small"
+                            onClick={() => {
+                              setSelectedSegment(null);
+                              setSelectedList(list.id);
+                              setTab("contatos");
+                            }}
+                          >
+                            Ver Contatos
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="small"
+                            startIcon={<Pencil size={14} />}
+                            onClick={() => handleOpenRenameList(list)}
+                          >
+                            Renomear
+                          </Button>
+                          <IconButton size="small" onClick={() => handleDeleteList(list.id)}>
+                            <Trash2 size={16} color="var(--mui-palette-error-main, #EA5455)" />
+                          </IconButton>
+                        </Stack>
+                      ))}
+                    </Stack>
+                  )}
+                </Box>
+              </Box>
+            </Stack>
           )}
 
           {tab === "rfm" && (
@@ -714,6 +947,62 @@ function CRMPage() {
       </Menu>
 
       <ImportContactsDialog open={importDialogOpen} onOpenChange={setImportDialogOpen} />
+
+      <Dialog open={listDialogOpen} onClose={() => setListDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>{editingList ? "Renomear lista" : "Criar lista estática"}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField label="Nome" value={listNome} onChange={(e) => setListNome(e.target.value)} autoFocus fullWidth />
+            <TextField
+              label="Descrição (opcional)"
+              value={listDescricao}
+              onChange={(e) => setListDescricao(e.target.value)}
+              multiline
+              rows={2}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setListDialogOpen(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={handleSaveList} disabled={!listNome.trim()}>
+            {editingList ? "Salvar" : "Criar"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={addToListOpen} onClose={() => setAddToListOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Adicionar {selectedCustomerIds.size} contato(s) à lista</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField select label="Lista" value={addToListChoice} onChange={(e) => setAddToListChoice(e.target.value)} fullWidth>
+              {(staticLists ?? []).map((list) => (
+                <MenuItem key={list.id} value={list.id}>{list.nome}</MenuItem>
+              ))}
+              <MenuItem value="__new__">+ Nova lista</MenuItem>
+            </TextField>
+            {addToListChoice === "__new__" && (
+              <TextField
+                label="Nome da nova lista"
+                value={newListNameForAdd}
+                onChange={(e) => setNewListNameForAdd(e.target.value)}
+                autoFocus
+                fullWidth
+              />
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddToListOpen(false)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmAddToList}
+            disabled={addToListChoice === "__new__" && !newListNameForAdd.trim()}
+          >
+            Adicionar
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

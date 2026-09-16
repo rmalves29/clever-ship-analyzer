@@ -34,6 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { SEGMENT_TYPES } from "@/lib/crm-mock";
 import { getSegmentsList } from "@/lib/crm-segmentation.functions";
+import { getStaticLists } from "@/lib/crm-static-lists.functions";
 import { listMetaTemplates, saveAutomation, sendAutomationTestMessage } from "@/lib/whatsapp-meta.functions";
 import { previewWhatsappAudience } from "@/lib/whatsapp-audience-preview.functions";
 import { normalizeWhatsappAudienceSelection } from "@/lib/whatsapp-audience-selection";
@@ -396,7 +397,15 @@ export function AutomationDialog({
     queryFn: () => getSegmentsList(),
     enabled: open,
   });
-  const customSegments = (segmentsResult ?? []) as { id: string; nome: string }[];
+  const { data: staticListsResult } = useQuery({
+    queryKey: ["crm-static-lists"],
+    queryFn: () => getStaticLists(),
+    enabled: open,
+  });
+  const customSegments = [
+    ...((segmentsResult ?? []) as { id: string; nome: string }[]),
+    ...(staticListsResult ?? []).map((l) => ({ id: l.id, nome: `📋 ${l.nome}` })),
+  ];
 
   const triggerAudienceSelection = useMemo(() => {
     try {

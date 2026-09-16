@@ -16,6 +16,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { previewWhatsappAudience } from "@/lib/whatsapp-audience-preview.functions";
 import { createAndSendCampaign, listMetaTemplates, getSegmentsList } from "@/lib/whatsapp-meta.functions";
+import { getStaticLists } from "@/lib/crm-static-lists.functions";
 import { extractTemplateBodyTokens } from "@/lib/whatsapp-template-body-tokens";
 import { normalizeWhatsappAudienceSelection } from "@/lib/whatsapp-audience-selection";
 
@@ -71,6 +72,7 @@ function NovaCampanha() {
   const [busy, setBusy] = useState(false);
 
   const { data: segments } = useQuery({ queryKey: ["crm-segments"], queryFn: () => getSegmentsList() });
+  const { data: staticLists } = useQuery({ queryKey: ["crm-static-lists"], queryFn: () => getStaticLists() });
   const { data: templatesResult } = useQuery({ queryKey: ["whatsapp-templates"], queryFn: () => listMetaTemplates() });
 
   const approved: TemplateOption[] = ((templatesResult?.success ? templatesResult.templates : []) as TemplateOption[]).filter(
@@ -85,12 +87,12 @@ function NovaCampanha() {
 
   const selection = useMemo(() => {
     try {
-      const isCustom = (segments ?? []).some((s: any) => s.id === audience);
+      const isCustom = (segments ?? []).some((s: any) => s.id === audience) || (staticLists ?? []).some((l) => l.id === audience);
       return normalizeWhatsappAudienceSelection(isCustom ? "custom" : audience, isCustom ? audience : undefined);
     } catch {
       return null;
     }
-  }, [audience, segments]);
+  }, [audience, segments, staticLists]);
 
   const { data: preview, isFetching: loadingPreview } = useQuery({
     queryKey: ["wa-audience", selection?.segmentType, selection?.segmentId],
@@ -184,6 +186,9 @@ function NovaCampanha() {
                 ))}
                 {(segments ?? []).map((s: any) => (
                   <MenuItem key={s.id} value={s.id}>{s.nome}</MenuItem>
+                ))}
+                {(staticLists ?? []).map((l) => (
+                  <MenuItem key={l.id} value={l.id}>📋 {l.nome}</MenuItem>
                 ))}
               </TextField>
               <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap", mt: 1 }}>

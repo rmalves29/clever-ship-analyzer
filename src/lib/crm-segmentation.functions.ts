@@ -14,6 +14,14 @@ async function getSegmentRules(segmentId?: string): Promise<SegmentRules | null>
   return (data?.regras as SegmentRules | null) ?? null;
 }
 
+async function getListMemberIds(listId?: string): Promise<Set<string> | null> {
+  if (!listId) return null;
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin.from("crm_list_members").select("customer_id").eq("lista_id", listId);
+  if (error) throw error;
+  return new Set((data ?? []).map((row) => row.customer_id));
+}
+
 function updatedAtTime(value: string | null | undefined): number {
   const time = value ? new Date(value).getTime() : 0;
   return Number.isFinite(time) ? time : 0;
@@ -64,14 +72,19 @@ export const getCustomersList = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.object({
     search: z.string().optional(),
     segmentId: z.string().uuid().optional(),
+    listId: z.string().uuid().optional(),
     limit: z.number().int().min(1).max(200).default(50),
     offset: z.number().int().min(0).default(0),
   }).parse(data))
   .handler(async ({ data }) => {
     const { loadCRMSegmentationContext } = await import("./crm-segmentation.server");
-    const [contexts, rules] = await Promise.all([loadCRMSegmentationContext(), getSegmentRules(data.segmentId)]);
+    const [contexts, rules, listMemberIds] = await Promise.all([
+      loadCRMSegmentationContext(),
+      getSegmentRules(data.segmentId),
+      getListMemberIds(data.listId),
+    ]);
     const filtered = contexts
-      .filter((context) => matchesAdvancedSegmentRules(context, rules))
+      .filter((context) => (listMemberIds ? listMemberIds.has(context.customer.id) : matchesAdvancedSegmentRules(context, rules)))
       .filter((context) => customerMatchesSearch(context, data.search))
       .sort((a, b) => updatedAtTime(b.customer.updated_at) - updatedAtTime(a.customer.updated_at));
     const total = filtered.length;
@@ -279,26 +292,22 @@ export const deleteSegment = createServerFn({ method: "POST" })
     return { success: true };
   });
 
-export const getStaticLists = createServerFn({ method: "GET" })
-  .middleware([requireAppAuth])
-  .handler(async () => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin.from("crm_static_lists").select("*").order("criado_em", { ascending: false });
-    if (error) throw error;
-    return data;
-  });
-
 export const exportSegmentCustomers = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({
     segmentId: z.string().uuid().optional(),
+    listId: z.string().uuid().optional(),
     search: z.string().optional(),
   }).parse(data))
   .handler(async ({ data }) => {
     const { loadCRMSegmentationContext } = await import("./crm-segmentation.server");
-    const [contexts, rules] = await Promise.all([loadCRMSegmentationContext(), getSegmentRules(data.segmentId)]);
+    const [contexts, rules, listMemberIds] = await Promise.all([
+      loadCRMSegmentationContext(),
+      getSegmentRules(data.segmentId),
+      getListMemberIds(data.listId),
+    ]);
     const rows = contexts
-      .filter((context) => matchesAdvancedSegmentRules(context, rules))
+      .filter((context) => (listMemberIds ? listMemberIds.has(context.customer.id) : matchesAdvancedSegmentRules(context, rules)))
       .filter((context) => customerMatchesSearch(context, data.search))
       .sort((a, b) => updatedAtTime(b.customer.updated_at) - updatedAtTime(a.customer.updated_at))
       .map(({ customer, metrics }) => ({

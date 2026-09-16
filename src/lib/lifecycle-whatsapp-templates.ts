@@ -52,7 +52,7 @@ const rfmVipInvite = marketingTemplate(
 
 const rfmVipReminder = marketingTemplate(
   "mm_rfm_vip_reforco_v1",
-  "{{1}}, passando para não deixar você perder as novidades que selecionamos com carinho. Quando quiser renovar o look, estamos por aqui 💜",
+  "Oi, {{1}}! Passando para não deixar você perder as novidades que selecionamos com carinho. Quando quiser renovar o look, estamos por aqui 💜",
   ["Mariana"],
   ["{{NOME_CLIENTE}}"],
 );
@@ -66,7 +66,7 @@ const rfmGrowthInvite = marketingTemplate(
 
 const rfmGrowthReminder = marketingTemplate(
   "mm_rfm_crescimento_reforco_v1",
-  "{{1}}, já viu as novidades da Mania de Mulher? Tem peças que podem combinar muito com suas últimas escolhas 💜",
+  "Oi, {{1}}! Já viu as novidades da Mania de Mulher? Tem peças que podem combinar muito com suas últimas escolhas 💜",
   ["Mariana"],
   ["{{NOME_CLIENTE}}"],
 );
@@ -80,7 +80,7 @@ const rfmAttentionInvite = marketingTemplate(
 
 const rfmAttentionReminder = marketingTemplate(
   "mm_rfm_atencao_reforco_v1",
-  "{{1}}, passando para lembrar que sempre tem novidade esperando por você na Mania de Mulher. Vem descobrir seu próximo look 💜",
+  "Oi, {{1}}! Passando para lembrar que sempre tem novidade esperando por você na Mania de Mulher. Vem descobrir seu próximo look 💜",
   ["Mariana"],
   ["{{NOME_CLIENTE}}"],
 );
@@ -94,7 +94,7 @@ const rfmRiskInvite = marketingTemplate(
 
 const rfmRiskReminder = marketingTemplate(
   "mm_rfm_risco_reforco_v1",
-  "{{1}}, este é um lembrete carinhoso: sua próxima peça favorita pode estar esperando por você na Mania de Mulher. Vem conferir as novidades?",
+  "Oi, {{1}}! Este é um lembrete carinhoso: sua próxima peça favorita pode estar esperando por você na Mania de Mulher. Vem conferir as novidades?",
   ["Mariana"],
   ["{{NOME_CLIENTE}}"],
 );
@@ -108,14 +108,14 @@ const rfmReactivationInvite = marketingTemplate(
 
 const rfmReactivationReminder = marketingTemplate(
   "mm_rfm_reativacao_reforco_v1",
-  "{{1}}, passando uma última vez para te convidar a voltar. Quando fizer sentido para você, a Mania de Mulher estará de portas abertas 💜",
+  "Oi, {{1}}! Passando uma última vez para te convidar a voltar. Quando fizer sentido para você, a Mania de Mulher estará de portas abertas 💜",
   ["Mariana"],
   ["{{NOME_CLIENTE}}"],
 );
 
 export const CASHBACK_RELEASED_TEMPLATE = marketingTemplate(
   "mm_cashback_liberado_v1",
-  "Oi, {{1}}! Seu cashback de {{2}} já está liberado 💜 Use o código {{3}} em uma compra a partir de {{4}}, até {{5}}.",
+  "Oi, {{1}}! Seu cashback de {{2}} já está liberado 💜 Use o código {{3}} em uma compra a partir de {{4}}, até {{5}}. Aproveite!",
   ["Mariana", "R$ 25,00", "CASHBACK25", "R$ 100,00", "30/09/2026"],
   [
     "{{NOME_CLIENTE}}",
@@ -142,7 +142,7 @@ export const CASHBACK_REMINDER_TEMPLATE = marketingTemplate(
 
 export const CASHBACK_FINAL_TEMPLATE = marketingTemplate(
   "mm_cashback_ultimo_dia_v1",
-  "Oi, {{1}}! Últimas horas para usar seu cashback de {{2}} 💜 Aplique o código {{3}} em compras a partir de {{4}}, até {{5}}.",
+  "Oi, {{1}}! Últimas horas para usar seu cashback de {{2}} 💜 Aplique o código {{3}} em compras a partir de {{4}}, até {{5}}. Aproveite agora!",
   ["Mariana", "R$ 25,00", "CASHBACK25", "R$ 100,00", "30/09/2026"],
   [
     "{{NOME_CLIENTE}}",

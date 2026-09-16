@@ -25,6 +25,8 @@ describe("modelos de ciclo de vida para a Meta", () => {
       const body = template.components.find((component) => component.type === "BODY")!;
       const validation = validateTemplateVariables(body.text);
       expect(validation.valid, template.name).toBe(true);
+      expect(body.text.trim(), template.name).not.toMatch(/^\{\{\d+\}\}/);
+      expect(body.text.trim(), template.name).not.toMatch(/\{\{\d+\}\}[.!?]?$/);
       expect(body.example.body_text[0]).toHaveLength(validation.indexes.length);
       expect(template.bodyParams).toHaveLength(validation.indexes.length);
       expect(template.bodyParamTokens).toHaveLength(validation.indexes.length);

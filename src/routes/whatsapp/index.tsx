@@ -2,7 +2,15 @@ import { useMemo, useState } from "react";
 import { createFileRoute, createLink, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Plus, RefreshCw, Search, Check, X, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
+import {
+  Plus,
+  RefreshCw,
+  Search,
+  Check,
+  X,
+  ChevronRight,
+  Calendar as CalendarIcon,
+} from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
@@ -27,9 +35,16 @@ export const Route = createFileRoute("/whatsapp/")({
   head: () => ({
     meta: [
       { title: "Campanhas de WhatsApp | CRM Insights" },
-      { name: "description", content: "Lista única de campanhas de WhatsApp com envio, entrega, leitura e falhas em tempo real." },
+      {
+        name: "description",
+        content:
+          "Campanhas manuais de WhatsApp com envio, entrega, leitura, vendas e ROAS em tempo real.",
+      },
       { property: "og:title", content: "Campanhas de WhatsApp | CRM Insights" },
-      { property: "og:description", content: "Acompanhe e aprove suas campanhas de WhatsApp em uma única tela." },
+      {
+        property: "og:description",
+        content: "Acompanhe e aprove suas campanhas de WhatsApp em uma única tela.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -81,12 +96,20 @@ function campaignDate(c: WaCampaignListRow): Date {
   return new Date(c.sentAt ?? c.createdAt);
 }
 
-function inPeriod(c: WaCampaignListRow, period: DatePeriodKey, range: DateRange | undefined): boolean {
+function inPeriod(
+  c: WaCampaignListRow,
+  period: DatePeriodKey,
+  range: DateRange | undefined,
+): boolean {
   if (period === "tudo") return true;
   const d = campaignDate(c);
   const now = new Date();
   if (period === "dia") {
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+    return (
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate()
+    );
   }
   if (period === "7d") {
     const start = new Date(now);
@@ -94,7 +117,8 @@ function inPeriod(c: WaCampaignListRow, period: DatePeriodKey, range: DateRange 
     start.setHours(0, 0, 0, 0);
     return d >= start;
   }
-  if (period === "mes") return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  if (period === "mes")
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
   if (period === "ano") return d.getFullYear() === now.getFullYear();
   if (range?.from) {
     const end = range.to ?? range.from;
@@ -106,7 +130,11 @@ function inPeriod(c: WaCampaignListRow, period: DatePeriodKey, range: DateRange 
 }
 
 function money(value: number): string {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+  return value.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 0,
+  });
 }
 
 function pct(part: number, total: number): string {
@@ -119,12 +147,30 @@ function roasLabel(revenue: number, custo: number): string {
   return `${(revenue / custo).toFixed(1)}x`;
 }
 
-function Metric({ label, value, hint }: { label: string; value: string; hint?: string | undefined }) {
+function Metric({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string | undefined;
+}) {
   return (
     <Box sx={{ textAlign: "right" }}>
-      <Typography variant="caption" color="text.secondary" sx={{ display: { xl: "none" }, textTransform: "uppercase", fontSize: 11 }}>{label}</Typography>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ display: { xl: "none" }, textTransform: "uppercase", fontSize: 11 }}
+      >
+        {label}
+      </Typography>
       <Typography sx={{ fontWeight: 600, lineHeight: 1.2 }}>{value}</Typography>
-      {hint && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>{hint}</Typography>}
+      {hint && (
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
+          {hint}
+        </Typography>
+      )}
     </Box>
   );
 }
@@ -151,7 +197,8 @@ function CampaignsPage() {
     () =>
       list.filter((c) => {
         if (filter !== "todas" && c.status !== filter) return false;
-        if (search.trim() && !c.name.toLowerCase().includes(search.trim().toLowerCase())) return false;
+        if (search.trim() && !c.name.toLowerCase().includes(search.trim().toLowerCase()))
+          return false;
         if (!inPeriod(c, datePeriod, range)) return false;
         return true;
       }),
@@ -208,19 +255,58 @@ function CampaignsPage() {
 
   return (
     <Stack spacing={2.5}>
-      <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(4, 1fr)", lg: "repeat(8, 1fr)" } }}>
-        <Box sx={{ gridColumn: { sm: "span 2" }, border: "1px solid", borderColor: "success.light", bgcolor: "success.50", borderRadius: 3, p: 2 }}>
-          <Typography variant="caption" sx={{ fontWeight: 600, color: "success.dark" }}>Valor vendido (30 dias após o envio)</Typography>
-          <Typography variant="h5" sx={{ fontWeight: 700, color: "success.dark", mt: 0.5 }}>{money(totals.revenue)}</Typography>
-          <Typography variant="caption" color="text.secondary">{totals.orders.toLocaleString("pt-BR")} pedidos atribuídos</Typography>
+      <Box>
+        <Typography variant="h6" sx={{ fontWeight: 700 }}>
+          Campanhas
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          Somente campanhas manuais. Os envios e resultados das réguas ficam separados na página
+          Automações.
+        </Typography>
+      </Box>
+
+      <Box
+        sx={{
+          display: "grid",
+          gap: 1.5,
+          gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(4, 1fr)", lg: "repeat(8, 1fr)" },
+        }}
+      >
+        <Box
+          sx={{
+            gridColumn: { sm: "span 2" },
+            border: "1px solid",
+            borderColor: "success.light",
+            bgcolor: "success.50",
+            borderRadius: 3,
+            p: 2,
+          }}
+        >
+          <Typography variant="caption" sx={{ fontWeight: 600, color: "success.dark" }}>
+            Valor vendido (30 dias após o envio)
+          </Typography>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: "success.dark", mt: 0.5 }}>
+            {money(totals.revenue)}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {totals.orders.toLocaleString("pt-BR")} pedidos atribuídos
+          </Typography>
         </Box>
         <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
-          <Typography variant="caption" color="text.secondary">Custo estimado</Typography>
-          <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>{money(totals.custo)}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Custo estimado
+          </Typography>
+          <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>
+            {money(totals.custo)}
+          </Typography>
         </Box>
         <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
-          <Typography variant="caption" color="text.secondary">ROAS</Typography>
-          <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>{totalRoas !== null ? `${totalRoas.toFixed(1)}x` : "—"}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            ROAS
+          </Typography>
+          <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>
+            {totalRoas !== null ? `${totalRoas.toFixed(1)}x` : "—"}
+          </Typography>
         </Box>
         {[
           { label: "Enviadas", value: totals.sent },
@@ -228,9 +314,16 @@ function CampaignsPage() {
           { label: "Lidas", value: totals.read },
           { label: "Falhas", value: totals.failed },
         ].map((card) => (
-          <Box key={card.label} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
-            <Typography variant="caption" color="text.secondary">{card.label}</Typography>
-            <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>{card.value.toLocaleString("pt-BR")}</Typography>
+          <Box
+            key={card.label}
+            sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}
+          >
+            <Typography variant="caption" color="text.secondary">
+              {card.label}
+            </Typography>
+            <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>
+              {card.value.toLocaleString("pt-BR")}
+            </Typography>
           </Box>
         ))}
       </Box>
@@ -242,9 +335,27 @@ function CampaignsPage() {
           placeholder="Buscar campanha…"
           size="small"
           sx={{ minWidth: 220, flex: 1 }}
-          slotProps={{ input: { startAdornment: <InputAdornment position="start"><Search size={16} /></InputAdornment> } }}
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <Search size={16} />
+                </InputAdornment>
+              ),
+            },
+          }}
         />
-        <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", border: "1px solid", borderColor: "divider", borderRadius: 3, p: 0.5 }}>
+        <Stack
+          direction="row"
+          spacing={0.5}
+          sx={{
+            flexWrap: "wrap",
+            border: "1px solid",
+            borderColor: "divider",
+            borderRadius: 3,
+            p: 0.5,
+          }}
+        >
           {FILTERS.map((f) => (
             <Button
               key={f.value}
@@ -258,7 +369,17 @@ function CampaignsPage() {
             </Button>
           ))}
         </Stack>
-        <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", border: "1px solid", borderColor: "divider", borderRadius: 3, p: 0.5 }}>
+        <Stack
+          direction="row"
+          spacing={0.5}
+          sx={{
+            flexWrap: "wrap",
+            border: "1px solid",
+            borderColor: "divider",
+            borderRadius: 3,
+            p: 0.5,
+          }}
+        >
           {DATE_PERIODS.map((p) => (
             <Button
               key={p.key}
@@ -298,40 +419,119 @@ function CampaignsPage() {
             </PopoverContent>
           </Popover>
         )}
-        <Button variant="outlined" startIcon={<RefreshCw size={14} className={isFetching ? "animate-spin" : undefined} />} onClick={() => refetch()} disabled={isFetching}>
+        <Button
+          variant="outlined"
+          startIcon={<RefreshCw size={14} className={isFetching ? "animate-spin" : undefined} />}
+          onClick={() => refetch()}
+          disabled={isFetching}
+        >
           Atualizar
         </Button>
-        <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => navigate({ to: "/whatsapp/nova" })}>
+        <Button
+          variant="contained"
+          startIcon={<Plus size={16} />}
+          onClick={() => navigate({ to: "/whatsapp/nova" })}
+        >
           Nova campanha
         </Button>
       </Stack>
 
       {isLoading ? (
-        <Typography variant="body2" color="text.secondary">Carregando campanhas…</Typography>
+        <Typography variant="body2" color="text.secondary">
+          Carregando campanhas…
+        </Typography>
       ) : filtered.length === 0 ? (
-        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 5, textAlign: "center" }}>
+        <Box
+          sx={{
+            border: "1px solid",
+            borderColor: "divider",
+            borderRadius: 3,
+            p: 5,
+            textAlign: "center",
+          }}
+        >
           <Typography sx={{ fontWeight: 600 }}>Nenhuma campanha aqui.</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Crie a primeira e acompanhe entrega e leitura em tempo real.</Typography>
-          <Button variant="contained" startIcon={<Plus size={16} />} sx={{ mt: 2 }} onClick={() => navigate({ to: "/whatsapp/nova" })}>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Crie a primeira e acompanhe entrega e leitura em tempo real.
+          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<Plus size={16} />}
+            sx={{ mt: 2 }}
+            onClick={() => navigate({ to: "/whatsapp/nova" })}
+          >
             Nova campanha
           </Button>
         </Box>
       ) : (
-        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, overflow: "hidden" }}>
+        <Box
+          sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, overflow: "hidden" }}
+        >
           <Stack
             direction="row"
             spacing={2}
-            sx={{ display: { xs: "none", xl: "flex" }, alignItems: "center", borderBottom: "1px solid", borderColor: "divider", bgcolor: "action.hover", px: 2, py: 1.25 }}
+            sx={{
+              display: { xs: "none", xl: "flex" },
+              alignItems: "center",
+              borderBottom: "1px solid",
+              borderColor: "divider",
+              bgcolor: "action.hover",
+              px: 2,
+              py: 1.25,
+            }}
           >
-            <Box sx={{ minWidth: 220, flex: 1 }}><Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", color: "text.secondary" }}>Campanha</Typography></Box>
-            <Box sx={{ width: 560, flexShrink: 0, display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 1.5, textAlign: "right" }}>
+            <Box sx={{ minWidth: 220, flex: 1 }}>
+              <Typography
+                variant="caption"
+                sx={{ fontWeight: 700, textTransform: "uppercase", color: "text.secondary" }}
+              >
+                Campanha
+              </Typography>
+            </Box>
+            <Box
+              sx={{
+                width: 560,
+                flexShrink: 0,
+                display: "grid",
+                gridTemplateColumns: "repeat(5, 1fr)",
+                gap: 1.5,
+                textAlign: "right",
+              }}
+            >
               {["Público", "Enviadas", "Entregues", "Lidas", "Falhas"].map((label) => (
-                <Typography key={label} variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", color: "text.secondary" }}>{label}</Typography>
+                <Typography
+                  key={label}
+                  variant="caption"
+                  sx={{ fontWeight: 700, textTransform: "uppercase", color: "text.secondary" }}
+                >
+                  {label}
+                </Typography>
               ))}
             </Box>
-            <Box sx={{ width: 130, flexShrink: 0, textAlign: "right" }}><Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", color: "text.secondary" }}>Valor vendido</Typography></Box>
-            <Box sx={{ width: 100, flexShrink: 0, textAlign: "right" }}><Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", color: "text.secondary" }}>Custo</Typography></Box>
-            <Box sx={{ width: 80, flexShrink: 0, textAlign: "right" }}><Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", color: "text.secondary" }}>ROAS</Typography></Box>
+            <Box sx={{ width: 130, flexShrink: 0, textAlign: "right" }}>
+              <Typography
+                variant="caption"
+                sx={{ fontWeight: 700, textTransform: "uppercase", color: "text.secondary" }}
+              >
+                Valor vendido
+              </Typography>
+            </Box>
+            <Box sx={{ width: 100, flexShrink: 0, textAlign: "right" }}>
+              <Typography
+                variant="caption"
+                sx={{ fontWeight: 700, textTransform: "uppercase", color: "text.secondary" }}
+              >
+                Custo
+              </Typography>
+            </Box>
+            <Box sx={{ width: 80, flexShrink: 0, textAlign: "right" }}>
+              <Typography
+                variant="caption"
+                sx={{ fontWeight: 700, textTransform: "uppercase", color: "text.secondary" }}
+              >
+                ROAS
+              </Typography>
+            </Box>
             <Box sx={{ width: 120, flexShrink: 0 }} />
           </Stack>
 
@@ -341,63 +541,178 @@ function CampaignsPage() {
                 key={c.id}
                 direction="row"
                 spacing={2}
-                sx={{ flexWrap: "wrap", alignItems: "center", px: 2, py: 1.75, "&:hover": { bgcolor: "action.hover" } }}
+                sx={{
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  px: 2,
+                  py: 1.75,
+                  "&:hover": { bgcolor: "action.hover" },
+                }}
               >
                 <Box sx={{ minWidth: 220, flex: 1 }}>
-                  <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
-                    <LinkTypography to="/whatsapp/$campaignId" params={{ campaignId: c.id }} sx={{ fontWeight: 600, textDecoration: "none", color: "text.primary", "&:hover": { textDecoration: "underline" } }}>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ flexWrap: "wrap", alignItems: "center" }}
+                  >
+                    <LinkTypography
+                      to="/whatsapp/$campaignId"
+                      params={{ campaignId: c.id }}
+                      sx={{
+                        fontWeight: 600,
+                        textDecoration: "none",
+                        color: "text.primary",
+                        "&:hover": { textDecoration: "underline" },
+                      }}
+                    >
                       {c.name}
                     </LinkTypography>
-                    <Chip size="small" color={STATUS_COLOR[c.status] ?? "default"} label={STATUS_LABEL[c.status] ?? c.status} />
-                    {c.origin === "automacao" && <Chip size="small" variant="outlined" label="Automação" />}
+                    <Chip
+                      size="small"
+                      color={STATUS_COLOR[c.status] ?? "default"}
+                      label={STATUS_LABEL[c.status] ?? c.status}
+                    />
                     {c.queuePaused && <Chip size="small" variant="outlined" label="Pausada" />}
                   </Stack>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: "block", mt: 0.5 }}
+                  >
                     {c.audienceLabel ?? "Público"} · modelo {c.templateName || "—"} ·{" "}
-                    {new Date(c.sentAt ?? c.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                    {new Date(c.sentAt ?? c.createdAt).toLocaleString("pt-BR", {
+                      dateStyle: "short",
+                      timeStyle: "short",
+                    })}
                   </Typography>
                 </Box>
 
-                <Box sx={{ width: { xs: "100%", xl: 560 }, flexShrink: 0, display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 1.5, textAlign: "right" }}>
+                <Box
+                  sx={{
+                    width: { xs: "100%", xl: 560 },
+                    flexShrink: 0,
+                    display: "grid",
+                    gridTemplateColumns: "repeat(5, 1fr)",
+                    gap: 1.5,
+                    textAlign: "right",
+                  }}
+                >
                   <Metric label="Público" value={c.total.toLocaleString("pt-BR")} />
-                  <Metric label="Enviadas" value={c.sent.toLocaleString("pt-BR")} hint={pct(c.sent, c.total)} />
-                  <Metric label="Entregues" value={c.delivered.toLocaleString("pt-BR")} hint={pct(c.delivered, c.sent)} />
-                  <Metric label="Lidas" value={c.read.toLocaleString("pt-BR")} hint={pct(c.read, c.delivered)} />
-                  <Metric label="Falhas" value={c.failed.toLocaleString("pt-BR")} hint={c.pending ? `${c.pending} na fila` : undefined} />
+                  <Metric
+                    label="Enviadas"
+                    value={c.sent.toLocaleString("pt-BR")}
+                    hint={pct(c.sent, c.total)}
+                  />
+                  <Metric
+                    label="Entregues"
+                    value={c.delivered.toLocaleString("pt-BR")}
+                    hint={pct(c.delivered, c.sent)}
+                  />
+                  <Metric
+                    label="Lidas"
+                    value={c.read.toLocaleString("pt-BR")}
+                    hint={pct(c.read, c.delivered)}
+                  />
+                  <Metric
+                    label="Falhas"
+                    value={c.failed.toLocaleString("pt-BR")}
+                    hint={c.pending ? `${c.pending} na fila` : undefined}
+                  />
                 </Box>
 
                 <Box sx={{ width: 130, flexShrink: 0, textAlign: "right" }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: { xl: "none" }, textTransform: "uppercase", fontSize: 11 }}>Valor vendido</Typography>
-                  <Typography sx={{ fontWeight: 600, lineHeight: 1.2, color: c.revenue > 0 ? "success.main" : "text.secondary" }}>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: { xl: "none" }, textTransform: "uppercase", fontSize: 11 }}
+                  >
+                    Valor vendido
+                  </Typography>
+                  <Typography
+                    sx={{
+                      fontWeight: 600,
+                      lineHeight: 1.2,
+                      color: c.revenue > 0 ? "success.main" : "text.secondary",
+                    }}
+                  >
                     {c.revenue > 0 ? money(c.revenue) : "—"}
                   </Typography>
-                  {c.orders > 0 && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>{c.orders} pedidos</Typography>}
+                  {c.orders > 0 && (
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
+                      {c.orders} pedidos
+                    </Typography>
+                  )}
                 </Box>
 
                 <Box sx={{ width: 100, flexShrink: 0, textAlign: "right" }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: { xl: "none" }, textTransform: "uppercase", fontSize: 11 }}>Custo</Typography>
-                  <Typography variant="body2" color="text.secondary">{c.custo > 0 ? money(c.custo) : "—"}</Typography>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: { xl: "none" }, textTransform: "uppercase", fontSize: 11 }}
+                  >
+                    Custo
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {c.custo > 0 ? money(c.custo) : "—"}
+                  </Typography>
                 </Box>
 
                 <Box sx={{ width: 80, flexShrink: 0, textAlign: "right" }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: { xl: "none" }, textTransform: "uppercase", fontSize: 11 }}>ROAS</Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: c.custo > 0 && c.revenue > c.custo ? "success.main" : "text.secondary" }}>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: { xl: "none" }, textTransform: "uppercase", fontSize: 11 }}
+                  >
+                    ROAS
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 600,
+                      color: c.custo > 0 && c.revenue > c.custo ? "success.main" : "text.secondary",
+                    }}
+                  >
                     {roasLabel(c.revenue, c.custo)}
                   </Typography>
                 </Box>
 
-                <Stack direction="row" spacing={1} sx={{ minWidth: 120, flexShrink: 0, alignItems: "center", justifyContent: "flex-end" }}>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{
+                    minWidth: 120,
+                    flexShrink: 0,
+                    alignItems: "center",
+                    justifyContent: "flex-end",
+                  }}
+                >
                   {c.status === "aguardando_aprovacao" && (
                     <>
-                      <Button size="small" variant="contained" startIcon={<Check size={14} />} disabled={busyId === c.id} onClick={() => approve(c.id)}>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        startIcon={<Check size={14} />}
+                        disabled={busyId === c.id}
+                        onClick={() => approve(c.id)}
+                      >
                         Aprovar
                       </Button>
-                      <Button size="small" variant="outlined" startIcon={<X size={14} />} disabled={busyId === c.id} onClick={() => reject(c.id)}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<X size={14} />}
+                        disabled={busyId === c.id}
+                        onClick={() => reject(c.id)}
+                      >
                         Rejeitar
                       </Button>
                     </>
                   )}
-                  <LinkIconButton to="/whatsapp/$campaignId" params={{ campaignId: c.id }} size="small">
+                  <LinkIconButton
+                    to="/whatsapp/$campaignId"
+                    params={{ campaignId: c.id }}
+                    size="small"
+                  >
                     <ChevronRight size={16} />
                   </LinkIconButton>
                 </Stack>

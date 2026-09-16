@@ -41,15 +41,23 @@ export const WA_REVENUE_WINDOW_DAYS = 30;
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin as unknown as { from: (t: string) => any; rpc: (fn: string, args?: any) => any };
+  return supabaseAdmin as unknown as {
+    from: (t: string) => any;
+    rpc: (fn: string, args?: any) => any;
+  };
 }
 
 async function revenueByCampaign(supabaseAdmin: { rpc: (fn: string, args?: any) => any }) {
   const map = new Map<string, { revenue: number; orders: number }>();
-  const { data, error } = await supabaseAdmin.rpc("wa_campaign_revenue", { p_window_days: WA_REVENUE_WINDOW_DAYS });
+  const { data, error } = await supabaseAdmin.rpc("wa_campaign_revenue", {
+    p_window_days: WA_REVENUE_WINDOW_DAYS,
+  });
   if (error) return map;
-  for (const row of ((data ?? []) as any[])) {
-    map.set(row.campaign_id, { revenue: Number(row.revenue ?? 0), orders: Number(row.orders ?? 0) });
+  for (const row of (data ?? []) as any[]) {
+    map.set(row.campaign_id, {
+      revenue: Number(row.revenue ?? 0),
+      orders: Number(row.orders ?? 0),
+    });
   }
   return map;
 }
@@ -66,7 +74,8 @@ function mapRow(
   // Utilidade dentro da janela de atendimento de 24h (cliente já tinha escrito antes) são
   // grátis na Meta — essa nuance não entra aqui, então o custo de campanhas de Utilidade pode
   // ficar um pouco acima do real.
-  const custo = sent * (messageType === "utility" ? costPerMessage.utility : costPerMessage.marketing);
+  const custo =
+    sent * (messageType === "utility" ? costPerMessage.utility : costPerMessage.marketing);
   return {
     id: row.id,
     name: row.name,
@@ -101,6 +110,10 @@ export const listWaCampaigns = createServerFn({ method: "GET" })
     const { data, error } = await supabaseAdmin
       .from("wa_campaigns")
       .select("*")
+      // Esta página é exclusiva de campanhas. Envios de réguas e fluxos conversacionais têm
+      // relatórios próprios em Automações e não podem contaminar estes totais.
+      .is("automation_id", null)
+      .is("conversation_flow_id", null)
       .order("created_at", { ascending: false })
       .limit(300);
     if (error) throw new Error(error.message);
@@ -111,23 +124,40 @@ export const listWaCampaigns = createServerFn({ method: "GET" })
       .from("wa_jobs")
       .select("campaign_id")
       .in("status", ["queued", "retry_wait", "sending"])
-      .in("campaign_id", rows.map((r) => r.id));
+      .in(
+        "campaign_id",
+        rows.map((r) => r.id),
+      );
     const pendingByCampaign = new Map<string, number>();
-    for (const job of ((jobs ?? []) as any[])) {
+    for (const job of (jobs ?? []) as any[]) {
       pendingByCampaign.set(job.campaign_id, (pendingByCampaign.get(job.campaign_id) ?? 0) + 1);
     }
-    const [revenue, settings] = await Promise.all([revenueByCampaign(supabaseAdmin), loadSettings()]);
-    const costPerMessage = { marketing: settings.costMarketing ?? 0, utility: settings.costUtility ?? 0 };
-    return rows.map((row) => mapRow(row, pendingByCampaign.get(row.id) ?? 0, revenue.get(row.id), costPerMessage));
+    const [revenue, settings] = await Promise.all([
+      revenueByCampaign(supabaseAdmin),
+      loadSettings(),
+    ]);
+    const costPerMessage = {
+      marketing: settings.costMarketing ?? 0,
+      utility: settings.costUtility ?? 0,
+    };
+    return rows.map((row) =>
+      mapRow(row, pendingByCampaign.get(row.id) ?? 0, revenue.get(row.id), costPerMessage),
+    );
   });
 
 /** Campanha aberta: cabeçalho + destinatários reais com motivo de falha. */
 export const getWaCampaign = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
-  .validator((data: unknown) => z.object({ campaignId: z.string().uuid(), status: z.string().optional() }).parse(data))
+  .validator((data: unknown) =>
+    z.object({ campaignId: z.string().uuid(), status: z.string().optional() }).parse(data),
+  )
   .handler(async ({ data }) => {
     const supabaseAdmin = await admin();
-    const { data: row, error } = await supabaseAdmin.from("wa_campaigns").select("*").eq("id", data.campaignId).maybeSingle();
+    const { data: row, error } = await supabaseAdmin
+      .from("wa_campaigns")
+      .select("*")
+      .eq("id", data.campaignId)
+      .maybeSingle();
     if (error) throw new Error(error.message);
     if (!row) throw new Error("Campanha não encontrada.");
 
@@ -146,8 +176,14 @@ export const getWaCampaign = createServerFn({ method: "POST" })
       .eq("campaign_id", data.campaignId)
       .in("status", ["queued", "retry_wait", "sending"]);
 
-    const [revenueMap, settings] = await Promise.all([revenueByCampaign(supabaseAdmin), loadSettings()]);
-    const costPerMessage = { marketing: settings.costMarketing ?? 0, utility: settings.costUtility ?? 0 };
+    const [revenueMap, settings] = await Promise.all([
+      revenueByCampaign(supabaseAdmin),
+      loadSettings(),
+    ]);
+    const costPerMessage = {
+      marketing: settings.costMarketing ?? 0,
+      utility: settings.costUtility ?? 0,
+    };
 
     return {
       campaign: mapRow(row, pending ?? 0, revenueMap.get(row.id), costPerMessage),
@@ -173,12 +209,19 @@ export const getWaCampaign = createServerFn({ method: "POST" })
 export const waCampaignAction = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) =>
-    z.object({ campaignId: z.string().uuid(), action: z.enum(["retry", "cancel", "pause", "resume", "refresh"]) }).parse(data),
+    z
+      .object({
+        campaignId: z.string().uuid(),
+        action: z.enum(["retry", "cancel", "pause", "resume", "refresh"]),
+      })
+      .parse(data),
   )
   .handler(async ({ data }) => {
     const engine = await import("./wa-campaigns.server");
-    if (data.action === "retry") return { ...(await engine.retryFailedRecipients(data.campaignId)), success: true as const };
-    if (data.action === "cancel") return { ...(await engine.cancelCampaignQueue(data.campaignId)), success: true as const };
+    if (data.action === "retry")
+      return { ...(await engine.retryFailedRecipients(data.campaignId)), success: true as const };
+    if (data.action === "cancel")
+      return { ...(await engine.cancelCampaignQueue(data.campaignId)), success: true as const };
     if (data.action === "refresh") {
       await engine.refreshCampaignStatus(data.campaignId);
       return { success: true as const };

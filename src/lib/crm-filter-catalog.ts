@@ -351,23 +351,43 @@ export function validateCRMFilterCondition(condition: unknown): string | null {
 
 export function validateSegmentRulesPayload(rules: unknown): { valid: boolean; errors: string[] } {
   if (!rules || typeof rules !== "object") return { valid: false, errors: ["Regras do segmento são inválidas."] };
-  const groups = (rules as { groups?: unknown }).groups;
+  const payload = rules as { groups?: unknown; excludeGroups?: unknown };
+  const groups = payload.groups;
   if (!Array.isArray(groups)) return { valid: false, errors: ["Regras do segmento precisam conter grupos."] };
   const errors: string[] = [];
-  groups.forEach((group, groupIndex) => {
+
+  const validateGroups = (rawGroups: unknown[], label: string) => rawGroups.forEach((group, groupIndex) => {
     if (!group || typeof group !== "object") {
-      errors.push(`Grupo ${groupIndex + 1} inválido.`);
+      errors.push(`${label} ${groupIndex + 1} é inválido.`);
       return;
     }
     const conditions = (group as { conditions?: unknown }).conditions;
     if (!Array.isArray(conditions)) {
-      errors.push(`Grupo ${groupIndex + 1} não possui condições válidas.`);
+      errors.push(`${label} ${groupIndex + 1} não possui condições válidas.`);
       return;
     }
     conditions.forEach((condition, conditionIndex) => {
       const error = validateCRMFilterCondition(condition);
-      if (error) errors.push(`Grupo ${groupIndex + 1}, filtro ${conditionIndex + 1}: ${error}`);
+      if (error) errors.push(`${label} ${groupIndex + 1}, filtro ${conditionIndex + 1}: ${error}`);
     });
   });
+
+  validateGroups(groups, "Grupo de inclusão");
+
+  const includeConditionCount = groups.reduce((total, group) => {
+    if (!group || typeof group !== "object") return total;
+    const conditions = (group as { conditions?: unknown }).conditions;
+    return total + (Array.isArray(conditions) ? conditions.length : 0);
+  }, 0);
+  if (includeConditionCount === 0) errors.push("Adicione pelo menos um filtro de inclusão ao segmento.");
+
+  if (payload.excludeGroups !== undefined) {
+    if (!Array.isArray(payload.excludeGroups)) {
+      errors.push("As exclusões do segmento precisam conter grupos válidos.");
+    } else {
+      validateGroups(payload.excludeGroups, "Grupo de exclusão");
+    }
+  }
+
   return { valid: errors.length === 0, errors };
 }

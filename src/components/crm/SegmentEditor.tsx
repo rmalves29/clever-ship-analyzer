@@ -80,6 +80,8 @@ type FilterOptions = {
 };
 type AudiencePreview = {
   count: number;
+  includedCount: number;
+  excludedCount: number;
   totalContacts: number;
   sample: Array<{ id: string; name: string; email: string | null }>;
 };
@@ -284,7 +286,14 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
   const loadFilterOptions = useServerFn(getCRMFilterOptions);
   const [nome, setNome] = useState(initialData?.nome || "");
   const [descricao, setDescricao] = useState(initialData?.descricao || "");
-  const [groups, setGroups] = useState<RuleGroup[]>(initialData?.regras?.groups || [{ id: "1", type: "AND", conditions: [] }]);
+  const [groups, setGroups] = useState<RuleGroup[]>(
+    Array.isArray(initialData?.regras?.groups) && initialData.regras.groups.length > 0
+      ? initialData.regras.groups
+      : [{ id: "1", type: "AND", conditions: [] }],
+  );
+  const [excludeGroups, setExcludeGroups] = useState<RuleGroup[]>(
+    Array.isArray(initialData?.regras?.excludeGroups) ? initialData.regras.excludeGroups : [],
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [filterOptions, setFilterOptions] = useState<FilterOptions>(EMPTY_FILTER_OPTIONS);
   const [filterSearch, setFilterSearch] = useState("");
@@ -303,11 +312,12 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
   }, []);
 
   useEffect(() => {
-    const conditions = groups.flatMap((group) => group.conditions);
-    if (conditions.length === 0) {
+    const includeConditions = groups.flatMap((group) => group.conditions);
+    const conditions = [...includeConditions, ...excludeGroups.flatMap((group) => group.conditions)];
+    if (includeConditions.length === 0) {
       setPreview(null);
       setPreviewLoading(false);
-      setPreviewMessage("Adicione filtros válidos para calcular a audiência.");
+      setPreviewMessage("Adicione pelo menos um filtro de inclusão para calcular a audiência.");
       return;
     }
     const invalid = conditions.find((condition) => validateCRMFilterCondition(condition));
@@ -322,7 +332,7 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
     setPreviewMessage("Calculando audiência...");
     let active = true;
     const timer = window.setTimeout(() => {
-      void runPreview({ data: { regras: { groups }, sampleSize: 5 } })
+      void runPreview({ data: { regras: { groups, excludeGroups }, sampleSize: 5 } })
         .then((result) => {
           if (!active) return;
           setPreview(result as AudiencePreview);
@@ -340,7 +350,7 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [groups]);
+  }, [groups, excludeGroups]);
 
   const closeAddFilterMenu = () => {
     setAddFilterAnchor(null);
@@ -349,7 +359,7 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
   };
 
   const addCondition = (groupId: string, category: CRMFilterCategory, field: CRMFilterField) => {
-    setGroups((prev) => prev.map((group) => group.id !== groupId ? group : ({
+    const addToMatchingGroup = (prev: RuleGroup[]) => prev.map((group) => group.id !== groupId ? group : ({
       ...group,
       conditions: [...group.conditions, {
         id: crypto.randomUUID(),
@@ -359,17 +369,38 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
         operator: defaultOperatorForField(field),
         value: initialValueForField(field),
       }],
-    })));
+    }));
+    setGroups(addToMatchingGroup);
+    setExcludeGroups(addToMatchingGroup);
     closeAddFilterMenu();
   };
 
-  const removeCondition = (groupId: string, conditionId: string) => setGroups((prev) => prev.map((group) =>
-    group.id === groupId ? { ...group, conditions: group.conditions.filter((condition) => condition.id !== conditionId) } : group,
-  ));
+  const removeCondition = (groupId: string, conditionId: string) => {
+    const removeFromMatchingGroup = (prev: RuleGroup[]) => prev.map((group) =>
+      group.id === groupId ? { ...group, conditions: group.conditions.filter((condition) => condition.id !== conditionId) } : group,
+    );
+    setGroups(removeFromMatchingGroup);
+    setExcludeGroups(removeFromMatchingGroup);
+  };
 
-  const updateCondition = (groupId: string, conditionId: string, patch: Partial<RuleCondition>) => setGroups((prev) => prev.map((group) =>
-    group.id === groupId ? { ...group, conditions: group.conditions.map((condition) => condition.id === conditionId ? { ...condition, ...patch } : condition) } : group,
-  ));
+  const updateCondition = (groupId: string, conditionId: string, patch: Partial<RuleCondition>) => {
+    const updateMatchingGroup = (prev: RuleGroup[]) => prev.map((group) =>
+      group.id === groupId ? { ...group, conditions: group.conditions.map((condition) => condition.id === conditionId ? { ...condition, ...patch } : condition) } : group,
+    );
+    setGroups(updateMatchingGroup);
+    setExcludeGroups(updateMatchingGroup);
+  };
+
+  const removeRuleGroup = (groupId: string, exclusion: boolean) => {
+    if (exclusion) {
+      setExcludeGroups((prev) => prev.filter((group) => group.id !== groupId));
+      return;
+    }
+    setGroups((prev) => {
+      const next = prev.filter((group) => group.id !== groupId);
+      return next.length > 0 ? next : [{ id: crypto.randomUUID(), type: "AND", conditions: [] }];
+    });
+  };
 
   const applyTemplate = (templateId: string) => {
     const template = CRM_SEGMENT_TEMPLATES.find((item) => item.id === templateId);
@@ -389,6 +420,7 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
       }];
     });
     setGroups([{ id: crypto.randomUUID(), type: "AND", conditions }]);
+    setExcludeGroups([]);
     setNome(template.name);
     setDescricao(template.description);
     toast.success("Modelo aplicado. Você pode ajustar os filtros antes de salvar.");
@@ -396,8 +428,9 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
 
   const handleSave = async () => {
     if (!nome.trim()) return void toast.error("Dê um nome ao segmento.");
-    const conditions = groups.flatMap((group) => group.conditions);
-    if (conditions.length === 0) return void toast.error("Adicione pelo menos um filtro ao segmento.");
+    const includeConditions = groups.flatMap((group) => group.conditions);
+    const conditions = [...includeConditions, ...excludeGroups.flatMap((group) => group.conditions)];
+    if (includeConditions.length === 0) return void toast.error("Adicione pelo menos um filtro de inclusão ao segmento.");
     if (conditions.some((condition) => !isSupportedCRMFilter(condition.field))) {
       return void toast.error("Este segmento possui filtro antigo sem suporte. Remova o filtro marcado antes de salvar.");
     }
@@ -406,7 +439,7 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
 
     setIsSaving(true);
     try {
-      await runSave({ data: { id: initialData?.id, nome: nome.trim(), descricao: descricao.trim(), regras: { groups } } });
+      await runSave({ data: { id: initialData?.id, nome: nome.trim(), descricao: descricao.trim(), regras: { groups, excludeGroups } } });
       toast.success(initialData?.id ? "Segmento atualizado com sucesso!" : "Segmento criado com sucesso!");
       onSave();
     } catch (err: any) {
@@ -729,6 +762,132 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
         .filter(({ category, field }) => normalizeSearch(`${category.label} ${field.label} ${field.description ?? ""} ${field.id}`).includes(searchTerm))
     : [];
 
+  const renderRuleGroups = (ruleGroups: RuleGroup[], exclusion: boolean) => (
+    <Stack spacing={3}>
+      {ruleGroups.map((group, groupIndex) => (
+        <Box key={group.id} sx={{ position: "relative" }}>
+          {groupIndex > 0 && (
+            <Stack direction="row" sx={{ justifyContent: "center", position: "relative", mb: 2 }}>
+              <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center" }}>
+                <Box sx={{ width: "100%", borderTop: "1px solid", borderColor: exclusion ? "error.light" : "divider" }} />
+              </Box>
+              <Chip
+                label={exclusion ? "OU EXCLUIR TAMBÉM" : "OU"}
+                color={exclusion ? "error" : "primary"}
+                sx={{ position: "relative", zIndex: 1, px: 1.5 }}
+              />
+            </Stack>
+          )}
+          <Box sx={{ border: "1px solid", borderColor: exclusion ? "error.light" : "divider", borderRadius: 2, bgcolor: exclusion ? "error.50" : "action.hover", p: 2 }}>
+            <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
+              <Chip
+                size="small"
+                variant="outlined"
+                color={exclusion ? "error" : "primary"}
+                label={exclusion ? "Excluir se corresponder a TODAS as regras (E)" : "Incluir se corresponder a TODAS as regras (E)"}
+                sx={{ fontSize: 10, textTransform: "uppercase", fontWeight: 400 }}
+              />
+              {(exclusion || ruleGroups.length > 1) && (
+                <IconButton
+                  size="small"
+                  aria-label={exclusion ? "Remover grupo de exclusão" : "Remover grupo de inclusão"}
+                  title={exclusion ? "Remover esta exclusão" : "Remover este grupo"}
+                  sx={{ color: "text.secondary", "&:hover": { color: "error.main" } }}
+                  onClick={() => removeRuleGroup(group.id, exclusion)}
+                >
+                  <Trash2 size={16} />
+                </IconButton>
+              )}
+            </Stack>
+            <Stack spacing={1.5}>
+              {group.conditions.map((condition) => {
+                const field = getCRMFilterField(condition.field);
+                if (!field) return (
+                  <Stack key={condition.id} direction="row" spacing={1.5} sx={{ alignItems: "center", border: "1px solid", borderColor: "warning.main", bgcolor: "warning.50", borderRadius: 2, p: 1.5 }}>
+                    <AlertTriangle size={16} color="var(--mui-palette-warning-main, #FF9F43)" />
+                    <Typography variant="caption" sx={{ flex: 1, fontWeight: 500 }}>Filtro antigo sem suporte: {condition.label || condition.field}</Typography>
+                    <IconButton size="small" onClick={() => removeCondition(group.id, condition.id)}>
+                      <Trash2 size={16} />
+                    </IconButton>
+                  </Stack>
+                );
+                const category = CRM_FILTER_CATEGORIES.find((item) => item.id === condition.category) ?? CRM_FILTER_CATEGORIES.find((item) => item.fields.some((candidate) => candidate.id === field.id));
+                const Icon = category ? CATEGORY_ICONS[category.id] : Users;
+                return (
+                  <Stack key={condition.id} direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: { xs: "wrap", lg: "nowrap" }, border: "1px solid", borderColor: exclusion ? "error.light" : "divider", bgcolor: "background.paper", borderRadius: 2, p: 1, pr: 1.5, boxShadow: 1 }}>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: "center", width: { xs: "100%", lg: 250 } }}>
+                      <Box sx={{ borderRadius: 1, bgcolor: exclusion ? "error.50" : "action.hover", p: 0.5 }}>
+                        <Icon size={12} />
+                      </Box>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="caption" sx={{ fontWeight: 500, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{field.label}</Typography>
+                        {field.description && (
+                          <Typography variant="caption" color="text.secondary" title={field.description} sx={{ fontSize: 10, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {field.description}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Stack>
+                    <Select
+                      size="small"
+                      sx={{ ...compactFieldSx, width: 185, fontWeight: 500 }}
+                      value={condition.operator}
+                      onChange={(e) => updateCondition(group.id, condition.id, { operator: e.target.value, value: nextValueForOperator(field, e.target.value, condition.value) })}
+                    >
+                      {operatorsForField(field).map((operator) => <MenuItem key={operator.value} value={operator.value}>{operator.label}</MenuItem>)}
+                    </Select>
+                    {renderValueControl(group.id, condition, field)}
+                    <IconButton size="small" sx={{ flexShrink: 0, color: "text.secondary", "&:hover": { color: "error.main" } }} onClick={() => removeCondition(group.id, condition.id)}>
+                      <Trash2 size={16} />
+                    </IconButton>
+                  </Stack>
+                );
+              })}
+
+              <Button
+                variant="outline"
+                fullWidth
+                color={exclusion ? "error" : "primary"}
+                startIcon={<Plus size={16} />}
+                sx={{ borderStyle: "dashed", borderWidth: 2, color: exclusion ? "error.main" : "text.secondary" }}
+                onClick={(e) => setAddFilterAnchor({ el: e.currentTarget, groupId: group.id })}
+              >
+                {exclusion ? "Adicionar filtro à mesma exclusão (E)" : "Adicionar filtro"}
+              </Button>
+            </Stack>
+          </Box>
+        </Box>
+      ))}
+
+      {exclusion ? (
+        <Button
+          variant="ghost"
+          fullWidth
+          color="error"
+          startIcon={<Plus size={16} />}
+          sx={{ border: "1px dashed", borderColor: "error.main", color: "error.main" }}
+          onClick={(event) => {
+            const groupId = crypto.randomUUID();
+            setExcludeGroups((prev) => [...prev, { id: groupId, type: "AND", conditions: [] }]);
+            setAddFilterAnchor({ el: event.currentTarget, groupId });
+          }}
+        >
+          {ruleGroups.length > 0 ? "Adicionar outra exclusão (OU)" : "Adicionar exclusão"}
+        </Button>
+      ) : (
+        <Button
+          variant="ghost"
+          fullWidth
+          startIcon={<Plus size={16} />}
+          sx={{ border: "1px dashed", borderColor: "primary.main", color: "primary.main" }}
+          onClick={() => setGroups((prev) => [...prev, { id: crypto.randomUUID(), type: "OR", conditions: [] }])}
+        >
+          Adicionar novo grupo de inclusão (OU)
+        </Button>
+      )}
+    </Stack>
+  );
+
   return (
     <Stack spacing={3}>
       <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }} spacing={2}>
@@ -792,7 +951,7 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
               <Chip size="small" label="Dinâmico" />
             </Stack>
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-              Dentro de cada grupo usamos E. Entre grupos usamos OU.
+              Primeiro incluímos o público desejado e depois retiramos quem corresponder às exclusões.
             </Typography>
           </Box>
           <Box sx={{ minWidth: 260, border: "1px solid", borderColor: "divider", borderRadius: 2, bgcolor: "action.hover", px: 1.5, py: 1, textAlign: "right" }}>
@@ -804,6 +963,9 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
             ) : preview ? (
               <>
                 <Typography sx={{ fontWeight: 600 }}>{preview.count.toLocaleString("pt-BR")} clientes</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                  {preview.includedCount.toLocaleString("pt-BR")} incluídos · {preview.excludedCount.toLocaleString("pt-BR")} retirados
+                </Typography>
                 <Typography variant="caption" color="text.secondary">de {preview.totalContacts.toLocaleString("pt-BR")} contatos</Typography>
               </>
             ) : (
@@ -819,93 +981,21 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
           </Box>
         ) : null}
 
-        <Stack spacing={3}>
-          {groups.map((group, groupIndex) => (
-            <Box key={group.id} sx={{ position: "relative" }}>
-              {groupIndex > 0 && (
-                <Stack direction="row" sx={{ justifyContent: "center", position: "relative", mb: 2 }}>
-                  <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center" }}>
-                    <Box sx={{ width: "100%", borderTop: "1px solid", borderColor: "divider" }} />
-                  </Box>
-                  <Chip label="OU" color="primary" sx={{ position: "relative", zIndex: 1, px: 1.5 }} />
-                </Stack>
-              )}
-              <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, bgcolor: "action.hover", p: 2 }}>
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  color="primary"
-                  label="Corresponder a TODAS as regras (E)"
-                  sx={{ mb: 1.5, fontSize: 10, textTransform: "uppercase", fontWeight: 400 }}
-                />
-                <Stack spacing={1.5}>
-                  {group.conditions.map((condition) => {
-                    const field = getCRMFilterField(condition.field);
-                    if (!field) return (
-                      <Stack key={condition.id} direction="row" spacing={1.5} sx={{ alignItems: "center", border: "1px solid", borderColor: "warning.main", bgcolor: "warning.50", borderRadius: 2, p: 1.5 }}>
-                        <AlertTriangle size={16} color="var(--mui-palette-warning-main, #FF9F43)" />
-                        <Typography variant="caption" sx={{ flex: 1, fontWeight: 500 }}>Filtro antigo sem suporte: {condition.label || condition.field}</Typography>
-                        <IconButton size="small" onClick={() => removeCondition(group.id, condition.id)}>
-                          <Trash2 size={16} />
-                        </IconButton>
-                      </Stack>
-                    );
-                    const category = CRM_FILTER_CATEGORIES.find((item) => item.id === condition.category) ?? CRM_FILTER_CATEGORIES.find((item) => item.fields.some((candidate) => candidate.id === field.id));
-                    const Icon = category ? CATEGORY_ICONS[category.id] : Users;
-                    return (
-                      <Stack key={condition.id} direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: { xs: "wrap", lg: "nowrap" }, border: "1px solid", borderColor: "divider", bgcolor: "background.paper", borderRadius: 2, p: 1, pr: 1.5, boxShadow: 1 }}>
-                        <Stack direction="row" spacing={1} sx={{ alignItems: "center", width: { xs: "100%", lg: 250 } }}>
-                          <Box sx={{ borderRadius: 1, bgcolor: "action.hover", p: 0.5 }}>
-                            <Icon size={12} />
-                          </Box>
-                          <Box sx={{ minWidth: 0 }}>
-                            <Typography variant="caption" sx={{ fontWeight: 500, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{field.label}</Typography>
-                            {field.description && (
-                              <Typography variant="caption" color="text.secondary" title={field.description} sx={{ fontSize: 10, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                {field.description}
-                              </Typography>
-                            )}
-                          </Box>
-                        </Stack>
-                        <Select
-                          size="small"
-                          sx={{ ...compactFieldSx, width: 185, fontWeight: 500 }}
-                          value={condition.operator}
-                          onChange={(e) => updateCondition(group.id, condition.id, { operator: e.target.value, value: nextValueForOperator(field, e.target.value, condition.value) })}
-                        >
-                          {operatorsForField(field).map((operator) => <MenuItem key={operator.value} value={operator.value}>{operator.label}</MenuItem>)}
-                        </Select>
-                        {renderValueControl(group.id, condition, field)}
-                        <IconButton size="small" sx={{ flexShrink: 0, color: "text.secondary", "&:hover": { color: "error.main" } }} onClick={() => removeCondition(group.id, condition.id)}>
-                          <Trash2 size={16} />
-                        </IconButton>
-                      </Stack>
-                    );
-                  })}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>1. Incluir clientes que...</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+            Dentro de cada grupo usamos E. Se houver mais de um grupo, basta corresponder a um deles (OU).
+          </Typography>
+          {renderRuleGroups(groups, false)}
+        </Box>
 
-                  <Button
-                    variant="outline"
-                    fullWidth
-                    startIcon={<Plus size={16} />}
-                    sx={{ borderStyle: "dashed", borderWidth: 2, color: "text.secondary" }}
-                    onClick={(e) => setAddFilterAnchor({ el: e.currentTarget, groupId: group.id })}
-                  >
-                    Adicionar Filtro
-                  </Button>
-                </Stack>
-              </Box>
-            </Box>
-          ))}
-          <Button
-            variant="ghost"
-            fullWidth
-            startIcon={<Plus size={16} />}
-            sx={{ border: "1px dashed", borderColor: "primary.main", color: "primary.main" }}
-            onClick={() => setGroups((prev) => [...prev, { id: crypto.randomUUID(), type: "OR", conditions: [] }])}
-          >
-            Adicionar novo grupo de regras (OU)
-          </Button>
-        </Stack>
+        <Box sx={{ borderTop: "1px solid", borderColor: "divider", pt: 3 }}>
+          <Typography variant="subtitle2" color="error.main" sx={{ fontWeight: 700, mb: 0.5 }}>2. Excluir clientes que...</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+            Quem corresponder a qualquer exclusão será retirado do público. Para retirar “Pop-up Site” OU “Cliente Tray”, crie uma exclusão para cada tag.
+          </Typography>
+          {renderRuleGroups(excludeGroups, true)}
+        </Box>
       </Box>
 
       <Menu

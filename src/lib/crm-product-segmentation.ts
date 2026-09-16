@@ -391,15 +391,29 @@ export function matchesAdvancedSegmentCondition(
   return matchesSegmentCondition(context, condition, now);
 }
 
-/** AND dentro de cada grupo e OR entre grupos. */
+/**
+ * E dentro de cada grupo e OU entre grupos. Os grupos de exclusão são avaliados
+ * depois da inclusão e qualquer correspondência remove o cliente da audiência.
+ */
 export function matchesAdvancedSegmentRules(
   context: CRMAdvancedCustomerContext,
   rules: SegmentRules | null | undefined,
   now = new Date(),
 ): boolean {
-  const groups = (rules?.groups ?? []).filter((group) => (group.conditions ?? []).length > 0);
-  if (groups.length === 0) return true;
-  return groups.some((group) =>
+  // `null` significa que nenhum segmento foi selecionado (lista geral do CRM).
+  if (!rules) return true;
+
+  const includeGroups = (rules.groups ?? []).filter((group) => (group.conditions ?? []).length > 0);
+  if (includeGroups.length === 0) return false;
+
+  const included = includeGroups.some((group) =>
     (group.conditions ?? []).every((condition) => matchesAdvancedSegmentCondition(context, condition, now)),
   );
+  if (!included) return false;
+
+  const excludeGroups = (rules.excludeGroups ?? []).filter((group) => (group.conditions ?? []).length > 0);
+  const excluded = excludeGroups.some((group) =>
+    (group.conditions ?? []).every((condition) => matchesAdvancedSegmentCondition(context, condition, now)),
+  );
+  return !excluded;
 }

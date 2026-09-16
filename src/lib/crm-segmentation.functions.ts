@@ -198,13 +198,21 @@ export const previewSegmentAudience = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { loadCRMSegmentationContext } = await import("./crm-segmentation.server");
     const contexts = await loadCRMSegmentationContext();
-    const matched = contexts.filter((context) => matchesAdvancedSegmentRules(context, data.regras as SegmentRules));
+    const rules = data.regras as SegmentRules;
+    const included = contexts.filter((context) => matchesAdvancedSegmentRules(context, { ...rules, excludeGroups: [] }));
+    const matched = included.filter((context) => matchesAdvancedSegmentRules(context, rules));
     const sample = matched.slice(0, data.sampleSize).map(({ customer }) => ({
       id: customer.id,
       name: [customer.first_name, customer.last_name].filter(Boolean).join(" ") || "Cliente sem nome",
       email: customer.email ?? null,
     }));
-    return { count: matched.length, totalContacts: contexts.length, sample };
+    return {
+      count: matched.length,
+      includedCount: included.length,
+      excludedCount: included.length - matched.length,
+      totalContacts: contexts.length,
+      sample,
+    };
   });
 
 export const getSegmentsList = createServerFn({ method: "GET" })

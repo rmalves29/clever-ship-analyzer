@@ -183,4 +183,16 @@ describe("filtros avançados por produto e comportamento", () => {
     };
     expect(matchesAdvancedSegmentRules(context, rules, NOW)).toBe(true);
   });
+
+  it("aplica exclusões também aos filtros avançados", () => {
+    const rules = {
+      groups: [{ conditions: [{ field: "total_pedidos", operator: "gte", value: 1 }] }],
+      excludeGroups: [{ conditions: [{
+        field: "colecao_produto",
+        operator: "bought",
+        value: "gid://shopify/Collection/100",
+      }] }],
+    };
+    expect(matchesAdvancedSegmentRules(context, rules, NOW)).toBe(false);
+  });
 });

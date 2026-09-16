@@ -236,6 +236,26 @@ describe("catálogo confiável de filtros do CRM", () => {
     ] }] })).toEqual({ valid: true, errors: [] });
   });
 
+  it("valida grupos de exclusão e exige pelo menos uma regra de inclusão", () => {
+    expect(validateSegmentRulesPayload({
+      groups: [{ conditions: [{ field: "acesso_sem_compra", operator: "eq", value: "sim" }] }],
+      excludeGroups: [
+        { conditions: [{ field: "customer_tag", operator: "eq", value: "Pop-up Site" }] },
+        { conditions: [{ field: "customer_tag", operator: "eq", value: "Cliente Tray" }] },
+      ],
+    })).toEqual({ valid: true, errors: [] });
+
+    expect(validateSegmentRulesPayload({
+      groups: [],
+      excludeGroups: [{ conditions: [{ field: "customer_tag", operator: "eq", value: "Pop-up Site" }] }],
+    }).errors).toContain("Adicione pelo menos um filtro de inclusão ao segmento.");
+
+    expect(validateSegmentRulesPayload({
+      groups: [{ conditions: [{ field: "acesso_sem_compra", operator: "eq", value: "sim" }] }],
+      excludeGroups: [{ conditions: [{ field: "campo_inexistente", operator: "eq", value: "x" }] }],
+    }).errors[0]).toContain("Grupo de exclusão 1");
+  });
+
   it("não expõe aliases antigos ou filtros sem fonte confiável", () => {
     ["regiao", "bairro", "aniversario_mes", "idade", "signo", "order_tag", "recebeu_campanha", "clicou_campanha", "entrou_fluxo"]
       .forEach((field) => expect(SUPPORTED_SEGMENT_FIELD_IDS).not.toContain(field));

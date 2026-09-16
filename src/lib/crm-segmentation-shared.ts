@@ -102,8 +102,19 @@ export type SegmentCondition = {
   value?: unknown;
 };
 
+export type SegmentRuleGroup = {
+  type?: "AND" | "OR";
+  conditions?: SegmentCondition[];
+};
+
 export type SegmentRules = {
-  groups?: Array<{ type?: "AND" | "OR"; conditions?: SegmentCondition[] }>;
+  /** Grupos de inclusão: E dentro de cada grupo e OU entre os grupos. */
+  groups?: SegmentRuleGroup[];
+  /**
+   * Grupos subtraídos da audiência depois da inclusão. Cada grupo usa E internamente;
+   * se qualquer grupo corresponder, o cliente é excluído.
+   */
+  excludeGroups?: SegmentRuleGroup[];
 };
 
 const DAY_MS = 86_400_000;
@@ -528,11 +539,31 @@ export function matchesSegmentCondition(context: CRMCustomerContext, condition: 
   return false;
 }
 
-/** AND dentro de cada grupo e OR entre grupos, conforme o editor visual do CRM. */
+function nonEmptyRuleGroups(groups: SegmentRuleGroup[] | undefined): SegmentRuleGroup[] {
+  return (groups ?? []).filter((group) => (group.conditions ?? []).length > 0);
+}
+
+/**
+ * E dentro de cada grupo e OU entre grupos. Depois da inclusão, qualquer grupo de
+ * exclusão correspondente remove o cliente da audiência.
+ */
 export function matchesSegmentRules(context: CRMCustomerContext, rules: SegmentRules | null | undefined, now = new Date()): boolean {
-  const groups = (rules?.groups ?? []).filter((group) => (group.conditions ?? []).length > 0);
-  if (groups.length === 0) return true;
-  return groups.some((group) => (group.conditions ?? []).every((condition) => matchesSegmentCondition(context, condition, now)));
+  // `null` significa que nenhum segmento foi selecionado (lista geral do CRM).
+  if (!rules) return true;
+
+  const includeGroups = nonEmptyRuleGroups(rules.groups);
+  if (includeGroups.length === 0) return false;
+
+  const included = includeGroups.some((group) =>
+    (group.conditions ?? []).every((condition) => matchesSegmentCondition(context, condition, now)),
+  );
+  if (!included) return false;
+
+  const excludeGroups = nonEmptyRuleGroups(rules.excludeGroups);
+  const excluded = excludeGroups.some((group) =>
+    (group.conditions ?? []).every((condition) => matchesSegmentCondition(context, condition, now)),
+  );
+  return !excluded;
 }
 
 export function customerMatchesSearch(context: CRMCustomerContext, search: string | undefined): boolean {

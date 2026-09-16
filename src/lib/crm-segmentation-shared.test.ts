@@ -23,8 +23,8 @@ const customers: CRMCustomerForSegmentation[] = [
       { status: "active", startsAt: isoDaysAgo(1), endsAt: isoDaysAgo(-3), createdAt: isoDaysAgo(4), amount: 25 },
     ],
   },
-  { id: "c2", first_name: "Bia", city: "São Paulo", province: "SP", rfm_segment: "Sem compra", created_at: isoDaysAgo(20) },
-  { id: "c3", first_name: "Clara", city: "Curitiba", province: "PR", rfm_segment: "Sem compra", created_at: isoDaysAgo(40) },
+  { id: "c2", first_name: "Bia", city: "São Paulo", province: "SP", tags: ["Pop-up Site"], rfm_segment: "Sem compra", created_at: isoDaysAgo(20) },
+  { id: "c3", first_name: "Clara", city: "Curitiba", province: "PR", tags: ["Cliente Tray"], rfm_segment: "Sem compra", created_at: isoDaysAgo(40) },
   {
     id: "c4",
     first_name: "Dani",
@@ -259,6 +259,39 @@ describe("lógica dos grupos", () => {
     expect(matchesSegmentRules(ctx("c1"), rules, NOW)).toBe(true);
     expect(matchesSegmentRules(ctx("c4"), rules, NOW)).toBe(true);
     expect(matchesSegmentRules(ctx("c3"), rules, NOW)).toBe(false);
+  });
+
+  it("subtrai da audiência quem corresponde a qualquer grupo de exclusão", () => {
+    const rules = {
+      groups: [{ conditions: [{ field: "acesso_sem_compra", operator: "eq", value: "sim" }] }],
+      excludeGroups: [
+        { conditions: [{ field: "customer_tag", operator: "eq", value: "Pop-up Site" }] },
+        { conditions: [{ field: "customer_tag", operator: "eq", value: "Cliente Tray" }] },
+      ],
+    };
+
+    expect(matchesSegmentRules(ctx("c2"), rules, NOW)).toBe(false);
+    expect(matchesSegmentRules(ctx("c3"), rules, NOW)).toBe(false);
+    expect(matchesSegmentRules(ctx("c1"), rules, NOW)).toBe(false);
+  });
+
+  it("usa E dentro de cada grupo de exclusão", () => {
+    const rules = {
+      groups: [{ conditions: [{ field: "acesso_sem_compra", operator: "eq", value: "sim" }] }],
+      excludeGroups: [{ conditions: [
+        { field: "customer_tag", operator: "eq", value: "Pop-up Site" },
+        { field: "estado", operator: "eq", value: "MG" },
+      ] }],
+    };
+
+    expect(matchesSegmentRules(ctx("c2"), rules, NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c3"), rules, NOW)).toBe(true);
+  });
+
+  it("mantém segmentos antigos sem exclusões e falha fechado para regras vazias salvas", () => {
+    expect(matchesSegmentRules(ctx("c1"), rule("estado", "eq", "MG"), NOW)).toBe(true);
+    expect(matchesSegmentRules(ctx("c1"), { groups: [] }, NOW)).toBe(false);
+    expect(matchesSegmentRules(ctx("c1"), null, NOW)).toBe(true);
   });
 
   it("filtro desconhecido falha fechado em vez de incluir audiência errada", () => {

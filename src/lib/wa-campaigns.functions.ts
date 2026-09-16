@@ -6,6 +6,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAppAuth } from "./app-auth";
 import { loadSettings } from "./whatsapp-meta.server";
+import { WHATSAPP_ATTRIBUTION_WINDOW_DAYS } from "./whatsapp-attribution";
 
 export type WaCampaignListRow = {
   id: string;
@@ -27,7 +28,7 @@ export type WaCampaignListRow = {
   read: number;
   failed: number;
   pending: number;
-  /** Valor vendido atribuído (pedidos pagos até 30 dias após o envio). */
+  /** Valor vendido atribuído (pedidos pagos dentro da janela padrão após o envio). */
   revenue: number;
   orders: number;
   /** Custo estimado: mensagens enviadas com sucesso × preço por mensagem (Marketing/Utilidade)
@@ -36,8 +37,8 @@ export type WaCampaignListRow = {
   custo: number;
 };
 
-/** Janela de atribuição de vendas, em dias. */
-export const WA_REVENUE_WINDOW_DAYS = 30;
+/** Janela única de atribuição de vendas, em dias. */
+export const WA_REVENUE_WINDOW_DAYS = WHATSAPP_ATTRIBUTION_WINDOW_DAYS;
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

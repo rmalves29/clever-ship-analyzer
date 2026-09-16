@@ -27,6 +27,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { listWaCampaigns, type WaCampaignListRow } from "@/lib/wa-campaigns.functions";
 import { approveCampaign, rejectCampaign } from "@/lib/whatsapp-meta.functions";
+import { WHATSAPP_ATTRIBUTION_WINDOW_DAYS } from "@/lib/whatsapp-attribution";
 
 const LinkTypography = createLink(Typography);
 const LinkIconButton = createLink(IconButton);
@@ -283,7 +284,7 @@ function CampaignsPage() {
           }}
         >
           <Typography variant="caption" sx={{ fontWeight: 600, color: "success.dark" }}>
-            Valor vendido (30 dias após o envio)
+            Valor vendido ({WHATSAPP_ATTRIBUTION_WINDOW_DAYS} dias após o envio)
           </Typography>
           <Typography variant="h5" sx={{ fontWeight: 700, color: "success.dark", mt: 0.5 }}>
             {money(totals.revenue)}

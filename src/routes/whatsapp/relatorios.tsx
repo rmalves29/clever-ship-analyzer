@@ -1,23 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
-import Stack from "@mui/material/Stack";
 import { ReportsTab } from "@/components/whatsapp/ReportsTab";
-import { QueueHealthPanel } from "@/components/whatsapp/QueueHealthPanel";
 
 export const Route = createFileRoute("/whatsapp/relatorios")({
   head: () => ({
     meta: [
       { title: "Relatórios de WhatsApp | CRM Insights" },
-      { name: "description", content: "Resultados de entrega, leitura, falhas e saúde da fila de envio do WhatsApp." },
+      {
+        name: "description",
+        content:
+          "Resultados de entrega, leitura, vendas, receita e ROAS das campanhas manuais de WhatsApp.",
+      },
       { property: "og:title", content: "Relatórios de WhatsApp | CRM Insights" },
-      { property: "og:description", content: "Métricas consolidadas das campanhas de WhatsApp." },
+      {
+        property: "og:description",
+        content: "Métricas das campanhas manuais, separadas das automações de WhatsApp.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: () => (
-    <Stack spacing={3}>
-      <QueueHealthPanel />
-      <ReportsTab />
-    </Stack>
-  ),
+  component: ReportsTab,
 });

@@ -276,29 +276,27 @@ function AutomacoesPage() {
               >
                 Rodar agora
               </Button>
-              {a.automationKind !== "cashback" && (
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<Pencil size={14} />}
-                  onClick={() => {
-                    setSeed({
-                      id: a.id,
-                      nome: a.nome,
-                      descricao: a.descricao ?? undefined,
-                      segmentType: a.segmentType ?? undefined,
-                      segmentId: a.segmentId ?? undefined,
-                      steps: a.steps ?? undefined,
-                      requerAprovacao: a.requerAprovacao ?? true,
-                      ativo: Boolean(a.ativo),
-                      automationKind: a.automationKind,
-                    });
-                    setOpen(true);
-                  }}
-                >
-                  Editar
-                </Button>
-              )}
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<Pencil size={14} />}
+                onClick={() => {
+                  setSeed({
+                    id: a.id,
+                    nome: a.nome,
+                    descricao: a.descricao ?? undefined,
+                    segmentType: a.segmentType ?? undefined,
+                    segmentId: a.segmentId ?? undefined,
+                    steps: a.steps ?? undefined,
+                    requerAprovacao: a.requerAprovacao ?? true,
+                    ativo: Boolean(a.ativo),
+                    automationKind: a.automationKind,
+                  });
+                  setOpen(true);
+                }}
+              >
+                Editar
+              </Button>
               {a.automationKind === "segment" && (
                 <Button
                   size="small"

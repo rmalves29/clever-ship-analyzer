@@ -6,6 +6,7 @@
  *  automações — as mesmas 6 condições fazem sentido nos dois motores. */
 
 import { type DecisionCondition, type DecisionStep, evaluateDecision } from "./automations-engine.server";
+import { META_GRAPH_API_VERSION } from "./whatsapp-phone-registration";
 
 export type ConvSendStep = {
   id: string;
@@ -177,7 +178,7 @@ async function sendConversationMessage(step: ConvSendStep | ConvMenuStep, phone:
           }
         : { messaging_product: "whatsapp", to: phone, type: "text", text: { body: step.text, preview_url: false } };
 
-  const res = await fetch(`https://graph.facebook.com/v20.0/${settings.phoneNumberId}/messages`, {
+  const res = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${settings.phoneNumberId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
     body: JSON.stringify(body),

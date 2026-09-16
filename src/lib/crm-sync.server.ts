@@ -218,7 +218,13 @@ export async function runShopifySync(fullSync: boolean) {
     // Configuração do Cashback carregada uma única vez por sincronização — a reconciliação
     // por pedido roda logo após o pedido e os itens serem persistidos, garantindo que o cupom
     // já exista quando o próximo tick de automações montar o contexto congelado.
-    const { loadCashbackSettings, reconcileCashbackForOrder, reprocessPendingCashback } = await import(
+    const {
+      loadCashbackSettings,
+      reconcileCashbackForOrder,
+      reconcileCashbackRedemptionForOrder,
+      reconcileCashbackRedemptions,
+      reprocessPendingCashback,
+    } = await import(
       "./cashback.server"
     );
     const cashbackSettings = await loadCashbackSettings();
@@ -323,6 +329,11 @@ export async function runShopifySync(fullSync: boolean) {
 
         // Cashback: nunca pode derrubar o sync inteiro — falha vira estado no banco.
         try {
+          await reconcileCashbackRedemptionForOrder({
+            orderId: order.id,
+            processedAt: order.processedAt ?? order.createdAt ?? null,
+            rawData: order,
+          });
           await reconcileCashbackForOrder(
             {
               id: order.id,
@@ -361,6 +372,7 @@ export async function runShopifySync(fullSync: boolean) {
 
     // Reprocessa cupons que falharam ou cancelamentos pendentes de sincronizações anteriores.
     try {
+      await reconcileCashbackRedemptions();
       await reprocessPendingCashback();
     } catch (cashbackError) {
       cashbackErrors++;

@@ -3,8 +3,10 @@ import { buildBodyParameters } from "./whatsapp-template-body-tokens";
 import { findFirstTouchCampaign } from "./whatsapp-attribution";
 import type { AutomationEventContext } from "./whatsapp-automation-context";
 import { extractShopifyOrderPhones, normalizeShopifyPhone } from "./shopify-order-phone";
+import { META_GRAPH_API_VERSION } from "./whatsapp-phone-registration";
 
 const DAY_MS = 86_400_000;
+const META_GRAPH_BASE = `https://graph.facebook.com/${META_GRAPH_API_VERSION}`;
 
 export function normalizeCouponCode(value: unknown): string {
   return String(value ?? "").trim().toUpperCase();
@@ -117,7 +119,7 @@ export async function exchangeEmbeddedSignupCode(params: { code: string; phoneNu
     return { success: false as const, error: "Configure primeiro a conexão com o Shopify em Configurações." };
   }
 
-  const tokenUrl = new URL("https://graph.facebook.com/v20.0/oauth/access_token");
+  const tokenUrl = new URL(`${META_GRAPH_BASE}/oauth/access_token`);
   tokenUrl.searchParams.set("client_id", settings.appId);
   tokenUrl.searchParams.set("client_secret", settings.appSecret);
   tokenUrl.searchParams.set("code", params.code);
@@ -132,7 +134,7 @@ export async function exchangeEmbeddedSignupCode(params: { code: string; phoneNu
 
   // Inscreve o app pra receber os webhooks dessa WABA (status de entrega/leitura).
   try {
-    await fetch(`https://graph.facebook.com/v20.0/${params.wabaId}/subscribed_apps`, {
+    await fetch(`${META_GRAPH_BASE}/${params.wabaId}/subscribed_apps`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
     });
@@ -447,7 +449,7 @@ export async function sendTemplateMessage(params: {
     });
   }
 
-  const res = await fetch(`https://graph.facebook.com/v20.0/${params.phoneNumberId}/messages`, {
+  const res = await fetch(`${META_GRAPH_BASE}/${params.phoneNumberId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${params.accessToken}` },
     body: JSON.stringify({
@@ -547,18 +549,22 @@ export async function listMetaTemplates() {
     return { success: false as const, error: "Configure o token de acesso e o WABA ID em Configurações.", templates: [] };
   }
 
-  const res = await fetch(`https://graph.facebook.com/v20.0/${settings.wabaId}/message_templates?limit=100`, {
-    headers: { Authorization: `Bearer ${settings.accessToken}` },
-  });
-  
-  const json: any = await res.json().catch(() => ({}));
-  console.log("[listMetaTemplates] API Response", { status: res.status, count: json?.data?.length, wabaId: settings.wabaId });
-
-  if (!res.ok) {
-    return { success: false as const, error: json?.error?.message ?? `Meta respondeu ${res.status}`, templates: [] };
+  const allRows: any[] = [];
+  let nextUrl: string | null = `${META_GRAPH_BASE}/${settings.wabaId}/message_templates?limit=100`;
+  let page = 0;
+  while (nextUrl && page < 20) {
+    page++;
+    const res = await fetch(nextUrl, { headers: { Authorization: `Bearer ${settings.accessToken}` } });
+    const json: any = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { success: false as const, error: json?.error?.message ?? `Meta respondeu ${res.status}`, templates: [] };
+    }
+    allRows.push(...(json.data ?? []));
+    nextUrl = typeof json?.paging?.next === "string" ? json.paging.next : null;
   }
+  console.log("[listMetaTemplates] API Response", { count: allRows.length, pages: page, wabaId: settings.wabaId });
 
-  const templates = (json.data ?? []).map((t: any) => ({
+  const templates = allRows.map((t: any) => ({
     id: t.id as string,
     name: t.name as string,
     status: t.status as string,
@@ -830,7 +836,7 @@ export type TemplateButtonInput =
 
 export type TemplateComponentInput =
   | { type: "HEADER"; format: "TEXT"; text: string }
-  | { type: "BODY"; text: string }
+  | { type: "BODY"; text: string; example?: { body_text: string[][] } | undefined }
   | { type: "FOOTER"; text: string }
   | { type: "BUTTONS"; buttons: TemplateButtonInput[] };
 
@@ -849,7 +855,7 @@ export async function createTemplate(input: {
   const name = input.name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
   if (!name) return { success: false as const, error: "Nome inválido." };
 
-  const res = await fetch(`https://graph.facebook.com/v20.0/${settings.wabaId}/message_templates`, {
+  const res = await fetch(`${META_GRAPH_BASE}/${settings.wabaId}/message_templates`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
     body: JSON.stringify({ name, category: input.category, language: input.language, components: input.components }),
@@ -920,7 +926,7 @@ export async function ensureTemplateStatusWebhookSubscribed() {
   if (!verifyToken) return { success: false as const, error: "Configure o Verify Token em Configurações." };
 
   const currentRes = await fetch(
-    `https://graph.facebook.com/v20.0/${settings.appId}/subscriptions?access_token=${encodeURIComponent(appToken)}`,
+    `${META_GRAPH_BASE}/${settings.appId}/subscriptions?access_token=${encodeURIComponent(appToken)}`,
   );
   const currentJson: any = await currentRes.json().catch(() => ({}));
   const wabaSub = (currentJson.data ?? []).find((s: any) => s.object === "whatsapp_business_account");
@@ -934,7 +940,7 @@ export async function ensureTemplateStatusWebhookSubscribed() {
     fields: fields.join(","),
     access_token: appToken,
   });
-  const res = await fetch(`https://graph.facebook.com/v20.0/${settings.appId}/subscriptions`, {
+  const res = await fetch(`${META_GRAPH_BASE}/${settings.appId}/subscriptions`, {
     method: "POST",
     body: params,
   });
@@ -1392,7 +1398,7 @@ export async function upsertAutomation(input: AutomationInput) {
     steps,
     requer_aprovacao: input.requerAprovacao,
     ativo: input.ativo,
-    origem: input.origem ?? "crm",
+    ...(!input.id || input.origem !== undefined ? { origem: input.origem ?? "crm" } : {}),
     updated_at: new Date().toISOString(),
   };
 
@@ -1428,6 +1434,8 @@ export async function listAutomationsRows() {
     requerAprovacao: a.requer_aprovacao as boolean,
     ativo: a.ativo as boolean,
     origem: (a.origem ?? "crm") as string,
+    automationKind: (a.automation_kind ?? "segment") as "segment" | "rfm" | "cashback",
+    triggerConfig: (a.trigger_config ?? {}) as Record<string, string | number | boolean | null>,
     lastRunAt: (a.last_run_at ?? null) as string | null,
     totalExecucoes: (a.total_execucoes ?? 0) as number,
     createdAt: a.created_at as string,
@@ -1587,7 +1595,7 @@ export async function duplicateTemplate(sourceName: string, components: unknown[
   }
 
   const newName = `${sourceName}_copy_${Date.now().toString(36)}`;
-  const res = await fetch(`https://graph.facebook.com/v20.0/${settings.wabaId}/message_templates`, {
+  const res = await fetch(`${META_GRAPH_BASE}/${settings.wabaId}/message_templates`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
     body: JSON.stringify({ name: newName, category, language, components }),
@@ -1602,7 +1610,7 @@ export async function updateTemplateComponents(templateId: string, components: u
   const settings = await loadSettings();
   if (!settings.accessToken) return { success: false as const, error: "Configure o token de acesso em Configurações." };
 
-  const res = await fetch(`https://graph.facebook.com/v20.0/${templateId}`, {
+  const res = await fetch(`${META_GRAPH_BASE}/${templateId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
     body: JSON.stringify({ components }),
@@ -1620,7 +1628,7 @@ export async function deleteTemplateByName(name: string) {
   }
 
   const res = await fetch(
-    `https://graph.facebook.com/v20.0/${settings.wabaId}/message_templates?name=${encodeURIComponent(name)}`,
+    `${META_GRAPH_BASE}/${settings.wabaId}/message_templates?name=${encodeURIComponent(name)}`,
     { method: "DELETE", headers: { Authorization: `Bearer ${settings.accessToken}` } },
   );
   const json: any = await res.json().catch(() => ({}));

@@ -154,6 +154,7 @@ export async function persistRFMSegments(
 ): Promise<number> {
   const db = await admin();
   const bySegment = new Map<RFMSegment, string[]>();
+  const changedAt = new Date().toISOString();
 
   for (const customer of customers) {
     // Não tenta criar clientes órfãos vindos de pedidos antigos: RFM só atualiza a base de clientes existente.
@@ -171,7 +172,7 @@ export async function persistRFMSegments(
       tasks.push(async () => {
         const { data, error } = await db
           .from("shopify_customers")
-          .update({ rfm_segment: segment })
+          .update({ rfm_segment: segment, rfm_segment_changed_at: changedAt } as never)
           .in("id", chunk)
           .select("id");
         if (error) throw new Error(`Erro ao gravar segmento RFM ${segment}: ${error.message}`);

@@ -65,6 +65,7 @@ export const Route = createFileRoute("/cashback")({
 const STATUS_CHIP_COLOR: Record<CashbackCouponStatus, ChipProps["color"]> = {
   pending: "warning",
   active: "success",
+  used: "info",
   expired: "default",
   cancel_pending: "warning",
   cancelled: "default",
@@ -143,7 +144,7 @@ function CashbackPage() {
     mutationFn: () => reprocess(),
     onSuccess: (result: any) => {
       toast.success(
-        `Reprocessamento concluído: ${result?.retried ?? 0} recriado(s), ${result?.cancelled ?? 0} cancelado(s), ${result?.stillFailing ?? 0} ainda com erro.`,
+        `Reprocessamento concluído: ${result?.redemptions?.used ?? 0} uso(s) identificado(s), ${result?.retried ?? 0} recriado(s), ${result?.cancelled ?? 0} cancelado(s), ${result?.stillFailing ?? 0} ainda com erro.`,
       );
       queryClient.invalidateQueries({ queryKey: ["cashback", "coupons"] });
     },
@@ -189,9 +190,10 @@ function CashbackPage() {
   const summary = useMemo(() => {
     const active = derived.filter((c) => c.derivedStatus === "active");
     const pending = derived.filter((c) => c.derivedStatus === "pending");
+    const used = derived.filter((c) => c.derivedStatus === "used");
     const failed = derived.filter((c) => c.derivedStatus === "failed" || c.derivedStatus === "cancel_pending");
     const outstanding = [...active, ...pending].reduce((sum, c) => sum + Number(c.cashback_amount ?? 0), 0);
-    return { total: derived.length, active: active.length, pending: pending.length, failed: failed.length, outstanding };
+    return { total: derived.length, active: active.length, pending: pending.length, used: used.length, failed: failed.length, outstanding };
   }, [derived]);
 
   const minExpiration = minExpirationDays(Number(activationDelayDays) || 0);
@@ -394,7 +396,7 @@ function CashbackPage() {
                 <StatCard label="Com erro" value={summary.failed} valueColor="error.main" />
               </Grid>
               <Grid size={6}>
-                <StatCard label="Total" value={summary.total} />
+                <StatCard label="Utilizados" value={summary.used} />
               </Grid>
             </Grid>
           </Stack>
@@ -411,7 +413,7 @@ function CashbackPage() {
           </Stack>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
             Use os tokens {"{{CUPOM_CASHBACK}}"}, {"{{VALOR_CASHBACK}}"}, {"{{COMPRA_MINIMA_CASHBACK}}"} e{" "}
-            {"{{VALIDADE_CASHBACK}}"} nas campanhas e automações de WhatsApp.
+            {"{{VALIDADE_CASHBACK}}"} e {"{{DIAS_PARA_EXPIRAR}}"} nas campanhas e automações de WhatsApp.
           </Typography>
 
           {couponsQuery.isLoading ? (

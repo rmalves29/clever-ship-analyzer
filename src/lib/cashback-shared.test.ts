@@ -7,6 +7,7 @@ import {
   calculateMinimumPurchase,
   CASHBACK_MIN_EXPIRATION_DAYS,
   deriveCashbackStatus,
+  extractCashbackOrderDiscountCodes,
   DEFAULT_CASHBACK_SETTINGS,
   isOrderEligibleForCashback,
   normalizeExpirationDays,
@@ -143,6 +144,20 @@ describe("status derivado", () => {
   it("mantém estados terminais de erro/cancelamento", () => {
     expect(deriveCashbackStatus({ ...row, status: "cancelled" }, new Date("2026-03-10T00:00:00Z"))).toBe("cancelled");
     expect(deriveCashbackStatus({ ...row, status: "failed" }, new Date("2026-03-10T00:00:00Z"))).toBe("failed");
+    expect(deriveCashbackStatus({ ...row, status: "used" }, new Date("2026-03-10T00:00:00Z"))).toBe("used");
+  });
+});
+
+describe("detecção de uso do cupom", () => {
+  it("lê códigos GraphQL e normaliza sem duplicar", () => {
+    expect(extractCashbackOrderDiscountCodes({ discountCodes: [" cashback10 ", "CASHBACK10", "OUTRO"] })).toEqual([
+      "CASHBACK10",
+      "OUTRO",
+    ]);
+  });
+
+  it("lê o formato REST da Shopify", () => {
+    expect(extractCashbackOrderDiscountCodes({ discount_codes: [{ code: "cashback20" }] })).toEqual(["CASHBACK20"]);
   });
 });
 

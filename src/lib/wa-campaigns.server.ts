@@ -206,7 +206,7 @@ async function preloadOrderBundles(customerIds: string[]): Promise<Map<string, O
         .order("updated_at", { ascending: false }),
       supabaseAdmin
         .from("cashback_coupons")
-        .select("shopify_order_id, code, cashback_amount, minimum_purchase, starts_at, ends_at, status")
+        .select("id, shopify_order_id, code, cashback_amount, minimum_purchase, starts_at, ends_at, status")
         .in("shopify_order_id", part),
     ]);
     for (const row of (itemRows ?? []) as any[]) {
@@ -220,6 +220,7 @@ async function preloadOrderBundles(customerIds: string[]): Promise<Map<string, O
     for (const row of (cashbackRows ?? []) as any[]) {
       if (row.status === "cancelled") continue;
       cashbackByOrder.set(String(row.shopify_order_id), {
+        id: Number(row.id),
         code: String(row.code),
         amount: Number(row.cashback_amount ?? 0),
         minimumPurchase: Number(row.minimum_purchase ?? 0),
@@ -261,6 +262,12 @@ async function resolveBodyParams(
   const purchasedItems: any[] = bundle?.items ?? [];
   const fulfillment: any = bundle?.fulfillment ?? null;
   const cashback = bundle?.cashback ?? null;
+  const cashbackRemainingMs = cashback?.endsAt ? new Date(cashback.endsAt).getTime() - Date.now() : Number.NaN;
+  const cashbackDaysToExpire = Number.isFinite(cashbackRemainingMs)
+    ? cashbackRemainingMs <= 86_400_000
+      ? "hoje"
+      : `em ${Math.ceil(cashbackRemainingMs / 86_400_000)} dias`
+    : "—";
 
   const brl = (value: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
 
@@ -290,6 +297,7 @@ async function resolveBodyParams(
     "{{VALIDADE_CASHBACK}}": cashback?.endsAt
       ? new Date(cashback.endsAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
       : "—",
+    "{{DIAS_PARA_EXPIRAR}}": cashbackDaysToExpire,
   };
 
   return bodyParams.map((param) => {
@@ -339,13 +347,21 @@ export async function enqueueCampaign(
   const ids = restrictToCustomerIds
     ? [...new Set(restrictToCustomerIds)]
     : await getSegmentCustomerIds(audienceType as SegmentType, campaign.audience_id || undefined);
-  const recipients = (await resolveSegmentRecipients(audienceType, ids)) as Array<{
+  const resolvedRecipients = (await resolveSegmentRecipients(audienceType, ids)) as Array<{
     id: string;
     phone: string;
     first_name?: string | null;
     checkout_url?: string | null;
     video_url?: string | null;
   }>;
+  let recipients = resolvedRecipients;
+  let suppressionSkipped = 0;
+  if (campaign.message_type === "marketing" && recipients.length > 0) {
+    const { getSuppressedWhatsappPhones } = await import("./whatsapp-suppression.server");
+    const suppressed = await getSuppressedWhatsappPhones(recipients.map((recipient) => recipient.phone));
+    recipients = recipients.filter((recipient) => !suppressed.has(toE164(recipient.phone) ?? ""));
+    suppressionSkipped = resolvedRecipients.length - recipients.length;
+  }
 
   let frozenContexts = new Map<string, AutomationEventContext>();
   if (campaign.origin === "automacao") {
@@ -361,7 +377,7 @@ export async function enqueueCampaign(
   const scheduledAt = schedule.iso;
   const rows: Record<string, unknown>[] = [];
   const mediaByPhone = new Map<string, string>();
-  let skipped = 0;
+  let skipped = suppressionSkipped;
 
   for (const recipient of recipients) {
     const to = toE164(recipient.phone);
@@ -372,7 +388,9 @@ export async function enqueueCampaign(
     // Automações reaproveitam a mesma campanha, então cada novo pedido/checkout precisa ser um
     // registro próprio — event_key garante isso sem abrir brecha pra duplicidade do mesmo evento.
     const context = frozenContexts.get(recipient.id);
-    const eventKey = String(context?.order?.id ?? context?.checkout?.id ?? "");
+    const eventKey = String(
+      context?.automationEnrollmentKey ?? context?.order?.id ?? context?.checkout?.id ?? "",
+    );
     if (isValidMediaUrl(recipient.video_url)) mediaByPhone.set(to, recipient.video_url);
     rows.push({
       campaign_id: campaignId,
@@ -671,6 +689,12 @@ export async function processWhatsappQueueBatch(options?: {
   const automationQueueHandler = [...campaignById.values()].some((c) => c.origin === "automacao")
     ? (await import("./automations-engine.server")).handleAutomationQueueResult
     : null;
+  const marketingPhones = [...recipientById.values()]
+    .filter((recipient) => campaignById.get(recipient.campaign_id)?.message_type === "marketing")
+    .map((recipient) => recipient.phone);
+  const suppressedPhones = marketingPhones.length > 0
+    ? await (await import("./whatsapp-suppression.server")).getSuppressedWhatsappPhones(marketingPhones)
+    : new Set<string>();
 
   // Corpo real dos templates deste lote (1 busca), pra espelhar o texto na caixa de entrada.
   let templateBodyByKey: Map<string, string> | null = null;
@@ -699,6 +723,30 @@ export async function processWhatsappQueueBatch(options?: {
       return;
     }
     touchedCampaigns.add(campaign.id);
+
+    if (campaign.message_type === "marketing" && suppressedPhones.has(recipient.phone)) {
+      const reason = "opt-out de marketing";
+      await Promise.all([
+        supabaseAdmin
+          .from(JOBS_TABLE)
+          .update({ status: "cancelled", error: reason, next_attempt_at: null, locked_by: null, locked_at: null })
+          .eq("id", job.id),
+        supabaseAdmin
+          .from(RECIPIENTS_TABLE)
+          .update({ status: "cancelled", error_message: reason })
+          .eq("id", recipient.id),
+      ]);
+      if (automationQueueHandler && campaign.origin === "automacao" && recipient.customer_id) {
+        await automationQueueHandler({
+          campaignId: campaign.id,
+          customerId: recipient.customer_id,
+          outcome: "failed",
+          error: reason,
+        });
+      }
+      failed++;
+      return;
+    }
 
     const bodyParams = Array.isArray(recipient.params) ? recipient.params : [];
     const templateLanguage = campaign.template_language || settings.templateLanguage;

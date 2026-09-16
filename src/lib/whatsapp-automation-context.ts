@@ -1,5 +1,7 @@
 export type AutomationEventContext = {
   capturedAt: string;
+  /** Identifica uma entrada específica na régua; evita deduplicar reentradas legítimas. */
+  automationEnrollmentKey?: string;
   order?: {
     id: string;
     orderNumber: string;
@@ -28,6 +30,8 @@ export type AutomationEventContext = {
   /** Cupom de cashback do PEDIDO deste contexto — congelado para que a automação
    *  envie exatamente o cupom daquela compra, e não o cupom mais recente do cliente. */
   cashback?: {
+    /** Ausente apenas em runs antigos, anteriores ao controle por cupom. */
+    id?: number;
     code: string;
     amount: number;
     minimumPurchase: number;
@@ -79,6 +83,12 @@ export function buildAutomationTokenReplacements(
   const validity = cashback?.endsAt
     ? new Date(cashback.endsAt).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })
     : "—";
+  const remainingMs = cashback?.endsAt ? new Date(cashback.endsAt).getTime() - Date.now() : Number.NaN;
+  const daysUntilExpiration = Number.isFinite(remainingMs)
+    ? remainingMs <= 86_400_000
+      ? "hoje"
+      : `em ${Math.ceil(remainingMs / 86_400_000)} dias`
+    : "—";
 
   return {
     "{{NOME_CLIENTE}}": recipient.firstName || "Cliente",
@@ -96,6 +106,7 @@ export function buildAutomationTokenReplacements(
     "{{VALOR_CASHBACK}}": cashback ? brl(cashback.amount) : "—",
     "{{COMPRA_MINIMA_CASHBACK}}": cashback ? brl(cashback.minimumPurchase) : "—",
     "{{VALIDADE_CASHBACK}}": validity,
+    "{{DIAS_PARA_EXPIRAR}}": daysUntilExpiration,
   };
 }
 

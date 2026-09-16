@@ -278,12 +278,14 @@ export type Database = {
           order_number: string | null
           order_total: number
           percentage: number
+          redeemed_order_id: string | null
           shopify_customer_gid: string | null
           shopify_discount_id: string | null
           shopify_order_id: string
           starts_at: string
           status: string
           updated_at: string
+          used_at: string | null
         }
         Insert: {
           cancelled_at?: string | null
@@ -300,12 +302,14 @@ export type Database = {
           order_number?: string | null
           order_total?: number
           percentage: number
+          redeemed_order_id?: string | null
           shopify_customer_gid?: string | null
           shopify_discount_id?: string | null
           shopify_order_id: string
           starts_at: string
           status?: string
           updated_at?: string
+          used_at?: string | null
         }
         Update: {
           cancelled_at?: string | null
@@ -322,12 +326,14 @@ export type Database = {
           order_number?: string | null
           order_total?: number
           percentage?: number
+          redeemed_order_id?: string | null
           shopify_customer_gid?: string | null
           shopify_discount_id?: string | null
           shopify_order_id?: string
           starts_at?: string
           status?: string
           updated_at?: string
+          used_at?: string | null
         }
         Relationships: []
       }
@@ -1692,6 +1698,7 @@ export type Database = {
           phone: string | null
           province: string | null
           rfm_segment: string | null
+          rfm_segment_changed_at: string | null
           tags: string[] | null
           tags_custom: string[] | null
           updated_at: string
@@ -1708,6 +1715,7 @@ export type Database = {
           phone?: string | null
           province?: string | null
           rfm_segment?: string | null
+          rfm_segment_changed_at?: string | null
           tags?: string[] | null
           tags_custom?: string[] | null
           updated_at?: string
@@ -1724,6 +1732,7 @@ export type Database = {
           phone?: string | null
           province?: string | null
           rfm_segment?: string | null
+          rfm_segment_changed_at?: string | null
           tags?: string[] | null
           tags_custom?: string[] | null
           updated_at?: string
@@ -2433,6 +2442,7 @@ export type Database = {
       }
       whatsapp_automations: {
         Row: {
+          automation_kind: string
           ativo: boolean
           created_at: string
           descricao: string | null
@@ -2447,9 +2457,11 @@ export type Database = {
           segment_type: string
           steps: Json
           total_execucoes: number
+          trigger_config: Json
           updated_at: string
         }
         Insert: {
+          automation_kind?: string
           ativo?: boolean
           created_at?: string
           descricao?: string | null
@@ -2464,9 +2476,11 @@ export type Database = {
           segment_type: string
           steps?: Json
           total_execucoes?: number
+          trigger_config?: Json
           updated_at?: string
         }
         Update: {
+          automation_kind?: string
           ativo?: boolean
           created_at?: string
           descricao?: string | null
@@ -2481,6 +2495,7 @@ export type Database = {
           segment_type?: string
           steps?: Json
           total_execucoes?: number
+          trigger_config?: Json
           updated_at?: string
         }
         Relationships: [

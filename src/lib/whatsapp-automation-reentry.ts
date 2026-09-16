@@ -1,4 +1,4 @@
-export const AUTOMATION_REENTRY_MODES = ["once", "per_order", "per_checkout", "after_days"] as const;
+export const AUTOMATION_REENTRY_MODES = ["once", "per_order", "per_checkout", "after_days", "per_segment_entry"] as const;
 export type AutomationReentryMode = (typeof AUTOMATION_REENTRY_MODES)[number];
 
 export type PreviousAutomationRun = {
@@ -57,6 +57,18 @@ export function decideAutomationReentry(params: {
     return alreadyUsed
       ? { eligible: false, reason: "already_enrolled" }
       : { eligible: true, enrollmentKey: params.contextKey };
+  }
+
+  if (mode === "per_segment_entry") {
+    const enrollmentKey = params.contextKey.startsWith("rfm-entry:")
+      ? params.contextKey
+      : `rfm-entry:${params.contextKey}`;
+    const alreadyUsed = previousRuns.some(
+      (run) => run.enrollment_key === enrollmentKey || run.context_key === params.contextKey,
+    );
+    return alreadyUsed
+      ? { eligible: false, reason: "already_enrolled" }
+      : { eligible: true, enrollmentKey };
   }
 
   const days = Math.max(1, Number(params.reentryAfterDays ?? 30));

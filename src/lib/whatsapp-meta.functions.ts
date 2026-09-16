@@ -305,7 +305,11 @@ export const getTemplateStats = createServerFn({ method: "POST" })
 
 const templateComponentSchema = z.union([
   z.object({ type: z.literal("HEADER"), format: z.literal("TEXT"), text: z.string().min(1) }),
-  z.object({ type: z.literal("BODY"), text: z.string().min(1) }),
+  z.object({
+    type: z.literal("BODY"),
+    text: z.string().min(1),
+    example: z.object({ body_text: z.array(z.array(z.string().min(1))).min(1) }).optional(),
+  }),
   z.object({ type: z.literal("FOOTER"), text: z.string().min(1) }),
   z.object({
     type: z.literal("BUTTONS"),
@@ -341,6 +345,14 @@ export const createMetaTemplate = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { createTemplate } = await import("./whatsapp-meta.server");
     return createTemplate(data);
+  });
+
+/** Instala as réguas RFM/cashback e envia seus modelos de mensagem para revisão na Meta. */
+export const installLifecycleAutomations = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .handler(async () => {
+    const { installLifecycleAutomationBundle } = await import("./lifecycle-automations.server");
+    return installLifecycleAutomationBundle();
   });
 
 /** Liga o campo `message_template_status_update` no webhook do App — sem isso a Meta nunca manda
@@ -457,6 +469,22 @@ export const saveAutomation = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => automationSchema.parse(data))
   .handler(async ({ data }) => {
+    if (data.id && data.ativo) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: current, error } = await (supabaseAdmin.from("whatsapp_automations") as any)
+        .select("automation_kind")
+        .eq("id", data.id)
+        .maybeSingle();
+      if (error) return { success: false as const, error: error.message };
+      if (current?.automation_kind === "rfm" || current?.automation_kind === "cashback") {
+        const { validateLifecycleAutomationTemplates } = await import("./lifecycle-automations.server");
+        const validation = await validateLifecycleAutomationTemplates({
+          automation_kind: current.automation_kind,
+          steps: data.steps,
+        });
+        if (!validation.ready) return { success: false as const, error: validation.error };
+      }
+    }
     const { upsertAutomation } = await import("./whatsapp-meta.server");
     return upsertAutomation(data);
   });
@@ -472,6 +500,17 @@ export const toggleAutomation = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.object({ id: z.string().uuid(), ativo: z.boolean() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    if (data.ativo) {
+      const { data: automation, error: automationError } = await (supabaseAdmin.from("whatsapp_automations") as any)
+        .select("automation_kind, steps")
+        .eq("id", data.id)
+        .maybeSingle();
+      if (automationError) return { success: false as const, error: automationError.message };
+      if (!automation) return { success: false as const, error: "Automação não encontrada." };
+      const { validateLifecycleAutomationTemplates } = await import("./lifecycle-automations.server");
+      const validation = await validateLifecycleAutomationTemplates(automation);
+      if (!validation.ready) return { success: false as const, error: validation.error };
+    }
     const { error } = await supabaseAdmin
       .from("whatsapp_automations")
       .update({ ativo: data.ativo, updated_at: new Date().toISOString() } as never)
@@ -496,6 +535,22 @@ export const runAutomationNow = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: automation, error } = await (supabaseAdmin.from("whatsapp_automations") as any)
+      .select("automation_kind, ativo")
+      .eq("id", data.id)
+      .maybeSingle();
+    if (error) return { success: false as const, error: error.message };
+    if (
+      automation &&
+      (automation.automation_kind === "rfm" || automation.automation_kind === "cashback") &&
+      !automation.ativo
+    ) {
+      return {
+        success: false as const,
+        error: "Esta régua de ciclo de vida está pausada. Ative-a somente depois que os modelos forem aprovados pela Meta.",
+      };
+    }
     const { runAutomationsTick } = await import("./automations-engine.server");
     const result = await runAutomationsTick({ automationId: data.id, force: true });
     return { success: true as const, ...result };

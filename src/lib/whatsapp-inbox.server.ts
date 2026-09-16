@@ -1,6 +1,8 @@
 /** Caixa de entrada do WhatsApp: registra tudo que o cliente manda pro número conectado
  *  e permite responder em texto livre dentro da janela de 24h da Meta. */
 
+import { META_GRAPH_API_VERSION } from "./whatsapp-phone-registration";
+
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
@@ -171,7 +173,7 @@ export async function sendInboxReply(threadId: string, text: string): Promise<{ 
     return { success: false, error: "Configure o token de acesso e o Phone Number ID em Configurações." };
   }
 
-  const res = await fetch(`https://graph.facebook.com/v20.0/${settings.phoneNumberId}/messages`, {
+  const res = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${settings.phoneNumberId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
     body: JSON.stringify({

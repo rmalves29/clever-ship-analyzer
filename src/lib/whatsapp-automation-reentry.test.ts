@@ -85,4 +85,22 @@ describe("whatsapp automation reentry", () => {
       }),
     ).toEqual({ eligible: true, enrollmentKey: "after_days:2026-08-25" });
   });
+
+  it("permite uma execução por entrada no segmento RFM", () => {
+    const first = decideAutomationReentry({
+      mode: "per_segment_entry",
+      contextKey: "rfm-entry:2026-08-25T20:00:00.000Z",
+      previousRuns: [],
+      now,
+    });
+    expect(first).toEqual({ eligible: true, enrollmentKey: "rfm-entry:2026-08-25T20:00:00.000Z" });
+    expect(
+      decideAutomationReentry({
+        mode: "per_segment_entry",
+        contextKey: "rfm-entry:2026-08-25T20:00:00.000Z",
+        previousRuns: [{ enrolled_at: now.toISOString(), enrollment_key: first.eligible ? first.enrollmentKey : null, status: "completed" }],
+        now,
+      }),
+    ).toEqual({ eligible: false, reason: "already_enrolled" });
+  });
 });

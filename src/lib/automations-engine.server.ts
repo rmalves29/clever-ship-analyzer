@@ -4,6 +4,12 @@
 import { automationDeliveryAction } from "./whatsapp-automation-delivery-state";
 import { decideAutomationReentry } from "./whatsapp-automation-reentry";
 import { resolveWaitInput } from "./automation-wait";
+import {
+  parseCashbackSendSchedule,
+  pickInitialCashbackStep,
+  pickNextCashbackStep,
+  type CashbackSendSchedule,
+} from "./cashback-automation-schedule";
 
 export type SendStep = {
   id: string;
@@ -17,6 +23,7 @@ export type SendStep = {
   bodyParams: string[];
   bodyParamTokens: string[];
   couponCode: string | null;
+  schedule?: CashbackSendSchedule;
   nextStepId: string | null;
 };
 
@@ -61,6 +68,7 @@ type RawStep = {
   bodyParams?: unknown;
   bodyParamTokens?: unknown;
   couponCode?: unknown;
+  schedule?: unknown;
   nextStepId?: unknown;
   condition?: unknown;
   yesStepId?: unknown;
@@ -122,6 +130,7 @@ export function parseSteps(raw: unknown): AutomationStep[] {
       const templateName = String(s.templateName ?? "");
       if (!templateName) return null;
       const resolved = resolveWaitInput(s);
+      const schedule = parseCashbackSendSchedule(s.schedule);
       return {
         id,
         type: "send",
@@ -134,6 +143,7 @@ export function parseSteps(raw: unknown): AutomationStep[] {
         bodyParams: Array.isArray(s.bodyParams) ? (s.bodyParams as string[]) : [],
         bodyParamTokens: Array.isArray(s.bodyParamTokens) ? (s.bodyParamTokens as string[]) : [],
         couponCode: (s.couponCode ?? null) as string | null,
+        ...(schedule ? { schedule } : {}),
         nextStepId: s.nextStepId ? String(s.nextStepId) : null,
       };
     })
@@ -223,7 +233,344 @@ export async function resolveNextActiveStep(
   return null;
 }
 
+const OPEN_RUN_STATUSES = ["pending_approval", "active", "waiting_send"] as const;
+const SPECIAL_QUERY_PAGE_SIZE = 500;
+
+function getAutomationKind(automation: any): "segment" | "rfm" | "cashback" {
+  if (automation?.automation_kind === "rfm" || automation?.automation_kind === "cashback") {
+    return automation.automation_kind;
+  }
+  return "segment";
+}
+
+async function exitOtherRFMRuns(customerIds: string[]): Promise<void> {
+  if (customerIds.length === 0) return;
+  const supabaseAdmin = await admin();
+  const { data: automationRows } = await (supabaseAdmin.from("whatsapp_automations") as any)
+    .select("id")
+    .eq("automation_kind", "rfm");
+  const automationIds = (automationRows ?? []).map((row: any) => String(row.id));
+  if (automationIds.length === 0) return;
+
+  for (let start = 0; start < customerIds.length; start += 200) {
+    const batch = customerIds.slice(start, start + 200);
+    const { data: runs } = await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+      .select("id")
+      .in("automation_id", automationIds)
+      .in("customer_id", batch)
+      .in("status", [...OPEN_RUN_STATUSES]);
+    await markRunsExited(
+      (runs ?? []).map((run: any) => String(run.id)),
+      "Cliente entrou em outro segmento RFM.",
+    );
+  }
+}
+
+async function enrollRFMCustomers(automation: any, steps: AutomationStep[]): Promise<number> {
+  const segment = String(automation?.trigger_config?.rfmSegment ?? "").trim();
+  const firstStep = steps[0];
+  if (!segment || !firstStep || firstStep.type !== "send") return 0;
+
+  const supabaseAdmin = await admin();
+  const rows: Array<{ id: string; phone: string; rfm_segment_changed_at: string | null }> = [];
+  for (let page = 0; ; page++) {
+    const { data, error } = await (supabaseAdmin.from("shopify_customers") as any)
+      .select("id, phone, rfm_segment_changed_at")
+      .eq("rfm_segment", segment)
+      .not("phone", "is", null)
+      .order("id", { ascending: true })
+      .range(page * SPECIAL_QUERY_PAGE_SIZE, page * SPECIAL_QUERY_PAGE_SIZE + SPECIAL_QUERY_PAGE_SIZE - 1);
+    if (error) throw new Error(`Erro ao carregar clientes RFM (${segment}): ${error.message}`);
+    if (!data?.length) break;
+    rows.push(...data);
+    if (data.length < SPECIAL_QUERY_PAGE_SIZE) break;
+  }
+  if (rows.length === 0) return 0;
+
+  const { toE164 } = await import("./whatsapp-meta.server");
+  const valid = rows
+    .map((row) => ({ ...row, phone: toE164(row.phone) }))
+    .filter((row) => row.phone && row.phone.length >= 12);
+  if (valid.length === 0) return 0;
+
+  const { data: existingRows, error: existingError } = await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+    .select("customer_id, enrollment_key")
+    .eq("automation_id", automation.id);
+  if (existingError) throw new Error(`Erro ao consultar entradas RFM: ${existingError.message}`);
+  const existingKeys = new Set(
+    (existingRows ?? []).map((row: any) => `${String(row.customer_id)}|${String(row.enrollment_key)}`),
+  );
+
+  const candidates = valid.flatMap((row) => {
+    const entryAt = row.rfm_segment_changed_at || "legacy";
+    const enrollmentKey = `rfm-entry:${entryAt}`;
+    return existingKeys.has(`${row.id}|${enrollmentKey}`) ? [] : [{ ...row, enrollmentKey }];
+  });
+  if (candidates.length === 0) return 0;
+
+  await exitOtherRFMRuns(candidates.map((row) => row.id));
+  const { captureAutomationEventContext } = await import("./whatsapp-automation-context.server");
+  const inserts = await Promise.all(
+    candidates.map(async (row) => {
+      const captured = await captureAutomationEventContext(row.id);
+      const entryTime = new Date(row.rfm_segment_changed_at ?? Date.now()).getTime();
+      const dueTime = Number.isFinite(entryTime)
+        ? Math.max(Date.now(), entryTime + firstStep.waitMinutes * 60_000)
+        : Date.now() + firstStep.waitMinutes * 60_000;
+      return {
+        automation_id: automation.id,
+        customer_id: row.id,
+        phone: row.phone,
+        status: "active",
+        current_step_id: firstStep.id,
+        next_run_at: new Date(dueTime).toISOString(),
+        event_context: { ...captured.context, automationEnrollmentKey: row.enrollmentKey },
+        context_key: captured.contextKey,
+        enrollment_key: row.enrollmentKey,
+      };
+    }),
+  );
+  const { error } = await (supabaseAdmin.from("whatsapp_automation_runs") as any).upsert(inserts, {
+    onConflict: "automation_id,customer_id,enrollment_key",
+    ignoreDuplicates: true,
+  });
+  if (error) throw new Error(`Erro ao matricular clientes RFM: ${error.message}`);
+  return inserts.length;
+}
+
+async function enrollCashbackCustomers(automation: any, steps: AutomationStep[]): Promise<number> {
+  const sendSteps = steps.filter((step): step is SendStep => step.type === "send");
+  const firstStep = sendSteps[0];
+  if (!firstStep || !firstStep.schedule) return 0;
+
+  const supabaseAdmin = await admin();
+  const now = new Date();
+  const coupons: Array<{
+    id: number;
+    shopify_order_id: string;
+    customer_row_id: string;
+    starts_at: string;
+    ends_at: string;
+  }> = [];
+  for (let page = 0; ; page++) {
+    const { data, error } = await (supabaseAdmin.from("cashback_coupons") as any)
+      .select("id, shopify_order_id, customer_row_id, starts_at, ends_at")
+      .in("status", ["pending", "active"])
+      .not("customer_row_id", "is", null)
+      .gt("ends_at", now.toISOString())
+      .order("id", { ascending: true })
+      .range(page * SPECIAL_QUERY_PAGE_SIZE, page * SPECIAL_QUERY_PAGE_SIZE + SPECIAL_QUERY_PAGE_SIZE - 1);
+    if (error) throw new Error(`Erro ao carregar cashbacks para lembrete: ${error.message}`);
+    if (!data?.length) break;
+    coupons.push(...data);
+    if (data.length < SPECIAL_QUERY_PAGE_SIZE) break;
+  }
+  if (coupons.length === 0) return 0;
+
+  const { data: existingRows, error: existingError } = await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+    .select("customer_id, enrollment_key, status")
+    .eq("automation_id", automation.id);
+  if (existingError) throw new Error(`Erro ao consultar lembretes de cashback: ${existingError.message}`);
+  const existingKeys = new Set((existingRows ?? []).map((row: any) => String(row.enrollment_key)));
+  const customersWithOpenRun = new Set(
+    (existingRows ?? [])
+      .filter((row: any) => OPEN_RUN_STATUSES.includes(row.status))
+      .map((row: any) => String(row.customer_id)),
+  );
+  const reservedCustomers = new Set(customersWithOpenRun);
+  const pendingCoupons = coupons
+    .sort((a, b) => new Date(a.ends_at).getTime() - new Date(b.ends_at).getTime())
+    .filter((coupon) => {
+      if (existingKeys.has(`cashback:${coupon.id}`) || reservedCustomers.has(coupon.customer_row_id)) return false;
+      reservedCustomers.add(coupon.customer_row_id);
+      return true;
+    });
+  if (pendingCoupons.length === 0) return 0;
+
+  const customerIds = [...new Set(pendingCoupons.map((coupon) => coupon.customer_row_id))];
+  const phones = new Map<string, string>();
+  const { toE164 } = await import("./whatsapp-meta.server");
+  for (let start = 0; start < customerIds.length; start += 200) {
+    const { data } = await (supabaseAdmin.from("shopify_customers") as any)
+      .select("id, phone")
+      .in("id", customerIds.slice(start, start + 200));
+    for (const customer of data ?? []) {
+      const phone = toE164(customer.phone);
+      if (phone && phone.length >= 12) phones.set(String(customer.id), phone);
+    }
+  }
+
+  const { captureAutomationEventContext } = await import("./whatsapp-automation-context.server");
+  const inserts = (
+    await Promise.all(
+      pendingCoupons.map(async (coupon) => {
+        const phone = phones.get(coupon.customer_row_id);
+        if (!phone) return null;
+        const captured = await captureAutomationEventContext(coupon.customer_row_id, {
+          orderId: coupon.shopify_order_id,
+        });
+        if (!captured.context.cashback) return null;
+        const picked = pickInitialCashbackStep(sendSteps, firstStep.id, captured.context, now);
+        if (!picked) return null;
+        return {
+          automation_id: automation.id,
+          customer_id: coupon.customer_row_id,
+          phone,
+          status: "active",
+          current_step_id: picked.step.id,
+          next_run_at: picked.dueAt.toISOString(),
+          event_context: {
+            ...captured.context,
+            automationEnrollmentKey: `cashback:${coupon.id}`,
+          },
+          context_key: captured.contextKey,
+          enrollment_key: `cashback:${coupon.id}`,
+        };
+      }),
+    )
+  ).filter((row): row is NonNullable<typeof row> => Boolean(row));
+  if (inserts.length === 0) return 0;
+
+  const { error } = await (supabaseAdmin.from("whatsapp_automation_runs") as any).upsert(inserts, {
+    onConflict: "automation_id,customer_id,enrollment_key",
+    ignoreDuplicates: true,
+  });
+  if (error) throw new Error(`Erro ao matricular lembretes de cashback: ${error.message}`);
+  return inserts.length;
+}
+
+async function markRunsExited(runIds: string[], reason: string): Promise<number> {
+  if (runIds.length === 0) return 0;
+  const supabaseAdmin = await admin();
+  let updated = 0;
+  for (let start = 0; start < runIds.length; start += 200) {
+    const ids = runIds.slice(start, start + 200);
+    const { data: openRuns } = await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+      .select("id, campaign_id, customer_id, event_context")
+      .in("id", ids)
+      .in("status", [...OPEN_RUN_STATUSES]);
+    const { data, error } = await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+      .update({
+        status: "exited",
+        next_run_at: null,
+        completed_at: new Date().toISOString(),
+        last_error: reason,
+        updated_at: new Date().toISOString(),
+      })
+      .in("id", ids)
+      .in("status", [...OPEN_RUN_STATUSES])
+      .select("id");
+    if (error) throw new Error(`Erro ao encerrar execucao de automacao: ${error.message}`);
+    updated += data?.length ?? 0;
+
+    // Se a mensagem ainda não saiu do worker, cancela o job correspondente. Um job já
+    // marcado como "sending" pode estar em trânsito e não é alterado para evitar corrida.
+    for (const run of openRuns ?? []) {
+      if (!run.campaign_id) continue;
+      const eventKey = String(
+        run.event_context?.automationEnrollmentKey ??
+          run.event_context?.order?.id ??
+          run.event_context?.checkout?.id ??
+          "",
+      );
+      let recipientQuery = (supabaseAdmin.from("wa_campaign_recipients") as any)
+        .select("id")
+        .eq("campaign_id", run.campaign_id)
+        .eq("customer_id", run.customer_id);
+      recipientQuery = eventKey ? recipientQuery.eq("event_key", eventKey) : recipientQuery.eq("event_key", "");
+      const { data: recipients } = await recipientQuery;
+      const recipientIds = (recipients ?? []).map((recipient: any) => String(recipient.id));
+      if (recipientIds.length === 0) continue;
+      const { data: cancelledJobs } = await (supabaseAdmin.from("wa_jobs") as any)
+        .update({ status: "cancelled", error: reason, locked_by: null, locked_at: null })
+        .in("recipient_id", recipientIds)
+        .in("status", ["queued", "retry_wait"])
+        .select("recipient_id");
+      const cancelledRecipientIds = (cancelledJobs ?? []).map((job: any) => String(job.recipient_id));
+      if (cancelledRecipientIds.length > 0) {
+        await (supabaseAdmin.from("wa_campaign_recipients") as any)
+          .update({ status: "cancelled", error_message: reason })
+          .in("id", cancelledRecipientIds);
+      }
+    }
+  }
+  return updated;
+}
+
+async function cleanupRFMRunMembership(automation: any): Promise<number> {
+  const segment = String(automation?.trigger_config?.rfmSegment ?? "").trim();
+  if (!segment) return 0;
+  const supabaseAdmin = await admin();
+  const { data: runs, error } = await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+    .select("id, customer_id")
+    .eq("automation_id", automation.id)
+    .in("status", [...OPEN_RUN_STATUSES]);
+  if (error) throw new Error(`Erro ao conferir saidas RFM: ${error.message}`);
+  if (!runs?.length) return 0;
+
+  const customerIds = [...new Set(runs.map((run: any) => String(run.customer_id)))];
+  const currentSegment = new Map<string, string | null>();
+  for (let start = 0; start < customerIds.length; start += 200) {
+    const { data } = await (supabaseAdmin.from("shopify_customers") as any)
+      .select("id, rfm_segment")
+      .in("id", customerIds.slice(start, start + 200));
+    for (const customer of data ?? []) currentSegment.set(String(customer.id), customer.rfm_segment ?? null);
+  }
+  const staleIds = runs
+    .filter((run: any) => currentSegment.get(String(run.customer_id)) !== segment)
+    .map((run: any) => String(run.id));
+  return markRunsExited(staleIds, `Cliente saiu do segmento RFM ${segment}.`);
+}
+
+function cashbackCouponIdFromRun(run: any): number | null {
+  const contextId = Number(run?.event_context?.cashback?.id);
+  if (Number.isFinite(contextId) && contextId > 0) return contextId;
+  const match = /^cashback:(\d+)$/.exec(String(run?.enrollment_key ?? ""));
+  return match ? Number(match[1]) : null;
+}
+
+async function cleanupCashbackRuns(automation: any): Promise<number> {
+  const supabaseAdmin = await admin();
+  const { data: runs, error } = await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+    .select("id, enrollment_key, event_context")
+    .eq("automation_id", automation.id)
+    .in("status", [...OPEN_RUN_STATUSES]);
+  if (error) throw new Error(`Erro ao conferir lembretes de cashback: ${error.message}`);
+  if (!runs?.length) return 0;
+
+  const couponIds = [...new Set(runs.map(cashbackCouponIdFromRun).filter((id: number | null): id is number => id !== null))];
+  const openIds = new Set<number>();
+  if (couponIds.length > 0) {
+    for (let start = 0; start < couponIds.length; start += 200) {
+      const { data } = await (supabaseAdmin.from("cashback_coupons") as any)
+        .select("id, status, ends_at")
+        .in("id", couponIds.slice(start, start + 200))
+        .in("status", ["pending", "active"])
+        .gt("ends_at", new Date().toISOString());
+      for (const coupon of data ?? []) openIds.add(Number(coupon.id));
+    }
+  }
+  const staleIds = runs
+    .filter((run: any) => {
+      const couponId = cashbackCouponIdFromRun(run);
+      return couponId === null || !openIds.has(couponId);
+    })
+    .map((run: any) => String(run.id));
+  return markRunsExited(staleIds, "Cashback utilizado, cancelado ou expirado.");
+}
+
+async function cleanupLifecycleRuns(automation: any): Promise<number> {
+  const kind = getAutomationKind(automation);
+  if (kind === "rfm") return cleanupRFMRunMembership(automation);
+  if (kind === "cashback") return cleanupCashbackRuns(automation);
+  return 0;
+}
+
 async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Promise<number> {
+  const kind = getAutomationKind(automation);
+  if (kind === "rfm") return enrollRFMCustomers(automation, steps);
+  if (kind === "cashback") return enrollCashbackCustomers(automation, steps);
+
   const supabaseAdmin = await admin();
   const [
     { resolveSegmentRecipients, createCampaignRow, findPendingApprovalCampaignId, syncCampaignMessageConfig },
@@ -364,14 +711,26 @@ async function advanceRuns(runs: any[], steps: AutomationStep[], campaignId: str
   for (const r of runs) {
     const current = steps.find((s) => s.id === r.current_step_id);
     const startId = current?.type === "send" ? current.nextStepId : null;
-    const next = await resolveNextActiveStep(steps, startId, {
-      customer_id: r.customer_id,
-      enrolled_at: r.enrolled_at,
-    });
+    let next: SendStep | null;
+    let scheduledAt: Date | null = null;
+    if (current?.type === "send" && current.schedule) {
+      const scheduled = pickNextCashbackStep(
+        steps.filter((step): step is SendStep => step.type === "send"),
+        startId,
+        r.event_context ?? {},
+      );
+      next = scheduled?.step ?? null;
+      scheduledAt = scheduled?.dueAt ?? null;
+    } else {
+      next = await resolveNextActiveStep(steps, startId, {
+        customer_id: r.customer_id,
+        enrolled_at: r.enrolled_at,
+      });
+    }
     const patch = next
       ? {
           current_step_id: next.id,
-          next_run_at: new Date(Date.now() + next.waitMinutes * 60_000).toISOString(),
+          next_run_at: (scheduledAt ?? new Date(Date.now() + next.waitMinutes * 60_000)).toISOString(),
           status: "active",
           campaign_id: campaignId ?? r.campaign_id,
           last_error: null,
@@ -438,7 +797,28 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
       continue;
     }
 
-    const customerIds = stepRuns.map((r) => r.customer_id as string);
+    let eligibleRuns = stepRuns;
+    if (step.messageType === "marketing") {
+      const { getSuppressedWhatsappPhones } = await import("./whatsapp-suppression.server");
+      const suppressedPhones = await getSuppressedWhatsappPhones(stepRuns.map((run) => String(run.phone ?? "")));
+      const suppressedRuns = stepRuns.filter((run) => suppressedPhones.has(String(run.phone ?? "")));
+      if (suppressedRuns.length > 0) {
+        await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+          .update({
+            status: "failed",
+            next_run_at: null,
+            last_error: "opt-out de marketing",
+            updated_at: new Date().toISOString(),
+          })
+          .in("id", suppressedRuns.map((run) => run.id));
+        processed += suppressedRuns.length;
+        const suppressedIds = new Set(suppressedRuns.map((run) => String(run.id)));
+        eligibleRuns = stepRuns.filter((run) => !suppressedIds.has(String(run.id)));
+      }
+    }
+    if (eligibleRuns.length === 0) continue;
+
+    const customerIds = eligibleRuns.map((r) => r.customer_id as string);
 
     // Reaproveita a campanha já existente pra essa etapa — disparos sucessivos do tick somam
     // no mesmo registro em vez de criar uma campanha nova a cada execução (refreshCampaignStatus
@@ -469,7 +849,7 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
       await syncCampaignMessageConfig(campaignId, step);
     }
 
-    const runIds = stepRuns.map((r) => String(r.id));
+    const runIds = eligibleRuns.map((r) => String(r.id));
     await markRunsWaitingSend(runIds, campaignId);
     const dispatchResult = await dispatchCampaign(campaignId, customerIds);
     if (!dispatchResult.success) {
@@ -478,7 +858,7 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
         .in("id", runIds);
       continue;
     }
-    processed += stepRuns.length;
+    processed += eligibleRuns.length;
   }
   return processed;
 }
@@ -497,6 +877,7 @@ export async function runAutomationsTick(options?: { automationId?: string; forc
     const steps = parseSteps(a.steps);
     if (steps.length === 0) continue;
     automationsProcessed++;
+    runsProcessed += await cleanupLifecycleRuns(a);
     runsProcessed += await enrollNewCustomers(a, steps);
     runsProcessed += await processDueRuns(a, steps);
     await supabaseAdmin

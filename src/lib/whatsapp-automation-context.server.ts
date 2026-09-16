@@ -28,22 +28,26 @@ function shippingTitle(rawData: any): string | null {
   );
 }
 
-export async function captureAutomationEventContext(customerId: string): Promise<{
+export async function captureAutomationEventContext(
+  customerId: string,
+  options?: { orderId?: string },
+): Promise<{
   context: AutomationEventContext;
   contextKey: string;
 }> {
   const db = await admin();
   const capturedAt = new Date().toISOString();
 
+  let orderQuery = db
+    .from("shopify_orders")
+    .select("id, order_number, total_price, financial_status, fulfillment_status, raw_data, processed_at, created_at")
+    .eq("customer_id", customerId);
+  orderQuery = options?.orderId
+    ? orderQuery.eq("id", options.orderId)
+    : orderQuery.order("processed_at", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false });
+
   const [{ data: orderRow }, { data: checkoutRow }, { data: settingsRow }] = await Promise.all([
-    db
-      .from("shopify_orders")
-      .select("id, order_number, total_price, financial_status, fulfillment_status, raw_data, processed_at, created_at")
-      .eq("customer_id", customerId)
-      .order("processed_at", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    orderQuery.limit(1).maybeSingle(),
     db
       .from("shopify_abandoned_checkouts")
       .select("id, checkout_url, total_price, created_at")

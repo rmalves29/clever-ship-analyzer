@@ -7,7 +7,9 @@ import {
   buildCashbackCode,
   calculateCashback,
   DEFAULT_CASHBACK_SETTINGS,
+  extractCashbackOrderDiscountCodes,
   isOrderEligibleForCashback,
+  normalizeCashbackCode,
   type CashbackSettings,
   type EligibilityOrder,
 } from "./cashback-shared";
@@ -15,6 +17,95 @@ import {
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin as any;
+}
+
+/**
+ * Marca como utilizado o cashback resgatado em um pedido novo. A origem do cupom e
+ * excluida da busca para nunca confundir geracao com resgate. Idempotente por status.
+ */
+export async function reconcileCashbackRedemptionForOrder(input: {
+  orderId: string;
+  processedAt?: string | null;
+  rawData: unknown;
+}): Promise<{ used: number; codes: string[] }> {
+  const codes = extractCashbackOrderDiscountCodes(input.rawData);
+  if (codes.length === 0) return { used: 0, codes: [] };
+
+  const db = await admin();
+  const { data, error } = await db
+    .from("cashback_coupons")
+    .select("id, code")
+    .in("code", codes)
+    .neq("shopify_order_id", input.orderId)
+    .in("status", ["pending", "active"]);
+  if (error) throw new Error(`Erro ao conferir uso do cashback: ${error.message}`);
+
+  const rows = (data ?? []) as { id: number; code: string }[];
+  if (rows.length === 0) return { used: 0, codes: [] };
+
+  const usedAt = input.processedAt && Number.isFinite(new Date(input.processedAt).getTime())
+    ? new Date(input.processedAt).toISOString()
+    : new Date().toISOString();
+  const { data: updated, error: updateError } = await db
+    .from("cashback_coupons")
+    .update({ status: "used", used_at: usedAt, redeemed_order_id: input.orderId, last_error: null })
+    .in("id", rows.map((row) => row.id))
+    .in("status", ["pending", "active"])
+    .select("id");
+  if (updateError) throw new Error(`Erro ao registrar uso do cashback: ${updateError.message}`);
+  return { used: updated?.length ?? rows.length, codes: rows.map((row) => normalizeCashbackCode(row.code)) };
+}
+
+/** Reconfere pedidos ja sincronizados para corrigir cupons usados antes desta versao. */
+export async function reconcileCashbackRedemptions(): Promise<{ scannedOrders: number; used: number }> {
+  const db = await admin();
+  const { data: openRows, error: openError } = await db
+    .from("cashback_coupons")
+    .select("id, code, shopify_order_id, created_at")
+    .in("status", ["pending", "active"])
+    .order("created_at", { ascending: true });
+  if (openError) throw new Error(`Erro ao carregar cashbacks em aberto: ${openError.message}`);
+  const open = (openRows ?? []) as { id: number; code: string; shopify_order_id: string; created_at: string }[];
+  if (open.length === 0) return { scannedOrders: 0, used: 0 };
+
+  const byCode = new Map(open.map((row) => [normalizeCashbackCode(row.code), row]));
+  const oldest = open[0]!.created_at;
+  let scannedOrders = 0;
+  let used = 0;
+  const pageSize = 500;
+
+  for (let page = 0; ; page++) {
+    const { data: orders, error } = await db
+      .from("shopify_orders")
+      .select("id, processed_at, created_at, raw_data")
+      .gte("created_at", oldest)
+      .order("created_at", { ascending: true })
+      .range(page * pageSize, page * pageSize + pageSize - 1);
+    if (error) throw new Error(`Erro ao conferir pedidos com cashback: ${error.message}`);
+    if (!orders?.length) break;
+    scannedOrders += orders.length;
+
+    for (const order of orders as any[]) {
+      const matched = extractCashbackOrderDiscountCodes(order.raw_data)
+        .map((code) => byCode.get(code))
+        .filter((row): row is (typeof open)[number] => Boolean(row && row.shopify_order_id !== String(order.id)));
+      if (matched.length === 0) continue;
+      const usedAt = order.processed_at ?? order.created_at ?? new Date().toISOString();
+      const { data: updated, error: updateError } = await db
+        .from("cashback_coupons")
+        .update({ status: "used", used_at: usedAt, redeemed_order_id: order.id, last_error: null })
+        .in("id", matched.map((row) => row.id))
+        .in("status", ["pending", "active"])
+        .select("id");
+      if (updateError) throw new Error(`Erro ao corrigir cashback utilizado: ${updateError.message}`);
+      used += updated?.length ?? 0;
+      for (const row of matched) byCode.delete(normalizeCashbackCode(row.code));
+    }
+
+    if (orders.length < pageSize || byCode.size === 0) break;
+  }
+
+  return { scannedOrders, used };
 }
 
 export async function loadCashbackSettings(): Promise<CashbackSettings> {
@@ -236,6 +327,7 @@ export async function reprocessPendingCashback(limit = 50): Promise<{
 }
 
 export type CashbackContextSnapshot = {
+  id: number;
   code: string;
   amount: number;
   minimumPurchase: number;
@@ -331,11 +423,12 @@ export async function loadCashbackForOrder(orderId: string): Promise<CashbackCon
   const db = await admin();
   const { data } = await db
     .from("cashback_coupons")
-    .select("code, cashback_amount, minimum_purchase, starts_at, ends_at, status")
+    .select("id, code, cashback_amount, minimum_purchase, starts_at, ends_at, status")
     .eq("shopify_order_id", orderId)
     .maybeSingle();
-  if (!data || data.status === "cancelled") return null;
+  if (!data || ["cancelled", "cancel_pending", "failed", "expired", "used"].includes(String(data.status))) return null;
   return {
+    id: Number(data.id),
     code: String(data.code),
     amount: Number(data.cashback_amount ?? 0),
     minimumPurchase: Number(data.minimum_purchase ?? 0),

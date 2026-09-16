@@ -15,6 +15,7 @@ const LABELS: Record<AutomationReentryMode, string> = {
   per_order: "Uma vez por pedido",
   per_checkout: "Uma vez por checkout",
   after_days: "Novamente após X dias",
+  per_segment_entry: "A cada entrada no segmento RFM",
 };
 
 export function AutomationReentryControl({ automationId }: { automationId: string }) {

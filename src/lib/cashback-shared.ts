@@ -28,6 +28,7 @@ export type CashbackCouponStatus =
   | "pending"
   | "active"
   | "expired"
+  | "used"
   | "cancel_pending"
   | "cancelled"
   | "failed";
@@ -145,6 +146,27 @@ export function buildCashbackCode(order: {
   return `${orderNumber}-${day}-${name}`;
 }
 
+export function normalizeCashbackCode(value: unknown): string {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+/** Aceita snapshots GraphQL (`discountCodes`) e REST (`discount_codes`). */
+export function extractCashbackOrderDiscountCodes(rawData: unknown): string[] {
+  const raw = rawData as any;
+  const candidates = Array.isArray(raw?.discountCodes)
+    ? raw.discountCodes
+    : Array.isArray(raw?.discount_codes)
+      ? raw.discount_codes
+      : [];
+  return Array.from(
+    new Set(
+      candidates
+        .map((entry: unknown) => normalizeCashbackCode(typeof entry === "string" ? entry : (entry as any)?.code))
+        .filter(Boolean),
+    ),
+  );
+}
+
 export type EligibilityOrder = {
   id: string;
   financialStatus: string | null | undefined;
@@ -190,7 +212,7 @@ export function deriveCashbackStatus(
   now: Date = new Date(),
 ): CashbackCouponStatus {
   const status = row.status as CashbackCouponStatus;
-  if (status === "cancelled" || status === "cancel_pending" || status === "failed") return status;
+  if (status === "cancelled" || status === "cancel_pending" || status === "failed" || status === "used") return status;
   const ts = now.getTime();
   if (ts >= new Date(row.ends_at).getTime()) return "expired";
   if (ts < new Date(row.starts_at).getTime()) return "pending";
@@ -201,6 +223,7 @@ export const CASHBACK_STATUS_LABEL: Record<CashbackCouponStatus, string> = {
   pending: "Aguardando liberação",
   active: "Ativo",
   expired: "Expirado",
+  used: "Utilizado",
   cancel_pending: "Cancelamento pendente",
   cancelled: "Cancelado",
   failed: "Falhou",

@@ -84,6 +84,7 @@ export type SendStepSeed = {
   templateName: string;
   templateLanguage?: string | undefined;
   bodyParams: string[];
+  bodyParamTokens?: string[] | undefined;
   couponCode?: string | undefined;
   nextStepId: string | null;
 };
@@ -121,6 +122,7 @@ export type AutomationSeed = {
   steps?: AutomationStepSeed[] | undefined;
   requerAprovacao?: boolean | undefined;
   ativo?: boolean | undefined;
+  automationKind?: "segment" | "rfm" | "cashback" | undefined;
 };
 
 function newId() {
@@ -366,6 +368,7 @@ export function AutomationDialog({
   const [manualPositions, setManualPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(TRIGGER_ID);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
+  const isLifecycleAutomation = seed?.automationKind === "rfm" || seed?.automationKind === "cashback";
 
   useEffect(() => {
     if (!open) return;
@@ -684,12 +687,12 @@ export function AutomationDialog({
               templateLanguage: s.templateLanguage,
               messageType: templateMessageType(tmpl?.category),
               bodyParams: s.bodyParams,
-              bodyParamTokens: templateBodyTokens(tmpl?.components),
+              bodyParamTokens: tmpl ? templateBodyTokens(tmpl.components) : (s.bodyParamTokens ?? []),
               couponCode: s.couponCode?.trim() || undefined,
               nextStepId: s.nextStepId,
             };
           }),
-          requerAprovacao,
+          requerAprovacao: isLifecycleAutomation ? false : requerAprovacao,
           ativo,
         },
       });
@@ -918,10 +921,20 @@ export function AutomationDialog({
                   </div>
                   <div className="flex items-center justify-between rounded-lg border border-border p-3">
                     <div>
-                      <p className="text-sm font-medium">Exigir aprovação</p>
-                      <p className="text-xs text-muted-foreground">Clientes novos ficam na fila até aprovar a leva.</p>
+                      <p className="text-sm font-medium">
+                        {isLifecycleAutomation ? "Aprovação manual desativada" : "Exigir aprovação"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {isLifecycleAutomation
+                          ? "A ativação só é liberada depois que todos os modelos forem aprovados pela Meta."
+                          : "Clientes novos ficam na fila até aprovar a leva."}
+                      </p>
                     </div>
-                    <Switch checked={requerAprovacao} onCheckedChange={setRequerAprovacao} />
+                    <Switch
+                      checked={isLifecycleAutomation ? false : requerAprovacao}
+                      disabled={isLifecycleAutomation}
+                      onCheckedChange={setRequerAprovacao}
+                    />
                   </div>
                   <div className="flex items-center justify-between rounded-lg border border-border p-3">
                     <div>

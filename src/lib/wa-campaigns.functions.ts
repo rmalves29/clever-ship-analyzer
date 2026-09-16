@@ -5,6 +5,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAppAuth } from "./app-auth";
+import { loadSettings } from "./whatsapp-meta.server";
 
 export type WaCampaignListRow = {
   id: string;
@@ -29,6 +30,10 @@ export type WaCampaignListRow = {
   /** Valor vendido atribuído (pedidos pagos até 30 dias após o envio). */
   revenue: number;
   orders: number;
+  /** Custo estimado: mensagens enviadas com sucesso × preço por mensagem (Marketing/Utilidade)
+   *  configurado em Configurações. Não desconta a janela de atendimento gratuita de 24h pra
+   *  mensagens de Utilidade (simplificação — ver nota em `mapRow`). */
+  custo: number;
 };
 
 /** Janela de atribuição de vendas, em dias. */
@@ -49,7 +54,19 @@ async function revenueByCampaign(supabaseAdmin: { rpc: (fn: string, args?: any) 
   return map;
 }
 
-function mapRow(row: any, pending: number, revenue?: { revenue: number; orders: number }): WaCampaignListRow {
+function mapRow(
+  row: any,
+  pending: number,
+  revenue: { revenue: number; orders: number } | undefined,
+  costPerMessage: { marketing: number; utility: number },
+): WaCampaignListRow {
+  const sent = Number(row.sent_count ?? 0);
+  const messageType = row.message_type ?? "marketing";
+  // Simplificação: cobra todo envio bem-sucedido pelo preço cheio do tipo. Mensagens de
+  // Utilidade dentro da janela de atendimento de 24h (cliente já tinha escrito antes) são
+  // grátis na Meta — essa nuance não entra aqui, então o custo de campanhas de Utilidade pode
+  // ficar um pouco acima do real.
+  const custo = sent * (messageType === "utility" ? costPerMessage.utility : costPerMessage.marketing);
   return {
     id: row.id,
     name: row.name,
@@ -72,6 +89,7 @@ function mapRow(row: any, pending: number, revenue?: { revenue: number; orders: 
     pending,
     revenue: revenue?.revenue ?? 0,
     orders: revenue?.orders ?? 0,
+    custo: Number(custo.toFixed(2)),
   };
 }
 
@@ -98,8 +116,9 @@ export const listWaCampaigns = createServerFn({ method: "GET" })
     for (const job of ((jobs ?? []) as any[])) {
       pendingByCampaign.set(job.campaign_id, (pendingByCampaign.get(job.campaign_id) ?? 0) + 1);
     }
-    const revenue = await revenueByCampaign(supabaseAdmin);
-    return rows.map((row) => mapRow(row, pendingByCampaign.get(row.id) ?? 0, revenue.get(row.id)));
+    const [revenue, settings] = await Promise.all([revenueByCampaign(supabaseAdmin), loadSettings()]);
+    const costPerMessage = { marketing: settings.costMarketing ?? 0, utility: settings.costUtility ?? 0 };
+    return rows.map((row) => mapRow(row, pendingByCampaign.get(row.id) ?? 0, revenue.get(row.id), costPerMessage));
   });
 
 /** Campanha aberta: cabeçalho + destinatários reais com motivo de falha. */
@@ -127,8 +146,11 @@ export const getWaCampaign = createServerFn({ method: "POST" })
       .eq("campaign_id", data.campaignId)
       .in("status", ["queued", "retry_wait", "sending"]);
 
+    const [revenueMap, settings] = await Promise.all([revenueByCampaign(supabaseAdmin), loadSettings()]);
+    const costPerMessage = { marketing: settings.costMarketing ?? 0, utility: settings.costUtility ?? 0 };
+
     return {
-      campaign: mapRow(row, pending ?? 0, (await revenueByCampaign(supabaseAdmin)).get(row.id)),
+      campaign: mapRow(row, pending ?? 0, revenueMap.get(row.id), costPerMessage),
       bodyParams: ((row as any).body_params ?? []) as string[],
       bodyParamTokens: ((row as any).body_param_tokens ?? []) as string[],
       lastError: ((row as any).last_error ?? null) as string | null,

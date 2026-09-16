@@ -114,6 +114,11 @@ function pct(part: number, total: number): string {
   return `${Math.round((part / total) * 100)}%`;
 }
 
+function roasLabel(revenue: number, custo: number): string {
+  if (!custo) return "—";
+  return `${(revenue / custo).toFixed(1)}x`;
+}
+
 function Metric({ label, value, hint }: { label: string; value: string; hint?: string | undefined }) {
   return (
     <Box sx={{ textAlign: "right" }}>
@@ -164,13 +169,15 @@ function CampaignsPage() {
           pending: acc.pending + c.pending,
           revenue: acc.revenue + c.revenue,
           orders: acc.orders + c.orders,
+          custo: acc.custo + c.custo,
         }),
-        { sent: 0, delivered: 0, read: 0, failed: 0, pending: 0, revenue: 0, orders: 0 },
+        { sent: 0, delivered: 0, read: 0, failed: 0, pending: 0, revenue: 0, orders: 0, custo: 0 },
       ),
     [filtered],
   );
 
   const totals = filteredTotals;
+  const totalRoas = totals.custo > 0 ? totals.revenue / totals.custo : null;
 
   const approve = async (id: string) => {
     setBusyId(id);
@@ -201,11 +208,19 @@ function CampaignsPage() {
 
   return (
     <Stack spacing={2.5}>
-      <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "repeat(2, 1fr)", lg: "repeat(6, 1fr)" } }}>
-        <Box sx={{ gridColumn: { lg: "span 2" }, border: "1px solid", borderColor: "success.light", bgcolor: "success.50", borderRadius: 3, p: 2 }}>
+      <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(4, 1fr)", lg: "repeat(8, 1fr)" } }}>
+        <Box sx={{ gridColumn: { sm: "span 2" }, border: "1px solid", borderColor: "success.light", bgcolor: "success.50", borderRadius: 3, p: 2 }}>
           <Typography variant="caption" sx={{ fontWeight: 600, color: "success.dark" }}>Valor vendido (30 dias após o envio)</Typography>
           <Typography variant="h5" sx={{ fontWeight: 700, color: "success.dark", mt: 0.5 }}>{money(totals.revenue)}</Typography>
           <Typography variant="caption" color="text.secondary">{totals.orders.toLocaleString("pt-BR")} pedidos atribuídos</Typography>
+        </Box>
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+          <Typography variant="caption" color="text.secondary">Custo estimado</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>{money(totals.custo)}</Typography>
+        </Box>
+        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+          <Typography variant="caption" color="text.secondary">ROAS</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>{totalRoas !== null ? `${totalRoas.toFixed(1)}x` : "—"}</Typography>
         </Box>
         {[
           { label: "Enviadas", value: totals.sent },
@@ -315,6 +330,8 @@ function CampaignsPage() {
               ))}
             </Box>
             <Box sx={{ width: 130, flexShrink: 0, textAlign: "right" }}><Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", color: "text.secondary" }}>Valor vendido</Typography></Box>
+            <Box sx={{ width: 100, flexShrink: 0, textAlign: "right" }}><Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", color: "text.secondary" }}>Custo</Typography></Box>
+            <Box sx={{ width: 80, flexShrink: 0, textAlign: "right" }}><Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", color: "text.secondary" }}>ROAS</Typography></Box>
             <Box sx={{ width: 120, flexShrink: 0 }} />
           </Stack>
 
@@ -355,6 +372,18 @@ function CampaignsPage() {
                     {c.revenue > 0 ? money(c.revenue) : "—"}
                   </Typography>
                   {c.orders > 0 && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>{c.orders} pedidos</Typography>}
+                </Box>
+
+                <Box sx={{ width: 100, flexShrink: 0, textAlign: "right" }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: { xl: "none" }, textTransform: "uppercase", fontSize: 11 }}>Custo</Typography>
+                  <Typography variant="body2" color="text.secondary">{c.custo > 0 ? money(c.custo) : "—"}</Typography>
+                </Box>
+
+                <Box sx={{ width: 80, flexShrink: 0, textAlign: "right" }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: { xl: "none" }, textTransform: "uppercase", fontSize: 11 }}>ROAS</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: c.custo > 0 && c.revenue > c.custo ? "success.main" : "text.secondary" }}>
+                    {roasLabel(c.revenue, c.custo)}
+                  </Typography>
                 </Box>
 
                 <Stack direction="row" spacing={1} sx={{ minWidth: 120, flexShrink: 0, alignItems: "center", justifyContent: "flex-end" }}>

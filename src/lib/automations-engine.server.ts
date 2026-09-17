@@ -592,18 +592,15 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
   const firstStep = steps[0];
   if (!firstStep || firstStep.type !== "send") return 0;
 
-  const recipientsWithContext = await Promise.all(
-    recipients.map(async (recipient) => ({
-      ...recipient,
-      ...(await captureAutomationEventContext(recipient.id)),
-    })),
-  );
-
-  // Paginado: um segmento grande (ex. tag de pop-up com >1000 clientes) gera uma lista de ids
-  // grande demais pra caber numa única URL de `.in()` e a API rejeita a chamada inteira com
-  // "Bad Request" — o mesmo motivo pelo qual `enrollRFMCustomers`/`enrollCashbackCustomers` já
-  // leem em lotes de 200.
-  const recipientIds = recipientsWithContext.map((recipient) => recipient.id);
+  // Consulta barata (sem capturar contexto de evento) primeiro: descarta quem já tem qualquer
+  // histórico nessa automação antes de pagar o custo pesado de captureAutomationEventContext
+  // (pedido + itens + entrega + checkout + cashback, vários round-trips por cliente). Essencial
+  // pra segmentos grandes e estáveis (ex. tag de pop-up com >1000 clientes): sem isso, todo tick
+  // reprocessa o contexto completo de todo mundo — inclusive quem já está enrollado há meses —
+  // e o volume de chamadas em paralelo trava a automação inteira num timeout, não só um "Bad
+  // Request" de URL grande demais (o mesmo motivo pelo qual essa consulta é paginada em lotes
+  // de 200, como `enrollRFMCustomers`/`enrollCashbackCustomers` já fazem).
+  const recipientIds = recipients.map((recipient) => recipient.id);
   const existingRuns: any[] = [];
   for (let start = 0; start < recipientIds.length; start += 200) {
     const batch = recipientIds.slice(start, start + 200);
@@ -623,9 +620,38 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
     runsByCustomer.set(customerId, list);
   }
 
-  const eligibleRecipients = recipientsWithContext.flatMap((recipient) => {
+  const reentryMode = automation.reentry_mode ?? "once";
+  const ACTIVE_RUN_STATUSES = ["pending_approval", "active", "waiting_send"];
+  // Pré-filtro sem custo de contexto: vale pra qualquer modo (execução em aberto sempre bloqueia
+  // reentrada) e, no modo "once" — o único que não olha pro contextKey pra decidir — qualquer
+  // histórico anterior já é suficiente pra excluir, então nem precisa capturar contexto.
+  const candidates = recipients.filter((recipient) => {
+    const previousRuns = runsByCustomer.get(recipient.id) ?? [];
+    if (previousRuns.some((run) => ACTIVE_RUN_STATUSES.includes(String(run.status ?? "")))) return false;
+    if (reentryMode === "once" && previousRuns.length > 0) return false;
+    return true;
+  });
+  if (candidates.length === 0) return 0;
+
+  // Concorrência limitada: mesmo pra uma automação nova com um segmento grande (primeira leva
+  // real, sem histórico pra filtrar), capturar contexto de centenas/milhares de clientes de uma
+  // vez estoura o limite de subrequests simultâneos do Worker e trava em vez de falhar rápido.
+  const CONTEXT_CAPTURE_CONCURRENCY = 25;
+  const candidatesWithContext: Array<{ id: string; phone: string; context: unknown; contextKey: string }> = [];
+  for (let start = 0; start < candidates.length; start += CONTEXT_CAPTURE_CONCURRENCY) {
+    const batch = candidates.slice(start, start + CONTEXT_CAPTURE_CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map(async (recipient) => ({
+        ...recipient,
+        ...(await captureAutomationEventContext(recipient.id)),
+      })),
+    );
+    candidatesWithContext.push(...(batchResults as typeof candidatesWithContext));
+  }
+
+  const eligibleRecipients = candidatesWithContext.flatMap((recipient) => {
     const decision = decideAutomationReentry({
-      mode: automation.reentry_mode ?? "once",
+      mode: reentryMode,
       contextKey: recipient.contextKey,
       previousRuns: runsByCustomer.get(recipient.id) ?? [],
       reentryAfterDays: automation.reentry_after_days ?? null,

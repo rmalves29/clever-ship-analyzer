@@ -599,14 +599,24 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
     })),
   );
 
-  const { data: existingRuns, error: existingRunsError } = await (supabaseAdmin.from("whatsapp_automation_runs") as any)
-    .select("customer_id, enrollment_key, context_key, enrolled_at, status")
-    .eq("automation_id", automation.id)
-    .in("customer_id", recipientsWithContext.map((recipient) => recipient.id));
-  if (existingRunsError) throw new Error(`Erro ao consultar histórico de reentrada: ${existingRunsError.message}`);
+  // Paginado: um segmento grande (ex. tag de pop-up com >1000 clientes) gera uma lista de ids
+  // grande demais pra caber numa única URL de `.in()` e a API rejeita a chamada inteira com
+  // "Bad Request" — o mesmo motivo pelo qual `enrollRFMCustomers`/`enrollCashbackCustomers` já
+  // leem em lotes de 200.
+  const recipientIds = recipientsWithContext.map((recipient) => recipient.id);
+  const existingRuns: any[] = [];
+  for (let start = 0; start < recipientIds.length; start += 200) {
+    const batch = recipientIds.slice(start, start + 200);
+    const { data, error: existingRunsError } = await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+      .select("customer_id, enrollment_key, context_key, enrolled_at, status")
+      .eq("automation_id", automation.id)
+      .in("customer_id", batch);
+    if (existingRunsError) throw new Error(`Erro ao consultar histórico de reentrada: ${existingRunsError.message}`);
+    existingRuns.push(...(data ?? []));
+  }
 
   const runsByCustomer = new Map<string, any[]>();
-  for (const run of existingRuns ?? []) {
+  for (const run of existingRuns) {
     const customerId = String(run.customer_id);
     const list = runsByCustomer.get(customerId) ?? [];
     list.push(run);
@@ -872,20 +882,35 @@ export async function runAutomationsTick(options?: { automationId?: string; forc
 
   let automationsProcessed = 0;
   let runsProcessed = 0;
+  const failures: Array<{ automationId: string; nome: string; error: string }> = [];
   for (const a of automations) {
     if (!a.ativo && !options?.force) continue;
     const steps = parseSteps(a.steps);
     if (steps.length === 0) continue;
-    automationsProcessed++;
-    runsProcessed += await cleanupLifecycleRuns(a);
-    runsProcessed += await enrollNewCustomers(a, steps);
-    runsProcessed += await processDueRuns(a, steps);
-    await supabaseAdmin
-      .from("whatsapp_automations")
-      .update({ last_run_at: new Date().toISOString(), total_execucoes: (a.total_execucoes ?? 0) + 1 } as never)
-      .eq("id", a.id);
+    // Isolado por automação: uma falha aqui (ex. segmento grande demais pra uma consulta) não
+    // pode travar o tick inteiro e impedir as automações seguintes de avançar etapa.
+    try {
+      automationsProcessed++;
+      runsProcessed += await cleanupLifecycleRuns(a);
+      runsProcessed += await enrollNewCustomers(a, steps);
+      runsProcessed += await processDueRuns(a, steps);
+      await supabaseAdmin
+        .from("whatsapp_automations")
+        .update({ last_run_at: new Date().toISOString(), total_execucoes: (a.total_execucoes ?? 0) + 1, last_error: null } as never)
+        .eq("id", a.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push({ automationId: a.id, nome: a.nome, error: message });
+      await supabaseAdmin
+        .from("whatsapp_automations")
+        .update({ last_run_at: new Date().toISOString(), last_error: message } as never)
+        .eq("id", a.id);
+    }
   }
-  return { automationsProcessed, runsProcessed };
+  if (failures.length > 0) {
+    console.error("[automations-engine] Falhas isoladas por automação neste tick:", failures);
+  }
+  return { automationsProcessed, runsProcessed, failures };
 }
 
 /** Aprovação libera o lote para a fila, mas não avança nenhuma etapa. */
@@ -1054,6 +1079,9 @@ export async function runAutomationsTickWithLog() {
           finished_at: new Date().toISOString(),
           automations_processed: result.automationsProcessed,
           runs_processed: result.runsProcessed,
+          error: result.failures.length > 0
+            ? result.failures.map((f) => `${f.nome} (${f.automationId}): ${f.error}`).join(" | ")
+            : null,
         } as never)
         .eq("id", logId);
     }

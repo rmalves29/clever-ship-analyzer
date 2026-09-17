@@ -2447,6 +2447,7 @@ export type Database = {
           created_at: string
           descricao: string | null
           id: string
+          last_error: string | null
           last_run_at: string | null
           nome: string
           origem: string
@@ -2466,6 +2467,7 @@ export type Database = {
           created_at?: string
           descricao?: string | null
           id?: string
+          last_error?: string | null
           last_run_at?: string | null
           nome: string
           origem?: string
@@ -2485,6 +2487,7 @@ export type Database = {
           created_at?: string
           descricao?: string | null
           id?: string
+          last_error?: string | null
           last_run_at?: string | null
           nome?: string
           origem?: string

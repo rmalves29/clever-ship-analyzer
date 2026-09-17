@@ -600,6 +600,7 @@ export const sendAutomationTestMessage = createServerFn({ method: "POST" })
         templateLanguage: z.string().min(2),
         bodyParams: z.array(z.string()),
         bodyParamTokens: z.array(z.string()).optional(),
+        messageType: z.enum(["marketing", "utility"]).optional(),
       })
       .parse(data),
   )

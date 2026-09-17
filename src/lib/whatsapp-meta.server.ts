@@ -475,9 +475,11 @@ export async function sendTemplateMessage(params: {
 }
 
 /** Envia uma mensagem de teste (etapa de automação ainda sendo editada) pro número informado.
- *  Passa pela fila normal (origem "teste", sem campaign_id) em vez de chamar sendTemplateMessage
- *  direto — reaproveita rate limit, retry e o espelhamento em Conversas, sem contar em métrica de
- *  campanha nenhuma (o worker só grava em whatsapp_campaign_recipients quando há campaign_id).
+ *  Cria uma campanha real de 1 destinatário (origin "teste", filtrada da listagem de Campanhas
+ *  em `listWaCampaigns`) no motor único (wa_campaigns/wa_campaign_recipients/wa_jobs) — reaproveita
+ *  rate limit, retry e o espelhamento em Conversas, sem poluir a lista de campanhas de verdade.
+ *  Antes disso, o teste gravava numa tabela legada (`whatsapp_message_queue`) que nenhum worker lê
+ *  mais desde a migração pro motor wa_jobs: a chamada retornava sucesso mas a mensagem nunca saía.
  *  Se o telefone bater com um cliente real, resolve as variáveis com o pedido mais recente dele
  *  (igual a um envio de verdade); senão usa valores de fallback ("Cliente", "—", etc.). */
 export async function sendAutomationTestMessage(input: {
@@ -486,6 +488,7 @@ export async function sendAutomationTestMessage(input: {
   templateLanguage: string;
   bodyParams: string[];
   bodyParamTokens?: string[] | undefined;
+  messageType?: "marketing" | "utility" | undefined;
 }): Promise<{ success: true } | { success: false; error: string }> {
   const supabaseAdmin = await admin();
   const phone = toE164(input.phone);
@@ -520,24 +523,70 @@ export async function sendAutomationTestMessage(input: {
     checkoutUrl: context.checkout?.checkoutUrl ?? null,
   });
 
-  const { error: insertError } = await (supabaseAdmin.from("whatsapp_message_queue") as any).insert({
-    campaign_id: null,
-    customer_id: customerId,
-    phone,
-    origem: "teste",
-    template_name: input.templateName,
-    template_language: input.templateLanguage,
-    body_params: resolvedParams,
-    ...(input.bodyParamTokens ? { body_param_tokens: input.bodyParamTokens } : {}),
+  const { CAMPAIGNS_TABLE, RECIPIENTS_TABLE, JOBS_TABLE, processWhatsappQueueBatch } = await import("./wa-campaigns.server");
+  const now = new Date().toISOString();
+
+  const { data: campaignRow, error: campaignError } = await (supabaseAdmin.from(CAMPAIGNS_TABLE) as any)
+    .insert({
+      name: `Teste — ${input.templateName}`,
+      status: "enviando",
+      origin: "teste",
+      audience_kind: "teste",
+      audience_label: "teste",
+      template_name: input.templateName,
+      template_language: input.templateLanguage,
+      message_type: input.messageType ?? "utility",
+      body_params: input.bodyParams,
+      body_param_tokens: input.bodyParamTokens ?? null,
+      total_recipients: 1,
+    })
+    .select("id")
+    .single();
+  if (campaignError) return { success: false as const, error: campaignError.message };
+  const campaignId = campaignRow.id as string;
+
+  const { data: recipientRow, error: recipientError } = await (supabaseAdmin.from(RECIPIENTS_TABLE) as any)
+    .insert({
+      campaign_id: campaignId,
+      customer_id: customerId,
+      name: firstName,
+      phone,
+      params: resolvedParams,
+      status: "queued",
+    })
+    .select("id")
+    .single();
+  if (recipientError) return { success: false as const, error: recipientError.message };
+  const recipientId = recipientRow.id as string;
+
+  // Prioridade mais alta que qualquer campanha real (default 100, campanhas normais usam 5) pra
+  // garantir que o worker pegue este job na mesma chamada, mesmo com a fila real cheia.
+  const { error: jobError } = await (supabaseAdmin.from(JOBS_TABLE) as any).insert({
+    campaign_id: campaignId,
+    recipient_id: recipientId,
     status: "queued",
     priority: 0,
+    scheduled_at: now,
+    next_attempt_at: now,
   });
-  if (insertError) return { success: false as const, error: insertError.message };
+  if (jobError) return { success: false as const, error: jobError.message };
 
-  const { processWhatsappQueueBatch } = await import("./wa-campaigns.server");
   const processed = await processWhatsappQueueBatch({ limit: 5 });
   if (!processed.success) return { success: false as const, error: `Mensagem enfileirada, mas o processamento imediato falhou: ${processed.error}` };
-  if (processed.failed > 0) return { success: false as const, error: "A Meta recusou o envio de teste. Confira o template e os parâmetros." };
+
+  // Confere o destinatário específico deste teste em vez de confiar nos contadores agregados do
+  // lote — o worker pode ter processado outros jobs reais junto (prioridade mais baixa, mas ainda
+  // dentro do limite de 5), e um erro deles não pode ser relatado como falha do teste.
+  const { data: finalRecipient } = await (supabaseAdmin.from(RECIPIENTS_TABLE) as any)
+    .select("status, error_message")
+    .eq("id", recipientId)
+    .maybeSingle();
+  if (finalRecipient?.status === "failed") {
+    return { success: false as const, error: finalRecipient.error_message || "A Meta recusou o envio de teste. Confira o template e os parâmetros." };
+  }
+  if (finalRecipient?.status !== "sent" && finalRecipient?.status !== "delivered" && finalRecipient?.status !== "read") {
+    return { success: false as const, error: "Mensagem enfileirada, mas ainda não foi processada — tente de novo em alguns segundos." };
+  }
   return { success: true as const };
 }
 

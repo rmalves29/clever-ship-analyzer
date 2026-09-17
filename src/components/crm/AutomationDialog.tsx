@@ -1010,6 +1010,7 @@ function SendStepPanel({
           templateLanguage: template?.language || "pt_BR",
           bodyParams: step.bodyParams,
           bodyParamTokens: tokens,
+          messageType: templateMessageType(template?.category),
         },
       });
       if (!result.success) {

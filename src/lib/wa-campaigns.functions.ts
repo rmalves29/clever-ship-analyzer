@@ -112,9 +112,12 @@ export const listWaCampaigns = createServerFn({ method: "GET" })
       .from("wa_campaigns")
       .select("*")
       // Esta página é exclusiva de campanhas. Envios de réguas e fluxos conversacionais têm
-      // relatórios próprios em Automações e não podem contaminar estes totais.
+      // relatórios próprios em Automações e não podem contaminar estes totais. Testes de etapa
+      // (origin "teste", ver sendAutomationTestMessage) também ficam fora — são só verificação
+      // pontual de 1 destinatário, não uma campanha de verdade.
       .is("automation_id", null)
       .is("conversation_flow_id", null)
+      .neq("origin", "teste")
       .order("created_at", { ascending: false })
       .limit(300);
     if (error) throw new Error(error.message);

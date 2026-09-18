@@ -165,6 +165,23 @@ export const DEFAULT_LANDING_PAGE_CONTENT: LandingPageContent = {
   },
 };
 
+/** Landing pages salvas antes da última seção nova (ex.: "depoimentos") têm esse campo ausente
+ *  no JSON gravado — sem esse merge por seção, a página quebraria ao tentar ler
+ *  `conteudo.depoimentos.itens` de um objeto que nunca teve essa chave. */
+export function mergeWithDefaultContent(saved: Partial<LandingPageContent> | null | undefined): LandingPageContent {
+  const s = saved ?? {};
+  return {
+    ticker: s.ticker ?? DEFAULT_LANDING_PAGE_CONTENT.ticker,
+    tema: { ...DEFAULT_LANDING_PAGE_CONTENT.tema, ...s.tema },
+    hero: { ...DEFAULT_LANDING_PAGE_CONTENT.hero, ...s.hero },
+    estatisticas: { ...DEFAULT_LANDING_PAGE_CONTENT.estatisticas, ...s.estatisticas },
+    beneficios: { ...DEFAULT_LANDING_PAGE_CONTENT.beneficios, ...s.beneficios },
+    comoFunciona: { ...DEFAULT_LANDING_PAGE_CONTENT.comoFunciona, ...s.comoFunciona },
+    depoimentos: { ...DEFAULT_LANDING_PAGE_CONTENT.depoimentos, ...s.depoimentos },
+    rodape: { ...DEFAULT_LANDING_PAGE_CONTENT.rodape, ...s.rodape },
+  };
+}
+
 const contentSchema: z.ZodType<LandingPageContent> = z.object({
   ticker: z.array(z.string()),
   tema: z.object({
@@ -253,7 +270,9 @@ export const getLandingPage = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: page, error } = await supabaseAdmin.from("landing_pages").select("*").eq("id", data.id).maybeSingle();
     if (error) throw error;
-    return page as LandingPage | null;
+    if (!page) return null;
+    const p = page as LandingPage;
+    return { ...p, conteudo: mergeWithDefaultContent(p.conteudo) };
   });
 
 export const saveLandingPage = createServerFn({ method: "POST" })
@@ -344,7 +363,7 @@ export const getPublicLandingPage = createServerFn({ method: "GET" })
     if (error) throw error;
     const p = page as Pick<LandingPage, "slug" | "nome" | "status" | "conteudo"> | null;
     if (!p || p.status !== "publicada") return null;
-    return p;
+    return { ...p, conteudo: mergeWithDefaultContent(p.conteudo) };
   });
 
 /** Registra o telefone digitado no formulário da landing page — vira "clique" pro relatório

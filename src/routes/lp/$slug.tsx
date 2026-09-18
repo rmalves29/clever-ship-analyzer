@@ -241,8 +241,10 @@ function PublicLandingPage() {
               <Typography sx={{ fontSize: 32, fontWeight: 800 }}>{c.estatisticas.item2Valor}</Typography>
               <Typography sx={{ fontSize: 12, color: "text.secondary", maxWidth: 100 }}>{c.estatisticas.item2Label}</Typography>
             </Box>
-            <Box sx={{ textAlign: "center", pl: { xs: 0, sm: 2 } }}>
-              <Typography sx={{ fontSize: 36, fontWeight: 800, color: c.tema.corPrimaria }}>{c.estatisticas.totalValor}</Typography>
+            <Box sx={{ textAlign: "center", pl: { xs: 0, sm: 2 }, maxWidth: 180 }}>
+              <Typography sx={{ fontSize: c.estatisticas.totalValor.length > 8 ? 20 : 36, fontWeight: 800, color: c.tema.corPrimaria, lineHeight: 1.2 }}>
+                {c.estatisticas.totalValor}
+              </Typography>
               <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: "text.secondary" }}>
                 {c.estatisticas.totalLabel}
               </Typography>
@@ -253,7 +255,7 @@ function PublicLandingPage() {
 
       {/* Benefícios */}
       <Box sx={{ maxWidth: 1120, mx: "auto", px: { xs: 3, md: 6 }, pb: { xs: 6, md: 10 } }}>
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: { xs: 4, md: 6 } }}>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: c.beneficios.imagemUrl ? "1fr 1fr" : "1fr" }, gap: { xs: 4, md: 6 } }}>
           {c.beneficios.imagemUrl && (
             <Box>
               <Box component="img" src={c.beneficios.imagemUrl} alt={c.beneficios.imagemLegenda} sx={{ width: "100%", borderRadius: 3, objectFit: "cover", aspectRatio: "4 / 3" }} />
@@ -265,20 +267,26 @@ function PublicLandingPage() {
             </Box>
           )}
           <Box>
-            <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 1.5, color: "text.secondary", mb: 2.5 }}>
+            <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 1.5, color: "text.secondary", mb: 2.5, textAlign: c.beneficios.imagemUrl ? "left" : "center" }}>
               {c.beneficios.seloTexto}
             </Typography>
-            <Stack spacing={3}>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: c.beneficios.imagemUrl ? "1fr" : { xs: "1fr", sm: `repeat(${Math.min(c.beneficios.itens.length, 3)}, 1fr)` },
+                gap: c.beneficios.imagemUrl ? 3 : 4,
+              }}
+            >
               {c.beneficios.itens.map((item, i) => (
-                <Box key={i}>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                <Box key={i} sx={{ textAlign: c.beneficios.imagemUrl ? "left" : "center" }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center", justifyContent: c.beneficios.imagemUrl ? "flex-start" : "center" }}>
                     <Box component="span" sx={{ color: c.tema.corPrimaria, fontWeight: 700 }}>◆</Box>
                     <Typography sx={{ fontWeight: 700 }}>{item.titulo}</Typography>
                   </Stack>
-                  <Typography sx={{ fontSize: 14, color: "text.secondary", mt: 0.5, ml: 3 }}>{item.descricao}</Typography>
+                  <Typography sx={{ fontSize: 14, color: "text.secondary", mt: 0.5, ml: c.beneficios.imagemUrl ? 3 : 0 }}>{item.descricao}</Typography>
                 </Box>
               ))}
-            </Stack>
+            </Box>
           </Box>
         </Box>
       </Box>
@@ -303,7 +311,14 @@ function PublicLandingPage() {
           ))}
         </Box>
 
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: { xs: 4, md: 6 }, alignItems: "center" }}>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", md: c.comoFunciona.imagemUrl ? "1fr 1fr" : "1fr" },
+            gap: { xs: 4, md: 6 },
+            alignItems: "center",
+          }}
+        >
           {c.comoFunciona.imagemUrl && (
             <Box>
               <Box component="img" src={c.comoFunciona.imagemUrl} alt={c.comoFunciona.imagemLegenda} sx={{ width: "100%", borderRadius: 3, objectFit: "cover", aspectRatio: "4 / 5" }} />
@@ -314,7 +329,7 @@ function PublicLandingPage() {
               )}
             </Box>
           )}
-          <Box>
+          <Box sx={c.comoFunciona.imagemUrl ? undefined : { textAlign: "center", maxWidth: 480, mx: "auto" }}>
             {c.comoFunciona.numeroGrande && (
               <Typography sx={{ fontSize: 72, fontWeight: 800, color: c.tema.corDourada, lineHeight: 1 }}>
                 {c.comoFunciona.numeroGrande}
@@ -328,8 +343,10 @@ function PublicLandingPage() {
             {c.comoFunciona.logoTexto && (
               <Typography sx={{ fontWeight: 800, letterSpacing: 1, color: c.tema.corDourada, mb: 2 }}>{c.comoFunciona.logoTexto}</Typography>
             )}
-            <Typography sx={{ fontSize: 22, fontWeight: 700, mb: 3, maxWidth: 380 }}>{c.comoFunciona.headline}</Typography>
-            <Box sx={{ maxWidth: 340 }}>
+            <Typography sx={{ fontSize: 22, fontWeight: 700, mb: 3, maxWidth: 380, mx: c.comoFunciona.imagemUrl ? 0 : "auto" }}>
+              {c.comoFunciona.headline}
+            </Typography>
+            <Box sx={{ maxWidth: 340, mx: c.comoFunciona.imagemUrl ? 0 : "auto" }}>
               <PhoneGateCta
                 label={c.comoFunciona.ctaLabel}
                 url={c.comoFunciona.ctaUrl}

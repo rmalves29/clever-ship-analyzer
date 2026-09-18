@@ -1602,6 +1602,44 @@ export type Database = {
           },
         ]
       }
+      landing_page_reviews: {
+        Row: {
+          aprovado: boolean
+          criado_em: string
+          estrelas: number
+          id: string
+          landing_page_id: string
+          nome: string
+          texto: string
+        }
+        Insert: {
+          aprovado?: boolean
+          criado_em?: string
+          estrelas?: number
+          id?: string
+          landing_page_id: string
+          nome: string
+          texto: string
+        }
+        Update: {
+          aprovado?: boolean
+          criado_em?: string
+          estrelas?: number
+          id?: string
+          landing_page_id?: string
+          nome?: string
+          texto?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "landing_page_reviews_landing_page_id_fkey"
+            columns: ["landing_page_id"]
+            isOneToOne: false
+            referencedRelation: "landing_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       landing_pages: {
         Row: {
           atualizado_em: string

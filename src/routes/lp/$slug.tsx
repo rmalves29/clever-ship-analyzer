@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, Star } from "lucide-react";
 import { toast } from "sonner";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -10,7 +10,13 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { getPublicLandingPage, submitLandingPageLead, type LandingPageContent } from "@/lib/landing-pages.functions";
+import {
+  getPublicLandingPage,
+  getPublicLandingPageReviews,
+  submitLandingPageLead,
+  submitLandingPageReview,
+  type LandingPageContent,
+} from "@/lib/landing-pages.functions";
 
 const HERO_PHONE_FIELD_ID = "lp-phone-input-hero";
 
@@ -32,6 +38,38 @@ function isValidPhoneBR(formatted: string): boolean {
  *  sem isso, um texto longo fica do tamanho de um título e briga visualmente com o resto. */
 function statFontSize(text: string, shortSize: number, longSize: number): number {
   return text.length > 8 ? longSize : shortSize;
+}
+
+/** Traço — texto — traço, no estilo de https://bazar.maniadmulher.com/ ("— O QUE VOCÊ RECEBE —"). */
+function SectionDivider({ label }: { label: string }) {
+  if (!label) return null;
+  return (
+    <Stack direction="row" spacing={2} sx={{ alignItems: "center", mb: 4 }}>
+      <Box sx={{ flex: 1, height: "1px", bgcolor: "divider" }} />
+      <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 2, color: "text.secondary", whiteSpace: "nowrap" }}>
+        {label}
+      </Typography>
+      <Box sx={{ flex: 1, height: "1px", bgcolor: "divider" }} />
+    </Stack>
+  );
+}
+
+function StarRating({ value, onChange, size = 16 }: { value: number; size?: number; onChange?: (value: number) => void }) {
+  return (
+    <Stack direction="row" spacing={0.3}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Box
+          key={n}
+          component={onChange ? "button" : "span"}
+          type={onChange ? "button" : undefined}
+          onClick={onChange ? () => onChange(n) : undefined}
+          sx={{ border: "none", bgcolor: "transparent", p: 0, cursor: onChange ? "pointer" : "default", display: "flex", lineHeight: 0 }}
+        >
+          <Star size={size} fill={n <= value ? "#F5A623" : "none"} color={n <= value ? "#F5A623" : "#D0D0D0"} />
+        </Box>
+      ))}
+    </Stack>
+  );
 }
 
 export const Route = createFileRoute("/lp/$slug")({
@@ -122,11 +160,23 @@ function PublicLandingPage() {
   const { slug } = Route.useParams();
   const runGet = useServerFn(getPublicLandingPage);
   const runSubmitLead = useServerFn(submitLandingPageLead);
+  const runGetReviews = useServerFn(getPublicLandingPageReviews);
+  const runSubmitReview = useServerFn(submitLandingPageReview);
   const [phone, setPhone] = useState("");
+  const [reviewNome, setReviewNome] = useState("");
+  const [reviewTexto, setReviewTexto] = useState("");
+  const [reviewEstrelas, setReviewEstrelas] = useState(5);
+  const [reviewSent, setReviewSent] = useState(false);
 
   const { data: page, isLoading } = useQuery({
     queryKey: ["public-landing-page", slug],
     queryFn: () => runGet({ data: { slug } }),
+  });
+
+  const { data: approvedReviews } = useQuery({
+    queryKey: ["public-landing-page-reviews", slug],
+    queryFn: () => runGetReviews({ data: { slug } }),
+    enabled: Boolean(page),
   });
 
   const submitMut = useMutation({
@@ -137,12 +187,35 @@ function PublicLandingPage() {
     onError: () => toast.error("Não foi possível enviar. Tente de novo em instantes."),
   });
 
+  const reviewMut = useMutation({
+    mutationFn: () => runSubmitReview({ data: { slug, nome: reviewNome, texto: reviewTexto, estrelas: reviewEstrelas } }),
+    onSuccess: (res) => {
+      if (res.success) {
+        setReviewSent(true);
+        setReviewNome("");
+        setReviewTexto("");
+        setReviewEstrelas(5);
+      } else {
+        toast.error(res.error ?? "Não foi possível enviar seu comentário.");
+      }
+    },
+    onError: () => toast.error("Não foi possível enviar seu comentário."),
+  });
+
   const handleSubmit = (ctaUrl: string) => {
     if (!isValidPhoneBR(phone)) {
       toast.error("Digite um telefone válido com DDD.");
       return;
     }
     submitMut.mutate(ctaUrl);
+  };
+
+  const handleSubmitReview = () => {
+    if (!reviewNome.trim() || !reviewTexto.trim()) {
+      toast.error("Preencha seu nome e o comentário.");
+      return;
+    }
+    reviewMut.mutate();
   };
 
   const scrollToPhoneField = () => {
@@ -185,7 +258,7 @@ function PublicLandingPage() {
             <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 1.5, color: "text.secondary", mb: 2 }}>
               {c.hero.selo}
             </Typography>
-            <Typography sx={{ fontSize: { xs: 32, md: 44 }, fontWeight: 800, lineHeight: 1.15, mb: 3 }}>
+            <Typography sx={{ fontSize: { xs: 38, md: 58 }, fontWeight: 800, lineHeight: 1.1, mb: 3, color: c.tema.corDestaque }}>
               {c.hero.headlineNormal}{" "}
               <Box component="span" sx={{ color: c.tema.corPrimaria }}>{c.hero.headlineDestaque}</Box>
             </Typography>
@@ -317,9 +390,7 @@ function PublicLandingPage() {
 
       {/* Como funciona */}
       <Box sx={{ maxWidth: 1120, mx: "auto", px: { xs: 3, md: 6 }, pb: { xs: 6, md: 10 } }}>
-        <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 1.5, color: "text.secondary", textAlign: "center", mb: 4 }}>
-          {c.comoFunciona.seloTexto}
-        </Typography>
+        <SectionDivider label={c.comoFunciona.seloTexto} />
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: `repeat(${Math.max(c.comoFunciona.passos.length, 1)}, 1fr)` }, gap: 4, mb: { xs: 5, md: 7 } }}>
           {c.comoFunciona.passos.map((passo, i) => (
             <Box key={i}>
@@ -383,6 +454,69 @@ function PublicLandingPage() {
             </Box>
           </Box>
         </Box>
+      </Box>
+
+      {/* Depoimentos: os fixos (fake) vêm do conteúdo da página; os reais só aparecem depois de
+       *  aprovados no admin (evita spam/ofensa indo direto pro ar). */}
+      <Box sx={{ maxWidth: 1120, mx: "auto", px: { xs: 3, md: 6 }, pb: { xs: 6, md: 10 } }}>
+        <SectionDivider label={c.depoimentos.seloTexto} />
+          {(c.depoimentos.itens.length > 0 || (approvedReviews?.length ?? 0) > 0) && (
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)" },
+                gap: 3,
+                mb: { xs: 5, md: 7 },
+              }}
+            >
+              {c.depoimentos.itens.map((dep, i) => (
+                <Box key={`fake-${i}`} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5, bgcolor: "#fff" }}>
+                  <StarRating value={dep.estrelas} />
+                  <Typography sx={{ fontSize: 14, mt: 1.5, color: "text.primary" }}>{dep.texto}</Typography>
+                  <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 1.5 }}>{dep.nome}</Typography>
+                </Box>
+              ))}
+              {(approvedReviews ?? []).map((rev) => (
+                <Box key={rev.id} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5, bgcolor: "#fff" }}>
+                  <StarRating value={rev.estrelas} />
+                  <Typography sx={{ fontSize: 14, mt: 1.5, color: "text.primary" }}>{rev.texto}</Typography>
+                  <Typography sx={{ fontSize: 13, fontWeight: 700, mt: 1.5 }}>{rev.nome}</Typography>
+                </Box>
+              ))}
+            </Box>
+          )}
+
+          {/* Formulário pra cliente deixar o próprio comentário. */}
+          <Box sx={{ maxWidth: 480, mx: "auto", border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3, textAlign: "center" }}>
+            {reviewSent ? (
+              <Typography sx={{ fontWeight: 700 }}>Obrigada pelo seu comentário! 💜</Typography>
+            ) : (
+              <Stack spacing={1.5}>
+                <Typography sx={{ fontSize: 14, fontWeight: 700 }}>Deixe seu comentário</Typography>
+                <Stack sx={{ alignItems: "center" }}>
+                  <StarRating value={reviewEstrelas} onChange={setReviewEstrelas} size={22} />
+                </Stack>
+                <TextField size="small" placeholder="Seu nome" value={reviewNome} onChange={(e) => setReviewNome(e.target.value)} fullWidth />
+                <TextField
+                  size="small"
+                  placeholder="Conte como foi sua experiência"
+                  value={reviewTexto}
+                  onChange={(e) => setReviewTexto(e.target.value)}
+                  multiline
+                  minRows={3}
+                  fullWidth
+                />
+                <Button
+                  onClick={handleSubmitReview}
+                  disabled={reviewMut.isPending}
+                  variant="contained"
+                  sx={{ bgcolor: c.tema.corDestaque, "&:hover": { bgcolor: c.tema.corDestaque, opacity: 0.9 } }}
+                >
+                  {reviewMut.isPending ? "Enviando..." : "Enviar comentário"}
+                </Button>
+              </Stack>
+            )}
+          </Box>
       </Box>
 
       {/* Botão flutuante: atalho que leva direto pro campo de telefone do topo. */}

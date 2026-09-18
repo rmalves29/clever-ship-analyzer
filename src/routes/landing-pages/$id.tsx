@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createFileRoute, createLink } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, ChevronDown, Copy, ExternalLink, ImageUp, Plus, Save, Trash2, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Copy, ExternalLink, ImageUp, Plus, Save, Star, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
@@ -133,6 +133,65 @@ function TitledListEditor({
           </Stack>
         ))}
         <Button size="small" startIcon={<Plus size={14} />} onClick={() => onChange([...items, { titulo: "", descricao: "" }])} sx={{ alignSelf: "flex-start" }}>
+          Adicionar
+        </Button>
+      </Stack>
+    </Box>
+  );
+}
+
+function EditableStarRating({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return (
+    <Stack direction="row" spacing={0.3}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <IconButton key={n} size="small" onClick={() => onChange(n)} sx={{ p: 0.3 }}>
+          <Star size={18} fill={n <= value ? "#F5A623" : "none"} color={n <= value ? "#F5A623" : "#D0D0D0"} />
+        </IconButton>
+      ))}
+    </Stack>
+  );
+}
+
+function ReviewListEditor({
+  label,
+  items,
+  onChange,
+}: {
+  label: string;
+  items: { nome: string; texto: string; estrelas: number }[];
+  onChange: (items: { nome: string; texto: string; estrelas: number }[]) => void;
+}) {
+  return (
+    <Box>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>{label}</Typography>
+      <Stack spacing={2}>
+        {items.map((item, i) => (
+          <Stack key={i} direction="row" spacing={1} sx={{ alignItems: "flex-start", border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+            <Stack spacing={1} sx={{ flex: 1 }}>
+              <EditableStarRating value={item.estrelas} onChange={(estrelas) => onChange(items.map((v, idx) => (idx === i ? { ...v, estrelas } : v)))} />
+              <TextField
+                size="small"
+                fullWidth
+                label="Nome"
+                value={item.nome}
+                onChange={(e) => onChange(items.map((v, idx) => (idx === i ? { ...v, nome: e.target.value } : v)))}
+              />
+              <TextField
+                size="small"
+                fullWidth
+                multiline
+                minRows={2}
+                label="Comentário"
+                value={item.texto}
+                onChange={(e) => onChange(items.map((v, idx) => (idx === i ? { ...v, texto: e.target.value } : v)))}
+              />
+            </Stack>
+            <IconButton size="small" onClick={() => onChange(items.filter((_, idx) => idx !== i))}>
+              <Trash2 size={16} />
+            </IconButton>
+          </Stack>
+        ))}
+        <Button size="small" startIcon={<Plus size={14} />} onClick={() => onChange([...items, { nome: "", texto: "", estrelas: 5 }])} sx={{ alignSelf: "flex-start" }}>
           Adicionar
         </Button>
       </Stack>
@@ -391,6 +450,14 @@ function LandingPageEditor() {
             <TextField size="small" fullWidth label="Texto do botão" value={content.comoFunciona.ctaLabel} onChange={(e) => updateSection("comoFunciona", { ctaLabel: e.target.value })} />
             <TextField size="small" fullWidth label="Link do botão" placeholder="https://..." value={content.comoFunciona.ctaUrl} onChange={(e) => updateSection("comoFunciona", { ctaUrl: e.target.value })} />
           </Stack>
+        </Section>
+
+        <Section title="Depoimentos" subtitle="Comentários fixos (fake) + os que as clientes enviarem pela página">
+          <TextField size="small" label="Selo" value={content.depoimentos.seloTexto} onChange={(e) => updateSection("depoimentos", { seloTexto: e.target.value })} />
+          <ReviewListEditor label="Comentários fixos" items={content.depoimentos.itens} onChange={(itens) => updateSection("depoimentos", { itens })} />
+          <Typography variant="caption" color="text.secondary">
+            Comentários enviados por clientes de verdade na página aparecem depois de aprovados na aba "Comentários" da listagem de Landing Pages.
+          </Typography>
         </Section>
 
         <Section title="Rodapé">

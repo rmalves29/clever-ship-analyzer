@@ -78,6 +78,10 @@ export type LandingPageContent = {
     ctaLabel: string;
     ctaUrl: string;
   };
+  depoimentos: {
+    seloTexto: string;
+    itens: { nome: string; texto: string; estrelas: number }[];
+  };
   rodape: {
     linhaEndereco: string;
     linhaBadges: string;
@@ -146,6 +150,14 @@ export const DEFAULT_LANDING_PAGE_CONTENT: LandingPageContent = {
     ctaLabel: "GARANTIR MINHA OFERTA",
     ctaUrl: "",
   },
+  depoimentos: {
+    seloTexto: "O QUE AS CLIENTES DIZEM",
+    itens: [
+      { nome: "Juliana R.", texto: "Chegou rapidinho e é ainda mais linda pessoalmente. Já virei cliente fiel!", estrelas: 5 },
+      { nome: "Camila S.", texto: "Atendimento excelente e o desconto valeu muito a pena. Recomendo demais.", estrelas: 5 },
+      { nome: "Fernanda A.", texto: "Adorei o presente que veio junto no pedido. Superou minhas expectativas.", estrelas: 5 },
+    ],
+  },
   rodape: {
     linhaEndereco: "MANIA DE MULHER · BELO HORIZONTE, MG",
     linhaBadges: "TROCA FÁCIL · 4X SEM JUROS · BRINDE EM TODAS AS COMPRAS",
@@ -200,6 +212,10 @@ const contentSchema: z.ZodType<LandingPageContent> = z.object({
     headline: z.string(),
     ctaLabel: z.string(),
     ctaUrl: z.string(),
+  }),
+  depoimentos: z.object({
+    seloTexto: z.string(),
+    itens: z.array(z.object({ nome: z.string(), texto: z.string(), estrelas: z.number().int().min(1).max(5) })),
   }),
   rodape: z.object({
     linhaEndereco: z.string(),
@@ -354,6 +370,105 @@ export const submitLandingPageLead = createServerFn({ method: "POST" })
       landing_page_id: p.id,
       phone,
     });
+    if (error) throw error;
+    return { success: true as const };
+  });
+
+/** Comentários aprovados pra exibir junto com os depoimentos fixos (fake) do conteúdo. */
+export const getPublicLandingPageReviews = createServerFn({ method: "GET" })
+  .validator((data: unknown) => z.object({ slug: z.string().min(1) }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: page } = await supabaseAdmin.from("landing_pages").select("id").eq("slug", data.slug).maybeSingle();
+    const p = page as { id: string } | null;
+    if (!p) return [];
+    const { data: reviews, error } = await supabaseAdmin
+      .from("landing_page_reviews")
+      .select("id, nome, texto, estrelas, criado_em")
+      .eq("landing_page_id", p.id)
+      .eq("aprovado", true)
+      .order("criado_em", { ascending: false })
+      .limit(50);
+    if (error) throw error;
+    return (reviews ?? []) as { id: string; nome: string; texto: string; estrelas: number; criado_em: string }[];
+  });
+
+/** Comentário enviado por uma cliente real na landing page — fica pendente até alguém aprovar
+ *  no admin, pra não publicar spam/ofensas direto na página pública. */
+export const submitLandingPageReview = createServerFn({ method: "POST" })
+  .validator((data: unknown) =>
+    z.object({
+      slug: z.string().min(1),
+      nome: z.string().trim().min(1).max(80),
+      texto: z.string().trim().min(1).max(500),
+      estrelas: z.number().int().min(1).max(5),
+    }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: page, error: pageError } = await supabaseAdmin
+      .from("landing_pages")
+      .select("id, status")
+      .eq("slug", data.slug)
+      .maybeSingle();
+    if (pageError) throw pageError;
+    const p = page as { id: string; status: string } | null;
+    if (!p || p.status !== "publicada") return { success: false as const, error: "Página não encontrada." };
+
+    const { error } = await (supabaseAdmin.from("landing_page_reviews") as any).insert({
+      landing_page_id: p.id,
+      nome: data.nome,
+      texto: data.texto,
+      estrelas: data.estrelas,
+      aprovado: false,
+    });
+    if (error) throw error;
+    return { success: true as const };
+  });
+
+// --- Admin: moderação de comentários ---
+
+export const listLandingPageReviews = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) => z.object({ landingPageId: z.string().uuid().optional() }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    let query = supabaseAdmin
+      .from("landing_page_reviews")
+      .select("id, nome, texto, estrelas, aprovado, criado_em, landing_page_id, landing_pages(nome)")
+      .order("criado_em", { ascending: false })
+      .limit(1000);
+    if (data.landingPageId) query = query.eq("landing_page_id", data.landingPageId);
+    const { data: reviews, error } = await query;
+    if (error) throw error;
+    return ((reviews ?? []) as any[]).map((r) => ({
+      id: r.id as string,
+      nome: r.nome as string,
+      texto: r.texto as string,
+      estrelas: r.estrelas as number,
+      aprovado: r.aprovado as boolean,
+      criadoEm: r.criado_em as string,
+      landingPageId: r.landing_page_id as string,
+      landingPageNome: (r.landing_pages?.nome ?? "—") as string,
+    }));
+  });
+
+export const moderateLandingPageReview = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) => z.object({ id: z.string().uuid(), aprovado: z.boolean() }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await (supabaseAdmin.from("landing_page_reviews") as any).update({ aprovado: data.aprovado }).eq("id", data.id);
+    if (error) throw error;
+    return { success: true as const };
+  });
+
+export const deleteLandingPageReview = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("landing_page_reviews").delete().eq("id", data.id);
     if (error) throw error;
     return { success: true as const };
   });

@@ -2,7 +2,7 @@ import { createFileRoute, createLink, useNavigate } from "@tanstack/react-router
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { BarChart3, CheckCircle2, Copy, ExternalLink, Eye, FileText, Files, Plus, Trash2, Users, XCircle } from "lucide-react";
+import { BarChart3, CheckCircle2, Copy, ExternalLink, Eye, FileText, Files, MessageSquare, Plus, Star, Trash2, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { BarChart } from "@mui/x-charts/BarChart";
 import Box from "@mui/material/Box";
@@ -31,11 +31,14 @@ import {
   duplicateLandingPage,
   listLandingPageLeads,
   getLandingPageClicksReport,
+  listLandingPageReviews,
+  moderateLandingPageReview,
+  deleteLandingPageReview,
   DEFAULT_LANDING_PAGE_CONTENT,
   type ClicksGranularity,
 } from "@/lib/landing-pages.functions";
 
-const VALID_TABS = ["paginas", "contatos", "relatorios"] as const;
+const VALID_TABS = ["paginas", "contatos", "comentarios", "relatorios"] as const;
 
 export const Route = createFileRoute("/landing-pages/")({
   validateSearch: (search: Record<string, unknown>) => z.object({
@@ -284,6 +287,114 @@ function ContactsTab() {
   );
 }
 
+function StarsDisplay({ value }: { value: number }) {
+  return (
+    <Stack direction="row" spacing={0.2}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star key={n} size={14} fill={n <= value ? "#F5A623" : "none"} color={n <= value ? "#F5A623" : "#D0D0D0"} />
+      ))}
+    </Stack>
+  );
+}
+
+function ReviewsTab() {
+  const runList = useServerFn(listLandingPageReviews);
+  const runPages = useServerFn(listLandingPages);
+  const runModerate = useServerFn(moderateLandingPageReview);
+  const runDelete = useServerFn(deleteLandingPageReview);
+  const [landingPageId, setLandingPageId] = useState<string>("todas");
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const { data: pages } = useQuery({ queryKey: ["landing-pages"], queryFn: () => runPages() });
+  const { data: reviews, isLoading, refetch } = useQuery({
+    queryKey: ["landing-page-reviews", landingPageId],
+    queryFn: () => runList({ data: { landingPageId: landingPageId === "todas" ? undefined : landingPageId } }),
+  });
+
+  const handleModerate = async (id: string, aprovado: boolean) => {
+    setBusyId(id);
+    try {
+      await runModerate({ data: { id, aprovado } });
+      refetch();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha ao atualizar.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Excluir este comentário?")) return;
+    setBusyId(id);
+    try {
+      await runDelete({ data: { id } });
+      toast.success("Comentário excluído.");
+      refetch();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha ao excluir.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <Box>
+      <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+        <TextField select size="small" label="Landing page" value={landingPageId} onChange={(e) => setLandingPageId(e.target.value)} sx={{ minWidth: 240 }}>
+          <MenuItem value="todas">Todas</MenuItem>
+          {(pages ?? []).map((p: any) => (
+            <MenuItem key={p.id} value={p.id}>{p.nome}</MenuItem>
+          ))}
+        </TextField>
+      </Stack>
+
+      {isLoading ? (
+        <Typography variant="body2" color="text.secondary">Carregando...</Typography>
+      ) : !reviews || reviews.length === 0 ? (
+        <Box sx={{ border: "1px dashed", borderColor: "divider", borderRadius: 3, p: 6, textAlign: "center" }}>
+          <MessageSquare size={40} style={{ margin: "0 auto", opacity: 0.3 }} />
+          <Typography sx={{ fontWeight: 600, mt: 2 }}>Nenhum comentário enviado ainda.</Typography>
+        </Box>
+      ) : (
+        <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Nome</TableCell>
+                <TableCell>Comentário</TableCell>
+                <TableCell>Nota</TableCell>
+                <TableCell>Landing page</TableCell>
+                <TableCell>Enviado em</TableCell>
+                <TableCell align="center">Aprovado</TableCell>
+                <TableCell align="right">Ações</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {reviews.map((r: any) => (
+                <TableRow key={r.id} hover>
+                  <TableCell>{r.nome}</TableCell>
+                  <TableCell sx={{ maxWidth: 320 }}>{r.texto}</TableCell>
+                  <TableCell><StarsDisplay value={r.estrelas} /></TableCell>
+                  <TableCell>{r.landingPageNome}</TableCell>
+                  <TableCell>{new Date(r.criadoEm).toLocaleString("pt-BR")}</TableCell>
+                  <TableCell align="center">
+                    <Switch checked={r.aprovado} disabled={busyId === r.id} onChange={(e) => handleModerate(r.id, e.target.checked)} />
+                  </TableCell>
+                  <TableCell align="right">
+                    <IconButton size="small" color="error" disabled={busyId === r.id} onClick={() => handleDelete(r.id)} title="Excluir">
+                      <Trash2 size={16} />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+    </Box>
+  );
+}
+
 function ReportsTab() {
   const runReport = useServerFn(getLandingPageClicksReport);
   const runPages = useServerFn(listLandingPages);
@@ -392,11 +503,13 @@ function LandingPagesIndex() {
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }}>
         <Tab value="paginas" label="Páginas" />
         <Tab value="contatos" label="Contatos" />
+        <Tab value="comentarios" label="Comentários" />
         <Tab value="relatorios" label="Relatórios" />
       </Tabs>
 
       {tab === "paginas" && <PagesTab />}
       {tab === "contatos" && <ContactsTab />}
+      {tab === "comentarios" && <ReviewsTab />}
       {tab === "relatorios" && <ReportsTab />}
     </Box>
   );

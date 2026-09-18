@@ -1,12 +1,32 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { MessageCircle } from "lucide-react";
+import { toast } from "sonner";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { getPublicLandingPage, type LandingPageContent } from "@/lib/landing-pages.functions";
+import { getPublicLandingPage, submitLandingPageLead, type LandingPageContent } from "@/lib/landing-pages.functions";
+
+const HERO_PHONE_FIELD_ID = "lp-phone-input-hero";
+
+function formatPhoneBR(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 11);
+  const ddd = digits.slice(0, 2);
+  const rest = digits.slice(2);
+  if (digits.length <= 2) return ddd;
+  if (rest.length <= 5) return `(${ddd}) ${rest}`;
+  return `(${ddd}) ${rest.slice(0, 5)}-${rest.slice(5, 9)}`;
+}
+
+function isValidPhoneBR(formatted: string): boolean {
+  const digits = formatted.replace(/\D/g, "");
+  return digits.length === 10 || digits.length === 11;
+}
 
 export const Route = createFileRoute("/lp/$slug")({
   head: () => ({ meta: [{ title: "Oferta especial" }] }),
@@ -32,37 +52,94 @@ function Ticker({ items, corPrimaria }: { items: string[]; corPrimaria: string }
   );
 }
 
-function CtaButton({ label, url, bgColor }: { label: string; url: string; bgColor: string }) {
+/** CTA com telefone obrigatório antes de seguir: é a única forma de saber quem visitou a página
+ *  (o WhatsApp não avisa este app quando alguém entra no grupo pelo link de convite). */
+function PhoneGateCta({
+  label,
+  url,
+  bgColor,
+  phone,
+  onPhoneChange,
+  onSubmit,
+  submitting,
+  fieldId,
+}: {
+  label: string;
+  url: string;
+  bgColor: string;
+  phone: string;
+  onPhoneChange: (value: string) => void;
+  onSubmit: () => void;
+  submitting: boolean;
+  fieldId?: string;
+}) {
+  const valid = isValidPhoneBR(phone);
   return (
-    <Button
-      component={url ? "a" : "button"}
-      href={url || undefined}
-      variant="contained"
-      size="large"
-      fullWidth
-      sx={{
-        bgcolor: bgColor,
-        color: "#fff",
-        borderRadius: 999,
-        py: 1.75,
-        fontWeight: 700,
-        letterSpacing: 0.5,
-        "&:hover": { bgcolor: bgColor, opacity: 0.9 },
-      }}
-    >
-      {label}
-    </Button>
+    <Stack spacing={1.5}>
+      <TextField
+        id={fieldId}
+        size="small"
+        placeholder="(DDD) XXXXX-XXXX"
+        value={phone}
+        onChange={(e) => onPhoneChange(formatPhoneBR(e.target.value))}
+        fullWidth
+        slotProps={{ htmlInput: { inputMode: "tel" } }}
+      />
+      <Button
+        onClick={onSubmit}
+        disabled={!valid || submitting}
+        component={url ? "a" : "button"}
+        variant="contained"
+        size="large"
+        fullWidth
+        sx={{
+          bgcolor: bgColor,
+          color: "#fff",
+          borderRadius: 999,
+          py: 1.75,
+          fontWeight: 700,
+          letterSpacing: 0.5,
+          "&:hover": { bgcolor: bgColor, opacity: 0.9 },
+          "&.Mui-disabled": { bgcolor: `${bgColor}55`, color: "#fff" },
+        }}
+      >
+        {submitting ? "Enviando..." : label}
+      </Button>
+    </Stack>
   );
 }
 
 function PublicLandingPage() {
   const { slug } = Route.useParams();
   const runGet = useServerFn(getPublicLandingPage);
+  const runSubmitLead = useServerFn(submitLandingPageLead);
+  const [phone, setPhone] = useState("");
 
   const { data: page, isLoading } = useQuery({
     queryKey: ["public-landing-page", slug],
     queryFn: () => runGet({ data: { slug } }),
   });
+
+  const submitMut = useMutation({
+    mutationFn: (ctaUrl: string) => runSubmitLead({ data: { slug, phone } }).then(() => ctaUrl),
+    onSuccess: (ctaUrl) => {
+      if (ctaUrl) window.location.href = ctaUrl;
+    },
+    onError: () => toast.error("Não foi possível enviar. Tente de novo em instantes."),
+  });
+
+  const handleSubmit = (ctaUrl: string) => {
+    if (!isValidPhoneBR(phone)) {
+      toast.error("Digite um telefone válido com DDD.");
+      return;
+    }
+    submitMut.mutate(ctaUrl);
+  };
+
+  const scrollToPhoneField = () => {
+    document.getElementById(HERO_PHONE_FIELD_ID)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    document.getElementById(HERO_PHONE_FIELD_ID)?.focus();
+  };
 
   if (isLoading) {
     return (
@@ -105,7 +182,16 @@ function PublicLandingPage() {
             </Typography>
             <Typography sx={{ fontSize: 16, color: "text.secondary", mb: 4, maxWidth: 440 }}>{c.hero.subcopy}</Typography>
             <Box sx={{ maxWidth: 360 }}>
-              <CtaButton label={c.hero.ctaLabel} url={c.hero.ctaUrl} bgColor={c.tema.corDestaque} />
+              <PhoneGateCta
+                fieldId={HERO_PHONE_FIELD_ID}
+                label={c.hero.ctaLabel}
+                url={c.hero.ctaUrl}
+                bgColor={c.tema.corDestaque}
+                phone={phone}
+                onPhoneChange={setPhone}
+                onSubmit={() => handleSubmit(c.hero.ctaUrl)}
+                submitting={submitMut.isPending}
+              />
             </Box>
             {c.hero.ctaLegenda && (
               <Typography sx={{ fontSize: 13, color: "text.secondary", mt: 1.5 }}>{c.hero.ctaLegenda}</Typography>
@@ -244,10 +330,45 @@ function PublicLandingPage() {
             )}
             <Typography sx={{ fontSize: 22, fontWeight: 700, mb: 3, maxWidth: 380 }}>{c.comoFunciona.headline}</Typography>
             <Box sx={{ maxWidth: 340 }}>
-              <CtaButton label={c.comoFunciona.ctaLabel} url={c.comoFunciona.ctaUrl} bgColor={c.tema.corDestaque} />
+              <PhoneGateCta
+                label={c.comoFunciona.ctaLabel}
+                url={c.comoFunciona.ctaUrl}
+                bgColor={c.tema.corDestaque}
+                phone={phone}
+                onPhoneChange={setPhone}
+                onSubmit={() => handleSubmit(c.comoFunciona.ctaUrl)}
+                submitting={submitMut.isPending}
+              />
             </Box>
           </Box>
         </Box>
+      </Box>
+
+      {/* Botão flutuante: atalho que leva direto pro campo de telefone do topo. */}
+      <Box
+        component="button"
+        type="button"
+        onClick={scrollToPhoneField}
+        aria-label={c.hero.ctaLabel}
+        sx={{
+          position: "fixed",
+          right: { xs: 16, md: 24 },
+          bottom: { xs: 16, md: 24 },
+          zIndex: 20,
+          width: 60,
+          height: 60,
+          borderRadius: "50%",
+          border: "none",
+          cursor: "pointer",
+          bgcolor: c.tema.corDestaque,
+          color: "#fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+        }}
+      >
+        <MessageCircle size={28} />
       </Box>
 
       {/* Rodapé */}

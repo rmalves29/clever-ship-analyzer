@@ -1573,6 +1573,35 @@ export type Database = {
         }
         Relationships: []
       }
+      landing_page_leads: {
+        Row: {
+          criado_em: string
+          id: string
+          landing_page_id: string
+          phone: string
+        }
+        Insert: {
+          criado_em?: string
+          id?: string
+          landing_page_id: string
+          phone: string
+        }
+        Update: {
+          criado_em?: string
+          id?: string
+          landing_page_id?: string
+          phone?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "landing_page_leads_landing_page_id_fkey"
+            columns: ["landing_page_id"]
+            isOneToOne: false
+            referencedRelation: "landing_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       landing_pages: {
         Row: {
           atualizado_em: string

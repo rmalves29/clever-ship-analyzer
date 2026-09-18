@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, createLink } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, ChevronDown, Copy, ExternalLink, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Copy, ExternalLink, ImageUp, Plus, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
@@ -10,6 +10,7 @@ import AccordionSummary from "@mui/material/AccordionSummary";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
 import IconButton from "@mui/material/IconButton";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
@@ -18,6 +19,7 @@ import Typography from "@mui/material/Typography";
 import {
   getLandingPage,
   saveLandingPage,
+  uploadLandingPageImage,
   DEFAULT_LANDING_PAGE_CONTENT,
   type LandingPageContent,
 } from "@/lib/landing-pages.functions";
@@ -138,6 +140,80 @@ function TitledListEditor({
   );
 }
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function ImageUploadField({ label, value, onChange }: { label: string; value: string; onChange: (url: string) => void }) {
+  const runUpload = useServerFn(uploadLandingPageImage);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = async (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Selecione um arquivo de imagem.");
+      return;
+    }
+    setUploading(true);
+    try {
+      const base64Data = await fileToBase64(file);
+      const { url } = await runUpload({ data: { fileName: file.name, base64Data, contentType: file.type } });
+      onChange(url);
+    } catch (err: any) {
+      toast.error(err?.message ?? "Falha ao enviar a imagem.");
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  return (
+    <Box>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>{label}</Typography>
+      <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
+        {value ? (
+          <Box sx={{ position: "relative" }}>
+            <Box component="img" src={value} alt="" sx={{ width: 96, height: 72, objectFit: "cover", borderRadius: 2, border: "1px solid", borderColor: "divider" }} />
+            <IconButton
+              size="small"
+              onClick={() => onChange("")}
+              sx={{ position: "absolute", top: -8, right: -8, bgcolor: "background.paper", border: "1px solid", borderColor: "divider", "&:hover": { bgcolor: "background.paper" } }}
+            >
+              <X size={12} />
+            </IconButton>
+          </Box>
+        ) : (
+          <Box sx={{ width: 96, height: 72, borderRadius: 2, border: "1px dashed", borderColor: "divider", display: "flex", alignItems: "center", justifyContent: "center", color: "text.secondary" }}>
+            <ImageUp size={20} />
+          </Box>
+        )}
+        <Button
+          size="small"
+          variant="outline"
+          startIcon={uploading ? <CircularProgress size={14} /> : <ImageUp size={14} />}
+          disabled={uploading}
+          onClick={() => inputRef.current?.click()}
+        >
+          {uploading ? "Enviando..." : value ? "Trocar imagem" : "Enviar imagem"}
+        </Button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => handleFile(e.target.files?.[0])}
+        />
+      </Stack>
+    </Box>
+  );
+}
+
 function LandingPageEditor() {
   const { id } = Route.useParams();
   const runGet = useServerFn(getLandingPage);
@@ -187,7 +263,7 @@ function LandingPageEditor() {
     <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 900, mx: "auto" }}>
       <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", mb: 3 }}>
         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-          <LinkIconButton to="/landing-pages" size="small"><ArrowLeft size={18} /></LinkIconButton>
+          <LinkIconButton to="/landing-pages" search={{ tab: "paginas" }} size="small"><ArrowLeft size={18} /></LinkIconButton>
           <Typography variant="h5" sx={{ fontWeight: 700 }}>Editar landing page</Typography>
           <Chip size="small" variant="outlined" color={status === "publicada" ? "success" : "default"} label={status === "publicada" ? "Publicada" : "Rascunho"} />
         </Stack>
@@ -272,7 +348,7 @@ function LandingPageEditor() {
             <TextField size="small" fullWidth label="Link do botão" placeholder="https://..." value={content.hero.ctaUrl} onChange={(e) => updateSection("hero", { ctaUrl: e.target.value })} />
           </Stack>
           <TextField size="small" label="Texto abaixo do botão" value={content.hero.ctaLegenda} onChange={(e) => updateSection("hero", { ctaLegenda: e.target.value })} />
-          <TextField size="small" label="URL da imagem" placeholder="https://..." value={content.hero.imagemUrl} onChange={(e) => updateSection("hero", { imagemUrl: e.target.value })} />
+          <ImageUploadField label="Imagem" value={content.hero.imagemUrl} onChange={(url) => updateSection("hero", { imagemUrl: url })} />
           <TextField size="small" label="Legenda da imagem" value={content.hero.imagemLegenda} onChange={(e) => updateSection("hero", { imagemLegenda: e.target.value })} />
         </Section>
 
@@ -295,7 +371,7 @@ function LandingPageEditor() {
 
         <Section title="Benefícios" subtitle="Imagem + lista de vantagens">
           <TextField size="small" label="Selo" value={content.beneficios.seloTexto} onChange={(e) => updateSection("beneficios", { seloTexto: e.target.value })} />
-          <TextField size="small" label="URL da imagem" placeholder="https://..." value={content.beneficios.imagemUrl} onChange={(e) => updateSection("beneficios", { imagemUrl: e.target.value })} />
+          <ImageUploadField label="Imagem" value={content.beneficios.imagemUrl} onChange={(url) => updateSection("beneficios", { imagemUrl: url })} />
           <TextField size="small" label="Legenda da imagem" value={content.beneficios.imagemLegenda} onChange={(e) => updateSection("beneficios", { imagemLegenda: e.target.value })} />
           <TitledListEditor label="Itens" items={content.beneficios.itens} onChange={(itens) => updateSection("beneficios", { itens })} />
         </Section>
@@ -303,7 +379,7 @@ function LandingPageEditor() {
         <Section title="Como funciona" subtitle="Passos + fechamento com CTA">
           <TextField size="small" label="Selo" value={content.comoFunciona.seloTexto} onChange={(e) => updateSection("comoFunciona", { seloTexto: e.target.value })} />
           <TitledListEditor label="Passos" items={content.comoFunciona.passos} onChange={(passos) => updateSection("comoFunciona", { passos })} />
-          <TextField size="small" label="URL da imagem" placeholder="https://..." value={content.comoFunciona.imagemUrl} onChange={(e) => updateSection("comoFunciona", { imagemUrl: e.target.value })} />
+          <ImageUploadField label="Imagem" value={content.comoFunciona.imagemUrl} onChange={(url) => updateSection("comoFunciona", { imagemUrl: url })} />
           <TextField size="small" label="Legenda da imagem" value={content.comoFunciona.imagemLegenda} onChange={(e) => updateSection("comoFunciona", { imagemLegenda: e.target.value })} />
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
             <TextField size="small" fullWidth label="Número grande (ex.: 14)" value={content.comoFunciona.numeroGrande} onChange={(e) => updateSection("comoFunciona", { numeroGrande: e.target.value })} />

@@ -2,6 +2,31 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAppAuth } from "./app-auth";
 
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/** Upload de imagem do editor de landing pages — mesmo padrão de uploadEnvioMedia/flow.server.ts
+ *  (base64 do cliente, bucket público, devolve a URL pública direto). */
+export const uploadLandingPageImage = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) =>
+    z.object({ fileName: z.string().min(1), base64Data: z.string().min(1), contentType: z.string().min(1) }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const safeName = data.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${Date.now()}-${safeName}`;
+    const bytes = base64ToUint8Array(data.base64Data);
+    const { error } = await supabaseAdmin.storage.from("landing-uploads").upload(path, bytes, { contentType: data.contentType, upsert: false });
+    if (error) throw new Error(error.message);
+    const { data: publicUrl } = supabaseAdmin.storage.from("landing-uploads").getPublicUrl(path);
+    return { url: publicUrl.publicUrl };
+  });
+
 /** Estrutura fixa reaproveitada de https://14anos.maniadmulher.com/ — cada landing page criada
  *  aqui preenche o mesmo layout (barra de anúncio, hero, bloco de desconto, benefícios, "como
  *  funciona", fechamento e rodapé) com conteúdo/cores próprios, em vez de um construtor livre. */
@@ -304,4 +329,144 @@ export const getPublicLandingPage = createServerFn({ method: "GET" })
     const p = page as Pick<LandingPage, "slug" | "nome" | "status" | "conteudo"> | null;
     if (!p || p.status !== "publicada") return null;
     return p;
+  });
+
+/** Registra o telefone digitado no formulário da landing page — vira "clique" pro relatório
+ *  (dia/mês/ano) e "contato" pra cruzar depois com quem entrou no grupo do WhatsApp. */
+export const submitLandingPageLead = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ slug: z.string().min(1), phone: z.string().min(8) }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { normalizeShopifyPhone } = await import("./shopify-order-phone");
+    const phone = normalizeShopifyPhone(data.phone);
+    if (!phone) return { success: false as const, error: "Telefone inválido." };
+
+    const { data: page, error: pageError } = await supabaseAdmin
+      .from("landing_pages")
+      .select("id, status")
+      .eq("slug", data.slug)
+      .maybeSingle();
+    if (pageError) throw pageError;
+    const p = page as { id: string; status: string } | null;
+    if (!p || p.status !== "publicada") return { success: false as const, error: "Página não encontrada." };
+
+    const { error } = await (supabaseAdmin.from("landing_page_leads") as any).insert({
+      landing_page_id: p.id,
+      phone,
+    });
+    if (error) throw error;
+    return { success: true as const };
+  });
+
+// --- Admin: contatos capturados + relatório de cliques ---
+
+/** Últimos 11 dígitos, sem símbolos — compara ignorando código do país/DDI ("55") e outras
+ *  variações de prefixo entre o telefone salvo aqui (E.164) e o gravado pelo webhook de grupo
+ *  no Live Launchpad (dígitos crus, sem "+55"). */
+function phoneMatchKey(phone: string): string {
+  return phone.replace(/\D/g, "").slice(-11);
+}
+
+async function loadGroupJoinsByPhone(): Promise<Map<string, { groupName: string; joinedAt: string }>> {
+  const { getLiveLaunchpadAdmin, MANIA_DE_MULHER_TENANT_ID } = await import("@/integrations/supabase/live-launchpad-client.server");
+  const liveLaunchpad = await getLiveLaunchpadAdmin();
+
+  const [{ data: events }, { data: groups }] = await Promise.all([
+    (liveLaunchpad.from("fe_group_events" as any) as any)
+      .select("group_id, phone, event_type, created_at")
+      .eq("tenant_id", MANIA_DE_MULHER_TENANT_ID)
+      .eq("event_type", "join")
+      .not("phone", "is", null)
+      .order("created_at", { ascending: true }),
+    (liveLaunchpad.from("fe_groups" as any) as any).select("id, group_name"),
+  ]);
+
+  const groupNameById = new Map<string, string>();
+  for (const g of (groups ?? []) as any[]) groupNameById.set(g.id, g.group_name);
+
+  const result = new Map<string, { groupName: string; joinedAt: string }>();
+  for (const e of (events ?? []) as any[]) {
+    const key = phoneMatchKey(String(e.phone ?? ""));
+    if (!key) continue;
+    // Mantém a entrada mais recente por telefone (order ascending, então sobrescreve).
+    result.set(key, { groupName: groupNameById.get(e.group_id) ?? "Grupo desconhecido", joinedAt: e.created_at });
+  }
+  return result;
+}
+
+export const listLandingPageLeads = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) => z.object({ landingPageId: z.string().uuid().optional() }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    let query = supabaseAdmin
+      .from("landing_page_leads")
+      .select("id, phone, criado_em, landing_page_id, landing_pages(nome, slug)")
+      .order("criado_em", { ascending: false })
+      .limit(2000);
+    if (data.landingPageId) query = query.eq("landing_page_id", data.landingPageId);
+    const { data: leads, error } = await query;
+    if (error) throw error;
+
+    const joinsByPhone = await loadGroupJoinsByPhone();
+
+    return ((leads ?? []) as any[]).map((lead) => {
+      const join = joinsByPhone.get(phoneMatchKey(lead.phone));
+      return {
+        id: lead.id as string,
+        phone: lead.phone as string,
+        criadoEm: lead.criado_em as string,
+        landingPageId: lead.landing_page_id as string,
+        landingPageNome: (lead.landing_pages?.nome ?? "—") as string,
+        landingPageSlug: (lead.landing_pages?.slug ?? "") as string,
+        entrouNoGrupo: Boolean(join),
+        grupoNome: join?.groupName ?? null,
+      };
+    });
+  });
+
+export type ClicksGranularity = "day" | "month" | "year";
+
+function bucketKey(iso: string, granularity: ClicksGranularity): string {
+  const date = new Date(iso);
+  if (granularity === "year") return String(date.getFullYear());
+  if (granularity === "month") return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  return iso.slice(0, 10);
+}
+
+export const getLandingPageClicksReport = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) =>
+    z.object({ landingPageId: z.string().uuid().optional(), granularity: z.enum(["day", "month", "year"]) }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    let query = supabaseAdmin
+      .from("landing_page_leads")
+      .select("criado_em, landing_page_id, landing_pages(nome)")
+      .order("criado_em", { ascending: true })
+      .limit(20000);
+    if (data.landingPageId) query = query.eq("landing_page_id", data.landingPageId);
+    const { data: leads, error } = await query;
+    if (error) throw error;
+
+    const rows = (leads ?? []) as any[];
+    const timelineMap = new Map<string, number>();
+    const totalsByPage = new Map<string, { nome: string; total: number }>();
+    for (const row of rows) {
+      const bucket = bucketKey(row.criado_em, data.granularity);
+      timelineMap.set(bucket, (timelineMap.get(bucket) ?? 0) + 1);
+      const pageEntry = totalsByPage.get(row.landing_page_id) ?? { nome: row.landing_pages?.nome ?? "—", total: 0 };
+      pageEntry.total++;
+      totalsByPage.set(row.landing_page_id, pageEntry);
+    }
+
+    const timeline = Array.from(timelineMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([bucket, total]) => ({ bucket, total }));
+    const porLandingPage = Array.from(totalsByPage.entries())
+      .map(([landingPageId, v]) => ({ landingPageId, nome: v.nome, total: v.total }))
+      .sort((a, b) => b.total - a.total);
+
+    return { total: rows.length, timeline, porLandingPage };
   });

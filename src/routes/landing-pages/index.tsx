@@ -2,31 +2,45 @@ import { createFileRoute, createLink, useNavigate } from "@tanstack/react-router
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Copy, ExternalLink, Eye, FileText, Files, Plus, Trash2 } from "lucide-react";
+import { BarChart3, CheckCircle2, Copy, ExternalLink, Eye, FileText, Files, Plus, Trash2, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { BarChart } from "@mui/x-charts/BarChart";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
+import Tab from "@mui/material/Tab";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import Tabs from "@mui/material/Tabs";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { z } from "zod";
 import {
   listLandingPages,
   saveLandingPage,
   toggleLandingPageStatus,
   deleteLandingPage,
   duplicateLandingPage,
+  listLandingPageLeads,
+  getLandingPageClicksReport,
   DEFAULT_LANDING_PAGE_CONTENT,
+  type ClicksGranularity,
 } from "@/lib/landing-pages.functions";
 
+const VALID_TABS = ["paginas", "contatos", "relatorios"] as const;
+
 export const Route = createFileRoute("/landing-pages/")({
+  validateSearch: (search: Record<string, unknown>) => z.object({
+    tab: z.enum(VALID_TABS).catch("paginas"),
+  }).parse(search),
   head: () => ({
     meta: [
       { title: "Landing Pages | CRM Insights" },
@@ -39,7 +53,7 @@ export const Route = createFileRoute("/landing-pages/")({
 const LinkTypography = createLink(Typography);
 const LinkIconButton = createLink(IconButton);
 
-function LandingPagesIndex() {
+function PagesTab() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const runList = useServerFn(listLandingPages);
@@ -120,28 +134,8 @@ function LandingPagesIndex() {
   };
 
   return (
-    <Box sx={{ p: { xs: 2, md: 4 } }}>
-      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
-        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 44,
-              height: 44,
-              borderRadius: 4,
-              background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
-              color: "primary.contrastText",
-            }}
-          >
-            <FileText size={20} />
-          </Box>
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 700 }}>Landing Pages</Typography>
-            <Typography variant="body2" color="text.secondary">Páginas para campanhas de anúncios, com layout pronto e conteúdo editável.</Typography>
-          </Box>
-        </Stack>
+    <Box>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "flex-end", mb: 2 }}>
         <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => createMut.mutate()} disabled={createMut.isPending}>
           Nova landing page
         </Button>
@@ -214,6 +208,196 @@ function LandingPagesIndex() {
           </Table>
         </TableContainer>
       )}
+    </Box>
+  );
+}
+
+function ContactsTab() {
+  const runList = useServerFn(listLandingPageLeads);
+  const runPages = useServerFn(listLandingPages);
+  const [landingPageId, setLandingPageId] = useState<string>("todas");
+
+  const { data: pages } = useQuery({ queryKey: ["landing-pages"], queryFn: () => runPages() });
+  const { data: leads, isLoading } = useQuery({
+    queryKey: ["landing-page-leads", landingPageId],
+    queryFn: () => runList({ data: { landingPageId: landingPageId === "todas" ? undefined : landingPageId } }),
+  });
+
+  return (
+    <Box>
+      <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+        <TextField select size="small" label="Landing page" value={landingPageId} onChange={(e) => setLandingPageId(e.target.value)} sx={{ minWidth: 240 }}>
+          <MenuItem value="todas">Todas</MenuItem>
+          {(pages ?? []).map((p: any) => (
+            <MenuItem key={p.id} value={p.id}>{p.nome}</MenuItem>
+          ))}
+        </TextField>
+      </Stack>
+
+      {isLoading ? (
+        <Typography variant="body2" color="text.secondary">Carregando...</Typography>
+      ) : !leads || leads.length === 0 ? (
+        <Box sx={{ border: "1px dashed", borderColor: "divider", borderRadius: 3, p: 6, textAlign: "center" }}>
+          <Users size={40} style={{ margin: "0 auto", opacity: 0.3 }} />
+          <Typography sx={{ fontWeight: 600, mt: 2 }}>Nenhum contato capturado ainda.</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Assim que alguém preencher o telefone numa landing page publicada, aparece aqui.
+          </Typography>
+        </Box>
+      ) : (
+        <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Telefone</TableCell>
+                <TableCell>Landing page</TableCell>
+                <TableCell>Preenchido em</TableCell>
+                <TableCell>Status</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {leads.map((lead: any) => (
+                <TableRow key={lead.id} hover>
+                  <TableCell>{lead.phone}</TableCell>
+                  <TableCell>{lead.landingPageNome}</TableCell>
+                  <TableCell>{new Date(lead.criadoEm).toLocaleString("pt-BR")}</TableCell>
+                  <TableCell>
+                    {lead.entrouNoGrupo ? (
+                      <Chip
+                        size="small"
+                        color="success"
+                        variant="outlined"
+                        icon={<CheckCircle2 size={12} />}
+                        label={`Entrou · ${lead.grupoNome}`}
+                      />
+                    ) : (
+                      <Chip size="small" variant="outlined" icon={<XCircle size={12} />} label="Não entrou" />
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+    </Box>
+  );
+}
+
+function ReportsTab() {
+  const runReport = useServerFn(getLandingPageClicksReport);
+  const runPages = useServerFn(listLandingPages);
+  const [landingPageId, setLandingPageId] = useState<string>("todas");
+  const [granularity, setGranularity] = useState<ClicksGranularity>("day");
+
+  const { data: pages } = useQuery({ queryKey: ["landing-pages"], queryFn: () => runPages() });
+  const { data: report, isLoading } = useQuery({
+    queryKey: ["landing-page-clicks-report", landingPageId, granularity],
+    queryFn: () => runReport({ data: { landingPageId: landingPageId === "todas" ? undefined : landingPageId, granularity } }),
+  });
+
+  return (
+    <Box>
+      <Stack direction="row" spacing={2} sx={{ mb: 3, flexWrap: "wrap" }}>
+        <TextField select size="small" label="Landing page" value={landingPageId} onChange={(e) => setLandingPageId(e.target.value)} sx={{ minWidth: 240 }}>
+          <MenuItem value="todas">Todas</MenuItem>
+          {(pages ?? []).map((p: any) => (
+            <MenuItem key={p.id} value={p.id}>{p.nome}</MenuItem>
+          ))}
+        </TextField>
+        <TextField select size="small" label="Agrupar por" value={granularity} onChange={(e) => setGranularity(e.target.value as ClicksGranularity)} sx={{ minWidth: 160 }}>
+          <MenuItem value="day">Dia</MenuItem>
+          <MenuItem value="month">Mês</MenuItem>
+          <MenuItem value="year">Ano</MenuItem>
+        </TextField>
+      </Stack>
+
+      {isLoading ? (
+        <Typography variant="body2" color="text.secondary">Carregando...</Typography>
+      ) : !report || report.total === 0 ? (
+        <Box sx={{ border: "1px dashed", borderColor: "divider", borderRadius: 3, p: 6, textAlign: "center" }}>
+          <BarChart3 size={40} style={{ margin: "0 auto", opacity: 0.3 }} />
+          <Typography sx={{ fontWeight: 600, mt: 2 }}>Nenhum clique registrado ainda.</Typography>
+        </Box>
+      ) : (
+        <Stack spacing={3}>
+          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 2 }}>
+              Cliques no CTA ({report.total} no total)
+            </Typography>
+            <BarChart
+              height={280}
+              xAxis={[{ data: report.timeline.map((t) => t.bucket), scaleType: "band" }]}
+              series={[{ data: report.timeline.map((t) => t.total) }]}
+            />
+          </Box>
+
+          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, p: 2, pb: 0 }}>Consolidado por landing page</Typography>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Landing page</TableCell>
+                    <TableCell align="right">Cliques</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {report.porLandingPage.map((row) => (
+                    <TableRow key={row.landingPageId} hover>
+                      <TableCell>{row.nome}</TableCell>
+                      <TableCell align="right">{row.total}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        </Stack>
+      )}
+    </Box>
+  );
+}
+
+function LandingPagesIndex() {
+  const navigate = useNavigate();
+  const { tab } = Route.useSearch();
+  const setTab = (value: string) => navigate({ to: "/landing-pages", search: { tab: value as (typeof VALID_TABS)[number] } });
+
+  return (
+    <Box sx={{ p: { xs: 2, md: 4 } }}>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 44,
+              height: 44,
+              borderRadius: 4,
+              background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+              color: "primary.contrastText",
+            }}
+          >
+            <FileText size={20} />
+          </Box>
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 700 }}>Landing Pages</Typography>
+            <Typography variant="body2" color="text.secondary">Páginas para campanhas de anúncios, com layout pronto e conteúdo editável.</Typography>
+          </Box>
+        </Stack>
+      </Stack>
+
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }}>
+        <Tab value="paginas" label="Páginas" />
+        <Tab value="contatos" label="Contatos" />
+        <Tab value="relatorios" label="Relatórios" />
+      </Tabs>
+
+      {tab === "paginas" && <PagesTab />}
+      {tab === "contatos" && <ContactsTab />}
+      {tab === "relatorios" && <ReportsTab />}
     </Box>
   );
 }

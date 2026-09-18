@@ -1573,6 +1573,36 @@ export type Database = {
         }
         Relationships: []
       }
+      landing_pages: {
+        Row: {
+          atualizado_em: string
+          conteudo: Json
+          criado_em: string
+          id: string
+          nome: string
+          slug: string
+          status: string
+        }
+        Insert: {
+          atualizado_em?: string
+          conteudo?: Json
+          criado_em?: string
+          id?: string
+          nome: string
+          slug: string
+          status?: string
+        }
+        Update: {
+          atualizado_em?: string
+          conteudo?: Json
+          criado_em?: string
+          id?: string
+          nome?: string
+          slug?: string
+          status?: string
+        }
+        Relationships: []
+      }
       surveys: {
         Row: {
           created_at: string

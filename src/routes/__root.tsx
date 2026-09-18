@@ -150,13 +150,15 @@ function RootComponent() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // /pesquisa/$slug é a landing page pública de uma pesquisa (link ou etiqueta NFC) — sem
   // o chrome do admin (Sidebar/Topbar), já que quem responde não é usuário logado do CRM.
+  // /lp/$slug é a mesma ideia para as landing pages de anúncio (Facebook Ads).
   const isPublicSurveyPage = pathname.startsWith("/pesquisa/");
+  const isPublicLandingPage = pathname.startsWith("/lp/");
 
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={materioTheme}>
         <Toaster position="top-right" />
-        {isPublicSurveyPage ? (
+        {isPublicSurveyPage || isPublicLandingPage ? (
           <Outlet />
         ) : (
           <Box sx={{ display: "flex", minHeight: "100vh" }}>

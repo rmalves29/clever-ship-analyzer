@@ -29,6 +29,9 @@ import { Route as CrmLiveViewRouteImport } from './routes/crm/live-view'
 import { Route as CrmSegmentosRouteImport } from './routes/crm/segmentos'
 import { Route as FlowIndexRouteImport } from './routes/flow/index'
 import { Route as FlowIdRouteImport } from './routes/flow/$id'
+import { Route as LandingPagesIndexRouteImport } from './routes/landing-pages/index'
+import { Route as LandingPagesIdRouteImport } from './routes/landing-pages/$id'
+import { Route as LpSlugRouteImport } from './routes/lp/$slug'
 import { Route as PerformanceMetaAdsRouteImport } from './routes/performance/meta-ads'
 import { Route as PesquisaSlugRouteImport } from './routes/pesquisa/$slug'
 import { Route as PesquisasIndexRouteImport } from './routes/pesquisas/index'
@@ -143,6 +146,21 @@ const FlowIdRoute = FlowIdRouteImport.update({
   path: '/flow/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LandingPagesIndexRoute = LandingPagesIndexRouteImport.update({
+  id: '/landing-pages/',
+  path: '/landing-pages/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LandingPagesIdRoute = LandingPagesIdRouteImport.update({
+  id: '/landing-pages/$id',
+  path: '/landing-pages/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LpSlugRoute = LpSlugRouteImport.update({
+  id: '/lp/$slug',
+  path: '/lp/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PerformanceMetaAdsRoute = PerformanceMetaAdsRouteImport.update({
   id: '/performance/meta-ads',
   path: '/performance/meta-ads',
@@ -229,6 +247,8 @@ export interface FileRoutesByFullPath {
   '/crm/live-view': typeof CrmLiveViewRoute
   '/crm/segmentos': typeof CrmSegmentosRoute
   '/flow/$id': typeof FlowIdRoute
+  '/landing-pages/$id': typeof LandingPagesIdRoute
+  '/lp/$slug': typeof LpSlugRoute
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/pesquisa/$slug': typeof PesquisaSlugRoute
   '/pesquisas/$surveyId': typeof PesquisasSurveyIdRoute
@@ -240,6 +260,7 @@ export interface FileRoutesByFullPath {
   '/whatsapp/relatorios': typeof WhatsappRelatoriosRoute
   '/crm/': typeof CrmIndexRoute
   '/flow/': typeof FlowIndexRoute
+  '/landing-pages/': typeof LandingPagesIndexRoute
   '/pesquisas/': typeof PesquisasIndexRoute
   '/whatsapp/': typeof WhatsappIndexRoute
   '/crm/cliente/$customerId': typeof CrmClienteCustomerIdRoute
@@ -263,6 +284,8 @@ export interface FileRoutesByTo {
   '/crm/live-view': typeof CrmLiveViewRoute
   '/crm/segmentos': typeof CrmSegmentosRoute
   '/flow/$id': typeof FlowIdRoute
+  '/landing-pages/$id': typeof LandingPagesIdRoute
+  '/lp/$slug': typeof LpSlugRoute
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/pesquisa/$slug': typeof PesquisaSlugRoute
   '/pesquisas/$surveyId': typeof PesquisasSurveyIdRoute
@@ -274,6 +297,7 @@ export interface FileRoutesByTo {
   '/whatsapp/relatorios': typeof WhatsappRelatoriosRoute
   '/crm': typeof CrmIndexRoute
   '/flow': typeof FlowIndexRoute
+  '/landing-pages': typeof LandingPagesIndexRoute
   '/pesquisas': typeof PesquisasIndexRoute
   '/whatsapp': typeof WhatsappIndexRoute
   '/crm/cliente/$customerId': typeof CrmClienteCustomerIdRoute
@@ -299,6 +323,8 @@ export interface FileRoutesById {
   '/crm/live-view': typeof CrmLiveViewRoute
   '/crm/segmentos': typeof CrmSegmentosRoute
   '/flow/$id': typeof FlowIdRoute
+  '/landing-pages/$id': typeof LandingPagesIdRoute
+  '/lp/$slug': typeof LpSlugRoute
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/pesquisa/$slug': typeof PesquisaSlugRoute
   '/pesquisas/$surveyId': typeof PesquisasSurveyIdRoute
@@ -310,6 +336,7 @@ export interface FileRoutesById {
   '/whatsapp/relatorios': typeof WhatsappRelatoriosRoute
   '/crm/': typeof CrmIndexRoute
   '/flow/': typeof FlowIndexRoute
+  '/landing-pages/': typeof LandingPagesIndexRoute
   '/pesquisas/': typeof PesquisasIndexRoute
   '/whatsapp/': typeof WhatsappIndexRoute
   '/crm/cliente/$customerId': typeof CrmClienteCustomerIdRoute
@@ -336,6 +363,8 @@ export interface FileRouteTypes {
     | '/crm/live-view'
     | '/crm/segmentos'
     | '/flow/$id'
+    | '/landing-pages/$id'
+    | '/lp/$slug'
     | '/performance/meta-ads'
     | '/pesquisa/$slug'
     | '/pesquisas/$surveyId'
@@ -347,6 +376,7 @@ export interface FileRouteTypes {
     | '/whatsapp/relatorios'
     | '/crm/'
     | '/flow/'
+    | '/landing-pages/'
     | '/pesquisas/'
     | '/whatsapp/'
     | '/crm/cliente/$customerId'
@@ -370,6 +400,8 @@ export interface FileRouteTypes {
     | '/crm/live-view'
     | '/crm/segmentos'
     | '/flow/$id'
+    | '/landing-pages/$id'
+    | '/lp/$slug'
     | '/performance/meta-ads'
     | '/pesquisa/$slug'
     | '/pesquisas/$surveyId'
@@ -381,6 +413,7 @@ export interface FileRouteTypes {
     | '/whatsapp/relatorios'
     | '/crm'
     | '/flow'
+    | '/landing-pages'
     | '/pesquisas'
     | '/whatsapp'
     | '/crm/cliente/$customerId'
@@ -405,6 +438,8 @@ export interface FileRouteTypes {
     | '/crm/live-view'
     | '/crm/segmentos'
     | '/flow/$id'
+    | '/landing-pages/$id'
+    | '/lp/$slug'
     | '/performance/meta-ads'
     | '/pesquisa/$slug'
     | '/pesquisas/$surveyId'
@@ -416,6 +451,7 @@ export interface FileRouteTypes {
     | '/whatsapp/relatorios'
     | '/crm/'
     | '/flow/'
+    | '/landing-pages/'
     | '/pesquisas/'
     | '/whatsapp/'
     | '/crm/cliente/$customerId'
@@ -441,11 +477,14 @@ export interface RootRouteChildren {
   CrmLiveViewRoute: typeof CrmLiveViewRoute
   CrmSegmentosRoute: typeof CrmSegmentosRoute
   FlowIdRoute: typeof FlowIdRoute
+  LandingPagesIdRoute: typeof LandingPagesIdRoute
+  LpSlugRoute: typeof LpSlugRoute
   PerformanceMetaAdsRoute: typeof PerformanceMetaAdsRoute
   PesquisaSlugRoute: typeof PesquisaSlugRoute
   PesquisasSurveyIdRoute: typeof PesquisasSurveyIdRoute
   CrmIndexRoute: typeof CrmIndexRoute
   FlowIndexRoute: typeof FlowIndexRoute
+  LandingPagesIndexRoute: typeof LandingPagesIndexRoute
   PesquisasIndexRoute: typeof PesquisasIndexRoute
   CrmClienteCustomerIdRoute: typeof CrmClienteCustomerIdRoute
   CrmReguasPrimeiraSegundaRoute: typeof CrmReguasPrimeiraSegundaRoute
@@ -593,6 +632,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FlowIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/landing-pages/': {
+      id: '/landing-pages/'
+      path: '/landing-pages'
+      fullPath: '/landing-pages/'
+      preLoaderRoute: typeof LandingPagesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/landing-pages/$id': {
+      id: '/landing-pages/$id'
+      path: '/landing-pages/$id'
+      fullPath: '/landing-pages/$id'
+      preLoaderRoute: typeof LandingPagesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lp/$slug': {
+      id: '/lp/$slug'
+      path: '/lp/$slug'
+      fullPath: '/lp/$slug'
+      preLoaderRoute: typeof LpSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/performance/meta-ads': {
       id: '/performance/meta-ads'
       path: '/performance/meta-ads'
@@ -730,11 +790,14 @@ const rootRouteChildren: RootRouteChildren = {
   CrmLiveViewRoute: CrmLiveViewRoute,
   CrmSegmentosRoute: CrmSegmentosRoute,
   FlowIdRoute: FlowIdRoute,
+  LandingPagesIdRoute: LandingPagesIdRoute,
+  LpSlugRoute: LpSlugRoute,
   PerformanceMetaAdsRoute: PerformanceMetaAdsRoute,
   PesquisaSlugRoute: PesquisaSlugRoute,
   PesquisasSurveyIdRoute: PesquisasSurveyIdRoute,
   CrmIndexRoute: CrmIndexRoute,
   FlowIndexRoute: FlowIndexRoute,
+  LandingPagesIndexRoute: LandingPagesIndexRoute,
   PesquisasIndexRoute: PesquisasIndexRoute,
   CrmClienteCustomerIdRoute: CrmClienteCustomerIdRoute,
   CrmReguasPrimeiraSegundaRoute: CrmReguasPrimeiraSegundaRoute,

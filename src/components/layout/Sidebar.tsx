@@ -56,7 +56,8 @@ type NavItem = {
     | "/popups"
     | "/cashback"
     | "/ga4"
-    | "/pesquisas";
+    | "/pesquisas"
+    | "/landing-pages";
   search?: Record<string, string>;
   icon: typeof LayoutDashboard;
 };
@@ -133,6 +134,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { label: "Cashback", to: "/cashback", icon: Coins },
       { label: "Google Analytics", to: "/ga4", icon: BarChart3 },
       { label: "Pesquisas", to: "/pesquisas", icon: ClipboardList },
+      { label: "Landing Pages", to: "/landing-pages", icon: FileText },
     ],
   },
   {

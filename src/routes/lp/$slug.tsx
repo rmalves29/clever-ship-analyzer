@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -32,6 +32,35 @@ function formatPhoneBR(raw: string): string {
 function isValidPhoneBR(formatted: string): boolean {
   const digits = formatted.replace(/\D/g, "");
   return digits.length === 10 || digits.length === 11;
+}
+
+function callFbq(...args: unknown[]) {
+  const w = window as unknown as { fbq?: (...a: unknown[]) => void };
+  w.fbq?.(...args);
+}
+
+/** Carrega o Pixel do Meta uma vez por pixelId e dispara PageView — cada landing page roda numa
+ *  conta de anúncio diferente, então o ID vem do conteúdo da própria página, não de env global. */
+function useMetaPixel(pixelId: string) {
+  useEffect(() => {
+    if (!pixelId) return;
+    const w = window as any;
+    if (!w.fbq) {
+      const fbq: any = function (...args: unknown[]) {
+        fbq.callMethod ? fbq.callMethod(...args) : fbq.queue.push(args);
+      };
+      fbq.queue = [];
+      fbq.loaded = true;
+      fbq.version = "2.0";
+      w.fbq = fbq;
+      const script = document.createElement("script");
+      script.async = true;
+      script.src = "https://connect.facebook.net/en_US/fbevents.js";
+      document.head.appendChild(script);
+    }
+    callFbq("init", pixelId);
+    callFbq("track", "PageView");
+  }, [pixelId]);
 }
 
 /** Reduz a fonte quando o valor é uma palavra/frase em vez de um número curto (ex.: "14%") —
@@ -179,9 +208,12 @@ function PublicLandingPage() {
     enabled: Boolean(page?.conteudo.secoesVisiveis.depoimentos),
   });
 
+  useMetaPixel(page?.conteudo.integracoes.metaPixelId ?? "");
+
   const submitMut = useMutation({
     mutationFn: (ctaUrl: string) => runSubmitLead({ data: { slug, phone } }).then(() => ctaUrl),
     onSuccess: (ctaUrl) => {
+      callFbq("track", "Lead");
       if (ctaUrl) window.location.href = ctaUrl;
     },
     onError: () => toast.error("Não foi possível enviar. Tente de novo em instantes."),

@@ -515,6 +515,20 @@ function LandingPageEditor() {
           <TextField size="small" label="Linha de selos (ex.: troca fácil · 4x sem juros)" value={content.rodape.linhaBadges} onChange={(e) => updateSection("rodape", { linhaBadges: e.target.value })} />
           <TextField size="small" multiline minRows={2} label="Texto legal (letras miúdas)" value={content.rodape.textoLegal} onChange={(e) => updateSection("rodape", { textoLegal: e.target.value })} />
         </Section>
+
+        <Section title="Integrações" subtitle="Rastreamento para campanhas de remarketing">
+          <TextField
+            size="small"
+            label="Pixel do Meta (ID)"
+            placeholder="Ex.: 1234567890123456"
+            value={content.integracoes.metaPixelId}
+            onChange={(e) => updateSection("integracoes", { metaPixelId: e.target.value.replace(/\D/g, "") })}
+          />
+          <Typography variant="caption" color="text.secondary">
+            Dispara PageView ao abrir a página e Lead quando a cliente envia o telefone. Encontre o ID em
+            Gerenciador de Eventos → Fontes de dados, no Meta Business Suite. Deixe em branco para não rastrear.
+          </Typography>
+        </Section>
       </Stack>
 
       <Box sx={{ position: "sticky", bottom: 16, display: "flex", justifyContent: "flex-end", mt: 3 }}>

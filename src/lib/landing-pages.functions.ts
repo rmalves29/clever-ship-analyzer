@@ -95,6 +95,12 @@ export type LandingPageContent = {
     comoFunciona: boolean;
     depoimentos: boolean;
   };
+  /** Cada landing page pode rodar numa conta de anúncio diferente, então o Pixel do Meta é
+   *  configurado por página (não global) — dispara PageView no load e Lead quando a cliente
+   *  envia o telefone, pra alimentar remarketing/lookalike dessa campanha específica. */
+  integracoes: {
+    metaPixelId: string;
+  };
 };
 
 export type LandingPage = {
@@ -172,6 +178,7 @@ export const DEFAULT_LANDING_PAGE_CONTENT: LandingPageContent = {
     textoLegal: "Condições da oferta e regulamento completo.",
   },
   secoesVisiveis: { estatisticas: true, beneficios: true, comoFunciona: true, depoimentos: true },
+  integracoes: { metaPixelId: "" },
 };
 
 /** Landing pages salvas antes da última seção nova (ex.: "depoimentos") têm esse campo ausente
@@ -189,6 +196,7 @@ export function mergeWithDefaultContent(saved: Partial<LandingPageContent> | nul
     depoimentos: { ...DEFAULT_LANDING_PAGE_CONTENT.depoimentos, ...s.depoimentos },
     rodape: { ...DEFAULT_LANDING_PAGE_CONTENT.rodape, ...s.rodape },
     secoesVisiveis: { ...DEFAULT_LANDING_PAGE_CONTENT.secoesVisiveis, ...s.secoesVisiveis },
+    integracoes: { ...DEFAULT_LANDING_PAGE_CONTENT.integracoes, ...s.integracoes },
   };
 }
 
@@ -254,6 +262,9 @@ const contentSchema: z.ZodType<LandingPageContent> = z.object({
     beneficios: z.boolean(),
     comoFunciona: z.boolean(),
     depoimentos: z.boolean(),
+  }),
+  integracoes: z.object({
+    metaPixelId: z.string(),
   }),
 });
 

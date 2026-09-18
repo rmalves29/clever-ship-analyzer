@@ -87,6 +87,14 @@ export type LandingPageContent = {
     linhaBadges: string;
     textoLegal: string;
   };
+  /** Blocos opcionais que a usuária pode ligar/desligar por campanha — hero, ticker e rodapé
+   *  ficam de fora por serem a estrutura mínima da página. */
+  secoesVisiveis: {
+    estatisticas: boolean;
+    beneficios: boolean;
+    comoFunciona: boolean;
+    depoimentos: boolean;
+  };
 };
 
 export type LandingPage = {
@@ -163,6 +171,7 @@ export const DEFAULT_LANDING_PAGE_CONTENT: LandingPageContent = {
     linhaBadges: "TROCA FÁCIL · 4X SEM JUROS · BRINDE EM TODAS AS COMPRAS",
     textoLegal: "Condições da oferta e regulamento completo.",
   },
+  secoesVisiveis: { estatisticas: true, beneficios: true, comoFunciona: true, depoimentos: true },
 };
 
 /** Landing pages salvas antes da última seção nova (ex.: "depoimentos") têm esse campo ausente
@@ -179,6 +188,7 @@ export function mergeWithDefaultContent(saved: Partial<LandingPageContent> | nul
     comoFunciona: { ...DEFAULT_LANDING_PAGE_CONTENT.comoFunciona, ...s.comoFunciona },
     depoimentos: { ...DEFAULT_LANDING_PAGE_CONTENT.depoimentos, ...s.depoimentos },
     rodape: { ...DEFAULT_LANDING_PAGE_CONTENT.rodape, ...s.rodape },
+    secoesVisiveis: { ...DEFAULT_LANDING_PAGE_CONTENT.secoesVisiveis, ...s.secoesVisiveis },
   };
 }
 
@@ -238,6 +248,12 @@ const contentSchema: z.ZodType<LandingPageContent> = z.object({
     linhaEndereco: z.string(),
     linhaBadges: z.string(),
     textoLegal: z.string(),
+  }),
+  secoesVisiveis: z.object({
+    estatisticas: z.boolean(),
+    beneficios: z.boolean(),
+    comoFunciona: z.boolean(),
+    depoimentos: z.boolean(),
   }),
 });
 

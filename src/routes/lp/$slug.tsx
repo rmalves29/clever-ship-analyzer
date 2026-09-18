@@ -176,7 +176,7 @@ function PublicLandingPage() {
   const { data: approvedReviews } = useQuery({
     queryKey: ["public-landing-page-reviews", slug],
     queryFn: () => runGetReviews({ data: { slug } }),
-    enabled: Boolean(page),
+    enabled: Boolean(page?.conteudo.secoesVisiveis.depoimentos),
   });
 
   const submitMut = useMutation({
@@ -298,6 +298,7 @@ function PublicLandingPage() {
       </Box>
 
       {/* Estatísticas */}
+      {c.secoesVisiveis.estatisticas && (
       <Box sx={{ maxWidth: 1120, mx: "auto", px: { xs: 3, md: 6 }, pb: { xs: 4, md: 6 } }}>
         <Box
           sx={{
@@ -349,8 +350,10 @@ function PublicLandingPage() {
           </Stack>
         </Box>
       </Box>
+      )}
 
       {/* Benefícios */}
+      {c.secoesVisiveis.beneficios && (
       <Box sx={{ maxWidth: 1120, mx: "auto", px: { xs: 3, md: 6 }, pb: { xs: 6, md: 10 } }}>
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: c.beneficios.imagemUrl ? "1fr 1fr" : "1fr" }, gap: { xs: 4, md: 6 } }}>
           {c.beneficios.imagemUrl && (
@@ -387,8 +390,10 @@ function PublicLandingPage() {
           </Box>
         </Box>
       </Box>
+      )}
 
       {/* Como funciona */}
+      {c.secoesVisiveis.comoFunciona && (
       <Box sx={{ maxWidth: 1120, mx: "auto", px: { xs: 3, md: 6 }, pb: { xs: 6, md: 10 } }}>
         <SectionDivider label={c.comoFunciona.seloTexto} />
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: `repeat(${Math.max(c.comoFunciona.passos.length, 1)}, 1fr)` }, gap: 4, mb: { xs: 5, md: 7 } }}>
@@ -455,9 +460,11 @@ function PublicLandingPage() {
           </Box>
         </Box>
       </Box>
+      )}
 
       {/* Depoimentos: os fixos (fake) vêm do conteúdo da página; os reais só aparecem depois de
        *  aprovados no admin (evita spam/ofensa indo direto pro ar). */}
+      {c.secoesVisiveis.depoimentos && (
       <Box sx={{ maxWidth: 1120, mx: "auto", px: { xs: 3, md: 6 }, pb: { xs: 6, md: 10 } }}>
         <SectionDivider label={c.depoimentos.seloTexto} />
           {(c.depoimentos.itens.length > 0 || (approvedReviews?.length ?? 0) > 0) && (
@@ -518,6 +525,7 @@ function PublicLandingPage() {
             )}
           </Box>
       </Box>
+      )}
 
       {/* Botão flutuante: atalho que leva direto pro campo de telefone do topo. */}
       <Box

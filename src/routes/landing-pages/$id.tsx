@@ -14,6 +14,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import IconButton from "@mui/material/IconButton";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
+import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import {
@@ -41,14 +42,43 @@ function slugify(text: string): string {
     .slice(0, 60);
 }
 
-function Section({ title, subtitle, children, defaultExpanded }: { title: string; subtitle?: string; children: React.ReactNode; defaultExpanded?: boolean }) {
+function Section({
+  title,
+  subtitle,
+  children,
+  defaultExpanded,
+  visible,
+  onVisibleChange,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  defaultExpanded?: boolean;
+  /** Quando definido, mostra um switch "Exibir na página" — usado nos blocos opcionais do layout. */
+  visible?: boolean;
+  onVisibleChange?: (visible: boolean) => void;
+}) {
   return (
-    <Accordion defaultExpanded={defaultExpanded} sx={{ "&:before": { display: "none" } }}>
+    <Accordion defaultExpanded={defaultExpanded} sx={{ "&:before": { display: "none" }, opacity: visible === false ? 0.6 : 1 }}>
       <AccordionSummary expandIcon={<ChevronDown size={18} />}>
-        <Box>
-          <Typography sx={{ fontWeight: 700 }}>{title}</Typography>
-          {subtitle && <Typography variant="caption" color="text.secondary">{subtitle}</Typography>}
-        </Box>
+        <Stack direction="row" spacing={2} sx={{ alignItems: "center", justifyContent: "space-between", width: "100%", pr: 1 }}>
+          <Box>
+            <Typography sx={{ fontWeight: 700 }}>{title}</Typography>
+            {subtitle && <Typography variant="caption" color="text.secondary">{subtitle}</Typography>}
+          </Box>
+          {onVisibleChange && (
+            <Stack
+              direction="row"
+              spacing={0.5}
+              sx={{ alignItems: "center" }}
+              onClick={(e) => e.stopPropagation()}
+              onFocus={(e) => e.stopPropagation()}
+            >
+              <Typography variant="caption" color="text.secondary">Exibir na página</Typography>
+              <Switch size="small" checked={visible ?? true} onChange={(e) => onVisibleChange(e.target.checked)} />
+            </Stack>
+          )}
+        </Stack>
       </AccordionSummary>
       <AccordionDetails>
         <Stack spacing={2}>{children}</Stack>
@@ -411,7 +441,12 @@ function LandingPageEditor() {
           <TextField size="small" label="Legenda da imagem" value={content.hero.imagemLegenda} onChange={(e) => updateSection("hero", { imagemLegenda: e.target.value })} />
         </Section>
 
-        <Section title="Bloco de desconto" subtitle="Selo + números do desconto">
+        <Section
+          title="Bloco de desconto"
+          subtitle="Selo + números do desconto"
+          visible={content.secoesVisiveis.estatisticas}
+          onVisibleChange={(v) => updateSection("secoesVisiveis", { estatisticas: v })}
+        >
           <TextField size="small" label="Selo" value={content.estatisticas.seloTexto} onChange={(e) => updateSection("estatisticas", { seloTexto: e.target.value })} />
           <TextField size="small" label="Título" value={content.estatisticas.tituloTexto} onChange={(e) => updateSection("estatisticas", { tituloTexto: e.target.value })} />
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
@@ -428,14 +463,24 @@ function LandingPageEditor() {
           </Stack>
         </Section>
 
-        <Section title="Benefícios" subtitle="Imagem + lista de vantagens">
+        <Section
+          title="Benefícios"
+          subtitle="Imagem + lista de vantagens"
+          visible={content.secoesVisiveis.beneficios}
+          onVisibleChange={(v) => updateSection("secoesVisiveis", { beneficios: v })}
+        >
           <TextField size="small" label="Selo" value={content.beneficios.seloTexto} onChange={(e) => updateSection("beneficios", { seloTexto: e.target.value })} />
           <ImageUploadField label="Imagem" value={content.beneficios.imagemUrl} onChange={(url) => updateSection("beneficios", { imagemUrl: url })} />
           <TextField size="small" label="Legenda da imagem" value={content.beneficios.imagemLegenda} onChange={(e) => updateSection("beneficios", { imagemLegenda: e.target.value })} />
           <TitledListEditor label="Itens" items={content.beneficios.itens} onChange={(itens) => updateSection("beneficios", { itens })} />
         </Section>
 
-        <Section title="Como funciona" subtitle="Passos + fechamento com CTA">
+        <Section
+          title="Como funciona"
+          subtitle="Passos + fechamento com CTA"
+          visible={content.secoesVisiveis.comoFunciona}
+          onVisibleChange={(v) => updateSection("secoesVisiveis", { comoFunciona: v })}
+        >
           <TextField size="small" label="Selo" value={content.comoFunciona.seloTexto} onChange={(e) => updateSection("comoFunciona", { seloTexto: e.target.value })} />
           <TitledListEditor label="Passos" items={content.comoFunciona.passos} onChange={(passos) => updateSection("comoFunciona", { passos })} />
           <ImageUploadField label="Imagem" value={content.comoFunciona.imagemUrl} onChange={(url) => updateSection("comoFunciona", { imagemUrl: url })} />
@@ -452,7 +497,12 @@ function LandingPageEditor() {
           </Stack>
         </Section>
 
-        <Section title="Depoimentos" subtitle="Comentários fixos (fake) + os que as clientes enviarem pela página">
+        <Section
+          title="Depoimentos"
+          subtitle="Comentários fixos (fake) + os que as clientes enviarem pela página"
+          visible={content.secoesVisiveis.depoimentos}
+          onVisibleChange={(v) => updateSection("secoesVisiveis", { depoimentos: v })}
+        >
           <TextField size="small" label="Selo" value={content.depoimentos.seloTexto} onChange={(e) => updateSection("depoimentos", { seloTexto: e.target.value })} />
           <ReviewListEditor label="Comentários fixos" items={content.depoimentos.itens} onChange={(itens) => updateSection("depoimentos", { itens })} />
           <Typography variant="caption" color="text.secondary">

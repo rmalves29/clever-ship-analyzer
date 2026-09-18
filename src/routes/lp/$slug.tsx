@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { MessageCircle, Star } from "lucide-react";
+import { Star } from "lucide-react";
 import { toast } from "sonner";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -37,6 +37,23 @@ function isValidPhoneBR(formatted: string): boolean {
 function callFbq(...args: unknown[]) {
   const w = window as unknown as { fbq?: (...a: unknown[]) => void };
   w.fbq?.(...args);
+}
+
+/** Destaca em negrito a chamada pro sorteio (ex.: "concorrer a um iPhone") dentro do texto de
+ *  apoio do hero — funciona pra qualquer landing page que use essa frase, sem exigir um campo
+ *  de conteúdo novo só pra isso. */
+function renderWithIphoneHighlight(text: string) {
+  const match = text.match(/concorrer a (?:um |1 )?iphone\.?/i);
+  if (!match || match.index === undefined) return text;
+  const start = match.index;
+  const end = start + match[0].length;
+  return (
+    <>
+      {text.slice(0, start)}
+      <Box component="span" sx={{ fontWeight: 800, color: "text.primary" }}>{text.slice(start, end)}</Box>
+      {text.slice(end)}
+    </>
+  );
 }
 
 /** Carrega o Pixel do Meta uma vez por pixelId e dispara PageView — cada landing page roda numa
@@ -250,11 +267,6 @@ function PublicLandingPage() {
     reviewMut.mutate();
   };
 
-  const scrollToPhoneField = () => {
-    document.getElementById(HERO_PHONE_FIELD_ID)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    document.getElementById(HERO_PHONE_FIELD_ID)?.focus();
-  };
-
   if (isLoading) {
     return (
       <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -284,9 +296,8 @@ function PublicLandingPage() {
 
       {/* Hero */}
       <Box sx={{ maxWidth: 1120, mx: "auto", px: { xs: 3, md: 6 }, py: { xs: 4, md: 8 } }}>
-        <Typography sx={{ fontWeight: 800, letterSpacing: 1, mb: { xs: 3, md: 5 } }}>{c.hero.logoTexto}</Typography>
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1.1fr 1fr" }, gap: { xs: 4, md: 6 }, alignItems: "start" }}>
-          <Box>
+          <Box sx={{ textAlign: { xs: "center", md: "left" } }}>
             <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 1.5, color: "text.secondary", mb: 2 }}>
               {c.hero.selo}
             </Typography>
@@ -294,8 +305,10 @@ function PublicLandingPage() {
               {c.hero.headlineNormal}{" "}
               <Box component="span" sx={{ color: c.tema.corPrimaria }}>{c.hero.headlineDestaque}</Box>
             </Typography>
-            <Typography sx={{ fontSize: 16, color: "text.secondary", mb: 4, maxWidth: 440 }}>{c.hero.subcopy}</Typography>
-            <Box sx={{ maxWidth: 360 }}>
+            <Typography sx={{ fontSize: 16, color: "text.secondary", mb: 4, maxWidth: 440, mx: { xs: "auto", md: 0 } }}>
+              {renderWithIphoneHighlight(c.hero.subcopy)}
+            </Typography>
+            <Box sx={{ maxWidth: 360, mx: { xs: "auto", md: 0 } }}>
               <PhoneGateCta
                 fieldId={HERO_PHONE_FIELD_ID}
                 label={c.hero.ctaLabel}
@@ -558,33 +571,6 @@ function PublicLandingPage() {
           </Box>
       </Box>
       )}
-
-      {/* Botão flutuante: atalho que leva direto pro campo de telefone do topo. */}
-      <Box
-        component="button"
-        type="button"
-        onClick={scrollToPhoneField}
-        aria-label={c.hero.ctaLabel}
-        sx={{
-          position: "fixed",
-          right: { xs: 16, md: 24 },
-          bottom: { xs: 16, md: 24 },
-          zIndex: 20,
-          width: 60,
-          height: 60,
-          borderRadius: "50%",
-          border: "none",
-          cursor: "pointer",
-          bgcolor: c.tema.corDestaque,
-          color: "#fff",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
-        }}
-      >
-        <MessageCircle size={28} />
-      </Box>
 
       {/* Rodapé */}
       <Box sx={{ bgcolor: c.tema.corDestaque, color: "#fff", py: { xs: 4, md: 5 }, px: 3, textAlign: "center" }}>

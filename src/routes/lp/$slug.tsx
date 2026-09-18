@@ -28,6 +28,12 @@ function isValidPhoneBR(formatted: string): boolean {
   return digits.length === 10 || digits.length === 11;
 }
 
+/** Reduz a fonte quando o valor é uma palavra/frase em vez de um número curto (ex.: "14%") —
+ *  sem isso, um texto longo fica do tamanho de um título e briga visualmente com o resto. */
+function statFontSize(text: string, shortSize: number, longSize: number): number {
+  return text.length > 8 ? longSize : shortSize;
+}
+
 export const Route = createFileRoute("/lp/$slug")({
   head: () => ({ meta: [{ title: "Oferta especial" }] }),
   component: PublicLandingPage,
@@ -76,6 +82,9 @@ function PhoneGateCta({
   const valid = isValidPhoneBR(phone);
   return (
     <Stack spacing={1.5}>
+      <Typography sx={{ fontSize: 13, fontWeight: 600, color: "text.secondary" }}>
+        Digite seu WhatsApp e clique no botão para entrar no grupo
+      </Typography>
       <TextField
         id={fieldId}
         size="small"
@@ -217,40 +226,55 @@ function PublicLandingPage() {
 
       {/* Estatísticas */}
       <Box sx={{ maxWidth: 1120, mx: "auto", px: { xs: 3, md: 6 }, pb: { xs: 4, md: 6 } }}>
-        <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 3, md: 4 }} sx={{ alignItems: { md: "center" } }}>
-          <Box sx={{ flex: 1 }}>
-            <Box
-              component="span"
-              sx={{ display: "inline-block", bgcolor: c.tema.corPrimaria, color: "#fff", fontSize: 11, fontWeight: 700, letterSpacing: 1, px: 1.5, py: 0.5, borderRadius: 999, mb: 1.5 }}
-            >
-              {c.estatisticas.seloTexto}
+        <Box
+          sx={{
+            border: "1px solid",
+            borderColor: `${c.tema.corPrimaria}33`,
+            bgcolor: "#fff",
+            borderRadius: 4,
+            p: { xs: 3, md: 4 },
+          }}
+        >
+          <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 3, md: 4 }} sx={{ alignItems: { md: "center" }, justifyContent: "space-between" }}>
+            <Box>
+              <Box
+                component="span"
+                sx={{ display: "inline-block", bgcolor: c.tema.corPrimaria, color: "#fff", fontSize: 11, fontWeight: 700, letterSpacing: 1, px: 1.5, py: 0.5, borderRadius: 999, mb: 1.5 }}
+              >
+                {c.estatisticas.seloTexto}
+              </Box>
+              <Typography sx={{ fontSize: 18, fontWeight: 700 }}>{c.estatisticas.tituloTexto}</Typography>
             </Box>
-            <Typography sx={{ fontSize: 20, fontWeight: 700 }}>{c.estatisticas.tituloTexto}</Typography>
-          </Box>
-          <Stack direction="row" spacing={3} sx={{ alignItems: "center" }}>
-            <Box sx={{ textAlign: "center" }}>
-              <Typography sx={{ fontSize: 32, fontWeight: 800 }}>{c.estatisticas.item1Valor}</Typography>
-              <Typography sx={{ fontSize: 12, color: "text.secondary", maxWidth: 100 }}>{c.estatisticas.item1Label}</Typography>
-            </Box>
-            <Box
-              sx={{ width: 32, height: 32, borderRadius: "50%", bgcolor: `${c.tema.corPrimaria}22`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: c.tema.corPrimaria }}
-            >
-              +
-            </Box>
-            <Box sx={{ textAlign: "center" }}>
-              <Typography sx={{ fontSize: 32, fontWeight: 800 }}>{c.estatisticas.item2Valor}</Typography>
-              <Typography sx={{ fontSize: 12, color: "text.secondary", maxWidth: 100 }}>{c.estatisticas.item2Label}</Typography>
-            </Box>
-            <Box sx={{ textAlign: "center", pl: { xs: 0, sm: 2 }, maxWidth: 180 }}>
-              <Typography sx={{ fontSize: c.estatisticas.totalValor.length > 8 ? 20 : 36, fontWeight: 800, color: c.tema.corPrimaria, lineHeight: 1.2 }}>
-                {c.estatisticas.totalValor}
-              </Typography>
-              <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: "text.secondary" }}>
-                {c.estatisticas.totalLabel}
-              </Typography>
-            </Box>
+            <Stack direction="row" spacing={{ xs: 2, sm: 3 }} sx={{ alignItems: "center", flexWrap: "wrap", justifyContent: { xs: "center", md: "flex-end" } }}>
+              <Box sx={{ textAlign: "center", maxWidth: 120 }}>
+                <Typography sx={{ fontSize: statFontSize(c.estatisticas.item1Valor, 32, 18), fontWeight: 800, lineHeight: 1.2 }}>
+                  {c.estatisticas.item1Valor}
+                </Typography>
+                <Typography sx={{ fontSize: 12, color: "text.secondary" }}>{c.estatisticas.item1Label}</Typography>
+              </Box>
+              <Box
+                sx={{ width: 32, height: 32, flexShrink: 0, borderRadius: "50%", bgcolor: `${c.tema.corPrimaria}22`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: c.tema.corPrimaria }}
+              >
+                +
+              </Box>
+              <Box sx={{ textAlign: "center", maxWidth: 120 }}>
+                <Typography sx={{ fontSize: statFontSize(c.estatisticas.item2Valor, 32, 18), fontWeight: 800, lineHeight: 1.2 }}>
+                  {c.estatisticas.item2Valor}
+                </Typography>
+                <Typography sx={{ fontSize: 12, color: "text.secondary" }}>{c.estatisticas.item2Label}</Typography>
+              </Box>
+              <Box sx={{ width: 1, alignSelf: "stretch", bgcolor: "divider", display: { xs: "none", sm: "block" } }} />
+              <Box sx={{ textAlign: "center", maxWidth: 140 }}>
+                <Typography sx={{ fontSize: statFontSize(c.estatisticas.totalValor, 36, 20), fontWeight: 800, color: c.tema.corPrimaria, lineHeight: 1.2 }}>
+                  {c.estatisticas.totalValor}
+                </Typography>
+                <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: "text.secondary" }}>
+                  {c.estatisticas.totalLabel}
+                </Typography>
+              </Box>
+            </Stack>
           </Stack>
-        </Stack>
+        </Box>
       </Box>
 
       {/* Benefícios */}

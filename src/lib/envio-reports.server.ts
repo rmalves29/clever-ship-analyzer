@@ -28,7 +28,7 @@ export async function getEnvioReports(period: EnvioReportsPeriod) {
 
   const [{ data: clicks }, { data: events }, { data: campaigns }, { data: campaignGroups }, { data: groups }] = await Promise.all([
     ((localSupabaseAdmin.from("envio_link_clicks" as any) as any) as any).select("campaign_id, clicked_at").gte("clicked_at", start),
-    ((liveLaunchpad.from("fe_group_events" as any) as any) as any).select("group_id, event_type, created_at").gte("created_at", start),
+    ((liveLaunchpad.from("fe_group_events" as any) as any) as any).select("group_id, event_type, created_at, phone").gte("created_at", start),
     ((liveLaunchpad.from("fe_campaigns" as any) as any) as any).select("id, name"),
     ((liveLaunchpad.from("fe_campaign_groups" as any) as any) as any).select("campaign_id, group_id"),
     ((liveLaunchpad.from("fe_groups" as any) as any) as any).select("id, group_name, participant_count"),

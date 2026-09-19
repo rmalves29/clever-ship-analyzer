@@ -22,8 +22,16 @@ import {
   saveLandingPage,
   uploadLandingPageImage,
   DEFAULT_LANDING_PAGE_CONTENT,
+  type ImageAspect,
   type LandingPageContent,
 } from "@/lib/landing-pages.functions";
+
+const IMAGE_ASPECT_LABELS: Record<ImageAspect, string> = {
+  quadrada: "Quadrada (1:1)",
+  retrato: "Retrato (4:5)",
+  paisagem: "Paisagem (4:3)",
+  original: "Original — mostra a imagem inteira, sem cortar",
+};
 
 export const Route = createFileRoute("/landing-pages/$id")({
   head: () => ({ meta: [{ title: "Editar landing page | CRM Insights" }] }),
@@ -303,6 +311,23 @@ function ImageUploadField({ label, value, onChange }: { label: string; value: st
   );
 }
 
+function ImageAspectField({ value, onChange }: { value: ImageAspect; onChange: (value: ImageAspect) => void }) {
+  return (
+    <TextField
+      size="small"
+      select
+      label="Proporção da imagem"
+      value={value}
+      onChange={(e) => onChange(e.target.value as ImageAspect)}
+      sx={{ maxWidth: 340 }}
+    >
+      {(Object.keys(IMAGE_ASPECT_LABELS) as ImageAspect[]).map((key) => (
+        <MenuItem key={key} value={key}>{IMAGE_ASPECT_LABELS[key]}</MenuItem>
+      ))}
+    </TextField>
+  );
+}
+
 function LandingPageEditor() {
   const { id } = Route.useParams();
   const runGet = useServerFn(getLandingPage);
@@ -438,6 +463,7 @@ function LandingPageEditor() {
           </Stack>
           <TextField size="small" label="Texto abaixo do botão" value={content.hero.ctaLegenda} onChange={(e) => updateSection("hero", { ctaLegenda: e.target.value })} />
           <ImageUploadField label="Imagem" value={content.hero.imagemUrl} onChange={(url) => updateSection("hero", { imagemUrl: url })} />
+          <ImageAspectField value={content.hero.imagemProporcao} onChange={(imagemProporcao) => updateSection("hero", { imagemProporcao })} />
           <TextField size="small" label="Legenda da imagem" value={content.hero.imagemLegenda} onChange={(e) => updateSection("hero", { imagemLegenda: e.target.value })} />
         </Section>
 
@@ -471,6 +497,7 @@ function LandingPageEditor() {
         >
           <TextField size="small" label="Selo" value={content.beneficios.seloTexto} onChange={(e) => updateSection("beneficios", { seloTexto: e.target.value })} />
           <ImageUploadField label="Imagem" value={content.beneficios.imagemUrl} onChange={(url) => updateSection("beneficios", { imagemUrl: url })} />
+          <ImageAspectField value={content.beneficios.imagemProporcao} onChange={(imagemProporcao) => updateSection("beneficios", { imagemProporcao })} />
           <TextField size="small" label="Legenda da imagem" value={content.beneficios.imagemLegenda} onChange={(e) => updateSection("beneficios", { imagemLegenda: e.target.value })} />
           <TitledListEditor label="Itens" items={content.beneficios.itens} onChange={(itens) => updateSection("beneficios", { itens })} />
         </Section>
@@ -484,6 +511,7 @@ function LandingPageEditor() {
           <TextField size="small" label="Selo" value={content.comoFunciona.seloTexto} onChange={(e) => updateSection("comoFunciona", { seloTexto: e.target.value })} />
           <TitledListEditor label="Passos" items={content.comoFunciona.passos} onChange={(passos) => updateSection("comoFunciona", { passos })} />
           <ImageUploadField label="Imagem" value={content.comoFunciona.imagemUrl} onChange={(url) => updateSection("comoFunciona", { imagemUrl: url })} />
+          <ImageAspectField value={content.comoFunciona.imagemProporcao} onChange={(imagemProporcao) => updateSection("comoFunciona", { imagemProporcao })} />
           <TextField size="small" label="Legenda da imagem" value={content.comoFunciona.imagemLegenda} onChange={(e) => updateSection("comoFunciona", { imagemLegenda: e.target.value })} />
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
             <TextField size="small" fullWidth label="Número grande (ex.: 14)" value={content.comoFunciona.numeroGrande} onChange={(e) => updateSection("comoFunciona", { numeroGrande: e.target.value })} />

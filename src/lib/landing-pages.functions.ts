@@ -27,6 +27,12 @@ export const uploadLandingPageImage = createServerFn({ method: "POST" })
     return { url: publicUrl.publicUrl };
   });
 
+/** Cada imagem escolhe sua própria proporção — "original" evita cortar cartazes/artes com texto
+ *  desenhado neles (a única forma de nunca perder informação sem a usuária ter que redimensionar
+ *  o arquivo antes de subir). */
+export const IMAGE_ASPECT_OPTIONS = ["quadrada", "retrato", "paisagem", "original"] as const;
+export type ImageAspect = (typeof IMAGE_ASPECT_OPTIONS)[number];
+
 /** Estrutura fixa reaproveitada de https://14anos.maniadmulher.com/ — cada landing page criada
  *  aqui preenche o mesmo layout (barra de anúncio, hero, bloco de desconto, benefícios, "como
  *  funciona", fechamento e rodapé) com conteúdo/cores próprios, em vez de um construtor livre. */
@@ -49,6 +55,7 @@ export type LandingPageContent = {
     ctaLegenda: string;
     imagemUrl: string;
     imagemLegenda: string;
+    imagemProporcao: ImageAspect;
   };
   estatisticas: {
     seloTexto: string;
@@ -64,6 +71,7 @@ export type LandingPageContent = {
     seloTexto: string;
     imagemUrl: string;
     imagemLegenda: string;
+    imagemProporcao: ImageAspect;
     itens: { titulo: string; descricao: string }[];
   };
   comoFunciona: {
@@ -71,6 +79,7 @@ export type LandingPageContent = {
     passos: { titulo: string; descricao: string }[];
     imagemUrl: string;
     imagemLegenda: string;
+    imagemProporcao: ImageAspect;
     numeroGrande: string;
     numeroGrandeLabel: string;
     logoTexto: string;
@@ -127,6 +136,7 @@ export const DEFAULT_LANDING_PAGE_CONTENT: LandingPageContent = {
     ctaLegenda: "Sem compromisso. Leva poucos segundos.",
     imagemUrl: "",
     imagemLegenda: "",
+    imagemProporcao: "retrato",
   },
   estatisticas: {
     seloTexto: "A OFERTA",
@@ -142,6 +152,7 @@ export const DEFAULT_LANDING_PAGE_CONTENT: LandingPageContent = {
     seloTexto: "VANTAGENS",
     imagemUrl: "",
     imagemLegenda: "",
+    imagemProporcao: "original",
     itens: [
       { titulo: "Vantagem 1", descricao: "Descreva a primeira vantagem." },
       { titulo: "Vantagem 2", descricao: "Descreva a segunda vantagem." },
@@ -157,6 +168,7 @@ export const DEFAULT_LANDING_PAGE_CONTENT: LandingPageContent = {
     ],
     imagemUrl: "",
     imagemLegenda: "",
+    imagemProporcao: "retrato",
     numeroGrande: "",
     numeroGrandeLabel: "",
     logoTexto: "MANIA DE MULHER",
@@ -200,6 +212,8 @@ export function mergeWithDefaultContent(saved: Partial<LandingPageContent> | nul
   };
 }
 
+const imageAspectSchema = z.enum(IMAGE_ASPECT_OPTIONS);
+
 const contentSchema: z.ZodType<LandingPageContent> = z.object({
   ticker: z.array(z.string()),
   tema: z.object({
@@ -219,6 +233,7 @@ const contentSchema: z.ZodType<LandingPageContent> = z.object({
     ctaLegenda: z.string(),
     imagemUrl: z.string(),
     imagemLegenda: z.string(),
+    imagemProporcao: imageAspectSchema,
   }),
   estatisticas: z.object({
     seloTexto: z.string(),
@@ -234,6 +249,7 @@ const contentSchema: z.ZodType<LandingPageContent> = z.object({
     seloTexto: z.string(),
     imagemUrl: z.string(),
     imagemLegenda: z.string(),
+    imagemProporcao: imageAspectSchema,
     itens: z.array(z.object({ titulo: z.string(), descricao: z.string() })),
   }),
   comoFunciona: z.object({
@@ -241,6 +257,7 @@ const contentSchema: z.ZodType<LandingPageContent> = z.object({
     passos: z.array(z.object({ titulo: z.string(), descricao: z.string() })),
     imagemUrl: z.string(),
     imagemLegenda: z.string(),
+    imagemProporcao: imageAspectSchema,
     numeroGrande: z.string(),
     numeroGrandeLabel: z.string(),
     logoTexto: z.string(),

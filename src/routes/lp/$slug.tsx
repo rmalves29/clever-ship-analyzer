@@ -15,6 +15,7 @@ import {
   getPublicLandingPageReviews,
   submitLandingPageLead,
   submitLandingPageReview,
+  type ImageAspect,
   type LandingPageContent,
 } from "@/lib/landing-pages.functions";
 
@@ -54,6 +55,14 @@ function renderWithIphoneHighlight(text: string) {
       {text.slice(end)}
     </>
   );
+}
+
+/** "original" não fixa proporção nem corta a imagem (evita cortar cartazes com texto desenhado);
+ *  as demais opções recortam pra caber num formato consistente ao lado do texto. */
+function imageAspectSx(proporcao: ImageAspect) {
+  if (proporcao === "original") return { objectFit: "contain" as const };
+  const aspectRatio = proporcao === "quadrada" ? "1 / 1" : proporcao === "paisagem" ? "4 / 3" : "4 / 5";
+  return { objectFit: "cover" as const, aspectRatio };
 }
 
 /** Carrega o Pixel do Meta uma vez por pixelId e dispara PageView — cada landing page roda numa
@@ -330,7 +339,7 @@ function PublicLandingPage() {
                 component="img"
                 src={c.hero.imagemUrl}
                 alt={c.hero.imagemLegenda || c.hero.headlineDestaque}
-                sx={{ width: "100%", borderRadius: 3, objectFit: "cover", aspectRatio: "4 / 5" }}
+                sx={{ width: "100%", borderRadius: 3, ...imageAspectSx(c.hero.imagemProporcao) }}
               />
               {c.hero.imagemLegenda && (
                 <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: "text.secondary", mt: 1.5 }}>
@@ -403,7 +412,7 @@ function PublicLandingPage() {
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: c.beneficios.imagemUrl ? "1fr 1fr" : "1fr" }, gap: { xs: 4, md: 6 } }}>
           {c.beneficios.imagemUrl && (
             <Box>
-              <Box component="img" src={c.beneficios.imagemUrl} alt={c.beneficios.imagemLegenda} sx={{ width: "100%", borderRadius: 3, objectFit: "contain", aspectRatio: "4 / 3" }} />
+              <Box component="img" src={c.beneficios.imagemUrl} alt={c.beneficios.imagemLegenda} sx={{ width: "100%", borderRadius: 3, ...imageAspectSx(c.beneficios.imagemProporcao) }} />
               {c.beneficios.imagemLegenda && (
                 <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: "text.secondary", mt: 1.5 }}>
                   {c.beneficios.imagemLegenda}
@@ -466,7 +475,7 @@ function PublicLandingPage() {
         >
           {c.comoFunciona.imagemUrl && (
             <Box>
-              <Box component="img" src={c.comoFunciona.imagemUrl} alt={c.comoFunciona.imagemLegenda} sx={{ width: "100%", borderRadius: 3, objectFit: "cover", aspectRatio: "4 / 5" }} />
+              <Box component="img" src={c.comoFunciona.imagemUrl} alt={c.comoFunciona.imagemLegenda} sx={{ width: "100%", borderRadius: 3, ...imageAspectSx(c.comoFunciona.imagemProporcao) }} />
               {c.comoFunciona.imagemLegenda && (
                 <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: "text.secondary", mt: 1.5 }}>
                   {c.comoFunciona.imagemLegenda}

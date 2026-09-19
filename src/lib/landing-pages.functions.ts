@@ -275,7 +275,11 @@ const landingPageSchema = z.object({
   slug: z.string().min(1).regex(SLUG_RE, "Use só letras minúsculas, números e hífen."),
   nome: z.string().min(1),
   status: z.enum(["rascunho", "publicada"]),
-  conteudo: contentSchema,
+  /** Preenche com os defaults antes de validar — uma aba do editor aberta desde antes do último
+   *  deploy ainda roda o JS antigo e não manda as seções mais novas (ex.: "integracoes"); sem
+   *  esse merge, salvar de uma aba assim quebraria com "Required" em vez de simplesmente usar o
+   *  padrão pra essas seções. */
+  conteudo: z.preprocess((val) => mergeWithDefaultContent(val as Partial<LandingPageContent> | null | undefined), contentSchema),
 });
 
 export const listLandingPages = createServerFn({ method: "GET" })

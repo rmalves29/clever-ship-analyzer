@@ -403,7 +403,7 @@ function PublicLandingPage() {
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: c.beneficios.imagemUrl ? "1fr 1fr" : "1fr" }, gap: { xs: 4, md: 6 } }}>
           {c.beneficios.imagemUrl && (
             <Box>
-              <Box component="img" src={c.beneficios.imagemUrl} alt={c.beneficios.imagemLegenda} sx={{ width: "100%", borderRadius: 3, objectFit: "cover", aspectRatio: "4 / 3" }} />
+              <Box component="img" src={c.beneficios.imagemUrl} alt={c.beneficios.imagemLegenda} sx={{ width: "100%", borderRadius: 3, objectFit: "contain", aspectRatio: "4 / 3" }} />
               {c.beneficios.imagemLegenda && (
                 <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.5, color: "text.secondary", mt: 1.5 }}>
                   {c.beneficios.imagemLegenda}

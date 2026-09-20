@@ -165,7 +165,7 @@ async function getPaginatedListCustomers(data: {
   const pageSize = 1000;
   const keepCount = data.offset + data.limit;
   const search = data.search?.trim();
-  const escapedSearch = search?.replace(/[%_\\]/g, (value) => `\\\\${value}`);
+  const escapedSearch = search?.replace(/[%_\\]/g, (value) => `\\${value}`);
   const matchingCustomers: any[] = [];
   let total = 0;
   const seenMemberIds = new Set<string>();

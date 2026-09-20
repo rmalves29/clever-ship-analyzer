@@ -74,19 +74,26 @@ export type CustomerCashbackCoupon = {
 async function loadCashbackCouponsByCustomer(): Promise<Map<string, CustomerCashbackCoupon[]>> {
   const db = await admin();
   const now = new Date();
-  const { data, error } = await (db.from("cashback_coupons") as any)
-    .select("shopify_order_id, starts_at, ends_at, created_at, cashback_amount")
-    .not("status", "in", "(cancelled,cancel_pending,failed)")
-    .gt("ends_at", now.toISOString());
-  if (error) throw new Error(`Erro ao buscar cupons de cashback: ${error.message}`);
-
-  const rows = (data ?? []) as {
+  const rows: {
     shopify_order_id: string;
     starts_at: string;
     ends_at: string;
     created_at: string;
     cashback_amount: number;
-  }[];
+  }[] = [];
+
+  for (let page = 0; ; page++) {
+    const { data, error } = await (db.from("cashback_coupons") as any)
+      .select("shopify_order_id, starts_at, ends_at, created_at, cashback_amount")
+      .not("status", "in", "(cancelled,cancel_pending,failed)")
+      .gt("ends_at", now.toISOString())
+      .order("created_at", { ascending: true })
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (error) throw new Error(`Erro ao buscar cupons de cashback: ${error.message}`);
+    if (!data || data.length === 0) break;
+    rows.push(...(data as typeof rows));
+    if (data.length < PAGE_SIZE) break;
+  }
   const orderIds = [...new Set(rows.map((row) => String(row.shopify_order_id)))];
   const customerIdByOrderId = new Map<string, string>();
   for (let i = 0; i < orderIds.length; i += ORDER_ID_BATCH) {
@@ -123,12 +130,21 @@ async function loadCashbackCouponsByCustomer(): Promise<Map<string, CustomerCash
 async function loadPopupVisitByPhone(): Promise<Map<string, string>> {
   const db = await admin();
   const map = new Map<string, string>();
-  const { data, error } = await (db.from("popup_leads" as any) as any)
-    .select("phone, last_visit_at")
-    .not("last_visit_at", "is", null);
-  if (error) throw new Error(`Erro ao buscar visitas do pop-up: ${error.message}`);
-  for (const row of (data ?? []) as { phone: string; last_visit_at: string }[]) {
-    map.set(row.phone, row.last_visit_at);
+  for (let page = 0; ; page++) {
+    const { data, error } = await (db.from("popup_leads" as any) as any)
+      .select("phone, last_visit_at")
+      .not("last_visit_at", "is", null)
+      .order("last_visit_at", { ascending: true })
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (error) throw new Error(`Erro ao buscar visitas do pop-up: ${error.message}`);
+    if (!data || data.length === 0) break;
+    for (const row of data as { phone: string; last_visit_at: string }[]) {
+      const current = map.get(row.phone);
+      if (!current || new Date(row.last_visit_at).getTime() > new Date(current).getTime()) {
+        map.set(row.phone, row.last_visit_at);
+      }
+    }
+    if (data.length < PAGE_SIZE) break;
   }
   return map;
 }
@@ -140,12 +156,21 @@ async function loadPopupVisitByPhone(): Promise<Map<string, string>> {
 async function loadInboxLastInboundByPhone(): Promise<Map<string, string>> {
   const db = await admin();
   const map = new Map<string, string>();
-  const { data, error } = await (db.from("whatsapp_inbox_threads" as any) as any)
-    .select("phone, last_inbound_at")
-    .not("last_inbound_at", "is", null);
-  if (error) throw new Error(`Erro ao buscar última mensagem recebida no WhatsApp: ${error.message}`);
-  for (const row of (data ?? []) as { phone: string; last_inbound_at: string }[]) {
-    map.set(row.phone, row.last_inbound_at);
+  for (let page = 0; ; page++) {
+    const { data, error } = await (db.from("whatsapp_inbox_threads" as any) as any)
+      .select("phone, last_inbound_at")
+      .not("last_inbound_at", "is", null)
+      .order("last_inbound_at", { ascending: true })
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (error) throw new Error(`Erro ao buscar última mensagem recebida no WhatsApp: ${error.message}`);
+    if (!data || data.length === 0) break;
+    for (const row of data as { phone: string; last_inbound_at: string }[]) {
+      const current = map.get(row.phone);
+      if (!current || new Date(row.last_inbound_at).getTime() > new Date(current).getTime()) {
+        map.set(row.phone, row.last_inbound_at);
+      }
+    }
+    if (data.length < PAGE_SIZE) break;
   }
   return map;
 }
@@ -176,7 +201,12 @@ async function loadDeliveryStatusByOrderId(): Promise<Map<string, string>> {
 
 async function loadOrders(): Promise<CRMOrderForSegmentation[]> {
   const db = await admin();
-  const deliveryStatusByOrderId = await loadDeliveryStatusByOrderId();
+  let deliveryStatusByOrderId = new Map<string, string>();
+  try {
+    deliveryStatusByOrderId = await loadDeliveryStatusByOrderId();
+  } catch (error) {
+    console.warn("CRM: delivery-status enrichment unavailable; continuing without it.", error);
+  }
   const rows: CRMOrderForSegmentation[] = [];
   for (let page = 0; ; page++) {
     const { data, error } = await (db.from("shopify_orders") as any)
@@ -519,7 +549,7 @@ export async function loadCRMProductFilterOptions(): Promise<CRMProductOption[]>
 }
 
 export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMAdvancedCustomerContext[]> {
-  const [customers, orders, abandonedCheckoutAtByCustomer, whatsappBehavior, popupVisitByPhone, cashbackCouponsByCustomer, inboxLastInboundByPhone] = await Promise.all([
+  const [customers, orders, abandonedCheckoutResult, whatsappBehaviorResult, popupVisitResult, cashbackResult, inboxResult] = await Promise.allSettled([
     loadCustomers(),
     loadOrders(),
     loadLatestAbandonedCheckoutByCustomer(),
@@ -528,9 +558,64 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
     loadCashbackCouponsByCustomer(),
     loadInboxLastInboundByPhone(),
   ]);
-  const { loadLandingPageActivitiesByCustomer } = await import("./landing-page-funnel.server");
-  const landingPageActivitiesByCustomer = await loadLandingPageActivitiesByCustomer(customers);
-  for (const customer of customers) {
+
+  if (customers.status === "rejected") throw customers.reason;
+  if (orders.status === "rejected") throw orders.reason;
+
+  const customersValue = customers.value;
+  const ordersValue = orders.value;
+
+  const warnOptional = (name: string, result: PromiseSettledResult<unknown>) => {
+    if (result.status === "rejected") {
+      console.warn(`CRM: ${name} enrichment unavailable; continuing without it.`, result.reason);
+    }
+  };
+
+  warnOptional("abandoned-checkout", abandonedCheckoutResult);
+  warnOptional("WhatsApp", whatsappBehaviorResult);
+  warnOptional("popup-visit", popupVisitResult);
+  warnOptional("cashback", cashbackResult);
+  warnOptional("inbox", inboxResult);
+
+  const abandonedCheckoutAtByCustomer =
+    abandonedCheckoutResult.status === "fulfilled"
+      ? abandonedCheckoutResult.value
+      : new Map<string, string>();
+  const whatsappBehavior =
+    whatsappBehaviorResult.status === "fulfilled"
+      ? whatsappBehaviorResult.value
+      : {
+          campaignSent: new Map<string, Set<string>>(),
+          campaignDelivered: new Map<string, Set<string>>(),
+          campaignRead: new Map<string, Set<string>>(),
+          campaignFailed: new Map<string, Set<string>>(),
+          automationEntered: new Map<string, Set<string>>(),
+          automationCompleted: new Map<string, Set<string>>(),
+        };
+  const popupVisitByPhone =
+    popupVisitResult.status === "fulfilled"
+      ? popupVisitResult.value
+      : new Map<string, string>();
+  const cashbackCouponsByCustomer =
+    cashbackResult.status === "fulfilled"
+      ? cashbackResult.value
+      : new Map<string, CustomerCashbackCoupon[]>();
+  const inboxLastInboundByPhone =
+    inboxResult.status === "fulfilled"
+      ? inboxResult.value
+      : new Map<string, string>();
+  // Landing-page analytics is an optional enrichment for CRM segmentation. It must not
+  // prevent the core Contacts/Segments screens from loading when the landing-page
+  // migration is missing, an optional column is unavailable, or the external group
+  // database is temporarily unavailable.
+  let landingPageActivitiesByCustomer = new Map<string, any[]>();
+  try {
+    const { loadLandingPageActivitiesByCustomer } = await import("./landing-page-funnel.server");
+    landingPageActivitiesByCustomer = await loadLandingPageActivitiesByCustomer(customersValue) as typeof landingPageActivitiesByCustomer;
+  } catch (error) {
+    console.warn("CRM: landing-page enrichment unavailable; continuing without it.", error);
+  }
+  for (const customer of customersValue) {
     if (customer.phone && popupVisitByPhone.has(customer.phone)) {
       customer.last_visit_at = popupVisitByPhone.get(customer.phone);
     }
@@ -541,21 +626,32 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
       customer.last_inbound_at = inboxLastInboundByPhone.get(customer.phone);
     }
   }
-  const [shippedTodayValidOrderIds, orderItems] = await Promise.all([
-    loadShippedTodayValidOrderIds(orders, now),
-    loadValidOrderItems(orders),
+  const [shippedResult, orderItemsResult] = await Promise.allSettled([
+    loadShippedTodayValidOrderIds(ordersValue, now),
+    loadValidOrderItems(ordersValue),
   ]);
+  warnOptional("shipped-today", shippedResult);
+  warnOptional("order-items", orderItemsResult);
+  const shippedTodayValidOrderIds =
+    shippedResult.status === "fulfilled" ? shippedResult.value : new Set<string>();
+  const orderItems =
+    orderItemsResult.status === "fulfilled" ? orderItemsResult.value : [];
   const baseContexts = buildCustomerContexts({
-    customers,
-    orders,
+    customers: customersValue,
+    orders: ordersValue,
     orderItems,
     abandonedCheckoutAtByCustomer,
     shippedTodayValidOrderIds,
   });
-  const spendIndex = buildProductSpendIndex(orders, orderItems);
-  const purchaseHistoryIndex = buildValidPurchaseHistoryIndex(orders);
-  const taxonomy = await getShopifyProductTaxonomyByIds(productIdsFromItems(orderItems));
-  const taxonomyIndexes = buildTaxonomyIndexes(orders, orderItems, taxonomy);
+  const spendIndex = buildProductSpendIndex(ordersValue, orderItems);
+  const purchaseHistoryIndex = buildValidPurchaseHistoryIndex(ordersValue);
+  let taxonomy = new Map<string, ShopifyProductTaxonomy>();
+  try {
+    taxonomy = await getShopifyProductTaxonomyByIds(productIdsFromItems(orderItems));
+  } catch (error) {
+    console.warn("CRM: product taxonomy enrichment unavailable; continuing without it.", error);
+  }
+  const taxonomyIndexes = buildTaxonomyIndexes(ordersValue, orderItems, taxonomy);
 
   return baseContexts.map((context) => {
     const purchasedProductTypes = new Set<string>();

@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAppAuth } from "./app-auth";
 import { validateSegmentRulesPayload } from "./crm-filter-catalog";
-import { customerMatchesSearch, type SegmentRules } from "./crm-segmentation-shared";
+import { buildPurchaseMetricsIndex, customerMatchesSearch, type PurchaseMetrics, type SegmentRules } from "./crm-segmentation-shared";
 import { matchesAdvancedSegmentRules } from "./crm-product-segmentation";
 import { CRM_SEGMENT_TEMPLATES, buildPersistedRulesFromTemplate } from "./crm-segment-templates";
 
@@ -17,9 +17,26 @@ async function getSegmentRules(segmentId?: string): Promise<SegmentRules | null>
 async function getListMemberIds(listId?: string): Promise<Set<string> | null> {
   if (!listId) return null;
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin.from("crm_list_members").select("customer_id").eq("lista_id", listId);
-  if (error) throw error;
-  return new Set((data ?? []).map((row) => row.customer_id));
+  const pageSize = 1000;
+  const ids = new Set<string>();
+
+  for (let page = 0; ; page++) {
+    const { data, error } = await supabaseAdmin
+      .from("crm_list_members")
+      .select("customer_id")
+      .eq("lista_id", listId)
+      .order("customer_id", { ascending: true })
+      .range(page * pageSize, page * pageSize + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+
+    for (const row of data) {
+      if (row.customer_id) ids.add(String(row.customer_id));
+    }
+    if (data.length < pageSize) break;
+  }
+
+  return ids;
 }
 
 function updatedAtTime(value: string | null | undefined): number {
@@ -67,6 +84,195 @@ async function createRecommendedSegmentsInDatabase() {
   };
 }
 
+async function getPaginatedBaseCustomers(data: {
+  search: string | undefined;
+  limit: number;
+  offset: number;
+}) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  let query = supabaseAdmin
+    .from("shopify_customers")
+    .select("*", { count: "exact" })
+    .order("updated_at", { ascending: false })
+    .range(data.offset, data.offset + data.limit - 1);
+
+  const search = data.search?.trim();
+  if (search) {
+    const escaped = search.replace(/[%_\\]/g, (value) => `\\${value}`);
+    query = query.or(
+      [`first_name.ilike.%${escaped}%`, `last_name.ilike.%${escaped}%`, `email.ilike.%${escaped}%`, `phone.ilike.%${escaped}%`, `city.ilike.%${escaped}%`, `province.ilike.%${escaped}%`].join(","),
+    );
+  }
+
+  const { data: customers, error, count } = await query;
+  if (error) throw new Error(`Erro ao buscar contatos do CRM: ${error.message}`);
+
+  const customerRows = (customers ?? []) as any[];
+  const customerIds = customerRows.map((customer) => String(customer.id));
+  const metricsByCustomer = new Map<string, PurchaseMetrics>();
+
+  if (customerIds.length > 0) {
+    const { data: orders, error: ordersError } = await supabaseAdmin
+      .from("shopify_orders")
+      .select("id, customer_id, total_price, processed_at, created_at, financial_status, cancelled_at")
+      .in("customer_id", customerIds);
+
+    if (ordersError) throw new Error(`Erro ao buscar métricas dos contatos do CRM: ${ordersError.message}`);
+
+    const orderRows = (orders ?? []).map((row: any) => ({
+      id: String(row.id),
+      customerId: String(row.customer_id),
+      totalPrice: Number(row.total_price ?? 0),
+      processedAt: String(row.processed_at ?? row.created_at ?? ""),
+      financialStatus: row.financial_status,
+      cancelledAt: row.cancelled_at,
+    }));
+    const built = buildPurchaseMetricsIndex(orderRows);
+    for (const [customerId, metrics] of built) metricsByCustomer.set(customerId, metrics);
+  }
+
+  const mapped = customerRows.map((customer) => {
+    const metrics = metricsByCustomer.get(String(customer.id)) ?? {
+      validOrderCount: 0,
+      totalSpent: 0,
+      lastOrderAt: null,
+    };
+    return {
+      id: customer.id,
+      name: [customer.first_name, customer.last_name].filter(Boolean).join(" ") || "Cliente sem nome",
+      email: customer.email ?? null,
+      phone: customer.phone ?? null,
+      city: customer.city ?? null,
+      province: customer.province ?? null,
+      rfmSegment: customer.rfm_segment ?? null,
+      totalOrders: metrics.validOrderCount,
+      totalSpent: metrics.totalSpent,
+      lastOrderAt: metrics.lastOrderAt,
+      tagsCustom: customer.tags_custom ?? [],
+      updatedAt: customer.updated_at ?? null,
+    };
+  });
+
+  return { customers: mapped, total: count ?? 0 };
+}
+
+async function getPaginatedListCustomers(data: {
+  listId: string;
+  search: string | undefined;
+  limit: number;
+  offset: number;
+}) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const pageSize = 1000;
+  const keepCount = data.offset + data.limit;
+  const search = data.search?.trim();
+  const escapedSearch = search?.replace(/[%_\\]/g, (value) => `\\${value}`);
+  const matchingCustomers: any[] = [];
+  let total = 0;
+  const seenMemberIds = new Set<string>();
+
+  // Evita um .in() gigantesco: percorremos os membros em lotes e mantemos apenas
+  // os clientes necessários para a página final, preservando a ordenação global por updated_at.
+  for (let page = 0; ; page++) {
+    const { data: memberRows, error: membersError } = await supabaseAdmin
+      .from("crm_list_members")
+      .select("customer_id")
+      .eq("lista_id", data.listId)
+      .order("customer_id", { ascending: true })
+      .range(page * pageSize, page * pageSize + pageSize - 1);
+
+    if (membersError) throw new Error(`Erro ao buscar membros da lista: ${membersError.message}`);
+    if (!memberRows || memberRows.length === 0) break;
+
+    const memberIds = (memberRows ?? [])
+      .map((row) => String(row.customer_id ?? "").trim())
+      .filter((id) => id && !seenMemberIds.has(id));
+
+    for (const id of memberIds) seenMemberIds.add(id);
+    if (memberIds.length > 0) {
+      let query = supabaseAdmin
+        .from("shopify_customers")
+        .select("*", { count: "exact" })
+        .in("id", memberIds);
+
+      if (escapedSearch) {
+        query = query.or(
+          [
+            `first_name.ilike.%${escapedSearch}%`,
+            `last_name.ilike.%${escapedSearch}%`,
+            `email.ilike.%${escapedSearch}%`,
+            `phone.ilike.%${escapedSearch}%`,
+            `city.ilike.%${escapedSearch}%`,
+            `province.ilike.%${escapedSearch}%`,
+          ].join(","),
+        );
+      }
+
+      const { data: customers, error, count } = await query;
+      if (error) throw new Error(`Erro ao buscar contatos da lista: ${error.message}`);
+      total += count ?? 0;
+      matchingCustomers.push(...(customers ?? []));
+
+      if (keepCount > 0 && matchingCustomers.length > keepCount * 2) {
+        matchingCustomers.sort((a, b) => updatedAtTime(b.updated_at) - updatedAtTime(a.updated_at));
+        matchingCustomers.splice(keepCount);
+      }
+    }
+
+    if (memberRows.length < pageSize) break;
+  }
+
+  matchingCustomers.sort((a, b) => updatedAtTime(b.updated_at) - updatedAtTime(a.updated_at));
+  const page = matchingCustomers.slice(data.offset, data.offset + data.limit);
+  const customerIds = page.map((customer) => String(customer.id));
+  const metricsByCustomer = new Map<string, PurchaseMetrics>();
+
+  if (customerIds.length > 0) {
+    const { data: orders, error: ordersError } = await supabaseAdmin
+      .from("shopify_orders")
+      .select("id, customer_id, total_price, processed_at, created_at, financial_status, cancelled_at")
+      .in("customer_id", customerIds);
+
+    if (ordersError) throw new Error(`Erro ao buscar métricas da lista: ${ordersError.message}`);
+
+    const built = buildPurchaseMetricsIndex((orders ?? []).map((row: any) => ({
+      id: String(row.id),
+      customerId: String(row.customer_id),
+      totalPrice: Number(row.total_price ?? 0),
+      processedAt: String(row.processed_at ?? row.created_at ?? ""),
+      financialStatus: row.financial_status,
+      cancelledAt: row.cancelled_at,
+    })));
+
+    for (const [customerId, metrics] of built) metricsByCustomer.set(customerId, metrics);
+  }
+
+  return {
+    customers: page.map((customer: any) => {
+      const metrics = metricsByCustomer.get(String(customer.id)) ?? {
+        validOrderCount: 0,
+        totalSpent: 0,
+        lastOrderAt: null,
+      };
+      return {
+        id: customer.id,
+        name: [customer.first_name, customer.last_name].filter(Boolean).join(" ") || "Cliente sem nome",
+        email: customer.email ?? null,
+        phone: customer.phone ?? null,
+        city: customer.city ?? null,
+        province: customer.province ?? null,
+        rfmSegment: customer.rfm_segment ?? null,
+        totalOrders: metrics.validOrderCount,
+        totalSpent: metrics.totalSpent,
+        lastOrderAt: metrics.lastOrderAt,
+        tagsCustom: customer.tags_custom ?? [],
+        updatedAt: customer.updated_at ?? null,
+      };
+    }),
+    total,
+  };
+}
+
 export const getCustomersList = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({
@@ -77,6 +283,25 @@ export const getCustomersList = createServerFn({ method: "POST" })
     offset: z.number().int().min(0).default(0),
   }).parse(data))
   .handler(async ({ data }) => {
+    // Caminho comum do CRM: paginação real no banco. Segmentação avançada/listas continuam
+    // usando o contexto analítico completo porque suas regras dependem de histórico e índices.
+    if (!data.segmentId && !data.listId) {
+      return getPaginatedBaseCustomers({
+        search: data.search,
+        limit: data.limit,
+        offset: data.offset,
+      });
+    }
+
+    if (data.listId && !data.segmentId) {
+      return getPaginatedListCustomers({
+        listId: data.listId,
+        search: data.search,
+        limit: data.limit,
+        offset: data.offset,
+      });
+    }
+
     const { loadCRMSegmentationContext } = await import("./crm-segmentation.server");
     const [contexts, rules, listMemberIds] = await Promise.all([
       loadCRMSegmentationContext(),
@@ -225,16 +450,38 @@ export const getSegmentsList = createServerFn({ method: "GET" })
   .middleware([requireAppAuth])
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { loadCRMSegmentationContext } = await import("./crm-segmentation.server");
-    const [{ data: segments, error }, contexts] = await Promise.all([
-      supabaseAdmin.from("crm_segments").select("*").order("criado_em", { ascending: false }),
-      loadCRMSegmentationContext(),
-    ]);
+    const { data, error } = await supabaseAdmin
+      .from("crm_segments")
+      .select("*")
+      .order("criado_em", { ascending: false });
     if (error) throw error;
-    return (segments ?? []).map((segment) => ({
-      ...segment,
-      memberCount: contexts.filter((context) => matchesAdvancedSegmentRules(context, segment.regras as SegmentRules)).length,
-    }));
+    // A listagem dos segmentos não calcula audiência. Isso deixa a navegação instantânea;
+    // a contagem é carregada separadamente por getSegmentMemberCounts.
+    return (data ?? []).map((segment) => ({ ...segment, memberCount: undefined }));
+  });
+
+export const getSegmentMemberCounts = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth])
+  .handler(async () => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { loadCRMSegmentationContext } = await import("./crm-segmentation.server");
+    const { data: segments, error } = await supabaseAdmin
+      .from("crm_segments")
+      .select("id, regras");
+    if (error) throw error;
+
+    try {
+      const contexts = await loadCRMSegmentationContext();
+      return (segments ?? []).map((segment) => ({
+        id: String(segment.id),
+        memberCount: contexts.filter((context) =>
+          matchesAdvancedSegmentRules(context, segment.regras as SegmentRules),
+        ).length,
+      }));
+    } catch (error) {
+      console.warn("CRM: contagens de audiência indisponíveis.", error);
+      return [];
+    }
   });
 
 /** Lista leve (id + nome) para seletores. Não calcula memberCount, que é caro e fazia os

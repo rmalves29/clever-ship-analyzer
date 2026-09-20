@@ -45,7 +45,7 @@ import TableRow from "@mui/material/TableRow";
 import Tabs from "@mui/material/Tabs";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { getCustomersList, getCRMStats, getSegmentsList, deleteSegment, exportSegmentCustomers, saveSegment } from "@/lib/crm-segmentation.functions";
+import { getCustomersList, getCRMStats, getSegmentsList, getSegmentMemberCounts, deleteSegment, exportSegmentCustomers, saveSegment } from "@/lib/crm-segmentation.functions";
 import {
   getStaticLists,
   createStaticList,
@@ -133,6 +133,7 @@ function CRMPage() {
   const fetchList = useServerFn(getCustomersList);
   const fetchStats = useServerFn(getCRMStats);
   const fetchSegments = useServerFn(getSegmentsList);
+  const fetchSegmentMemberCounts = useServerFn(getSegmentMemberCounts);
   const fetchStaticLists = useServerFn(getStaticLists);
   const runDeleteSegment = useServerFn(deleteSegment);
   const runFixPhone = useServerFn(fixCustomerPhone);
@@ -196,11 +197,22 @@ function CRMPage() {
     queryFn: () => fetchList({ data: { search, segmentId: selectedSegment || undefined, listId: selectedList || undefined } }),
   });
 
-  const { data: segments, refetch: refetchSegments } = useQuery({
+  const { data: segmentRows, refetch: refetchSegments } = useQuery({
     queryKey: ["crm-segments"],
     queryFn: () => fetchSegments(),
     enabled: tab === "segmentos",
   });
+
+  const { data: segmentMemberCounts, refetch: refetchSegmentMemberCounts } = useQuery({
+    queryKey: ["crm-segment-member-counts"],
+    queryFn: () => fetchSegmentMemberCounts(),
+    enabled: tab === "segmentos" && Boolean(segmentRows),
+  });
+
+  const segments = segmentRows?.map((segment) => ({
+    ...segment,
+    memberCount: segmentMemberCounts?.find((item) => item.id === segment.id)?.memberCount,
+  }));
 
   const { data: staticLists, refetch: refetchStaticLists } = useQuery({
     queryKey: ["crm-static-lists"],
@@ -302,6 +314,7 @@ function CRMPage() {
       await runDeleteSegment({ data: { id } });
       toast.success("Segmento excluído.");
       refetchSegments();
+      refetchSegmentMemberCounts();
     } catch (err: any) {
       toast.error("Erro ao excluir: " + err.message);
     }
@@ -384,6 +397,7 @@ function CRMPage() {
               setShowEditor(false);
               setEditingSegment(null);
               refetchSegments();
+              refetchSegmentMemberCounts();
             }}
           />
         </Box>
@@ -754,6 +768,7 @@ function CRMPage() {
                           }
                           toast.success("Segmentos sugeridos criados com sucesso!");
                           refetchSegments();
+                          refetchSegmentMemberCounts();
                         } catch (err: any) {
                           toast.error("Erro ao criar segmentos: " + err.message);
                         }

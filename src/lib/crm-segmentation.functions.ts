@@ -155,6 +155,88 @@ async function getPaginatedBaseCustomers(data: {
   return { customers: mapped, total: count ?? 0 };
 }
 
+async function getPaginatedListCustomers(data: {
+  listId: string;
+  search?: string;
+  limit: number;
+  offset: number;
+}) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+  // Lista estática não precisa montar o contexto analítico completo: os membros já
+  // estão materializados em crm_list_members. Paginação e busca ficam no banco.
+  const { data: memberRows, error: membersError } = await supabaseAdmin
+    .from("crm_list_members")
+    .select("customer_id")
+    .eq("lista_id", data.listId);
+  if (membersError) throw new Error(`Erro ao buscar membros da lista: ${membersError.message}`);
+
+  const memberIds = [...new Set((memberRows ?? []).map((row) => String(row.customer_id)).filter(Boolean))];
+  if (memberIds.length === 0) return { customers: [], total: 0 };
+
+  let query = supabaseAdmin
+    .from("shopify_customers")
+    .select("*", { count: "exact" })
+    .in("id", memberIds)
+    .order("updated_at", { ascending: false })
+    .range(data.offset, data.offset + data.limit - 1);
+
+  const search = data.search?.trim();
+  if (search) {
+    const escaped = search.replace(/[%_\\]/g, (value) => `\\${value}`);
+    query = query.or(
+      [`first_name.ilike.%${escaped}%`, `last_name.ilike.%${escaped}%`, `email.ilike.%${escaped}%`, `phone.ilike.%${escaped}%`, `city.ilike.%${escaped}%`, `province.ilike.%${escaped}%`].join(","),
+    );
+  }
+
+  const { data: customers, error, count } = await query;
+  if (error) throw new Error(`Erro ao buscar contatos da lista: ${error.message}`);
+
+  const customerIds = (customers ?? []).map((customer) => String(customer.id));
+  const metricsByCustomer = new Map<string, PurchaseMetrics>();
+  if (customerIds.length > 0) {
+    const { data: orders, error: ordersError } = await supabaseAdmin
+      .from("shopify_orders")
+      .select("id, customer_id, total_price, processed_at, created_at, financial_status, cancelled_at")
+      .in("customer_id", customerIds);
+    if (ordersError) throw new Error(`Erro ao buscar métricas da lista: ${ordersError.message}`);
+    const built = buildPurchaseMetricsIndex((orders ?? []).map((row: any) => ({
+      id: String(row.id),
+      customerId: String(row.customer_id),
+      totalPrice: Number(row.total_price ?? 0),
+      processedAt: String(row.processed_at ?? row.created_at ?? ""),
+      financialStatus: row.financial_status,
+      cancelledAt: row.cancelled_at,
+    })));
+    for (const [customerId, metrics] of built) metricsByCustomer.set(customerId, metrics);
+  }
+
+  return {
+    customers: (customers ?? []).map((customer: any) => {
+      const metrics = metricsByCustomer.get(String(customer.id)) ?? {
+        validOrderCount: 0,
+        totalSpent: 0,
+        lastOrderAt: null,
+      };
+      return {
+        id: customer.id,
+        name: [customer.first_name, customer.last_name].filter(Boolean).join(" ") || "Cliente sem nome",
+        email: customer.email ?? null,
+        phone: customer.phone ?? null,
+        city: customer.city ?? null,
+        province: customer.province ?? null,
+        rfmSegment: customer.rfm_segment ?? null,
+        totalOrders: metrics.validOrderCount,
+        totalSpent: metrics.totalSpent,
+        lastOrderAt: metrics.lastOrderAt,
+        tagsCustom: customer.tags_custom ?? [],
+        updatedAt: customer.updated_at ?? null,
+      };
+    }),
+    total: count ?? 0,
+  };
+}
+
 export const getCustomersList = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({
@@ -169,6 +251,10 @@ export const getCustomersList = createServerFn({ method: "POST" })
     // usando o contexto analítico completo porque suas regras dependem de histórico e índices.
     if (!data.segmentId && !data.listId) {
       return getPaginatedBaseCustomers(data);
+    }
+
+    if (data.listId && !data.segmentId) {
+      return getPaginatedListCustomers({ ...data, listId: data.listId });
     }
 
     const { loadCRMSegmentationContext } = await import("./crm-segmentation.server");

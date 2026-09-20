@@ -397,7 +397,7 @@ function CRMPage() {
               setShowEditor(false);
               setEditingSegment(null);
               refetchSegments();
-      refetchSegmentMemberCounts();
+              refetchSegmentMemberCounts();
             }}
           />
         </Box>
@@ -768,7 +768,7 @@ function CRMPage() {
                           }
                           toast.success("Segmentos sugeridos criados com sucesso!");
                           refetchSegments();
-      refetchSegmentMemberCounts();
+                          refetchSegmentMemberCounts();
                         } catch (err: any) {
                           toast.error("Erro ao criar segmentos: " + err.message);
                         }

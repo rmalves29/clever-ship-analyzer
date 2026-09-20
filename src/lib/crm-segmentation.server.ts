@@ -528,8 +528,17 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
     loadCashbackCouponsByCustomer(),
     loadInboxLastInboundByPhone(),
   ]);
-  const { loadLandingPageActivitiesByCustomer } = await import("./landing-page-funnel.server");
-  const landingPageActivitiesByCustomer = await loadLandingPageActivitiesByCustomer(customers);
+  // Landing-page analytics is an optional enrichment for CRM segmentation. It must not
+  // prevent the core Contacts/Segments screens from loading when the landing-page
+  // migration is missing, an optional column is unavailable, or the external group
+  // database is temporarily unavailable.
+  let landingPageActivitiesByCustomer = new Map<string, any[]>();
+  try {
+    const { loadLandingPageActivitiesByCustomer } = await import("./landing-page-funnel.server");
+    landingPageActivitiesByCustomer = await loadLandingPageActivitiesByCustomer(customers);
+  } catch (error) {
+    console.warn("CRM: landing-page enrichment unavailable; continuing without it.", error);
+  }
   for (const customer of customers) {
     if (customer.phone && popupVisitByPhone.has(customer.phone)) {
       customer.last_visit_at = popupVisitByPhone.get(customer.phone);

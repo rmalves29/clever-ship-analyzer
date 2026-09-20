@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAppAuth } from "./app-auth";
 import { validateSegmentRulesPayload } from "./crm-filter-catalog";
-import { customerMatchesSearch, type SegmentRules } from "./crm-segmentation-shared";
+import { buildPurchaseMetricsIndex, customerMatchesSearch, type SegmentRules } from "./crm-segmentation-shared";
 import { matchesAdvancedSegmentRules } from "./crm-product-segmentation";
 import { CRM_SEGMENT_TEMPLATES, buildPersistedRulesFromTemplate } from "./crm-segment-templates";
 
@@ -67,6 +67,78 @@ async function createRecommendedSegmentsInDatabase() {
   };
 }
 
+async function getPaginatedBaseCustomers(data: {
+  search?: string;
+  limit: number;
+  offset: number;
+}) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  let query = supabaseAdmin
+    .from("shopify_customers")
+    .select("*", { count: "exact" })
+    .order("updated_at", { ascending: false })
+    .range(data.offset, data.offset + data.limit - 1);
+
+  const search = data.search?.trim();
+  if (search) {
+    const escaped = search.replace(/[%_\\]/g, (value) => `\\${value}`);
+    query = query.or(
+      [`first_name.ilike.%${escaped}%`, `last_name.ilike.%${escaped}%`, `email.ilike.%${escaped}%`, `phone.ilike.%${escaped}%`, `city.ilike.%${escaped}%`, `province.ilike.%${escaped}%`].join(","),
+    );
+  }
+
+  const { data: customers, error, count } = await query;
+  if (error) throw new Error(`Erro ao buscar contatos do CRM: ${error.message}`);
+
+  const customerRows = (customers ?? []) as any[];
+  const customerIds = customerRows.map((customer) => String(customer.id));
+  const metricsByCustomer = new Map<string, ReturnType<typeof buildPurchaseMetricsIndex> extends Map<string, infer T> ? T : never>();
+
+  if (customerIds.length > 0) {
+    const { data: orders, error: ordersError } = await supabaseAdmin
+      .from("shopify_orders")
+      .select("id, customer_id, total_price, processed_at, created_at, financial_status, cancelled_at")
+      .in("customer_id", customerIds);
+
+    if (ordersError) throw new Error(`Erro ao buscar métricas dos contatos do CRM: ${ordersError.message}`);
+
+    const orderRows = (orders ?? []).map((row: any) => ({
+      id: String(row.id),
+      customerId: String(row.customer_id),
+      totalPrice: Number(row.total_price ?? 0),
+      processedAt: String(row.processed_at ?? row.created_at ?? ""),
+      financialStatus: row.financial_status,
+      cancelledAt: row.cancelled_at,
+    }));
+    const built = buildPurchaseMetricsIndex(orderRows);
+    for (const [customerId, metrics] of built) metricsByCustomer.set(customerId, metrics);
+  }
+
+  const mapped = customerRows.map((customer) => {
+    const metrics = metricsByCustomer.get(String(customer.id)) ?? {
+      validOrderCount: 0,
+      totalSpent: 0,
+      lastOrderAt: null,
+    };
+    return {
+      id: customer.id,
+      name: [customer.first_name, customer.last_name].filter(Boolean).join(" ") || "Cliente sem nome",
+      email: customer.email ?? null,
+      phone: customer.phone ?? null,
+      city: customer.city ?? null,
+      province: customer.province ?? null,
+      rfmSegment: customer.rfm_segment ?? null,
+      totalOrders: metrics.validOrderCount,
+      totalSpent: metrics.totalSpent,
+      lastOrderAt: metrics.lastOrderAt,
+      tagsCustom: customer.tags_custom ?? [],
+      updatedAt: customer.updated_at ?? null,
+    };
+  });
+
+  return { customers: mapped, total: count ?? 0 };
+}
+
 export const getCustomersList = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({
@@ -77,6 +149,12 @@ export const getCustomersList = createServerFn({ method: "POST" })
     offset: z.number().int().min(0).default(0),
   }).parse(data))
   .handler(async ({ data }) => {
+    // Caminho comum do CRM: paginação real no banco. Segmentação avançada/listas continuam
+    // usando o contexto analítico completo porque suas regras dependem de histórico e índices.
+    if (!data.segmentId && !data.listId) {
+      return getPaginatedBaseCustomers(data);
+    }
+
     const { loadCRMSegmentationContext } = await import("./crm-segmentation.server");
     const [contexts, rules, listMemberIds] = await Promise.all([
       loadCRMSegmentationContext(),

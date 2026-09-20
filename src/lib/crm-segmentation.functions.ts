@@ -237,6 +237,22 @@ export const getSegmentsList = createServerFn({ method: "GET" })
     }));
   });
 
+/** Lista leve (id + nome) para seletores. Não calcula memberCount, que é caro e fazia os
+ *  seletores de automação/campanha ficarem eternamente vazios. */
+export const getSegmentOptions = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth])
+  .handler(async () => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("crm_segments")
+      .select("id, nome")
+      .order("criado_em", { ascending: false });
+    if (error) throw error;
+    return (data ?? []) as Array<{ id: string; nome: string }>;
+  });
+
+
+
 export const createRecommendedSegments = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .handler(async () => createRecommendedSegmentsInDatabase());

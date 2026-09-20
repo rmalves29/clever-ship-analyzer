@@ -162,44 +162,77 @@ async function getPaginatedListCustomers(data: {
   offset: number;
 }) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-  // Lista estática não precisa montar o contexto analítico completo: os membros já
-  // estão materializados em crm_list_members. Paginação e busca ficam no banco.
-  const { data: memberRows, error: membersError } = await supabaseAdmin
-    .from("crm_list_members")
-    .select("customer_id")
-    .eq("lista_id", data.listId);
-  if (membersError) throw new Error(`Erro ao buscar membros da lista: ${membersError.message}`);
-
-  const memberIds = [...new Set((memberRows ?? []).map((row) => String(row.customer_id)).filter(Boolean))];
-  if (memberIds.length === 0) return { customers: [], total: 0 };
-
-  let query = supabaseAdmin
-    .from("shopify_customers")
-    .select("*", { count: "exact" })
-    .in("id", memberIds)
-    .order("updated_at", { ascending: false })
-    .range(data.offset, data.offset + data.limit - 1);
-
+  const pageSize = 1000;
+  const keepCount = data.offset + data.limit;
   const search = data.search?.trim();
-  if (search) {
-    const escaped = search.replace(/[%_\\]/g, (value) => `\\${value}`);
-    query = query.or(
-      [`first_name.ilike.%${escaped}%`, `last_name.ilike.%${escaped}%`, `email.ilike.%${escaped}%`, `phone.ilike.%${escaped}%`, `city.ilike.%${escaped}%`, `province.ilike.%${escaped}%`].join(","),
-    );
+  const escapedSearch = search?.replace(/[%_\\]/g, (value) => `\\\\${value}`);
+  const matchingCustomers: any[] = [];
+  let total = 0;
+  const seenMemberIds = new Set<string>();
+
+  // Evita um .in() gigantesco: percorremos os membros em lotes e mantemos apenas
+  // os clientes necessários para a página final, preservando a ordenação global por updated_at.
+  for (let page = 0; ; page++) {
+    const { data: memberRows, error: membersError } = await supabaseAdmin
+      .from("crm_list_members")
+      .select("customer_id")
+      .eq("lista_id", data.listId)
+      .range(page * pageSize, page * pageSize + pageSize - 1);
+
+    if (membersError) throw new Error(`Erro ao buscar membros da lista: ${membersError.message}`);
+    if (!memberRows || memberRows.length === 0) break;
+
+    const memberIds = (memberRows ?? [])
+      .map((row) => String(row.customer_id ?? "").trim())
+      .filter((id) => id && !seenMemberIds.has(id));
+
+    for (const id of memberIds) seenMemberIds.add(id);
+    if (memberIds.length > 0) {
+      let query = supabaseAdmin
+        .from("shopify_customers")
+        .select("*", { count: "exact" })
+        .in("id", memberIds);
+
+      if (escapedSearch) {
+        query = query.or(
+          [
+            `first_name.ilike.%${escapedSearch}%`,
+            `last_name.ilike.%${escapedSearch}%`,
+            `email.ilike.%${escapedSearch}%`,
+            `phone.ilike.%${escapedSearch}%`,
+            `city.ilike.%${escapedSearch}%`,
+            `province.ilike.%${escapedSearch}%`,
+          ].join(","),
+        );
+      }
+
+      const { data: customers, error, count } = await query;
+      if (error) throw new Error(`Erro ao buscar contatos da lista: ${error.message}`);
+      total += count ?? 0;
+      matchingCustomers.push(...(customers ?? []));
+
+      if (keepCount > 0 && matchingCustomers.length > keepCount * 2) {
+        matchingCustomers.sort((a, b) => updatedAtTime(b.updated_at) - updatedAtTime(a.updated_at));
+        matchingCustomers.splice(keepCount);
+      }
+    }
+
+    if (memberRows.length < pageSize) break;
   }
 
-  const { data: customers, error, count } = await query;
-  if (error) throw new Error(`Erro ao buscar contatos da lista: ${error.message}`);
-
-  const customerIds = (customers ?? []).map((customer) => String(customer.id));
+  matchingCustomers.sort((a, b) => updatedAtTime(b.updated_at) - updatedAtTime(a.updated_at));
+  const page = matchingCustomers.slice(data.offset, data.offset + data.limit);
+  const customerIds = page.map((customer) => String(customer.id));
   const metricsByCustomer = new Map<string, PurchaseMetrics>();
+
   if (customerIds.length > 0) {
     const { data: orders, error: ordersError } = await supabaseAdmin
       .from("shopify_orders")
       .select("id, customer_id, total_price, processed_at, created_at, financial_status, cancelled_at")
       .in("customer_id", customerIds);
+
     if (ordersError) throw new Error(`Erro ao buscar métricas da lista: ${ordersError.message}`);
+
     const built = buildPurchaseMetricsIndex((orders ?? []).map((row: any) => ({
       id: String(row.id),
       customerId: String(row.customer_id),
@@ -208,11 +241,12 @@ async function getPaginatedListCustomers(data: {
       financialStatus: row.financial_status,
       cancelledAt: row.cancelled_at,
     })));
+
     for (const [customerId, metrics] of built) metricsByCustomer.set(customerId, metrics);
   }
 
   return {
-    customers: (customers ?? []).map((customer: any) => {
+    customers: page.map((customer: any) => {
       const metrics = metricsByCustomer.get(String(customer.id)) ?? {
         validOrderCount: 0,
         totalSpent: 0,
@@ -233,7 +267,7 @@ async function getPaginatedListCustomers(data: {
         updatedAt: customer.updated_at ?? null,
       };
     }),
-    total: count ?? 0,
+    total,
   };
 }
 

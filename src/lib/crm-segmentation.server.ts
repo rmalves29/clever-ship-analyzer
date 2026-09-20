@@ -74,19 +74,26 @@ export type CustomerCashbackCoupon = {
 async function loadCashbackCouponsByCustomer(): Promise<Map<string, CustomerCashbackCoupon[]>> {
   const db = await admin();
   const now = new Date();
-  const { data, error } = await (db.from("cashback_coupons") as any)
-    .select("shopify_order_id, starts_at, ends_at, created_at, cashback_amount")
-    .not("status", "in", "(cancelled,cancel_pending,failed)")
-    .gt("ends_at", now.toISOString());
-  if (error) throw new Error(`Erro ao buscar cupons de cashback: ${error.message}`);
-
-  const rows = (data ?? []) as {
+  const rows: {
     shopify_order_id: string;
     starts_at: string;
     ends_at: string;
     created_at: string;
     cashback_amount: number;
-  }[];
+  }[] = [];
+
+  for (let page = 0; ; page++) {
+    const { data, error } = await (db.from("cashback_coupons") as any)
+      .select("shopify_order_id, starts_at, ends_at, created_at, cashback_amount")
+      .not("status", "in", "(cancelled,cancel_pending,failed)")
+      .gt("ends_at", now.toISOString())
+      .order("created_at", { ascending: true })
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (error) throw new Error(`Erro ao buscar cupons de cashback: ${error.message}`);
+    if (!data || data.length === 0) break;
+    rows.push(...(data as typeof rows));
+    if (data.length < PAGE_SIZE) break;
+  }
   const orderIds = [...new Set(rows.map((row) => String(row.shopify_order_id)))];
   const customerIdByOrderId = new Map<string, string>();
   for (let i = 0; i < orderIds.length; i += ORDER_ID_BATCH) {
@@ -123,12 +130,21 @@ async function loadCashbackCouponsByCustomer(): Promise<Map<string, CustomerCash
 async function loadPopupVisitByPhone(): Promise<Map<string, string>> {
   const db = await admin();
   const map = new Map<string, string>();
-  const { data, error } = await (db.from("popup_leads" as any) as any)
-    .select("phone, last_visit_at")
-    .not("last_visit_at", "is", null);
-  if (error) throw new Error(`Erro ao buscar visitas do pop-up: ${error.message}`);
-  for (const row of (data ?? []) as { phone: string; last_visit_at: string }[]) {
-    map.set(row.phone, row.last_visit_at);
+  for (let page = 0; ; page++) {
+    const { data, error } = await (db.from("popup_leads" as any) as any)
+      .select("phone, last_visit_at")
+      .not("last_visit_at", "is", null)
+      .order("last_visit_at", { ascending: true })
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (error) throw new Error(`Erro ao buscar visitas do pop-up: ${error.message}`);
+    if (!data || data.length === 0) break;
+    for (const row of data as { phone: string; last_visit_at: string }[]) {
+      const current = map.get(row.phone);
+      if (!current || new Date(row.last_visit_at).getTime() > new Date(current).getTime()) {
+        map.set(row.phone, row.last_visit_at);
+      }
+    }
+    if (data.length < PAGE_SIZE) break;
   }
   return map;
 }
@@ -140,12 +156,21 @@ async function loadPopupVisitByPhone(): Promise<Map<string, string>> {
 async function loadInboxLastInboundByPhone(): Promise<Map<string, string>> {
   const db = await admin();
   const map = new Map<string, string>();
-  const { data, error } = await (db.from("whatsapp_inbox_threads" as any) as any)
-    .select("phone, last_inbound_at")
-    .not("last_inbound_at", "is", null);
-  if (error) throw new Error(`Erro ao buscar última mensagem recebida no WhatsApp: ${error.message}`);
-  for (const row of (data ?? []) as { phone: string; last_inbound_at: string }[]) {
-    map.set(row.phone, row.last_inbound_at);
+  for (let page = 0; ; page++) {
+    const { data, error } = await (db.from("whatsapp_inbox_threads" as any) as any)
+      .select("phone, last_inbound_at")
+      .not("last_inbound_at", "is", null)
+      .order("last_inbound_at", { ascending: true })
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (error) throw new Error(`Erro ao buscar última mensagem recebida no WhatsApp: ${error.message}`);
+    if (!data || data.length === 0) break;
+    for (const row of data as { phone: string; last_inbound_at: string }[]) {
+      const current = map.get(row.phone);
+      if (!current || new Date(row.last_inbound_at).getTime() > new Date(current).getTime()) {
+        map.set(row.phone, row.last_inbound_at);
+      }
+    }
+    if (data.length < PAGE_SIZE) break;
   }
   return map;
 }

@@ -17,9 +17,25 @@ async function getSegmentRules(segmentId?: string): Promise<SegmentRules | null>
 async function getListMemberIds(listId?: string): Promise<Set<string> | null> {
   if (!listId) return null;
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin.from("crm_list_members").select("customer_id").eq("lista_id", listId);
-  if (error) throw error;
-  return new Set((data ?? []).map((row) => row.customer_id));
+  const pageSize = 1000;
+  const ids = new Set<string>();
+
+  for (let page = 0; ; page++) {
+    const { data, error } = await supabaseAdmin
+      .from("crm_list_members")
+      .select("customer_id")
+      .eq("lista_id", listId)
+      .range(page * pageSize, page * pageSize + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+
+    for (const row of data) {
+      if (row.customer_id) ids.add(String(row.customer_id));
+    }
+    if (data.length < pageSize) break;
+  }
+
+  return ids;
 }
 
 function updatedAtTime(value: string | null | undefined): number {

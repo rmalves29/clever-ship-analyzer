@@ -25,6 +25,7 @@ async function getListMemberIds(listId?: string): Promise<Set<string> | null> {
       .from("crm_list_members")
       .select("customer_id")
       .eq("lista_id", listId)
+      .order("customer_id", { ascending: true })
       .range(page * pageSize, page * pageSize + pageSize - 1);
     if (error) throw error;
     if (!data || data.length === 0) break;
@@ -177,6 +178,7 @@ async function getPaginatedListCustomers(data: {
       .from("crm_list_members")
       .select("customer_id")
       .eq("lista_id", data.listId)
+      .order("customer_id", { ascending: true })
       .range(page * pageSize, page * pageSize + pageSize - 1);
 
     if (membersError) throw new Error(`Erro ao buscar membros da lista: ${membersError.message}`);

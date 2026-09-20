@@ -1352,6 +1352,129 @@ export type Database = {
         }
         Relationships: []
       }
+      landing_page_leads: {
+        Row: {
+          criado_em: string
+          id: string
+          landing_page_id: string
+          phone: string
+        }
+        Insert: {
+          criado_em?: string
+          id?: string
+          landing_page_id: string
+          phone: string
+        }
+        Update: {
+          criado_em?: string
+          id?: string
+          landing_page_id?: string
+          phone?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "landing_page_leads_landing_page_id_fkey"
+            columns: ["landing_page_id"]
+            isOneToOne: false
+            referencedRelation: "landing_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      landing_page_reviews: {
+        Row: {
+          aprovado: boolean
+          criado_em: string
+          estrelas: number
+          id: string
+          landing_page_id: string
+          nome: string
+          texto: string
+        }
+        Insert: {
+          aprovado?: boolean
+          criado_em?: string
+          estrelas?: number
+          id?: string
+          landing_page_id: string
+          nome: string
+          texto: string
+        }
+        Update: {
+          aprovado?: boolean
+          criado_em?: string
+          estrelas?: number
+          id?: string
+          landing_page_id?: string
+          nome?: string
+          texto?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "landing_page_reviews_landing_page_id_fkey"
+            columns: ["landing_page_id"]
+            isOneToOne: false
+            referencedRelation: "landing_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      landing_page_views: {
+        Row: {
+          criado_em: string
+          id: string
+          landing_page_id: string
+        }
+        Insert: {
+          criado_em?: string
+          id?: string
+          landing_page_id: string
+        }
+        Update: {
+          criado_em?: string
+          id?: string
+          landing_page_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "landing_page_views_landing_page_id_fkey"
+            columns: ["landing_page_id"]
+            isOneToOne: false
+            referencedRelation: "landing_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      landing_pages: {
+        Row: {
+          atualizado_em: string
+          conteudo: Json
+          criado_em: string
+          id: string
+          nome: string
+          slug: string
+          status: string
+        }
+        Insert: {
+          atualizado_em?: string
+          conteudo?: Json
+          criado_em?: string
+          id?: string
+          nome: string
+          slug: string
+          status?: string
+        }
+        Update: {
+          atualizado_em?: string
+          conteudo?: Json
+          criado_em?: string
+          id?: string
+          nome?: string
+          slug?: string
+          status?: string
+        }
+        Relationships: []
+      }
       meta_ads_planning: {
         Row: {
           cps: number
@@ -1572,171 +1695,6 @@ export type Database = {
           visible_seconds?: number
         }
         Relationships: []
-      }
-      landing_page_leads: {
-        Row: {
-          criado_em: string
-          id: string
-          landing_page_id: string
-          phone: string
-        }
-        Insert: {
-          criado_em?: string
-          id?: string
-          landing_page_id: string
-          phone: string
-        }
-        Update: {
-          criado_em?: string
-          id?: string
-          landing_page_id?: string
-          phone?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "landing_page_leads_landing_page_id_fkey"
-            columns: ["landing_page_id"]
-            isOneToOne: false
-            referencedRelation: "landing_pages"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      landing_page_reviews: {
-        Row: {
-          aprovado: boolean
-          criado_em: string
-          estrelas: number
-          id: string
-          landing_page_id: string
-          nome: string
-          texto: string
-        }
-        Insert: {
-          aprovado?: boolean
-          criado_em?: string
-          estrelas?: number
-          id?: string
-          landing_page_id: string
-          nome: string
-          texto: string
-        }
-        Update: {
-          aprovado?: boolean
-          criado_em?: string
-          estrelas?: number
-          id?: string
-          landing_page_id?: string
-          nome?: string
-          texto?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "landing_page_reviews_landing_page_id_fkey"
-            columns: ["landing_page_id"]
-            isOneToOne: false
-            referencedRelation: "landing_pages"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      landing_pages: {
-        Row: {
-          atualizado_em: string
-          conteudo: Json
-          criado_em: string
-          id: string
-          nome: string
-          slug: string
-          status: string
-        }
-        Insert: {
-          atualizado_em?: string
-          conteudo?: Json
-          criado_em?: string
-          id?: string
-          nome: string
-          slug: string
-          status?: string
-        }
-        Update: {
-          atualizado_em?: string
-          conteudo?: Json
-          criado_em?: string
-          id?: string
-          nome?: string
-          slug?: string
-          status?: string
-        }
-        Relationships: []
-      }
-      surveys: {
-        Row: {
-          created_at: string
-          description: string | null
-          id: string
-          is_active: boolean
-          questions: Json
-          slug: string
-          thank_you_message: string
-          title: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          is_active?: boolean
-          questions?: Json
-          slug: string
-          thank_you_message?: string
-          title: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          is_active?: boolean
-          questions?: Json
-          slug?: string
-          thank_you_message?: string
-          title?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      survey_responses: {
-        Row: {
-          answers: Json
-          created_at: string
-          id: string
-          source: string | null
-          survey_id: string
-        }
-        Insert: {
-          answers?: Json
-          created_at?: string
-          id?: string
-          source?: string | null
-          survey_id: string
-        }
-        Update: {
-          answers?: Json
-          created_at?: string
-          id?: string
-          source?: string | null
-          survey_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "survey_responses_survey_id_fkey"
-            columns: ["survey_id"]
-            isOneToOne: false
-            referencedRelation: "surveys"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       shopify_abandoned_checkouts: {
         Row: {
@@ -2220,6 +2178,74 @@ export type Database = {
         }
         Relationships: []
       }
+      survey_responses: {
+        Row: {
+          answers: Json
+          created_at: string
+          id: string
+          source: string | null
+          survey_id: string
+        }
+        Insert: {
+          answers?: Json
+          created_at?: string
+          id?: string
+          source?: string | null
+          survey_id: string
+        }
+        Update: {
+          answers?: Json
+          created_at?: string
+          id?: string
+          source?: string | null
+          survey_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "survey_responses_survey_id_fkey"
+            columns: ["survey_id"]
+            isOneToOne: false
+            referencedRelation: "surveys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      surveys: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          questions: Json
+          slug: string
+          thank_you_message: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          questions?: Json
+          slug: string
+          thank_you_message?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          questions?: Json
+          slug?: string
+          thank_you_message?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       wa_campaign_recipients: {
         Row: {
           campaign_id: string
@@ -2539,8 +2565,8 @@ export type Database = {
       }
       whatsapp_automations: {
         Row: {
-          automation_kind: string
           ativo: boolean
+          automation_kind: string
           created_at: string
           descricao: string | null
           id: string
@@ -2559,8 +2585,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          automation_kind?: string
           ativo?: boolean
+          automation_kind?: string
           created_at?: string
           descricao?: string | null
           id?: string
@@ -2579,8 +2605,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          automation_kind?: string
           ativo?: boolean
+          automation_kind?: string
           created_at?: string
           descricao?: string | null
           id?: string
@@ -3072,6 +3098,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      whatsapp_suppressions: {
+        Row: {
+          marketing_opt_out: boolean
+          opted_out_at: string
+          phone: string
+          reason: string | null
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          marketing_opt_out?: boolean
+          opted_out_at?: string
+          phone: string
+          reason?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          marketing_opt_out?: boolean
+          opted_out_at?: string
+          phone?: string
+          reason?: string | null
+          source?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       whatsapp_template_events: {
         Row: {

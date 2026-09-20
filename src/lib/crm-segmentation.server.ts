@@ -176,7 +176,12 @@ async function loadDeliveryStatusByOrderId(): Promise<Map<string, string>> {
 
 async function loadOrders(): Promise<CRMOrderForSegmentation[]> {
   const db = await admin();
-  const deliveryStatusByOrderId = await loadDeliveryStatusByOrderId();
+  let deliveryStatusByOrderId = new Map<string, string>();
+  try {
+    deliveryStatusByOrderId = await loadDeliveryStatusByOrderId();
+  } catch (error) {
+    console.warn("CRM: delivery-status enrichment unavailable; continuing without it.", error);
+  }
   const rows: CRMOrderForSegmentation[] = [];
   for (let page = 0; ; page++) {
     const { data, error } = await (db.from("shopify_orders") as any)
@@ -519,7 +524,7 @@ export async function loadCRMProductFilterOptions(): Promise<CRMProductOption[]>
 }
 
 export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMAdvancedCustomerContext[]> {
-  const [customers, orders, abandonedCheckoutAtByCustomer, whatsappBehavior, popupVisitByPhone, cashbackCouponsByCustomer, inboxLastInboundByPhone] = await Promise.all([
+  const [customers, orders, abandonedCheckoutResult, whatsappBehaviorResult, popupVisitResult, cashbackResult, inboxResult] = await Promise.allSettled([
     loadCustomers(),
     loadOrders(),
     loadLatestAbandonedCheckoutByCustomer(),
@@ -528,6 +533,49 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
     loadCashbackCouponsByCustomer(),
     loadInboxLastInboundByPhone(),
   ]);
+
+  if (customers.status === "rejected") throw customers.reason;
+  if (orders.status === "rejected") throw orders.reason;
+
+  const warnOptional = (name: string, result: PromiseSettledResult<unknown>) => {
+    if (result.status === "rejected") {
+      console.warn(`CRM: ${name} enrichment unavailable; continuing without it.`, result.reason);
+    }
+  };
+
+  warnOptional("abandoned-checkout", abandonedCheckoutResult);
+  warnOptional("WhatsApp", whatsappBehaviorResult);
+  warnOptional("popup-visit", popupVisitResult);
+  warnOptional("cashback", cashbackResult);
+  warnOptional("inbox", inboxResult);
+
+  const abandonedCheckoutAtByCustomer =
+    abandonedCheckoutResult.status === "fulfilled"
+      ? abandonedCheckoutResult.value
+      : new Map<string, string>();
+  const whatsappBehavior =
+    whatsappBehaviorResult.status === "fulfilled"
+      ? whatsappBehaviorResult.value
+      : {
+          campaignSent: new Map<string, Set<string>>(),
+          campaignDelivered: new Map<string, Set<string>>(),
+          campaignRead: new Map<string, Set<string>>(),
+          campaignFailed: new Map<string, Set<string>>(),
+          automationEntered: new Map<string, Set<string>>(),
+          automationCompleted: new Map<string, Set<string>>(),
+        };
+  const popupVisitByPhone =
+    popupVisitResult.status === "fulfilled"
+      ? popupVisitResult.value
+      : new Map<string, string>();
+  const cashbackCouponsByCustomer =
+    cashbackResult.status === "fulfilled"
+      ? cashbackResult.value
+      : new Map<string, CustomerCashbackCoupon[]>();
+  const inboxLastInboundByPhone =
+    inboxResult.status === "fulfilled"
+      ? inboxResult.value
+      : new Map<string, string>();
   // Landing-page analytics is an optional enrichment for CRM segmentation. It must not
   // prevent the core Contacts/Segments screens from loading when the landing-page
   // migration is missing, an optional column is unavailable, or the external group
@@ -550,10 +598,16 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
       customer.last_inbound_at = inboxLastInboundByPhone.get(customer.phone);
     }
   }
-  const [shippedTodayValidOrderIds, orderItems] = await Promise.all([
+  const [shippedResult, orderItemsResult] = await Promise.allSettled([
     loadShippedTodayValidOrderIds(orders, now),
     loadValidOrderItems(orders),
   ]);
+  warnOptional("shipped-today", shippedResult);
+  warnOptional("order-items", orderItemsResult);
+  const shippedTodayValidOrderIds =
+    shippedResult.status === "fulfilled" ? shippedResult.value : new Set<string>();
+  const orderItems =
+    orderItemsResult.status === "fulfilled" ? orderItemsResult.value : [];
   const baseContexts = buildCustomerContexts({
     customers,
     orders,
@@ -563,7 +617,12 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
   });
   const spendIndex = buildProductSpendIndex(orders, orderItems);
   const purchaseHistoryIndex = buildValidPurchaseHistoryIndex(orders);
-  const taxonomy = await getShopifyProductTaxonomyByIds(productIdsFromItems(orderItems));
+  let taxonomy = new Map<string, ShopifyProductTaxonomy>();
+  try {
+    taxonomy = await getShopifyProductTaxonomyByIds(productIdsFromItems(orderItems));
+  } catch (error) {
+    console.warn("CRM: product taxonomy enrichment unavailable; continuing without it.", error);
+  }
   const taxonomyIndexes = buildTaxonomyIndexes(orders, orderItems, taxonomy);
 
   return baseContexts.map((context) => {

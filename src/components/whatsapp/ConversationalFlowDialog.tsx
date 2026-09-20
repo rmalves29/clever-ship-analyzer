@@ -27,7 +27,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { SEGMENT_TYPES } from "@/lib/crm-mock";
-import { getSegmentsList } from "@/lib/crm-segmentation.functions";
+import { getSegmentOptions } from "@/lib/crm-segmentation.functions";
 import { SEGMENT_LABEL } from "@/components/crm/AutomationDialog";
 import { saveConversationalFlow, getRecentlyUsedTemplateNames } from "@/lib/conversational-flows.functions";
 
@@ -296,7 +296,7 @@ export function ConversationalFlowDialog({
 
   const { data: segmentsResult } = useQuery({
     queryKey: ["crm-segments-list"],
-    queryFn: () => getSegmentsList(),
+    queryFn: () => getSegmentOptions(),
     enabled: open,
   });
   const customSegments = (segmentsResult ?? []) as { id: string; nome: string }[];

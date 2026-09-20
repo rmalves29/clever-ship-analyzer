@@ -8,7 +8,7 @@ import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { getSegmentsList } from "@/lib/crm-segmentation.functions";
+import { getSegmentOptions } from "@/lib/crm-segmentation.functions";
 import { previewWhatsappPresendAudit } from "@/lib/whatsapp-presend-audit.functions";
 
 export function PresendAuditPanel() {
@@ -18,7 +18,7 @@ export function PresendAuditPanel() {
 
   const { data: segments } = useQuery({
     queryKey: ["crm-segments-presend-audit"],
-    queryFn: () => getSegmentsList(),
+    queryFn: () => getSegmentOptions(),
   });
   const customSegments = (segments ?? []).map((segment) => ({ id: segment.id, nome: segment.nome }));
   const selectedCustom = customSegments.find((segment) => segment.id === segmentValue);

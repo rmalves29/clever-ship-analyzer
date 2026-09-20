@@ -304,15 +304,27 @@ export const getSegmentsList = createServerFn({ method: "GET" })
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { loadCRMSegmentationContext } = await import("./crm-segmentation.server");
-    const [{ data: segments, error }, contexts] = await Promise.all([
-      supabaseAdmin.from("crm_segments").select("*").order("criado_em", { ascending: false }),
-      loadCRMSegmentationContext(),
-    ]);
+    const { data: segments, error } = await supabaseAdmin
+      .from("crm_segments")
+      .select("*")
+      .order("criado_em", { ascending: false });
     if (error) throw error;
-    return (segments ?? []).map((segment) => ({
-      ...segment,
-      memberCount: contexts.filter((context) => matchesAdvancedSegmentRules(context, segment.regras as SegmentRules)).length,
-    }));
+
+    // O carregamento dos segmentos é separado da contagem. Assim a tela consegue
+    // renderizar imediatamente mesmo que a audiência analítica seja pesada.
+    const segmentRows = (segments ?? []) as Array<Record<string, unknown>>;
+    if (segmentRows.length === 0) return [];
+
+    try {
+      const contexts = await loadCRMSegmentationContext();
+      return segmentRows.map((segment) => ({
+        ...segment,
+        memberCount: contexts.filter((context) => matchesAdvancedSegmentRules(context, segment.regras as SegmentRules)).length,
+      }));
+    } catch (error) {
+      console.warn("CRM: memberCount indisponível; retornando segmentos sem contagem.", error);
+      return segmentRows.map((segment) => ({ ...segment, memberCount: null }));
+    }
   });
 
 /** Lista leve (id + nome) para seletores. Não calcula memberCount, que é caro e fazia os

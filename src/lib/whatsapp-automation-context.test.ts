@@ -27,6 +27,13 @@ const context: AutomationEventContext = {
     status: "fulfilled",
   },
   checkout: { id: "checkout-1", checkoutUrl: "https://checkout.exemplo/1", totalPrice: 199.9 },
+  landingPage: {
+    id: "landing-1",
+    name: "Grupo VIP",
+    slug: "grupo-vip",
+    groupId: "group-1",
+    groupLink: "https://chat.whatsapp.com/exemplo",
+  },
 };
 
 describe("whatsapp automation frozen context", () => {
@@ -52,6 +59,7 @@ describe("whatsapp automation frozen context", () => {
           "Pedido {{NUMERO_PEDIDO}} - {{VALOR_TOTAL}}",
           "{{ITENS_COMPRADOS}} | {{CUPOM_DESCONTO}} | {{FRETE_ESCOLHIDO}}",
           "{{RASTREIO}} | {{LINK_RASTREIO}} | {{STATUS_PEDIDO}} | {{LINK_CHECKOUT}}",
+          "{{NOME_LANDING_PAGE}} | {{LINK_GRUPO_LANDING}}",
         ],
         context,
         { firstName: "Maria" },
@@ -61,6 +69,7 @@ describe("whatsapp automation frozen context", () => {
       "Pedido #1001 - R$ 199,90",
       "1x Colar Gota (Dourado), 2x Brinco Londres | VIP10 | SEDEX",
       "BR123 | https://rastreio.exemplo/BR123 | Enviado | https://checkout.exemplo/1",
+      "Grupo VIP | https://chat.whatsapp.com/exemplo",
     ]);
   });
 });

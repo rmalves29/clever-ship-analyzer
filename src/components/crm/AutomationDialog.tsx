@@ -73,6 +73,8 @@ const DYNAMIC_VARS: { token: string; label: string }[] = [
   { token: "{{VALOR_CASHBACK}}", label: "Valor do cashback gerado" },
   { token: "{{COMPRA_MINIMA_CASHBACK}}", label: "Compra mínima para usar o cashback" },
   { token: "{{VALIDADE_CASHBACK}}", label: "Data de validade do cashback" },
+  { token: "{{NOME_LANDING_PAGE}}", label: "Nome da landing page de origem" },
+  { token: "{{LINK_GRUPO_LANDING}}", label: "Link do grupo da landing page" },
 ];
 
 export type SendStepSeed = {
@@ -123,6 +125,8 @@ export type AutomationSeed = {
   requerAprovacao?: boolean | undefined;
   ativo?: boolean | undefined;
   automationKind?: "segment" | "rfm" | "cashback" | undefined;
+  revalidateSegmentBeforeSend?: boolean | undefined;
+  recoveryLandingPageId?: string | undefined;
 };
 
 function newId() {
@@ -364,6 +368,7 @@ export function AutomationDialog({
   const [rootStepId, setRootStepId] = useState<string>("");
   const [requerAprovacao, setRequerAprovacao] = useState(true);
   const [ativo, setAtivo] = useState(true);
+  const [revalidateSegmentBeforeSend, setRevalidateSegmentBeforeSend] = useState(false);
   const [busy, setBusy] = useState(false);
   const [manualPositions, setManualPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(TRIGGER_ID);
@@ -381,6 +386,7 @@ export function AutomationDialog({
     setRootStepId(initialSteps[0]!.id);
     setRequerAprovacao(seed?.requerAprovacao ?? true);
     setAtivo(seed?.ativo ?? true);
+    setRevalidateSegmentBeforeSend(seed?.revalidateSegmentBeforeSend ?? false);
     setManualPositions({});
     setSelectedNodeId(TRIGGER_ID);
     setAddPanelOpen(false);
@@ -694,6 +700,8 @@ export function AutomationDialog({
           }),
           requerAprovacao: isLifecycleAutomation ? false : requerAprovacao,
           ativo,
+          revalidateSegmentBeforeSend,
+          recoveryLandingPageId: seed?.recoveryLandingPageId,
         },
       });
       if (!res.success) {
@@ -918,6 +926,19 @@ export function AutomationDialog({
                           ? "Calculando quantos contatos entram nesse gatilho…"
                           : `${triggerAudience?.destinatarios ?? 0} contato(s) vão receber esta automação agora`}
                     </p>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                    <div>
+                      <p className="text-sm font-medium">Revalidar segmento antes do envio</p>
+                      <p className="text-xs text-muted-foreground">
+                        Se o contato sair do público durante a espera, a mensagem é cancelada.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={revalidateSegmentBeforeSend}
+                      disabled={isLifecycleAutomation}
+                      onCheckedChange={setRevalidateSegmentBeforeSend}
+                    />
                   </div>
                   <div className="flex items-center justify-between rounded-lg border border-border p-3">
                     <div>

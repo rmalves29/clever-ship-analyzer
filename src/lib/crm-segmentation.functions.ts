@@ -176,6 +176,11 @@ export const getCRMFilterOptions = createServerFn({ method: "GET" })
     }
 
     const productOptions = await productOptionsPromise;
+    const { data: landingPageRows, error: landingPagesError } = await supabaseAdmin
+      .from("landing_pages")
+      .select("id, nome, slug")
+      .order("criado_em", { ascending: false });
+    if (landingPagesError) throw landingPagesError;
     const sortPt = (values: Set<string>) => [...values].sort((a, b) => a.localeCompare(b, "pt-BR"));
     return {
       cities: sortPt(cities),
@@ -186,6 +191,7 @@ export const getCRMFilterOptions = createServerFn({ method: "GET" })
       collections: productOptions.collections,
       campaigns,
       automations,
+      landingPages: (landingPageRows ?? []).map((row) => ({ id: row.id, name: `${row.nome} · /lp/${row.slug}` })),
     };
   });
 

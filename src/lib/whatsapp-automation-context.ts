@@ -38,6 +38,13 @@ export type AutomationEventContext = {
     startsAt: string;
     endsAt: string;
   } | null;
+  landingPage?: {
+    id: string;
+    name: string;
+    slug: string;
+    groupId?: string | null;
+    groupLink?: string | null;
+  } | null;
 };
 
 
@@ -107,6 +114,8 @@ export function buildAutomationTokenReplacements(
     "{{COMPRA_MINIMA_CASHBACK}}": cashback ? brl(cashback.minimumPurchase) : "—",
     "{{VALIDADE_CASHBACK}}": validity,
     "{{DIAS_PARA_EXPIRAR}}": daysUntilExpiration,
+    "{{NOME_LANDING_PAGE}}": context.landingPage?.name || "—",
+    "{{LINK_GRUPO_LANDING}}": context.landingPage?.groupLink || "—",
   };
 }
 

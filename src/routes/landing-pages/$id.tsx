@@ -25,6 +25,7 @@ import {
   type ImageAspect,
   type LandingPageContent,
 } from "@/lib/landing-pages.functions";
+import { listEnvioGroups } from "@/lib/envio-groups.functions";
 
 const IMAGE_ASPECT_LABELS: Record<ImageAspect, string> = {
   quadrada: "Quadrada (1:1)",
@@ -332,6 +333,7 @@ function LandingPageEditor() {
   const { id } = Route.useParams();
   const runGet = useServerFn(getLandingPage);
   const runSave = useServerFn(saveLandingPage);
+  const runGroups = useServerFn(listEnvioGroups);
 
   const [nome, setNome] = useState("");
   const [slug, setSlug] = useState("");
@@ -342,6 +344,10 @@ function LandingPageEditor() {
   const { data: page, isLoading } = useQuery({
     queryKey: ["landing-page", id],
     queryFn: () => runGet({ data: { id } }),
+  });
+  const { data: whatsappGroups } = useQuery({
+    queryKey: ["envio-groups", "landing-page-editor"],
+    queryFn: () => runGroups(),
   });
 
   useEffect(() => {
@@ -545,6 +551,38 @@ function LandingPageEditor() {
         </Section>
 
         <Section title="Integrações" subtitle="Rastreamento para campanhas de remarketing">
+          <TextField
+            size="small"
+            select
+            fullWidth
+            label="Grupo do WhatsApp acompanhado"
+            value={content.integracoes.whatsappGroupId}
+            onChange={(e) => {
+              const whatsappGroupId = e.target.value;
+              const selected = (whatsappGroups ?? []).find((group) => group.id === whatsappGroupId);
+              setContent((prev) => ({
+                ...prev,
+                integracoes: { ...prev.integracoes, whatsappGroupId },
+                ...(selected?.invite_link
+                  ? {
+                      hero: { ...prev.hero, ctaUrl: selected.invite_link },
+                      comoFunciona: { ...prev.comoFunciona, ctaUrl: selected.invite_link },
+                    }
+                  : {}),
+              }));
+            }}
+          >
+            <MenuItem value=""><em>Selecione o grupo...</em></MenuItem>
+            {(whatsappGroups ?? []).filter((group) => group.is_active).map((group) => (
+              <MenuItem key={group.id} value={group.id}>
+                {group.group_name} · {group.participant_count} participante(s)
+              </MenuItem>
+            ))}
+          </TextField>
+          <Typography variant="caption" color="text.secondary">
+            Define qual grupo será usado para confirmar as entradas, calcular o funil e interromper a automação de recuperação.
+            Ao selecionar um grupo com link de convite salvo, os dois botões da página passam a usar esse link.
+          </Typography>
           <TextField
             size="small"
             label="Pixel do Meta (ID)"

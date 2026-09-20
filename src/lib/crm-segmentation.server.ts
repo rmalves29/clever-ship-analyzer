@@ -528,6 +528,8 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
     loadCashbackCouponsByCustomer(),
     loadInboxLastInboundByPhone(),
   ]);
+  const { loadLandingPageActivitiesByCustomer } = await import("./landing-page-funnel.server");
+  const landingPageActivitiesByCustomer = await loadLandingPageActivitiesByCustomer(customers);
   for (const customer of customers) {
     if (customer.phone && popupVisitByPhone.has(customer.phone)) {
       customer.last_visit_at = popupVisitByPhone.get(customer.phone);
@@ -584,6 +586,7 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
       whatsappCampaignFailedIds: whatsappBehavior.campaignFailed.get(customerId) ?? new Set<string>(),
       whatsappAutomationEnteredIds: whatsappBehavior.automationEntered.get(customerId) ?? new Set<string>(),
       whatsappAutomationCompletedIds: whatsappBehavior.automationCompleted.get(customerId) ?? new Set<string>(),
+      landingPageActivities: landingPageActivitiesByCustomer.get(customerId) ?? [],
     };
   });
 }

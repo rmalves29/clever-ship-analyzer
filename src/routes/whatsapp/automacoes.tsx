@@ -291,6 +291,11 @@ function AutomacoesPage() {
                     requerAprovacao: a.requerAprovacao ?? true,
                     ativo: Boolean(a.ativo),
                     automationKind: a.automationKind,
+                    revalidateSegmentBeforeSend: Boolean(a.triggerConfig?.revalidateSegmentBeforeSend),
+                    recoveryLandingPageId:
+                      typeof a.triggerConfig?.landingPageId === "string"
+                        ? a.triggerConfig.landingPageId
+                        : undefined,
                   });
                   setOpen(true);
                 }}
@@ -311,6 +316,11 @@ function AutomacoesPage() {
                       steps: a.steps ?? undefined,
                       requerAprovacao: a.requerAprovacao ?? true,
                       ativo: false,
+                      revalidateSegmentBeforeSend: Boolean(a.triggerConfig?.revalidateSegmentBeforeSend),
+                      recoveryLandingPageId:
+                        typeof a.triggerConfig?.landingPageId === "string"
+                          ? a.triggerConfig.landingPageId
+                          : undefined,
                     });
                     setOpen(true);
                   }}

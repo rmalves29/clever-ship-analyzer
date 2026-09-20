@@ -13,6 +13,7 @@ import Typography from "@mui/material/Typography";
 import {
   getPublicLandingPage,
   getPublicLandingPageReviews,
+  trackLandingPageView,
   submitLandingPageLead,
   submitLandingPageReview,
   type ImageAspect,
@@ -20,6 +21,22 @@ import {
 } from "@/lib/landing-pages.functions";
 
 const HERO_PHONE_FIELD_ID = "lp-phone-input-hero";
+const LANDING_VISITOR_STORAGE_KEY = "crm-landing-visitor-id";
+
+function getLandingVisitorId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const current = window.localStorage.getItem(LANDING_VISITOR_STORAGE_KEY);
+    if (current) return current;
+    const created = typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `visitor_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+    window.localStorage.setItem(LANDING_VISITOR_STORAGE_KEY, created);
+    return created;
+  } catch {
+    return `visitor_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+  }
+}
 
 function formatPhoneBR(raw: string): string {
   const digits = raw.replace(/\D/g, "").slice(0, 11);
@@ -214,6 +231,7 @@ function PhoneGateCta({
 function PublicLandingPage() {
   const { slug } = Route.useParams();
   const runGet = useServerFn(getPublicLandingPage);
+  const runTrackView = useServerFn(trackLandingPageView);
   const runSubmitLead = useServerFn(submitLandingPageLead);
   const runGetReviews = useServerFn(getPublicLandingPageReviews);
   const runSubmitReview = useServerFn(submitLandingPageReview);
@@ -222,6 +240,7 @@ function PublicLandingPage() {
   const [reviewTexto, setReviewTexto] = useState("");
   const [reviewEstrelas, setReviewEstrelas] = useState(5);
   const [reviewSent, setReviewSent] = useState(false);
+  const [visitorId, setVisitorId] = useState("");
 
   const { data: page, isLoading } = useQuery({
     queryKey: ["public-landing-page", slug],
@@ -236,8 +255,26 @@ function PublicLandingPage() {
 
   useMetaPixel(page?.conteudo.integracoes.metaPixelId ?? "");
 
+  useEffect(() => {
+    if (!page) return;
+    const id = getLandingVisitorId();
+    setVisitorId(id);
+    const sessionKey = `crm-landing-view:${slug}`;
+    try {
+      if (window.sessionStorage.getItem(sessionKey)) return;
+      window.sessionStorage.setItem(sessionKey, "1");
+    } catch {
+      // Sem sessionStorage ainda registra a visita; a deduplicacao do relatorio usa visitorId.
+    }
+    void runTrackView({ data: { slug, visitorId: id || undefined } }).catch(() => undefined);
+  }, [page, runTrackView, slug]);
+
   const submitMut = useMutation({
-    mutationFn: (ctaUrl: string) => runSubmitLead({ data: { slug, phone } }).then(() => ctaUrl),
+    mutationFn: async (ctaUrl: string) => {
+      const result = await runSubmitLead({ data: { slug, phone, visitorId: visitorId || undefined } });
+      if (!result.success) throw new Error(result.error ?? "Não foi possível registrar seu contato.");
+      return ctaUrl;
+    },
     onSuccess: (ctaUrl) => {
       callFbq("track", "Lead");
       if (ctaUrl) window.location.href = ctaUrl;

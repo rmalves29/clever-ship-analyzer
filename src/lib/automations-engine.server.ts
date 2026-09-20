@@ -643,7 +643,12 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
     const batchResults = await Promise.all(
       batch.map(async (recipient) => ({
         ...recipient,
-        ...(await captureAutomationEventContext(recipient.id)),
+        ...(await captureAutomationEventContext(recipient.id, {
+          landingPageId:
+            typeof automation.trigger_config?.landingPageId === "string"
+              ? automation.trigger_config.landingPageId
+              : undefined,
+        })),
       })),
     );
     candidatesWithContext.push(...(batchResults as typeof candidatesWithContext));
@@ -812,7 +817,27 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
     .eq("status", "active")
     .lte("next_run_at", new Date().toISOString());
 
-  const runs = (dueRuns ?? []) as any[];
+  let runs = (dueRuns ?? []) as any[];
+  if (runs.length === 0) return 0;
+
+  if (automation.trigger_config?.revalidateSegmentBeforeSend === true) {
+    const { resolveWhatsappSegmentCustomerIds } = await import("./whatsapp-segment-resolver.server");
+    const currentCustomerIds = new Set<string>(
+      await resolveWhatsappSegmentCustomerIds(
+        automation.segment_type,
+        automation.segment_id || undefined,
+      ),
+    );
+    const staleRuns = runs.filter((run) => !currentCustomerIds.has(String(run.customer_id)));
+    if (staleRuns.length > 0) {
+      await markRunsExited(
+        staleRuns.map((run) => String(run.id)),
+        "Contato saiu do segmento antes do envio.",
+      );
+      const staleIds = new Set(staleRuns.map((run) => String(run.id)));
+      runs = runs.filter((run) => !staleIds.has(String(run.id)));
+    }
+  }
   if (runs.length === 0) return 0;
 
   const byStep = new Map<string, any[]>();

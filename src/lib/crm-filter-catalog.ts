@@ -21,7 +21,8 @@ export type CRMFilterKind =
   | "product_taxonomy_number"
   | "product_taxonomy_money"
   | "campaign_behavior"
-  | "automation_behavior";
+  | "automation_behavior"
+  | "landing_page_behavior";
 
 export type CRMFilterField = {
   id: string;
@@ -60,6 +61,7 @@ export const CRM_FILTER_OPERATORS: Record<CRMFilterKind, readonly string[]> = {
   product_taxonomy_money: NUMBER_OPERATORS,
   campaign_behavior: ["sent", "not_sent", "delivered", "not_delivered", "read", "not_read", "failed", "not_failed"],
   automation_behavior: ["entered", "not_entered", "completed", "not_completed"],
+  landing_page_behavior: ["submitted", "not_submitted", "clicked", "not_clicked", "joined_group", "not_joined_group", "submitted_not_joined", "clicked_not_joined"],
 };
 
 export const CRM_STATUS_FILTER_VALUES = [
@@ -143,6 +145,7 @@ export const CRM_FILTER_CATEGORIES: CRMFilterCategory[] = [
     fields: [
       { id: "campanha_whatsapp", label: "Campanha WhatsApp", kind: "campaign_behavior", description: "Enviada, entregue, lida ou com falha para uma campanha específica." },
       { id: "automacao_whatsapp", label: "Automação WhatsApp", kind: "automation_behavior", description: "Entrou ou concluiu uma automação específica." },
+      { id: "landing_page", label: "Landing Page", kind: "landing_page_behavior", description: "Preencheu, clicou ou entrou no grupo relacionado a uma landing page específica." },
     ],
   },
   {
@@ -326,7 +329,7 @@ export function validateCRMFilterCondition(condition: unknown): string | null {
     }
     return Object.prototype.hasOwnProperty.call(RFM_SEGMENTS_CONFIG, String(value ?? "")) ? null : "Segmento RFM inválido.";
   }
-  if (field.kind === "product" || field.kind === "product_taxonomy" || field.kind === "campaign_behavior" || field.kind === "automation_behavior") {
+  if (field.kind === "product" || field.kind === "product_taxonomy" || field.kind === "campaign_behavior" || field.kind === "automation_behavior" || field.kind === "landing_page_behavior") {
     return isNonBlankString(value) ? null : `Selecione um valor para ${field.label}.`;
   }
   if (field.kind === "product_taxonomy_date") return validateTaxonomyDate(field.label, operator, value);

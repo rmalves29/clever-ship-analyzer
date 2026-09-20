@@ -294,6 +294,8 @@ async function loadCustomerAdvancedContext(
       automationCompleted.add(id);
     }
   }
+  const { loadLandingPageActivitiesByCustomer } = await import("./landing-page-funnel.server");
+  const landingPageActivities = (await loadLandingPageActivitiesByCustomer([customer])).get(customer.id) ?? [];
 
   return {
     ...baseContext,
@@ -313,6 +315,7 @@ async function loadCustomerAdvancedContext(
     whatsappCampaignFailedIds: campaignFailed,
     whatsappAutomationEnteredIds: automationEntered,
     whatsappAutomationCompletedIds: automationCompleted,
+    landingPageActivities,
   };
 }
 

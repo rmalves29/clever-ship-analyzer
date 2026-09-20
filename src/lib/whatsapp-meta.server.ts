@@ -1391,11 +1391,24 @@ export type AutomationInput = {
   requerAprovacao: boolean;
   ativo: boolean;
   origem?: string | undefined;
+  revalidateSegmentBeforeSend?: boolean | undefined;
+  recoveryLandingPageId?: string | undefined;
 };
 
 export async function upsertAutomation(input: AutomationInput) {
   const supabaseAdmin = await admin();
   const settings = await loadSettings();
+
+  let existingTriggerConfig: Record<string, unknown> = {};
+  if (input.id && (input.revalidateSegmentBeforeSend !== undefined || input.recoveryLandingPageId !== undefined)) {
+    const { data: existing } = await (supabaseAdmin.from("whatsapp_automations") as any)
+      .select("trigger_config")
+      .eq("id", input.id)
+      .maybeSingle();
+    if (existing?.trigger_config && typeof existing.trigger_config === "object") {
+      existingTriggerConfig = existing.trigger_config as Record<string, unknown>;
+    }
+  }
 
   const firstStep = input.steps[0];
   if (!firstStep) {
@@ -1448,6 +1461,19 @@ export async function upsertAutomation(input: AutomationInput) {
     requer_aprovacao: input.requerAprovacao,
     ativo: input.ativo,
     ...(!input.id || input.origem !== undefined ? { origem: input.origem ?? "crm" } : {}),
+    ...(input.revalidateSegmentBeforeSend !== undefined || input.recoveryLandingPageId !== undefined
+      ? {
+          trigger_config: {
+            ...existingTriggerConfig,
+            ...(input.revalidateSegmentBeforeSend !== undefined
+              ? { revalidateSegmentBeforeSend: input.revalidateSegmentBeforeSend }
+              : {}),
+            ...(input.recoveryLandingPageId !== undefined
+              ? { landingPageId: input.recoveryLandingPageId }
+              : {}),
+          },
+        }
+      : {}),
     updated_at: new Date().toISOString(),
   };
 

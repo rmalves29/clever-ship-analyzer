@@ -77,6 +77,7 @@ type FilterOptions = {
   collections: CollectionOption[];
   campaigns: NamedOption[];
   automations: NamedOption[];
+  landingPages: NamedOption[];
 };
 type AudiencePreview = {
   count: number;
@@ -95,6 +96,7 @@ const EMPTY_FILTER_OPTIONS: FilterOptions = {
   collections: [],
   campaigns: [],
   automations: [],
+  landingPages: [],
 };
 
 const CATEGORY_ICONS: Record<CRMFilterCategory["id"], typeof Users> = {
@@ -166,6 +168,16 @@ const OPERATORS = {
     { label: "Concluiu", value: "completed" },
     { label: "Não concluiu", value: "not_completed" },
   ],
+  landingPage: [
+    { label: "Preencheu", value: "submitted" },
+    { label: "Não preencheu", value: "not_submitted" },
+    { label: "Clicou no link", value: "clicked" },
+    { label: "Preencheu, mas não clicou", value: "not_clicked" },
+    { label: "Entrou no grupo", value: "joined_group" },
+    { label: "Não entrou no grupo", value: "not_joined_group" },
+    { label: "Preencheu e não entrou", value: "submitted_not_joined" },
+    { label: "Clicou e não entrou", value: "clicked_not_joined" },
+  ],
 } as const;
 
 function operatorsForField(field: CRMFilterField) {
@@ -177,6 +189,7 @@ function operatorsForField(field: CRMFilterField) {
   if (field.kind === "product" || field.kind === "product_sku" || field.kind === "product_taxonomy") return OPERATORS.bought;
   if (field.kind === "campaign_behavior") return OPERATORS.campaign;
   if (field.kind === "automation_behavior") return OPERATORS.automation;
+  if (field.kind === "landing_page_behavior") return OPERATORS.landingPage;
   if (["boolean", "status", "fulfillment_status", "profile"].includes(field.kind)) return OPERATORS.exact;
   return OPERATORS.string;
 }
@@ -188,6 +201,7 @@ function defaultOperatorForField(field: CRMFilterField) {
   if (["product_number", "product_money", "period_number", "period_money", "product_taxonomy_number", "product_taxonomy_money"].includes(field.kind)) return "gte";
   if (field.kind === "campaign_behavior") return "sent";
   if (field.kind === "automation_behavior") return "entered";
+  if (field.kind === "landing_page_behavior") return "submitted";
   return "eq";
 }
 
@@ -258,7 +272,7 @@ function nextValueForOperator(field: CRMFilterField, operator: string, current: 
   }
   if (operator === "between" || operator === "between_days") return { min: "", max: "" };
   if (field.kind === "rfm" && (operator === "in" || operator === "not_in")) return Array.isArray(current) ? current : [];
-  if (field.kind === "product" || field.kind === "product_taxonomy" || field.kind === "campaign_behavior" || field.kind === "automation_behavior") return typeof current === "string" ? current : "";
+  if (field.kind === "product" || field.kind === "product_taxonomy" || field.kind === "campaign_behavior" || field.kind === "automation_behavior" || field.kind === "landing_page_behavior") return typeof current === "string" ? current : "";
   if (field.kind === "product_sku") return productMetricValue(current);
   if (Array.isArray(current) || (current && typeof current === "object")) return "";
   if (field.kind === "date") return "";
@@ -516,6 +530,13 @@ export function SegmentEditor({ onCancel, onSave, initialData }: {
       <Select size="small" displayEmpty sx={{ ...compactFieldSx, minWidth: 300, flex: 1 }} value={String(condition.value || "")} onChange={(e) => setValue(e.target.value)}>
         <MenuItem value=""><em>Selecionar automação...</em></MenuItem>
         {filterOptions.automations.map((option) => <MenuItem key={option.id} value={option.id}>{option.name}</MenuItem>)}
+      </Select>
+    );
+
+    if (field.kind === "landing_page_behavior") return (
+      <Select size="small" displayEmpty sx={{ ...compactFieldSx, minWidth: 300, flex: 1 }} value={String(condition.value || "")} onChange={(e) => setValue(e.target.value)}>
+        <MenuItem value=""><em>Selecionar landing page...</em></MenuItem>
+        {filterOptions.landingPages.map((option) => <MenuItem key={option.id} value={option.id}>{option.name}</MenuItem>)}
       </Select>
     );
 

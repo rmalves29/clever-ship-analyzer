@@ -30,7 +30,7 @@ function shippingTitle(rawData: any): string | null {
 
 export async function captureAutomationEventContext(
   customerId: string,
-  options?: { orderId?: string },
+  options?: { orderId?: string; landingPageId?: string },
 ): Promise<{
   context: AutomationEventContext;
   contextKey: string;
@@ -46,7 +46,15 @@ export async function captureAutomationEventContext(
     ? orderQuery.eq("id", options.orderId)
     : orderQuery.order("processed_at", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false });
 
-  const [{ data: orderRow }, { data: checkoutRow }, { data: settingsRow }] = await Promise.all([
+  const landingPagePromise = options?.landingPageId
+    ? db
+        .from("landing_pages")
+        .select("id, nome, slug, conteudo")
+        .eq("id", options.landingPageId)
+        .maybeSingle()
+    : Promise.resolve({ data: null });
+
+  const [{ data: orderRow }, { data: checkoutRow }, { data: settingsRow }, { data: landingPageRow }] = await Promise.all([
     orderQuery.limit(1).maybeSingle(),
     db
       .from("shopify_abandoned_checkouts")
@@ -56,6 +64,7 @@ export async function captureAutomationEventContext(
       .limit(1)
       .maybeSingle(),
     db.from("store_settings").select("storefront_domain").order("created_at", { ascending: true }).limit(1).maybeSingle(),
+    landingPagePromise,
   ]);
 
   let items: NonNullable<AutomationEventContext["items"]> = [];
@@ -130,6 +139,21 @@ export async function captureAutomationEventContext(
         }
       : null,
     cashback,
+    landingPage: landingPageRow
+      ? {
+          id: String(landingPageRow.id),
+          name: String(landingPageRow.nome ?? "Landing page"),
+          slug: String(landingPageRow.slug ?? ""),
+          groupId:
+            (landingPageRow.conteudo as any)?.integracoes?.whatsappGroupId
+              ? String((landingPageRow.conteudo as any).integracoes.whatsappGroupId)
+              : null,
+          groupLink:
+            (landingPageRow.conteudo as any)?.hero?.ctaUrl
+              ? String((landingPageRow.conteudo as any).hero.ctaUrl)
+              : null,
+        }
+      : null,
   };
 
   return { context, contextKey: buildAutomationContextKey(context, customerId) };

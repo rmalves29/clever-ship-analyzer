@@ -109,6 +109,8 @@ export type LandingPageContent = {
    *  envia o telefone, pra alimentar remarketing/lookalike dessa campanha específica. */
   integracoes: {
     metaPixelId: string;
+    /** Grupo acompanhado por esta pagina. O id pertence a fe_groups no Live Launchpad. */
+    whatsappGroupId: string;
   };
 };
 
@@ -190,7 +192,7 @@ export const DEFAULT_LANDING_PAGE_CONTENT: LandingPageContent = {
     textoLegal: "Condições da oferta e regulamento completo.",
   },
   secoesVisiveis: { estatisticas: true, beneficios: true, comoFunciona: true, depoimentos: true },
-  integracoes: { metaPixelId: "" },
+  integracoes: { metaPixelId: "", whatsappGroupId: "" },
 };
 
 /** Landing pages salvas antes da última seção nova (ex.: "depoimentos") têm esse campo ausente
@@ -282,6 +284,7 @@ const contentSchema: z.ZodType<LandingPageContent> = z.object({
   }),
   integracoes: z.object({
     metaPixelId: z.string(),
+    whatsappGroupId: z.string(),
   }),
 });
 
@@ -298,6 +301,83 @@ const landingPageSchema = z.object({
    *  padrão pra essas seções. */
   conteudo: z.preprocess((val) => mergeWithDefaultContent(val as Partial<LandingPageContent> | null | undefined), contentSchema),
 });
+
+type LandingPageSegmentKind = "submitted_not_joined" | "clicked_not_joined";
+
+function landingPageSegmentDescription(landingPageId: string, kind: LandingPageSegmentKind): string {
+  return `[landing-page:${landingPageId}:${kind}] Segmento gerado automaticamente.`;
+}
+
+function landingPageSegmentRules(landingPageId: string, kind: LandingPageSegmentKind) {
+  const suffix = kind.replaceAll("_", "-");
+  return {
+    groups: [
+      {
+        id: `landing-page-${landingPageId}-${suffix}`,
+        type: "AND",
+        conditions: [
+          {
+            id: `landing-page-${landingPageId}-${suffix}-condition`,
+            category: "marketing",
+            field: "landing_page",
+            label: "Landing Page",
+            operator: kind,
+            value: landingPageId,
+          },
+        ],
+      },
+    ],
+    excludeGroups: [],
+  };
+}
+
+/** Mantem os dois segmentos pedidos pelo funil: o publico amplo (preencheu/nao entrou) e o
+ *  publico estrito que pode receber a recuperacao (clicou/nao entrou). */
+async function ensureLandingPageSegments(
+  supabaseAdmin: (typeof import("@/integrations/supabase/client.server"))["supabaseAdmin"],
+  page: { id: string; nome: string },
+): Promise<{ submittedSegmentId: string; clickedSegmentId: string }> {
+  const definitions: Array<{ kind: LandingPageSegmentKind; nome: string }> = [
+    { kind: "submitted_not_joined", nome: `LP · ${page.nome} · Preencheu e não entrou` },
+    { kind: "clicked_not_joined", nome: `LP · ${page.nome} · Clicou e não entrou` },
+  ];
+  const ids = new Map<LandingPageSegmentKind, string>();
+
+  for (const definition of definitions) {
+    const descricao = landingPageSegmentDescription(page.id, definition.kind);
+    const { data: existing, error: findError } = await supabaseAdmin
+      .from("crm_segments")
+      .select("id")
+      .eq("descricao", descricao)
+      .maybeSingle();
+    if (findError) throw new Error(`Não foi possível localizar o segmento da landing page: ${findError.message}`);
+
+    const payload = {
+      nome: definition.nome,
+      descricao,
+      regras: landingPageSegmentRules(page.id, definition.kind),
+      atualizado_em: new Date().toISOString(),
+    };
+    if (existing?.id) {
+      const { error } = await supabaseAdmin.from("crm_segments").update(payload as never).eq("id", existing.id);
+      if (error) throw new Error(`Não foi possível atualizar o segmento da landing page: ${error.message}`);
+      ids.set(definition.kind, existing.id);
+    } else {
+      const { data: created, error } = await supabaseAdmin
+        .from("crm_segments")
+        .insert({ ...payload, criado_em: new Date().toISOString() } as never)
+        .select("id")
+        .single();
+      if (error || !created) throw new Error(`Não foi possível criar o segmento da landing page: ${error?.message ?? "sem retorno"}`);
+      ids.set(definition.kind, created.id);
+    }
+  }
+
+  return {
+    submittedSegmentId: ids.get("submitted_not_joined")!,
+    clickedSegmentId: ids.get("clicked_not_joined")!,
+  };
+}
 
 export const listLandingPages = createServerFn({ method: "GET" })
   .middleware([requireAppAuth])
@@ -337,6 +417,7 @@ export const saveLandingPage = createServerFn({ method: "POST" })
         if ((error as any).code === "23505") throw new Error("Já existe uma landing page com esse link (slug).");
         throw error;
       }
+      await ensureLandingPageSegments(supabaseAdmin, { id, nome: data.nome });
       return { id };
     }
     const { data: created, error } = await (supabaseAdmin.from("landing_pages") as any)
@@ -347,7 +428,9 @@ export const saveLandingPage = createServerFn({ method: "POST" })
       if ((error as any).code === "23505") throw new Error("Já existe uma landing page com esse link (slug).");
       throw error;
     }
-    return { id: (created as { id: string }).id };
+    const createdId = (created as { id: string }).id;
+    await ensureLandingPageSegments(supabaseAdmin, { id: createdId, nome: data.nome });
+    return { id: createdId };
   });
 
 export const toggleLandingPageStatus = createServerFn({ method: "POST" })
@@ -394,7 +477,9 @@ export const duplicateLandingPage = createServerFn({ method: "POST" })
       .select("id")
       .single();
     if (insertError) throw insertError;
-    return { id: (created as { id: string }).id };
+    const createdId = (created as { id: string }).id;
+    await ensureLandingPageSegments(supabaseAdmin, { id: createdId, nome: `${source.nome} (cópia)` });
+    return { id: createdId };
   });
 
 // --- Público (sem autenticação): a página que roda nos anúncios ---
@@ -414,10 +499,86 @@ export const getPublicLandingPage = createServerFn({ method: "GET" })
     return { ...p, conteudo: mergeWithDefaultContent(p.conteudo) };
   });
 
-/** Registra o telefone digitado no formulário da landing page — vira "clique" pro relatório
- *  (dia/mês/ano) e "contato" pra cruzar depois com quem entrou no grupo do WhatsApp. */
+const visitorIdSchema = z.string().trim().min(8).max(128).regex(/^[a-zA-Z0-9_-]+$/).optional();
+
+/** PageView proprio do CRM. O Pixel continua recebendo o evento dele, mas o funil nao depende
+ *  de cookies da Meta e consegue contar visitantes unicos pelo identificador local do navegador. */
+export const trackLandingPageView = createServerFn({ method: "POST" })
+  .validator((data: unknown) => z.object({ slug: z.string().min(1), visitorId: visitorIdSchema }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: page, error: pageError } = await supabaseAdmin
+      .from("landing_pages")
+      .select("id, status")
+      .eq("slug", data.slug)
+      .maybeSingle();
+    if (pageError) throw pageError;
+    if (!page || page.status !== "publicada") return { success: false as const };
+
+    const { error } = await (supabaseAdmin.from("landing_page_events" as any) as any).insert({
+      landing_page_id: page.id,
+      event_type: "view",
+      visitor_id: data.visitorId ?? null,
+    });
+    if (error) throw error;
+    return { success: true as const };
+  });
+
+function brazilianPhoneVariants(phone: string): string[] {
+  const variants = new Set([phone]);
+  const digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("55")) {
+    const local = digits.slice(2);
+    if (local.length === 11 && local[2] === "9") variants.add(`+55${local.slice(0, 2)}${local.slice(3)}`);
+    if (local.length === 10) variants.add(`+55${local.slice(0, 2)}9${local.slice(2)}`);
+  }
+  return [...variants];
+}
+
+async function upsertLandingPageCRMContact(
+  supabaseAdmin: (typeof import("@/integrations/supabase/client.server"))["supabaseAdmin"],
+  phone: string,
+  slug: string,
+): Promise<string> {
+  const variants = brazilianPhoneVariants(phone);
+  const { data: matches, error: findError } = await supabaseAdmin
+    .from("shopify_customers")
+    .select("id, tags_custom")
+    .in("phone", variants)
+    .limit(1);
+  if (findError) throw new Error(`Não foi possível localizar o contato no CRM: ${findError.message}`);
+  const existing = matches?.[0] as { id: string; tags_custom: string[] | null } | undefined;
+  const now = new Date().toISOString();
+
+  if (existing) {
+    const tags = Array.from(new Set([...(existing.tags_custom ?? []), slug]));
+    const { error } = await supabaseAdmin
+      .from("shopify_customers")
+      .update({ tags_custom: tags, updated_at: now } as never)
+      .eq("id", existing.id);
+    if (error) throw new Error(`Não foi possível adicionar a tag da landing page ao contato: ${error.message}`);
+    return existing.id;
+  }
+
+  const customerId = `phone:${phone}`;
+  const { error } = await supabaseAdmin.from("shopify_customers").upsert(
+    {
+      id: customerId,
+      phone,
+      tags_custom: [slug],
+      created_at: now,
+      updated_at: now,
+    } as never,
+    { onConflict: "id" },
+  );
+  if (error) throw new Error(`Não foi possível criar o contato no CRM: ${error.message}`);
+  return customerId;
+}
+
+/** Captura o formulario, cria/atualiza o contato no CRM com a tag do slug e registra as etapas
+ *  formulario + clique. O mesmo telefone nao gera uma nova ficha no CRM. */
 export const submitLandingPageLead = createServerFn({ method: "POST" })
-  .validator((data: unknown) => z.object({ slug: z.string().min(1), phone: z.string().min(8) }).parse(data))
+  .validator((data: unknown) => z.object({ slug: z.string().min(1), phone: z.string().min(8), visitorId: visitorIdSchema }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { normalizeShopifyPhone } = await import("./shopify-order-phone");
@@ -426,19 +587,57 @@ export const submitLandingPageLead = createServerFn({ method: "POST" })
 
     const { data: page, error: pageError } = await supabaseAdmin
       .from("landing_pages")
-      .select("id, status")
+      .select("id, slug, status")
       .eq("slug", data.slug)
       .maybeSingle();
     if (pageError) throw pageError;
-    const p = page as { id: string; status: string } | null;
+    const p = page as { id: string; slug: string; status: string } | null;
     if (!p || p.status !== "publicada") return { success: false as const, error: "Página não encontrada." };
 
-    const { error } = await (supabaseAdmin.from("landing_page_leads") as any).insert({
+    const customerId = await upsertLandingPageCRMContact(supabaseAdmin, phone, p.slug);
+    const clickedAt = new Date().toISOString();
+    const { data: existingLeads, error: existingError } = await (supabaseAdmin.from("landing_page_leads") as any)
+      .select("id")
+      .eq("landing_page_id", p.id)
+      .in("phone", brazilianPhoneVariants(phone))
+      .order("criado_em", { ascending: true })
+      .limit(1);
+    if (existingError) throw existingError;
+
+    let leadId: string;
+    const existingLead = (existingLeads ?? [])[0] as { id: string } | undefined;
+    if (existingLead) {
+      const { error } = await (supabaseAdmin.from("landing_page_leads") as any)
+        .update({ visitor_id: data.visitorId ?? null, customer_id: customerId, clicked_at: clickedAt })
+        .eq("id", existingLead.id);
+      if (error) throw error;
+      leadId = existingLead.id;
+    } else {
+      const { data: created, error } = await (supabaseAdmin.from("landing_page_leads") as any)
+        .insert({
+          landing_page_id: p.id,
+          phone,
+          visitor_id: data.visitorId ?? null,
+          customer_id: customerId,
+          clicked_at: clickedAt,
+        })
+        .select("id")
+        .single();
+      if (error || !created) throw error ?? new Error("Contato da landing page não foi retornado.");
+      leadId = String(created.id);
+    }
+
+    const eventRows = ["form_submit", "link_click"].map((eventType) => ({
       landing_page_id: p.id,
+      event_type: eventType,
+      visitor_id: data.visitorId ?? null,
+      lead_id: leadId,
+      customer_id: customerId,
       phone,
-    });
-    if (error) throw error;
-    return { success: true as const };
+    }));
+    const { error: eventError } = await (supabaseAdmin.from("landing_page_events" as any) as any).insert(eventRows);
+    if (eventError) throw eventError;
+    return { success: true as const, leadId, customerId };
   });
 
 /** Comentários aprovados pra exibir junto com os depoimentos fixos (fake) do conteúdo. */
@@ -540,115 +739,135 @@ export const deleteLandingPageReview = createServerFn({ method: "POST" })
     return { success: true as const };
   });
 
-// --- Admin: contatos capturados + relatório de cliques ---
-
-/** Últimos 11 dígitos, sem símbolos — compara ignorando código do país/DDI ("55") e outras
- *  variações de prefixo entre o telefone salvo aqui (E.164) e o gravado pelo webhook de grupo
- *  no Live Launchpad (dígitos crus, sem "+55"). */
-function phoneMatchKey(phone: string): string {
-  return phone.replace(/\D/g, "").slice(-11);
-}
-
-async function loadGroupJoinsByPhone(): Promise<Map<string, { groupName: string; joinedAt: string }>> {
-  const { getLiveLaunchpadAdmin, MANIA_DE_MULHER_TENANT_ID } = await import("@/integrations/supabase/live-launchpad-client.server");
-  const liveLaunchpad = await getLiveLaunchpadAdmin();
-
-  const [{ data: events }, { data: groups }] = await Promise.all([
-    (liveLaunchpad.from("fe_group_events" as any) as any)
-      .select("group_id, phone, event_type, created_at")
-      .eq("tenant_id", MANIA_DE_MULHER_TENANT_ID)
-      .eq("event_type", "join")
-      .not("phone", "is", null)
-      .order("created_at", { ascending: true }),
-    (liveLaunchpad.from("fe_groups" as any) as any).select("id, group_name"),
-  ]);
-
-  const groupNameById = new Map<string, string>();
-  for (const g of (groups ?? []) as any[]) groupNameById.set(g.id, g.group_name);
-
-  const result = new Map<string, { groupName: string; joinedAt: string }>();
-  for (const e of (events ?? []) as any[]) {
-    const key = phoneMatchKey(String(e.phone ?? ""));
-    if (!key) continue;
-    // Mantém a entrada mais recente por telefone (order ascending, então sobrescreve).
-    result.set(key, { groupName: groupNameById.get(e.group_id) ?? "Grupo desconhecido", joinedAt: e.created_at });
-  }
-  return result;
-}
+// --- Admin: contatos capturados + funil ---
 
 export const listLandingPageLeads = createServerFn({ method: "GET" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => z.object({ landingPageId: z.string().uuid().optional() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    let query = supabaseAdmin
-      .from("landing_page_leads")
-      .select("id, phone, criado_em, landing_page_id, landing_pages(nome, slug)")
+    const [{ loadResolvedLandingPages, loadLandingPageGroupJoins }, { landingPagePhoneKey }] = await Promise.all([
+      import("./landing-page-funnel.server"),
+      import("./landing-page-funnel"),
+    ]);
+    let query = (supabaseAdmin.from("landing_page_leads") as any)
+      .select("id, phone, customer_id, criado_em, clicked_at, landing_page_id, landing_pages(nome, slug)")
       .order("criado_em", { ascending: false })
-      .limit(2000);
-    if (data.landingPageId) query = query.eq("landing_page_id", data.landingPageId);
-    const { data: leads, error } = await query;
-    if (error) throw error;
-
-    const joinsByPhone = await loadGroupJoinsByPhone();
-
-    return ((leads ?? []) as any[]).map((lead) => {
-      const join = joinsByPhone.get(phoneMatchKey(lead.phone));
-      return {
-        id: lead.id as string,
-        phone: lead.phone as string,
-        criadoEm: lead.criado_em as string,
-        landingPageId: lead.landing_page_id as string,
-        landingPageNome: (lead.landing_pages?.nome ?? "—") as string,
-        landingPageSlug: (lead.landing_pages?.slug ?? "") as string,
-        entrouNoGrupo: Boolean(join),
-        grupoNome: join?.groupName ?? null,
-      };
-    });
-  });
-
-export type ClicksGranularity = "day" | "month" | "year";
-
-function bucketKey(iso: string, granularity: ClicksGranularity): string {
-  const date = new Date(iso);
-  if (granularity === "year") return String(date.getFullYear());
-  if (granularity === "month") return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-  return iso.slice(0, 10);
-}
-
-export const getLandingPageClicksReport = createServerFn({ method: "GET" })
-  .middleware([requireAppAuth])
-  .validator((data: unknown) =>
-    z.object({ landingPageId: z.string().uuid().optional(), granularity: z.enum(["day", "month", "year"]) }).parse(data),
-  )
-  .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    let query = supabaseAdmin
-      .from("landing_page_leads")
-      .select("criado_em, landing_page_id, landing_pages(nome)")
-      .order("criado_em", { ascending: true })
       .limit(20000);
     if (data.landingPageId) query = query.eq("landing_page_id", data.landingPageId);
     const { data: leads, error } = await query;
     if (error) throw error;
 
-    const rows = (leads ?? []) as any[];
-    const timelineMap = new Map<string, number>();
-    const totalsByPage = new Map<string, { nome: string; total: number }>();
-    for (const row of rows) {
-      const bucket = bucketKey(row.criado_em, data.granularity);
-      timelineMap.set(bucket, (timelineMap.get(bucket) ?? 0) + 1);
-      const pageEntry = totalsByPage.get(row.landing_page_id) ?? { nome: row.landing_pages?.nome ?? "—", total: 0 };
-      pageEntry.total++;
-      totalsByPage.set(row.landing_page_id, pageEntry);
+    const pages = await loadResolvedLandingPages(data.landingPageId);
+    const joins = await loadLandingPageGroupJoins(pages);
+    const joinByPagePhone = new Map<string, (typeof joins)[number]>();
+    for (const join of joins) {
+      const key = `${join.landingPageId}|${landingPagePhoneKey(join.phone)}`;
+      const current = joinByPagePhone.get(key);
+      if (!current || join.joinedAt < current.joinedAt) joinByPagePhone.set(key, join);
     }
 
-    const timeline = Array.from(timelineMap.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([bucket, total]) => ({ bucket, total }));
-    const porLandingPage = Array.from(totalsByPage.entries())
-      .map(([landingPageId, v]) => ({ landingPageId, nome: v.nome, total: v.total }))
-      .sort((a, b) => b.total - a.total);
+    // Leads antigos podiam repetir a mesma pessoa. A tela e o funil trabalham sempre com
+    // contato unico por landing page, sem apagar o historico bruto.
+    const unique = new Map<string, any>();
+    for (const lead of (leads ?? []) as any[]) {
+      const key = `${lead.landing_page_id}|${landingPagePhoneKey(lead.phone)}`;
+      if (!unique.has(key)) unique.set(key, lead);
+    }
 
-    return { total: rows.length, timeline, porLandingPage };
+    return [...unique.values()].map((lead) => {
+      const join = joinByPagePhone.get(`${lead.landing_page_id}|${landingPagePhoneKey(lead.phone)}`);
+      return {
+        id: lead.id as string,
+        phone: lead.phone as string,
+        customerId: (lead.customer_id ?? null) as string | null,
+        criadoEm: lead.criado_em as string,
+        clicouEm: (lead.clicked_at ?? lead.criado_em) as string,
+        landingPageId: lead.landing_page_id as string,
+        landingPageNome: (lead.landing_pages?.nome ?? "—") as string,
+        landingPageSlug: (lead.landing_pages?.slug ?? "") as string,
+        entrouNoGrupo: Boolean(join),
+        grupoNome: join?.groupName ?? null,
+        entrouEm: join?.joinedAt ?? null,
+      };
+    });
+  });
+
+export type LandingPageReportPeriod = "7d" | "30d" | "90d" | "all";
+
+function landingPageReportStart(period: LandingPageReportPeriod): string | undefined {
+  if (period === "all") return undefined;
+  const days = period === "7d" ? 7 : period === "30d" ? 30 : 90;
+  return new Date(Date.now() - days * 86_400_000).toISOString();
+}
+
+export const getLandingPageFunnelReport = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) =>
+    z.object({ landingPageId: z.string().uuid().optional(), period: z.enum(["7d", "30d", "90d", "all"]).default("30d") }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const [{ computeLandingPageFunnel }, { loadResolvedLandingPages, loadLandingPageGroupJoins }] = await Promise.all([
+      import("./landing-page-funnel"),
+      import("./landing-page-funnel.server"),
+    ]);
+    const pages = await loadResolvedLandingPages(data.landingPageId);
+    const since = landingPageReportStart(data.period);
+    const events: any[] = [];
+    for (let page = 0; ; page++) {
+      let query = (supabaseAdmin.from("landing_page_events" as any) as any)
+        .select("id, landing_page_id, event_type, visitor_id, phone, criado_em")
+        .order("criado_em", { ascending: true })
+        .range(page * 1000, page * 1000 + 999);
+      if (data.landingPageId) query = query.eq("landing_page_id", data.landingPageId);
+      if (since) query = query.gte("criado_em", since);
+      const { data: rows, error } = await query;
+      if (error) throw error;
+      events.push(...(rows ?? []));
+      if ((rows ?? []).length < 1000) break;
+    }
+
+    const joins = await loadLandingPageGroupJoins(pages, since ? { since } : undefined);
+    const report = computeLandingPageFunnel(
+      pages.map((page) => ({ ...page })),
+      events.map((event) => ({
+        id: String(event.id),
+        landingPageId: String(event.landing_page_id),
+        eventType: event.event_type,
+        visitorId: event.visitor_id ?? null,
+        phone: event.phone ?? null,
+        createdAt: event.criado_em,
+      })),
+      joins,
+    );
+    return {
+      ...report,
+      period: data.period,
+      pagesWithoutGroup: pages.filter((page) => !page.groupId).map((page) => ({ id: page.id, nome: page.nome })),
+    };
+  });
+
+/** Garante os segmentos e devolve o publico correto pre-selecionado para abrir o editor da
+ *  automacao. A mensagem/template continua sendo escolhida pelo usuario entre os aprovados. */
+export const getLandingPageRecoverySetup = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) => z.object({ landingPageId: z.string().uuid() }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { loadResolvedLandingPages } = await import("./landing-page-funnel.server");
+    const { data: page, error } = await supabaseAdmin.from("landing_pages").select("id, nome, slug").eq("id", data.landingPageId).maybeSingle();
+    if (error) throw error;
+    if (!page) throw new Error("Landing page não encontrada.");
+    const segments = await ensureLandingPageSegments(supabaseAdmin, page);
+    const resolved = (await loadResolvedLandingPages(page.id))[0];
+    return {
+      landingPageId: page.id,
+      nome: page.nome,
+      slug: page.slug,
+      groupId: resolved?.groupId ?? null,
+      groupName: resolved?.groupName ?? null,
+      groupInviteLink: resolved?.groupInviteLink ?? null,
+      ...segments,
+    };
   });

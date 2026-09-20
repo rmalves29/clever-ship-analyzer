@@ -56,6 +56,15 @@ const buyer: CRMAdvancedCustomerContext = {
   whatsappCampaignFailedIds: new Set(["camp-2"]),
   whatsappAutomationEnteredIds: new Set(["auto-1"]),
   whatsappAutomationCompletedIds: new Set(["auto-1"]),
+  landingPageActivities: [{
+    landingPageId: "lp-1",
+    landingPageName: "Grupo VIP",
+    slug: "grupo-vip",
+    groupId: "group-1",
+    submittedAt: "2026-08-24T09:00:00-03:00",
+    clickedAt: "2026-08-24T09:01:00-03:00",
+    joinedAt: null,
+  }],
   abandonedCheckout: true,
   hadAbandonedCheckout: true,
   abandonedCheckoutRecovered: false,
@@ -89,6 +98,7 @@ const lead: CRMAdvancedCustomerContext = {
   whatsappCampaignFailedIds: new Set(),
   whatsappAutomationEnteredIds: new Set(),
   whatsappAutomationCompletedIds: new Set(),
+  landingPageActivities: [],
   abandonedCheckout: false,
   hadAbandonedCheckout: false,
   abandonedCheckoutRecovered: false,
@@ -122,6 +132,7 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
   { field: "cashback_dias_para_expirar", operator: "lte", value: 3 },
   { field: "cashback_data_geracao", operator: "on", value: "2026-08-23" },
   { field: "janela_24h_aberta", operator: "eq", value: "sim" },
+  { field: "landing_page", operator: "clicked_not_joined", value: "lp-1" },
   { field: "produto", operator: "bought", value: "p-brinco" },
   { field: "categoria_produto", operator: "bought", value: "Brincos" },
   { field: "categoria_periodo", operator: "last_days", value: { taxonomyValue: "Brincos", days: 7 } },
@@ -143,8 +154,8 @@ const cases: Array<{ field: string; operator: string; value: unknown; context?: 
 ];
 
 describe("catálogo confiável de filtros do CRM", () => {
-  it("expõe somente os 43 filtros implementados no motor", () => {
-    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(43);
+  it("expõe somente os 44 filtros implementados no motor", () => {
+    expect(SUPPORTED_SEGMENT_FIELD_IDS).toHaveLength(44);
     expect(new Set(SUPPORTED_SEGMENT_FIELD_IDS)).toEqual(new Set(cases.map((item) => item.field)));
   });
 

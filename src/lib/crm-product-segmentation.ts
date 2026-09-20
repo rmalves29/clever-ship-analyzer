@@ -27,6 +27,15 @@ export type CRMAdvancedCustomerContext = CRMCustomerContext & {
   whatsappCampaignFailedIds: Set<string>;
   whatsappAutomationEnteredIds: Set<string>;
   whatsappAutomationCompletedIds: Set<string>;
+  landingPageActivities: Array<{
+    landingPageId: string;
+    landingPageName: string;
+    slug: string;
+    groupId: string | null;
+    submittedAt: string;
+    clickedAt: string | null;
+    joinedAt: string | null;
+  }>;
 };
 
 type RawProductMetricValue = {
@@ -288,6 +297,22 @@ function automationBehaviorMatches(context: CRMAdvancedCustomerContext, operator
   return false;
 }
 
+function landingPageBehaviorMatches(context: CRMAdvancedCustomerContext, operator: string, landingPageId: string): boolean {
+  const activity = context.landingPageActivities.find((item) => item.landingPageId === landingPageId);
+  const submitted = Boolean(activity?.submittedAt);
+  const clicked = Boolean(activity?.clickedAt);
+  const joined = Boolean(activity?.joinedAt);
+  if (operator === "submitted") return submitted;
+  if (operator === "not_submitted") return !submitted;
+  if (operator === "clicked") return clicked;
+  if (operator === "not_clicked") return submitted && !clicked;
+  if (operator === "joined_group") return joined;
+  if (operator === "not_joined_group") return submitted && !joined;
+  if (operator === "submitted_not_joined") return submitted && !joined;
+  if (operator === "clicked_not_joined") return clicked && !joined;
+  return false;
+}
+
 export function matchesAdvancedSegmentCondition(
   context: CRMAdvancedCustomerContext,
   condition: SegmentCondition,
@@ -357,6 +382,11 @@ export function matchesAdvancedSegmentCondition(
   if (field === "automacao_whatsapp") {
     const automationId = String(condition.value ?? "").trim();
     return automationId ? automationBehaviorMatches(context, operator, automationId) : false;
+  }
+
+  if (field === "landing_page") {
+    const landingPageId = String(condition.value ?? "").trim();
+    return landingPageId ? landingPageBehaviorMatches(context, operator, landingPageId) : false;
   }
 
   const value = parseProductMetricValue(condition.value);

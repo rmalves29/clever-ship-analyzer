@@ -462,6 +462,8 @@ const automationSchema = z.object({
   requerAprovacao: z.boolean().default(true),
   ativo: z.boolean().default(true),
   origem: z.string().optional(),
+  revalidateSegmentBeforeSend: z.boolean().optional(),
+  recoveryLandingPageId: z.string().uuid().optional(),
 });
 
 /** Cria ou atualiza uma automação (régua) — usada tanto na página do WhatsApp quanto no CRM. */

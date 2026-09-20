@@ -53,6 +53,7 @@ const context: CRMAdvancedCustomerContext = {
   whatsappCampaignFailedIds: new Set(["camp-2"]),
   whatsappAutomationEnteredIds: new Set(["auto-1", "auto-2"]),
   whatsappAutomationCompletedIds: new Set(["auto-1"]),
+  landingPageActivities: [],
   abandonedCheckout: false,
   hadAbandonedCheckout: false,
   abandonedCheckoutRecovered: false,

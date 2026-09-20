@@ -2,9 +2,10 @@ import { createFileRoute, createLink, useNavigate } from "@tanstack/react-router
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { BarChart3, CheckCircle2, Copy, ExternalLink, Eye, FileText, Files, MessageSquare, Plus, Star, Trash2, Users, XCircle } from "lucide-react";
+import { BarChart3, CheckCircle2, Copy, ExternalLink, Eye, FileText, Files, MessageSquare, Plus, Send, Star, Trash2, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { BarChart } from "@mui/x-charts/BarChart";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
@@ -23,6 +24,7 @@ import Tabs from "@mui/material/Tabs";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { z } from "zod";
+import { AutomationDialog, type AutomationSeed } from "@/components/crm/AutomationDialog";
 import {
   listLandingPages,
   saveLandingPage,
@@ -30,12 +32,13 @@ import {
   deleteLandingPage,
   duplicateLandingPage,
   listLandingPageLeads,
-  getLandingPageClicksReport,
+  getLandingPageFunnelReport,
+  getLandingPageRecoverySetup,
   listLandingPageReviews,
   moderateLandingPageReview,
   deleteLandingPageReview,
   DEFAULT_LANDING_PAGE_CONTENT,
-  type ClicksGranularity,
+  type LandingPageReportPeriod,
 } from "@/lib/landing-pages.functions";
 
 const VALID_TABS = ["paginas", "contatos", "comentarios", "relatorios"] as const;
@@ -396,51 +399,126 @@ function ReviewsTab() {
 }
 
 function ReportsTab() {
-  const runReport = useServerFn(getLandingPageClicksReport);
+  const runReport = useServerFn(getLandingPageFunnelReport);
+  const runRecoverySetup = useServerFn(getLandingPageRecoverySetup);
   const runPages = useServerFn(listLandingPages);
   const [landingPageId, setLandingPageId] = useState<string>("todas");
-  const [granularity, setGranularity] = useState<ClicksGranularity>("day");
+  const [period, setPeriod] = useState<LandingPageReportPeriod>("30d");
+  const [automationSeed, setAutomationSeed] = useState<AutomationSeed | null>(null);
+  const [automationOpen, setAutomationOpen] = useState(false);
 
   const { data: pages } = useQuery({ queryKey: ["landing-pages"], queryFn: () => runPages() });
   const { data: report, isLoading } = useQuery({
-    queryKey: ["landing-page-clicks-report", landingPageId, granularity],
-    queryFn: () => runReport({ data: { landingPageId: landingPageId === "todas" ? undefined : landingPageId, granularity } }),
+    queryKey: ["landing-page-funnel-report", landingPageId, period],
+    queryFn: () => runReport({ data: { landingPageId: landingPageId === "todas" ? undefined : landingPageId, period } }),
   });
+  const { data: recoverySetup, isLoading: isLoadingRecovery } = useQuery({
+    queryKey: ["landing-page-recovery-setup", landingPageId],
+    queryFn: () => runRecoverySetup({ data: { landingPageId } }),
+    enabled: landingPageId !== "todas",
+  });
+
+  const createRecoveryAutomation = () => {
+    if (!recoverySetup?.groupId) {
+      toast.error("Vincule um grupo do WhatsApp a esta landing page antes de criar a automação.");
+      return;
+    }
+    setAutomationSeed({
+      nome: `Recuperação · ${recoverySetup.nome}`,
+      descricao: "Convida novamente quem clicou no link da landing page, mas ainda não entrou no grupo.",
+      segmentType: "custom",
+      segmentId: recoverySetup.clickedSegmentId,
+      steps: [
+        {
+          id: `lp_recovery_${Date.now()}`,
+          type: "send",
+          waitMinutes: 60,
+          waitValue: 60,
+          waitUnit: "minutes",
+          templateName: "",
+          templateLanguage: "pt_BR",
+          bodyParams: [],
+          nextStepId: null,
+        },
+      ],
+      requerAprovacao: false,
+      ativo: true,
+      revalidateSegmentBeforeSend: true,
+      recoveryLandingPageId: recoverySetup.landingPageId,
+    });
+    setAutomationOpen(true);
+  };
+
+  const percentage = (value: number) => `${value.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+  const metricCards = report
+    ? [
+        { label: "Acessaram", value: report.totals.visits, detail: "pessoas únicas" },
+        { label: "Preencheram", value: report.totals.submissions, detail: "contatos capturados" },
+        { label: "Clicaram", value: report.totals.clicks, detail: percentage(report.totals.accessToClickRate) + " dos acessos" },
+        { label: "Entraram no grupo", value: report.totals.joins, detail: percentage(report.totals.clickToJoinRate) + " dos cliques" },
+      ]
+    : [];
 
   return (
     <Box>
-      <Stack direction="row" spacing={2} sx={{ mb: 3, flexWrap: "wrap" }}>
+      <Stack direction="row" spacing={2} sx={{ mb: 3, flexWrap: "wrap", alignItems: "center" }}>
         <TextField select size="small" label="Landing page" value={landingPageId} onChange={(e) => setLandingPageId(e.target.value)} sx={{ minWidth: 240 }}>
           <MenuItem value="todas">Todas</MenuItem>
           {(pages ?? []).map((p: any) => (
             <MenuItem key={p.id} value={p.id}>{p.nome}</MenuItem>
           ))}
         </TextField>
-        <TextField select size="small" label="Agrupar por" value={granularity} onChange={(e) => setGranularity(e.target.value as ClicksGranularity)} sx={{ minWidth: 160 }}>
-          <MenuItem value="day">Dia</MenuItem>
-          <MenuItem value="month">Mês</MenuItem>
-          <MenuItem value="year">Ano</MenuItem>
+        <TextField select size="small" label="Período" value={period} onChange={(e) => setPeriod(e.target.value as LandingPageReportPeriod)} sx={{ minWidth: 160 }}>
+          <MenuItem value="7d">Últimos 7 dias</MenuItem>
+          <MenuItem value="30d">Últimos 30 dias</MenuItem>
+          <MenuItem value="90d">Últimos 90 dias</MenuItem>
+          <MenuItem value="all">Todo o período</MenuItem>
         </TextField>
+        {landingPageId !== "todas" && (
+          <Button variant="contained" startIcon={<Send size={16} />} disabled={isLoadingRecovery} onClick={createRecoveryAutomation}>
+            Criar automação de recuperação
+          </Button>
+        )}
       </Stack>
+
+      {landingPageId !== "todas" && recoverySetup && !recoverySetup.groupId && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          Esta landing page ainda não tem um grupo do WhatsApp vinculado. Selecione o grupo no editor para medir entradas e ativar a recuperação.
+        </Alert>
+      )}
 
       {isLoading ? (
         <Typography variant="body2" color="text.secondary">Carregando...</Typography>
-      ) : !report || report.total === 0 ? (
+      ) : !report || (report.totals.visits === 0 && report.totals.clicks === 0) ? (
         <Box sx={{ border: "1px dashed", borderColor: "divider", borderRadius: 3, p: 6, textAlign: "center" }}>
           <BarChart3 size={40} style={{ margin: "0 auto", opacity: 0.3 }} />
-          <Typography sx={{ fontWeight: 600, mt: 2 }}>Nenhum clique registrado ainda.</Typography>
+          <Typography sx={{ fontWeight: 600, mt: 2 }}>Nenhuma atividade registrada neste período.</Typography>
         </Box>
       ) : (
         <Stack spacing={3}>
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(4, 1fr)" } }}>
+            {metricCards.map((metric) => (
+              <Box key={metric.label} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+                <Typography variant="caption" color="text.secondary">{metric.label}</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 700, my: 0.5 }}>{metric.value}</Typography>
+                <Typography variant="caption" color="text.secondary">{metric.detail}</Typography>
+              </Box>
+            ))}
+          </Box>
+
           <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
             <Typography variant="body2" sx={{ fontWeight: 600, mb: 2 }}>
-              Cliques no CTA ({report.total} no total)
+              Funil de conversão
             </Typography>
             <BarChart
               height={280}
-              xAxis={[{ data: report.timeline.map((t) => t.bucket), scaleType: "band" }]}
-              series={[{ data: report.timeline.map((t) => t.total) }]}
+              layout="horizontal"
+              yAxis={[{ data: ["Acessaram", "Clicaram", "Entraram no grupo"], scaleType: "band" }]}
+              series={[{ label: "Pessoas", data: [report.totals.visits, report.totals.clicks, report.totals.joins] }]}
             />
+            <Typography variant="caption" color="text.secondary">
+              Conversão total: {percentage(report.totals.accessToJoinRate)} · {report.totals.abandoned} pessoa(s) clicaram e ainda não entraram.
+            </Typography>
           </Box>
 
           <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
@@ -450,14 +528,24 @@ function ReportsTab() {
                 <TableHead>
                   <TableRow>
                     <TableCell>Landing page</TableCell>
+                    <TableCell align="right">Acessos</TableCell>
+                    <TableCell align="right">Cadastros</TableCell>
                     <TableCell align="right">Cliques</TableCell>
+                    <TableCell align="right">Entradas</TableCell>
+                    <TableCell align="right">Não entraram</TableCell>
+                    <TableCell align="right">Clique → grupo</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {report.porLandingPage.map((row) => (
                     <TableRow key={row.landingPageId} hover>
                       <TableCell>{row.nome}</TableCell>
-                      <TableCell align="right">{row.total}</TableCell>
+                      <TableCell align="right">{row.visits}</TableCell>
+                      <TableCell align="right">{row.submissions}</TableCell>
+                      <TableCell align="right">{row.clicks}</TableCell>
+                      <TableCell align="right">{row.joins}</TableCell>
+                      <TableCell align="right">{row.abandoned}</TableCell>
+                      <TableCell align="right">{percentage(row.clickToJoinRate)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -466,6 +554,12 @@ function ReportsTab() {
           </Box>
         </Stack>
       )}
+      <AutomationDialog
+        seed={automationSeed}
+        open={automationOpen}
+        onOpenChange={setAutomationOpen}
+        onSaved={() => toast.success("Automação de recuperação salva.")}
+      />
     </Box>
   );
 }

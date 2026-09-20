@@ -1,4 +1,9 @@
 import { loadUazapiCreds, listGroupsRaw, getGroupInfo, toGroupJid, fromGroupJid } from "./envio-uazapi.server";
+import {
+  currentWhatsappGroupSnapshot,
+  whatsappParticipantIsAdmin,
+  whatsappParticipantPhone,
+} from "./envio-group-sync";
 
 /** Banco do live-launchpad-79 (OrderZaps) — dono real dos grupos/campanhas, escopado ao tenant
  *  Mania de Mulher. Ver "Fluxo de Envio vs SendFlow" no vault pro histórico dessa migração. */
@@ -89,30 +94,28 @@ export async function syncEnvioGroupsFromWhatsapp(): Promise<{ synced: number; t
 
   const enriched = await parallelLimit(raw, 10, async (g: any) => {
     const groupJid: string = g.JID ?? g.jid ?? g.groupjid ?? g.id;
-    const name: string = g.Name ?? g.name ?? "Grupo sem nome";
-    let participantCount: number = g.ParticipantsCount ?? g.participant_count ?? g.size ?? 0;
+    let snapshot = currentWhatsappGroupSnapshot(g, null);
     let isAdmin = false;
-    let inviteLink: string | null = null;
 
     try {
       const info = await getGroupInfo(creds, groupJid, { getInviteLink: true });
-      const participants: any[] = info?.Participants ?? info?.participants ?? [];
-      if (participants.length) participantCount = participants.length;
+      snapshot = currentWhatsappGroupSnapshot(g, info);
       if (connectedPhone) {
-        const me = participants.find((p) => phonesMatch(p.PhoneNumber ?? p.phoneNumber ?? "", connectedPhone));
-        isAdmin = Boolean(me?.IsAdmin || me?.IsSuperAdmin || me?.isAdmin || me?.isSuperAdmin);
+        const me = snapshot.participants.find((participant) =>
+          phonesMatch(whatsappParticipantPhone(participant), connectedPhone),
+        );
+        isAdmin = Boolean(me && whatsappParticipantIsAdmin(me));
       }
-      inviteLink = info?.inviteLink ?? info?.invite_link ?? null;
     } catch (error) {
       console.error(`syncEnvioGroupsFromWhatsapp: falha ao buscar info de ${groupJid}`, error);
     }
 
     return {
       group_jid: fromGroupJid(groupJid),
-      group_name: name,
-      participant_count: participantCount,
+      group_name: snapshot.name,
+      participant_count: snapshot.participantCount,
       is_admin: isAdmin,
-      invite_link: inviteLink,
+      invite_link: snapshot.inviteLink,
     };
   });
 

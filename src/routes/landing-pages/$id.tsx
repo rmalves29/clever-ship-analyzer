@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createFileRoute, createLink } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, ChevronDown, Copy, ExternalLink, ImageUp, Plus, Save, Star, Trash2, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Copy, ExternalLink, ImageUp, Plus, RefreshCw, Save, Star, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
@@ -25,7 +25,7 @@ import {
   type ImageAspect,
   type LandingPageContent,
 } from "@/lib/landing-pages.functions";
-import { listEnvioGroups } from "@/lib/envio-groups.functions";
+import { listEnvioGroups, syncEnvioGroupsFromWhatsapp } from "@/lib/envio-groups.functions";
 
 const IMAGE_ASPECT_LABELS: Record<ImageAspect, string> = {
   quadrada: "Quadrada (1:1)",
@@ -334,6 +334,7 @@ function LandingPageEditor() {
   const runGet = useServerFn(getLandingPage);
   const runSave = useServerFn(saveLandingPage);
   const runGroups = useServerFn(listEnvioGroups);
+  const runSyncGroups = useServerFn(syncEnvioGroupsFromWhatsapp);
 
   const [nome, setNome] = useState("");
   const [slug, setSlug] = useState("");
@@ -345,9 +346,17 @@ function LandingPageEditor() {
     queryKey: ["landing-page", id],
     queryFn: () => runGet({ data: { id } }),
   });
-  const { data: whatsappGroups } = useQuery({
+  const { data: whatsappGroups, refetch: refetchWhatsappGroups } = useQuery({
     queryKey: ["envio-groups", "landing-page-editor"],
     queryFn: () => runGroups(),
+  });
+  const syncGroupsMut = useMutation({
+    mutationFn: () => runSyncGroups(),
+    onSuccess: async (result) => {
+      await refetchWhatsappGroups();
+      toast.success(`${result.synced} grupo(s) atualizado(s) com os nomes atuais do WhatsApp.`);
+    },
+    onError: (error: Error) => toast.error(error.message),
   });
 
   useEffect(() => {
@@ -551,6 +560,20 @@ function LandingPageEditor() {
         </Section>
 
         <Section title="Integrações" subtitle="Rastreamento para campanhas de remarketing">
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center", justifyContent: "space-between" }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              Grupo usado nesta landing page
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<RefreshCw size={15} className={syncGroupsMut.isPending ? "animate-spin" : undefined} />}
+              disabled={syncGroupsMut.isPending}
+              onClick={() => syncGroupsMut.mutate()}
+            >
+              {syncGroupsMut.isPending ? "Atualizando..." : "Atualizar nomes do WhatsApp"}
+            </Button>
+          </Stack>
           <TextField
             size="small"
             select

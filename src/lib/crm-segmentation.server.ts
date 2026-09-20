@@ -526,7 +526,7 @@ export async function loadCRMProductFilterOptionsBundle(): Promise<{
   collections: CRMCollectionOption[];
 }> {
   const orders = await loadOrders();
-  const items = await loadValidOrderItems(orders);
+  const items = await loadValidOrderItems(ordersValue);
   const products = buildProductOptions(items);
   const taxonomy = await getShopifyProductTaxonomyByIds(productIdsFromItems(items));
   const productTypes = new Set<string>();
@@ -561,6 +561,9 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
 
   if (customers.status === "rejected") throw customers.reason;
   if (orders.status === "rejected") throw orders.reason;
+
+  const customersValue = customers.value;
+  const ordersValue = orders.value;
 
   const warnOptional = (name: string, result: PromiseSettledResult<unknown>) => {
     if (result.status === "rejected") {
@@ -608,11 +611,11 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
   let landingPageActivitiesByCustomer = new Map<string, any[]>();
   try {
     const { loadLandingPageActivitiesByCustomer } = await import("./landing-page-funnel.server");
-    landingPageActivitiesByCustomer = await loadLandingPageActivitiesByCustomer(customers);
+    landingPageActivitiesByCustomer = await loadLandingPageActivitiesByCustomer(customersValue) as typeof landingPageActivitiesByCustomer;
   } catch (error) {
     console.warn("CRM: landing-page enrichment unavailable; continuing without it.", error);
   }
-  for (const customer of customers) {
+  for (const customer of customersValue) {
     if (customer.phone && popupVisitByPhone.has(customer.phone)) {
       customer.last_visit_at = popupVisitByPhone.get(customer.phone);
     }
@@ -624,7 +627,7 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
     }
   }
   const [shippedResult, orderItemsResult] = await Promise.allSettled([
-    loadShippedTodayValidOrderIds(orders, now),
+    loadShippedTodayValidOrderIds(ordersValue, now),
     loadValidOrderItems(orders),
   ]);
   warnOptional("shipped-today", shippedResult);
@@ -634,21 +637,21 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
   const orderItems =
     orderItemsResult.status === "fulfilled" ? orderItemsResult.value : [];
   const baseContexts = buildCustomerContexts({
-    customers,
-    orders,
+    customers: customersValue,
+    orders: ordersValue,
     orderItems,
     abandonedCheckoutAtByCustomer,
     shippedTodayValidOrderIds,
   });
-  const spendIndex = buildProductSpendIndex(orders, orderItems);
-  const purchaseHistoryIndex = buildValidPurchaseHistoryIndex(orders);
+  const spendIndex = buildProductSpendIndex(ordersValue, orderItems);
+  const purchaseHistoryIndex = buildValidPurchaseHistoryIndex(ordersValue);
   let taxonomy = new Map<string, ShopifyProductTaxonomy>();
   try {
     taxonomy = await getShopifyProductTaxonomyByIds(productIdsFromItems(orderItems));
   } catch (error) {
     console.warn("CRM: product taxonomy enrichment unavailable; continuing without it.", error);
   }
-  const taxonomyIndexes = buildTaxonomyIndexes(orders, orderItems, taxonomy);
+  const taxonomyIndexes = buildTaxonomyIndexes(ordersValue, orderItems, taxonomy);
 
   return baseContexts.map((context) => {
     const purchasedProductTypes = new Set<string>();

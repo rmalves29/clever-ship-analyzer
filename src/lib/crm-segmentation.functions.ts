@@ -250,11 +250,20 @@ export const getCustomersList = createServerFn({ method: "POST" })
     // Caminho comum do CRM: paginação real no banco. Segmentação avançada/listas continuam
     // usando o contexto analítico completo porque suas regras dependem de histórico e índices.
     if (!data.segmentId && !data.listId) {
-      return getPaginatedBaseCustomers(data);
+      return getPaginatedBaseCustomers({
+        search: data.search,
+        limit: data.limit,
+        offset: data.offset,
+      });
     }
 
     if (data.listId && !data.segmentId) {
-      return getPaginatedListCustomers({ ...data, listId: data.listId });
+      return getPaginatedListCustomers({
+        listId: data.listId,
+        search: data.search,
+        limit: data.limit,
+        offset: data.offset,
+      });
     }
 
     const { loadCRMSegmentationContext } = await import("./crm-segmentation.server");

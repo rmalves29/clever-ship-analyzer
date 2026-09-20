@@ -15,7 +15,8 @@ import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { previewWhatsappAudience } from "@/lib/whatsapp-audience-preview.functions";
-import { createAndSendCampaign, listMetaTemplates, getSegmentsList } from "@/lib/whatsapp-meta.functions";
+import { createAndSendCampaign, listMetaTemplates } from "@/lib/whatsapp-meta.functions";
+import { getSegmentOptions } from "@/lib/crm-segmentation.functions";
 import { getStaticLists } from "@/lib/crm-static-lists.functions";
 import { extractTemplateBodyTokens } from "@/lib/whatsapp-template-body-tokens";
 import { normalizeWhatsappAudienceSelection } from "@/lib/whatsapp-audience-selection";
@@ -71,7 +72,7 @@ function NovaCampanha() {
   const [scheduledAt, setScheduledAt] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const { data: segments } = useQuery({ queryKey: ["crm-segments"], queryFn: () => getSegmentsList() });
+  const { data: segments } = useQuery({ queryKey: ["crm-segments"], queryFn: () => getSegmentOptions() });
   const { data: staticLists } = useQuery({ queryKey: ["crm-static-lists"], queryFn: () => getStaticLists() });
   const { data: templatesResult } = useQuery({ queryKey: ["whatsapp-templates"], queryFn: () => listMetaTemplates() });
 

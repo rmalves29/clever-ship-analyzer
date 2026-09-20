@@ -33,7 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { SEGMENT_TYPES } from "@/lib/crm-mock";
-import { getSegmentsList } from "@/lib/crm-segmentation.functions";
+import { getSegmentOptions } from "@/lib/crm-segmentation.functions";
 import { getStaticLists } from "@/lib/crm-static-lists.functions";
 import { listMetaTemplates, saveAutomation, sendAutomationTestMessage } from "@/lib/whatsapp-meta.functions";
 import { previewWhatsappAudience } from "@/lib/whatsapp-audience-preview.functions";
@@ -403,7 +403,7 @@ export function AutomationDialog({
 
   const { data: segmentsResult } = useQuery({
     queryKey: ["crm-segments-list"],
-    queryFn: () => getSegmentsList(),
+    queryFn: () => getSegmentOptions(),
     enabled: open,
   });
   const { data: staticListsResult } = useQuery({

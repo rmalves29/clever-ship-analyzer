@@ -1,6 +1,8 @@
-import { loadUazapiCreds, listGroupsRaw, getGroupInfo, toGroupJid, fromGroupJid } from "./envio-uazapi.server";
+import { loadUazapiCreds, listGroupsRaw, getGroupInfo } from "./envio-uazapi.server";
 import {
+  canonicalWhatsappGroupJid,
   currentWhatsappGroupSnapshot,
+  whatsappGroupSourceJid,
   whatsappParticipantIsAdmin,
   whatsappParticipantPhone,
 } from "./envio-group-sync";
@@ -81,24 +83,54 @@ async function parallelLimit<T, R>(items: T[], limit: number, fn: (item: T) => P
   return results;
 }
 
-export async function syncEnvioGroupsFromWhatsapp(): Promise<{ synced: number; total_found: number; admin_count: number }> {
+export type EnvioGroupSyncResult = {
+  synced: number;
+  total_found: number;
+  admin_count: number;
+  names_updated: number;
+  duplicate_records_updated: number;
+  detail_failures: number;
+  failed: number;
+};
+
+export async function syncEnvioGroupsFromWhatsapp(): Promise<EnvioGroupSyncResult> {
   const creds = await loadUazapiCreds();
   if (!creds) throw new Error("UazAPI não configurada");
 
-  const raw = await listGroupsRaw(creds);
+  // A UazAPI mantém cache da lista e dos detalhes. Forçar ambos é essencial para refletir
+  // renomeações feitas diretamente no WhatsApp.
+  const raw = await listGroupsRaw(creds, { force: true });
   const supabaseAdmin = await admin();
   const tenant = await tenantId();
   const localSupabaseAdmin = await localAdmin();
   const { data: settingsRow } = await localSupabaseAdmin.from("store_settings" as any).select("uazapi_connected_phone").limit(1).maybeSingle();
   const connectedPhone = (settingsRow as any)?.uazapi_connected_phone as string | null;
 
+  const { data: existingData, error: existingError } = await (supabaseAdmin
+    .from("fe_groups" as any) as any)
+    .select("id, group_jid, group_name, invite_link, is_admin")
+    .eq("tenant_id", tenant);
+  if (existingError) throw new Error(`Falha ao carregar os grupos salvos: ${existingError.message}`);
+
+  const existingGroups = (existingData ?? []) as Array<Pick<EnvioGroup, "id" | "group_jid" | "group_name" | "invite_link" | "is_admin">>;
+  const existingByJid = new Map<string, typeof existingGroups>();
+  for (const group of existingGroups) {
+    const key = canonicalWhatsappGroupJid(group.group_jid);
+    if (!key) continue;
+    existingByJid.set(key, [...(existingByJid.get(key) ?? []), group]);
+  }
+
   const enriched = await parallelLimit(raw, 10, async (g: any) => {
-    const groupJid: string = g.JID ?? g.jid ?? g.groupjid ?? g.id;
+    const groupJid = whatsappGroupSourceJid(g);
+    if (!groupJid) return null;
     let snapshot = currentWhatsappGroupSnapshot(g, null);
     let isAdmin = false;
+    let detailFailed = false;
 
     try {
-      const info = await getGroupInfo(creds, groupJid, { getInviteLink: true });
+      // Buscar primeiro sem link: pedir convite pode falhar para grupos onde a instância não é
+      // administradora, mas o nome atual ainda deve ser sincronizado.
+      const info = await getGroupInfo(creds, groupJid, { force: true });
       snapshot = currentWhatsappGroupSnapshot(g, info);
       if (connectedPhone) {
         const me = snapshot.participants.find((participant) =>
@@ -106,54 +138,91 @@ export async function syncEnvioGroupsFromWhatsapp(): Promise<{ synced: number; t
         );
         isAdmin = Boolean(me && whatsappParticipantIsAdmin(me));
       }
+
+      const wasAlreadyAdmin = (existingByJid.get(groupJid) ?? []).some((group) => group.is_admin);
+      if (isAdmin || wasAlreadyAdmin) {
+        try {
+          const infoWithInvite = await getGroupInfo(creds, groupJid, { getInviteLink: true, force: true });
+          snapshot = currentWhatsappGroupSnapshot(snapshot, infoWithInvite);
+        } catch (error) {
+          console.error(`syncEnvioGroupsFromWhatsapp: falha ao buscar convite de ${groupJid}`, error);
+        }
+      }
     } catch (error) {
+      detailFailed = true;
       console.error(`syncEnvioGroupsFromWhatsapp: falha ao buscar info de ${groupJid}`, error);
     }
 
     return {
-      group_jid: fromGroupJid(groupJid),
+      group_jid: groupJid,
       group_name: snapshot.name,
       participant_count: snapshot.participantCount,
       is_admin: isAdmin,
       invite_link: snapshot.inviteLink,
+      detail_failed: detailFailed,
     };
   });
 
+  const validGroups = enriched.filter((row): row is NonNullable<typeof row> => Boolean(row));
   let adminCount = 0;
-  for (const row of enriched) {
-    if (row.is_admin) adminCount++;
-    const { data: existing } = await (supabaseAdmin
-      .from("fe_groups" as any) as any)
-      .select("invite_link")
-      .eq("tenant_id", tenant)
-      .eq("group_jid", row.group_jid)
-      .maybeSingle();
+  let synced = 0;
+  let namesUpdated = 0;
+  let duplicateRecordsUpdated = 0;
+  let failed = raw.length - validGroups.length;
 
-    await (supabaseAdmin
-      .from("fe_groups" as any) as any)
-      .upsert(
-        {
-          tenant_id: tenant,
-          group_jid: row.group_jid,
-          group_name: row.group_name,
-          participant_count: row.participant_count,
-          is_admin: row.is_admin,
-          // Preserva o invite_link já salvo se a busca fresca não trouxe um novo (não sobrescreve
-          // um link bom com uma falha de lookup).
-          invite_link: row.invite_link ?? (existing as any)?.invite_link ?? null,
-          updated_at: new Date().toISOString(),
-        } as never,
-        { onConflict: "tenant_id,group_jid" },
-      );
+  for (const row of validGroups) {
+    if (row.is_admin) adminCount++;
+    const matches = existingByJid.get(row.group_jid) ?? [];
+    const targets = matches.length > 0 ? matches : [null];
+    let rowSucceeded = false;
+
+    if (matches.length > 1) duplicateRecordsUpdated += matches.length - 1;
+    for (const existing of targets) {
+      const payload = {
+        tenant_id: tenant,
+        group_jid: existing?.group_jid ?? row.group_jid,
+        group_name: row.group_name,
+        participant_count: row.participant_count,
+        is_admin: connectedPhone ? row.is_admin : (existing?.is_admin ?? row.is_admin),
+        // Preserva o invite_link já salvo se a busca fresca não trouxe um novo.
+        invite_link: row.invite_link ?? existing?.invite_link ?? null,
+        updated_at: new Date().toISOString(),
+      };
+      const query = existing
+        ? (supabaseAdmin.from("fe_groups" as any) as any).update(payload as never).eq("tenant_id", tenant).eq("id", existing.id)
+        : (supabaseAdmin.from("fe_groups" as any) as any).insert(payload as never);
+      const { error } = await query;
+      if (error) {
+        failed++;
+        console.error(`syncEnvioGroupsFromWhatsapp: falha ao salvar ${row.group_jid}`, error);
+      } else {
+        rowSucceeded = true;
+        if (existing && existing.group_name !== row.group_name) namesUpdated++;
+      }
+    }
+    if (rowSucceeded) synced++;
   }
 
-  return { synced: enriched.length, total_found: raw.length, admin_count: adminCount };
+  if (validGroups.length > 0 && synced === 0) {
+    throw new Error("O WhatsApp respondeu, mas nenhum grupo pôde ser salvo. Verifique a conexão com o Live Launchpad.");
+  }
+
+  return {
+    synced,
+    total_found: raw.length,
+    admin_count: adminCount,
+    names_updated: namesUpdated,
+    duplicate_records_updated: duplicateRecordsUpdated,
+    detail_failures: validGroups.filter((row) => row.detail_failed).length,
+    failed,
+  };
 }
 
 export async function addEnvioGroupManual(input: { groupJid: string; groupName: string; inviteLink?: string | undefined }): Promise<EnvioGroup> {
   const supabaseAdmin = await admin();
   const tenant = await tenantId();
-  const normalizedJid = input.groupJid.endsWith("-group") ? input.groupJid : fromGroupJid(toGroupJid(input.groupJid));
+  const normalizedJid = canonicalWhatsappGroupJid(input.groupJid);
+  if (!normalizedJid) throw new Error("JID do grupo inválido");
   const { data, error } = await (supabaseAdmin
     .from("fe_groups" as any) as any)
     .insert({ tenant_id: tenant, group_jid: normalizedJid, group_name: input.groupName, invite_link: input.inviteLink || null } as never)

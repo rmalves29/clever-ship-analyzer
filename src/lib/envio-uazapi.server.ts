@@ -20,7 +20,8 @@ export async function loadUazapiCreds(): Promise<UazapiCreds | null> {
   return { url: row.uazapi_url, token: row.uazapi_token, adminToken: row.uazapi_admin_token ?? null };
 }
 
-/** `envio_groups.group_jid` guarda o formato "<id>-group"; a UazAPI espera "<id>@g.us". */
+/** A tabela local legada `envio_groups` pode guardar "<id>-group"; a UazAPI espera "<id>@g.us".
+ * As tabelas `fe_groups` do Live Launchpad usam diretamente o formato oficial `@g.us`. */
 export function toGroupJid(groupId: string): string {
   if (groupId.endsWith("@g.us")) return groupId;
   if (groupId.endsWith("-group")) return groupId.replace(/-group$/, "@g.us");
@@ -97,15 +98,24 @@ export async function setWebhook(creds: UazapiCreds, url: string): Promise<void>
   });
 }
 
-export async function listGroupsRaw(creds: UazapiCreds): Promise<any[]> {
-  const data = await uazapiFetch(creds, "/group/list", { method: "GET", timeoutMs: 30_000 });
+export async function listGroupsRaw(creds: UazapiCreds, opts?: { force?: boolean }): Promise<any[]> {
+  const path = opts?.force ? "/group/list?force=true" : "/group/list";
+  const data = await uazapiFetch(creds, path, { method: "GET", timeoutMs: 30_000 });
   return Array.isArray(data) ? data : (data?.groups ?? data?.data ?? []);
 }
 
-export async function getGroupInfo(creds: UazapiCreds, groupJid: string, opts?: { getInviteLink?: boolean }): Promise<any> {
+export async function getGroupInfo(
+  creds: UazapiCreds,
+  groupJid: string,
+  opts?: { getInviteLink?: boolean; force?: boolean },
+): Promise<any> {
   return uazapiFetch(creds, "/group/info", {
     method: "POST",
-    body: { groupjid: groupJid, ...(opts?.getInviteLink ? { getInviteLink: true } : {}) },
+    body: {
+      groupjid: groupJid,
+      ...(opts?.getInviteLink ? { getInviteLink: true } : {}),
+      ...(opts?.force ? { force: true } : {}),
+    },
     timeoutMs: 30_000,
   });
 }

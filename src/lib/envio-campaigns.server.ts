@@ -1,4 +1,5 @@
-import { loadUazapiCreds, createGroup, applyGroupSettings, getGroupInfo, toGroupJid, fromGroupJid } from "./envio-uazapi.server";
+import { loadUazapiCreds, createGroup, applyGroupSettings, getGroupInfo } from "./envio-uazapi.server";
+import { canonicalWhatsappGroupJid } from "./envio-group-sync";
 
 /** Banco do live-launchpad-79 (OrderZaps) — dono real dos grupos/campanhas, escopado ao tenant
  *  Mania de Mulher. Ver "Fluxo de Envio vs SendFlow" no vault pro histórico dessa migração. */
@@ -259,7 +260,7 @@ export async function spawnGroupForCampaign(campaignId: string): Promise<{ skipp
     .from("fe_groups" as any) as any)
     .insert({
       tenant_id: tenant,
-      group_jid: fromGroupJid(groupJid),
+      group_jid: canonicalWhatsappGroupJid(groupJid),
       group_name: groupName,
       invite_link: inviteLink ?? null,
       participant_count: seedNumbers.length,

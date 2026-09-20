@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, createLink } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -26,6 +26,7 @@ import {
   type LandingPageContent,
 } from "@/lib/landing-pages.functions";
 import { listEnvioGroups, syncEnvioGroupsFromWhatsapp } from "@/lib/envio-groups.functions";
+import { dedupeWhatsappGroupsForSelection } from "@/lib/envio-group-sync";
 
 const IMAGE_ASPECT_LABELS: Record<ImageAspect, string> = {
   quadrada: "Quadrada (1:1)",
@@ -354,10 +355,23 @@ function LandingPageEditor() {
     mutationFn: () => runSyncGroups(),
     onSuccess: async (result) => {
       await refetchWhatsappGroups();
-      toast.success(`${result.synced} grupo(s) atualizado(s) com os nomes atuais do WhatsApp.`);
+      const details = [
+        `${result.synced} grupo(s) sincronizado(s)`,
+        `${result.names_updated} nome(s) alterado(s)`,
+        result.duplicate_records_updated > 0 ? `${result.duplicate_records_updated} duplicado(s) antigo(s) atualizado(s)` : "",
+      ].filter(Boolean).join("; ");
+      if (result.detail_failures > 0 || result.failed > 0) {
+        toast.warning(`${details}. ${result.detail_failures} consulta(s) de detalhes e ${result.failed} gravação(ões) falharam.`);
+      } else {
+        toast.success(`${details}.`);
+      }
     },
     onError: (error: Error) => toast.error(error.message),
   });
+  const selectableWhatsappGroups = useMemo(
+    () => dedupeWhatsappGroupsForSelection(whatsappGroups ?? [], content.integracoes.whatsappGroupId),
+    [whatsappGroups, content.integracoes.whatsappGroupId],
+  );
 
   useEffect(() => {
     if (page && !loaded) {
@@ -582,7 +596,7 @@ function LandingPageEditor() {
             value={content.integracoes.whatsappGroupId}
             onChange={(e) => {
               const whatsappGroupId = e.target.value;
-              const selected = (whatsappGroups ?? []).find((group) => group.id === whatsappGroupId);
+              const selected = selectableWhatsappGroups.find((group) => group.id === whatsappGroupId);
               setContent((prev) => ({
                 ...prev,
                 integracoes: { ...prev.integracoes, whatsappGroupId },
@@ -596,7 +610,7 @@ function LandingPageEditor() {
             }}
           >
             <MenuItem value=""><em>Selecione o grupo...</em></MenuItem>
-            {(whatsappGroups ?? []).filter((group) => group.is_active).map((group) => (
+            {selectableWhatsappGroups.filter((group) => group.is_active).map((group) => (
               <MenuItem key={group.id} value={group.id}>
                 {group.group_name} · {group.participant_count} participante(s)
               </MenuItem>

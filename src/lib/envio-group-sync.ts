@@ -7,6 +7,56 @@ export type WhatsappGroupSnapshot = {
   inviteLink: string | null;
 };
 
+export type WhatsappGroupListItem = {
+  id: string;
+  group_jid: string;
+};
+
+/** O Live Launchpad usa o JID oficial do WhatsApp (`@g.us`). Algumas rotinas antigas deste
+ * projeto salvaram o mesmo identificador como `-group`, criando registros duplicados. */
+export function canonicalWhatsappGroupJid(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const base = raw
+    .replace(/@g\.us$/i, "")
+    .replace(/-group$/i, "");
+  return base ? `${base}@g.us` : "";
+}
+
+export function whatsappGroupSourceJid(value: unknown): string {
+  const row = record(value);
+  if (!row) return "";
+  return canonicalWhatsappGroupJid(
+    row["JID"] ??
+      row["id"] ??
+      row["jid"] ??
+      row["remoteJid"] ??
+      row["groupJid"] ??
+      row["groupjid"],
+  );
+}
+
+/** Esconde duplicados antigos no seletor, mas mantém a linha já escolhida por uma landing page
+ * para não invalidar configurações existentes. Fora isso, prefere o JID oficial `@g.us`. */
+export function dedupeWhatsappGroupsForSelection<T extends WhatsappGroupListItem>(
+  groups: T[],
+  selectedId?: string | null,
+): T[] {
+  const byJid = new Map<string, T>();
+  for (const group of groups) {
+    const key = canonicalWhatsappGroupJid(group.group_jid) || group.group_jid;
+    const current = byJid.get(key);
+    if (
+      !current ||
+      group.id === selectedId ||
+      (current.id !== selectedId && /@g\.us$/i.test(group.group_jid) && !/@g\.us$/i.test(current.group_jid))
+    ) {
+      byJid.set(key, group);
+    }
+  }
+  return [...byJid.values()];
+}
+
 function record(value: unknown): UnknownRecord | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as UnknownRecord)
@@ -73,8 +123,8 @@ export function currentWhatsappGroupSnapshot(listRow: unknown, detailPayload: un
   const participants = firstParticipants(detailRows) ?? firstParticipants(listRows) ?? [];
   const detailedParticipants = firstParticipants(detailRows);
   const fallbackCount =
-    firstNumber(detailRows, ["ParticipantsCount", "participantsCount", "participant_count", "size"]) ??
-    firstNumber(listRows, ["ParticipantsCount", "participantsCount", "participant_count", "size"]) ??
+    firstNumber(detailRows, ["ParticipantCount", "ParticipantsCount", "participantsCount", "participant_count", "participantsSize", "size"]) ??
+    firstNumber(listRows, ["ParticipantCount", "ParticipantsCount", "participantsCount", "participant_count", "participantsSize", "size"]) ??
     0;
 
   return {

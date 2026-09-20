@@ -84,7 +84,7 @@ async function createRecommendedSegmentsInDatabase() {
 }
 
 async function getPaginatedBaseCustomers(data: {
-  search?: string;
+  search: string | undefined;
   limit: number;
   offset: number;
 }) {
@@ -157,7 +157,7 @@ async function getPaginatedBaseCustomers(data: {
 
 async function getPaginatedListCustomers(data: {
   listId: string;
-  search?: string;
+  search: string | undefined;
   limit: number;
   offset: number;
 }) {

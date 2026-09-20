@@ -203,7 +203,7 @@ function CRMPage() {
     enabled: tab === "segmentos",
   });
 
-  const { data: segmentMemberCounts } = useQuery({
+  const { data: segmentMemberCounts, refetch: refetchSegmentMemberCounts } = useQuery({
     queryKey: ["crm-segment-member-counts"],
     queryFn: () => fetchSegmentMemberCounts(),
     enabled: tab === "segmentos" && Boolean(segmentRows),
@@ -314,6 +314,7 @@ function CRMPage() {
       await runDeleteSegment({ data: { id } });
       toast.success("Segmento excluído.");
       refetchSegments();
+      refetchSegmentMemberCounts();
     } catch (err: any) {
       toast.error("Erro ao excluir: " + err.message);
     }
@@ -396,6 +397,7 @@ function CRMPage() {
               setShowEditor(false);
               setEditingSegment(null);
               refetchSegments();
+      refetchSegmentMemberCounts();
             }}
           />
         </Box>
@@ -766,6 +768,7 @@ function CRMPage() {
                           }
                           toast.success("Segmentos sugeridos criados com sucesso!");
                           refetchSegments();
+      refetchSegmentMemberCounts();
                         } catch (err: any) {
                           toast.error("Erro ao criar segmentos: " + err.message);
                         }

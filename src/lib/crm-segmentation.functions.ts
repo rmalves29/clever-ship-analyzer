@@ -303,27 +303,37 @@ export const getSegmentsList = createServerFn({ method: "GET" })
   .middleware([requireAppAuth])
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { loadCRMSegmentationContext } = await import("./crm-segmentation.server");
-    const { data: segments, error } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from("crm_segments")
       .select("*")
       .order("criado_em", { ascending: false });
     if (error) throw error;
+    // A listagem dos segmentos não calcula audiência. Isso deixa a navegação instantânea;
+    // a contagem é carregada separadamente por getSegmentMemberCounts.
+    return (data ?? []).map((segment) => ({ ...segment, memberCount: undefined }));
+  });
 
-    // O carregamento dos segmentos é separado da contagem. Assim a tela consegue
-    // renderizar imediatamente mesmo que a audiência analítica seja pesada.
-    const segmentRows = (segments ?? []) as Array<Record<string, unknown>>;
-    if (segmentRows.length === 0) return [];
+export const getSegmentMemberCounts = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth])
+  .handler(async () => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { loadCRMSegmentationContext } = await import("./crm-segmentation.server");
+    const { data: segments, error } = await supabaseAdmin
+      .from("crm_segments")
+      .select("id, regras");
+    if (error) throw error;
 
     try {
       const contexts = await loadCRMSegmentationContext();
-      return segmentRows.map((segment) => ({
-        ...segment,
-        memberCount: contexts.filter((context) => matchesAdvancedSegmentRules(context, segment.regras as SegmentRules)).length,
+      return (segments ?? []).map((segment) => ({
+        id: String(segment.id),
+        memberCount: contexts.filter((context) =>
+          matchesAdvancedSegmentRules(context, segment.regras as SegmentRules),
+        ).length,
       }));
     } catch (error) {
-      console.warn("CRM: memberCount indisponível; retornando segmentos sem contagem.", error);
-      return segmentRows.map((segment) => ({ ...segment, memberCount: null }));
+      console.warn("CRM: contagens de audiência indisponíveis.", error);
+      return [];
     }
   });
 

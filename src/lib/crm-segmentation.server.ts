@@ -526,7 +526,7 @@ export async function loadCRMProductFilterOptionsBundle(): Promise<{
   collections: CRMCollectionOption[];
 }> {
   const orders = await loadOrders();
-  const items = await loadValidOrderItems(ordersValue);
+  const items = await loadValidOrderItems(orders);
   const products = buildProductOptions(items);
   const taxonomy = await getShopifyProductTaxonomyByIds(productIdsFromItems(items));
   const productTypes = new Set<string>();
@@ -628,7 +628,7 @@ export async function loadCRMSegmentationContext(now = new Date()): Promise<CRMA
   }
   const [shippedResult, orderItemsResult] = await Promise.allSettled([
     loadShippedTodayValidOrderIds(ordersValue, now),
-    loadValidOrderItems(orders),
+    loadValidOrderItems(ordersValue),
   ]);
   warnOptional("shipped-today", shippedResult);
   warnOptional("order-items", orderItemsResult);

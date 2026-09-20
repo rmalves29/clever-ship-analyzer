@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Trash2, RefreshCw, Plus, ExternalLink } from "lucide-react";
 import Box from "@mui/material/Box";
+import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Dialog from "@mui/material/Dialog";
@@ -24,6 +25,16 @@ import {
   deleteEnvioGroup,
 } from "@/lib/envio-groups.functions";
 
+type GroupSyncResult = {
+  synced: number;
+  total_found: number;
+  admin_count: number;
+  names_updated: number;
+  duplicate_records_updated: number;
+  detail_failures: number;
+  failed: number;
+};
+
 export function GroupsManager() {
   const qc = useQueryClient();
   const list = useServerFn(listEnvioGroups);
@@ -32,7 +43,10 @@ export function GroupsManager() {
   const update = useServerFn(updateEnvioGroup);
   const del = useServerFn(deleteEnvioGroup);
 
-  const { data: groups, isLoading } = useQuery({ queryKey: ["envio-groups"], queryFn: () => list() });
+  const { data: groups, isLoading } = useQuery({
+    queryKey: ["envio-groups"],
+    queryFn: () => list(),
+  });
 
   const [search, setSearch] = useState("");
   const [adminOnly, setAdminOnly] = useState(true);
@@ -41,20 +55,32 @@ export function GroupsManager() {
   const [newJid, setNewJid] = useState("");
   const [newName, setNewName] = useState("");
   const [newInvite, setNewInvite] = useState("");
+  const [lastSync, setLastSync] = useState<GroupSyncResult | null>(null);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["envio-groups"] });
 
   const syncMut = useMutation({
     mutationFn: () => sync(),
     onSuccess: (r) => {
-      toast.success(`Sincronizado: ${r.synced} grupo(s), ${r.admin_count} como admin.`);
+      const result = r as GroupSyncResult;
+      setLastSync(result);
+      const hasWarnings = result.detail_failures > 0 || result.failed > 0;
+      const message = `WhatsApp: ${result.total_found} encontrado(s); ${result.synced} salvo(s); ${result.names_updated} nome(s) alterado(s).`;
+      if (hasWarnings) {
+        toast.warning(
+          `${message} ${result.detail_failures} detalhe(s) falharam e ${result.failed} gravação(ões) falharam.`,
+        );
+      } else {
+        toast.success(message);
+      }
       invalidate();
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const addMut = useMutation({
-    mutationFn: () => add({ data: { groupJid: newJid, groupName: newName, inviteLink: newInvite || undefined } }),
+    mutationFn: () =>
+      add({ data: { groupJid: newJid, groupName: newName, inviteLink: newInvite || undefined } }),
     onSuccess: () => {
       toast.success("Grupo adicionado.");
       setAddOpen(false);
@@ -67,7 +93,8 @@ export function GroupsManager() {
   });
 
   const updateMut = useMutation({
-    mutationFn: (input: { id: string; is_entry_open?: boolean; is_active?: boolean }) => update({ data: input }),
+    mutationFn: (input: { id: string; is_entry_open?: boolean; is_active?: boolean }) =>
+      update({ data: input }),
     onSuccess: invalidate,
     onError: (e: Error) => toast.error(e.message),
   });
@@ -96,13 +123,27 @@ export function GroupsManager() {
   return (
     <Stack spacing={2} sx={{ py: 2 }}>
       <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", alignItems: "center" }}>
-        <TextField size="small" placeholder="Buscar grupo…" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ maxWidth: 260 }} />
+        <TextField
+          size="small"
+          placeholder="Buscar grupo…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ maxWidth: 260 }}
+        />
         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-          <Switch size="small" checked={adminOnly} onChange={(e) => setAdminOnly(e.target.checked)} />
+          <Switch
+            size="small"
+            checked={adminOnly}
+            onChange={(e) => setAdminOnly(e.target.checked)}
+          />
           <Typography variant="body2">Só onde sou admin</Typography>
         </Stack>
         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-          <Switch size="small" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
+          <Switch
+            size="small"
+            checked={showInactive}
+            onChange={(e) => setShowInactive(e.target.checked)}
+          />
           <Typography variant="body2">Mostrar inativos</Typography>
         </Stack>
         <Stack direction="row" spacing={1} sx={{ ml: "auto" }}>
@@ -111,7 +152,9 @@ export function GroupsManager() {
           </Button>
           <Button
             variant="contained"
-            startIcon={<RefreshCw size={16} className={syncMut.isPending ? "animate-spin" : undefined} />}
+            startIcon={
+              <RefreshCw size={16} className={syncMut.isPending ? "animate-spin" : undefined} />
+            }
             onClick={() => syncMut.mutate()}
             disabled={syncMut.isPending}
           >
@@ -119,6 +162,21 @@ export function GroupsManager() {
           </Button>
         </Stack>
       </Stack>
+
+      {lastSync && (
+        <Alert
+          severity={lastSync.detail_failures > 0 || lastSync.failed > 0 ? "warning" : "success"}
+        >
+          <strong>Última verificação:</strong> {lastSync.total_found} grupo(s) retornado(s) pela
+          UazAPI, {lastSync.synced} salvo(s), {lastSync.names_updated} nome(s) atualizado(s) e{" "}
+          {lastSync.admin_count} identificado(s) como admin.
+          {lastSync.duplicate_records_updated > 0 &&
+            ` ${lastSync.duplicate_records_updated} registro(s) duplicado(s) também foram atualizado(s).`}
+          {lastSync.detail_failures > 0 &&
+            ` Não foi possível consultar os detalhes de ${lastSync.detail_failures} grupo(s); o nome pode ter vindo da listagem antiga.`}
+          {lastSync.failed > 0 && ` ${lastSync.failed} operação(ões) de gravação falharam.`}
+        </Alert>
+      )}
 
       <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
         {filtered.length === 0 && (
@@ -131,15 +189,40 @@ export function GroupsManager() {
             key={g.id}
             direction="row"
             spacing={2}
-            sx={{ flexWrap: "wrap", alignItems: "center", p: 2, borderTop: i > 0 ? "1px solid" : "none", borderColor: "divider" }}
+            sx={{
+              flexWrap: "wrap",
+              alignItems: "center",
+              p: 2,
+              borderTop: i > 0 ? "1px solid" : "none",
+              borderColor: "divider",
+            }}
           >
             <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography sx={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.group_name}</Typography>
+              <Typography
+                sx={{
+                  fontWeight: 500,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {g.group_name}
+              </Typography>
               <Stack direction="row" spacing={1} sx={{ alignItems: "center", mt: 0.5 }}>
-                <Chip size="small" variant="outlined" label={`${g.participant_count}/${g.max_participants || 1024}`} />
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={`${g.participant_count}/${g.max_participants || 1024}`}
+                />
                 {g.is_admin && <Chip size="small" color="primary" label="Admin" />}
                 {g.invite_link ? (
-                  <Link href={g.invite_link} target="_blank" rel="noreferrer" underline="hover" sx={{ display: "flex", alignItems: "center", gap: 0.5, fontSize: 12 }}>
+                  <Link
+                    href={g.invite_link}
+                    target="_blank"
+                    rel="noreferrer"
+                    underline="hover"
+                    sx={{ display: "flex", alignItems: "center", gap: 0.5, fontSize: 12 }}
+                  >
                     <ExternalLink size={12} /> Link
                   </Link>
                 ) : (
@@ -151,11 +234,19 @@ export function GroupsManager() {
             </Box>
             <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
               <Typography variant="caption">Aberto</Typography>
-              <Switch size="small" checked={g.is_entry_open} onChange={(e) => updateMut.mutate({ id: g.id, is_entry_open: e.target.checked })} />
+              <Switch
+                size="small"
+                checked={g.is_entry_open}
+                onChange={(e) => updateMut.mutate({ id: g.id, is_entry_open: e.target.checked })}
+              />
             </Stack>
             <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
               <Typography variant="caption">Ativo</Typography>
-              <Switch size="small" checked={g.is_active} onChange={(e) => updateMut.mutate({ id: g.id, is_active: e.target.checked })} />
+              <Switch
+                size="small"
+                checked={g.is_active}
+                onChange={(e) => updateMut.mutate({ id: g.id, is_active: e.target.checked })}
+              />
             </Stack>
             <IconButton
               size="small"
@@ -173,8 +264,21 @@ export function GroupsManager() {
         <DialogTitle>Adicionar grupo manualmente</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
-            <TextField fullWidth size="small" label="JID do grupo" value={newJid} onChange={(e) => setNewJid(e.target.value)} placeholder="120363xxxxxxx-group" />
-            <TextField fullWidth size="small" label="Nome" value={newName} onChange={(e) => setNewName(e.target.value)} />
+            <TextField
+              fullWidth
+              size="small"
+              label="JID do grupo"
+              value={newJid}
+              onChange={(e) => setNewJid(e.target.value)}
+              placeholder="120363xxxxxxx-group"
+            />
+            <TextField
+              fullWidth
+              size="small"
+              label="Nome"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+            />
             <TextField
               fullWidth
               size="small"
@@ -186,7 +290,11 @@ export function GroupsManager() {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button variant="contained" onClick={() => addMut.mutate()} disabled={addMut.isPending || !newJid || !newName}>
+          <Button
+            variant="contained"
+            onClick={() => addMut.mutate()}
+            disabled={addMut.isPending || !newJid || !newName}
+          >
             Adicionar
           </Button>
         </DialogActions>

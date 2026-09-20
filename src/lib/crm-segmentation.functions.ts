@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAppAuth } from "./app-auth";
 import { validateSegmentRulesPayload } from "./crm-filter-catalog";
-import { buildPurchaseMetricsIndex, customerMatchesSearch, type SegmentRules } from "./crm-segmentation-shared";
+import { buildPurchaseMetricsIndex, customerMatchesSearch, type PurchaseMetrics, type SegmentRules } from "./crm-segmentation-shared";
 import { matchesAdvancedSegmentRules } from "./crm-product-segmentation";
 import { CRM_SEGMENT_TEMPLATES, buildPersistedRulesFromTemplate } from "./crm-segment-templates";
 
@@ -92,7 +92,7 @@ async function getPaginatedBaseCustomers(data: {
 
   const customerRows = (customers ?? []) as any[];
   const customerIds = customerRows.map((customer) => String(customer.id));
-  const metricsByCustomer = new Map<string, ReturnType<typeof buildPurchaseMetricsIndex> extends Map<string, infer T> ? T : never>();
+  const metricsByCustomer = new Map<string, PurchaseMetrics>();
 
   if (customerIds.length > 0) {
     const { data: orders, error: ordersError } = await supabaseAdmin

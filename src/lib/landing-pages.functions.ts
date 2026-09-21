@@ -759,7 +759,14 @@ export const listLandingPageLeads = createServerFn({ method: "GET" })
     if (error) throw error;
 
     const pages = await loadResolvedLandingPages(data.landingPageId);
-    const joins = await loadLandingPageGroupJoins(pages);
+    const leadPhones = Array.from(
+      new Set(
+        ((leads ?? []) as any[])
+          .map((lead) => String(lead.phone ?? "").trim())
+          .filter(Boolean),
+      ),
+    );
+    const joins = await loadLandingPageGroupJoins(pages, { phones: leadPhones });
     const joinByPagePhone = new Map<string, (typeof joins)[number]>();
     for (const join of joins) {
       const key = `${join.landingPageId}|${landingPagePhoneKey(join.phone)}`;

@@ -878,5 +878,14 @@ export async function applyMetaStatusUpdate(status: {
     patch["error_message"] = [e.code, e.title ?? e.message].filter(Boolean).join(" — ");
   }
 
-  await supabaseAdmin.from(RECIPIENTS_TABLE).update(patch as never).eq("id", row.id);
+  const { error: updateError } = await supabaseAdmin.from(RECIPIENTS_TABLE).update(patch as never).eq("id", row.id);
+  if (updateError) {
+    throw new Error(`Erro ao atualizar status da mensagem WhatsApp: ${updateError.message}`);
+  }
+
+  // O worker atualiza a campanha logo após processar a fila, mas os eventos
+  // delivered/read/failed chegam depois, diretamente pelo webhook da Meta.
+  // Recalcula aqui para que o painel reflita o estado recebido sem esperar
+  // outro ciclo do worker.
+  await refreshCampaignStatus(row.campaign_id);
 }

@@ -415,12 +415,6 @@ function ReportsTab() {
     staleTime: 30_000,
     gcTime: 5 * 60_000,
   });
-  const { data: recoverySetup, isLoading: isLoadingRecovery } = useQuery({
-    queryKey: ["landing-page-recovery-setup", landingPageId],
-    queryFn: () => runRecoverySetup({ data: { landingPageId } }),
-    enabled: false,
-  });
-
   const createRecoveryAutomation = async () => {
     if (landingPageId === "todas") return;
     const { data: setup } = await queryClient.fetchQuery({

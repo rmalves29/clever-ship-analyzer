@@ -34,7 +34,7 @@ as $$
     where event_type = 'link_click' and nullif(regexp_replace(coalesce(phone, ''), '\D', '', 'g'), '') is not null
   ),
   page_groups as (
-    select p.id as landing_page_id, nullif(p.conteudo->'integracoes'->>'whatsappGroupId', '')::uuid as group_id
+    select p.id as landing_page_id, nullif(p.conteudo->'integracoes'->>'whatsappGroupId', '') as group_id
     from public.landing_pages p
     where (p_landing_page_id is null or p.id = p_landing_page_id)
       and nullif(p.conteudo->'integracoes'->>'whatsappGroupId', '') is not null
@@ -45,7 +45,7 @@ as $$
     join page_groups pg on pg.landing_page_id = c.landing_page_id
     where exists (
       select 1 from public.fe_group_events g
-      where g.group_id = pg.group_id and g.event_type = 'join' and g.phone is not null
+      where g.group_id::text = pg.group_id and g.event_type = 'join' and g.phone is not null
         and right(regexp_replace(g.phone, '\D', '', 'g'), 11) = c.phone_key
         and (p_since is null or g.created_at >= p_since)
     )

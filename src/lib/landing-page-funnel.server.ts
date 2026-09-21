@@ -71,8 +71,24 @@ export async function loadResolvedLandingPages(landingPageId?: string): Promise<
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   let query = supabaseAdmin.from("landing_pages").select("id, nome, slug, conteudo").order("criado_em", { ascending: false });
   if (landingPageId) query = query.eq("id", landingPageId);
-  const [{ data: pageRows, error }, groups] = await Promise.all([query, loadLiveGroups()]);
+  const { data: pageRows, error } = await query;
   if (error) throw new Error(`Erro ao carregar landing pages: ${error.message}`);
+
+  const typedPages = (pageRows ?? []) as Array<{ id: string; nome: string; slug: string; conteudo: unknown }>;
+  const explicitIds = [...new Set(typedPages.map((page) => contentGroupId(page.conteudo)).filter((id): id is string => Boolean(id)))];
+  const needsInviteResolution = typedPages.some((page) => !contentGroupId(page.conteudo) && contentCtaLinks(page.conteudo).length > 0);
+  const groups = needsInviteResolution || explicitIds.length === 0
+    ? await loadLiveGroups()
+    : await (async () => {
+        const { getLiveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
+        const live = await getLiveLaunchpadAdmin();
+        const { data, error } = await (live.from("fe_groups" as any) as any)
+          .select("id, group_name, invite_link")
+          .eq("tenant_id", (await import("@/integrations/supabase/live-launchpad-client.server")).MANIA_DE_MULHER_TENANT_ID)
+          .in("id", explicitIds);
+        if (error) throw new Error(`Erro ao carregar grupos do WhatsApp: ${error.message}`);
+        return (data ?? []) as LiveGroup[];
+      })();
 
   const groupById = new Map(groups.map((group) => [group.id, group]));
   const groupByInvite = new Map(
@@ -81,7 +97,7 @@ export async function loadResolvedLandingPages(landingPageId?: string): Promise<
       .filter(([link]) => Boolean(link)),
   );
 
-  return ((pageRows ?? []) as Array<{ id: string; nome: string; slug: string; conteudo: unknown }>).map((page) => {
+  return typedPages.map((page) => {
     const explicitId = contentGroupId(page.conteudo);
     const inferred = contentCtaLinks(page.conteudo).map((link) => groupByInvite.get(link)).find(Boolean);
     const group = (explicitId ? groupById.get(explicitId) : null) ?? inferred ?? null;

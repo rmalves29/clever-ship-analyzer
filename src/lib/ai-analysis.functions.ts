@@ -220,6 +220,19 @@ export const generateAiAnalysis = createServerFn({ method: "POST" })
       return { success: false as const, error: `Análise gerada, mas falhou ao salvar: ${saveError.message}` };
     }
 
+    try {
+      const { createAIAnalysisEvent } = await import("./events.server");
+      await createAIAnalysisEvent({
+        module: "CRM",
+        title: "Análise geral",
+        analysis,
+        generatedAt,
+        period: period,
+      });
+    } catch (eventErr) {
+      console.error("[CRM] Falha ao registrar análise de IA no calendário:", eventErr);
+    }
+
     return { success: true as const, analysis, generatedAt };
   });
 

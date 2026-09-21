@@ -594,7 +594,9 @@ export const submitLandingPageLead = createServerFn({ method: "POST" })
     const p = page as { id: string; slug: string; status: string } | null;
     if (!p || p.status !== "publicada") return { success: false as const, error: "Página não encontrada." };
 
-    const customerId = await upsertLandingPageCRMContact(supabaseAdmin, phone, p.slug);
+    // Registra primeiro a captura da landing page. A ficha no CRM é uma consequência desse
+    // evento, não a fonte de verdade. Assim, uma falha no CRM não deixa um contato "órfão"
+    // apenas com a tag e invisível em Contatos/Relatórios.
     const clickedAt = new Date().toISOString();
     const { data: existingLeads, error: existingError } = await (supabaseAdmin.from("landing_page_leads") as any)
       .select("id")
@@ -608,7 +610,7 @@ export const submitLandingPageLead = createServerFn({ method: "POST" })
     const existingLead = (existingLeads ?? [])[0] as { id: string } | undefined;
     if (existingLead) {
       const { error } = await (supabaseAdmin.from("landing_page_leads") as any)
-        .update({ visitor_id: data.visitorId ?? null, customer_id: customerId, clicked_at: clickedAt })
+        .update({ visitor_id: data.visitorId ?? null, clicked_at: clickedAt })
         .eq("id", existingLead.id);
       if (error) throw error;
       leadId = existingLead.id;
@@ -618,7 +620,6 @@ export const submitLandingPageLead = createServerFn({ method: "POST" })
           landing_page_id: p.id,
           phone,
           visitor_id: data.visitorId ?? null,
-          customer_id: customerId,
           clicked_at: clickedAt,
         })
         .select("id")
@@ -632,11 +633,24 @@ export const submitLandingPageLead = createServerFn({ method: "POST" })
       event_type: eventType,
       visitor_id: data.visitorId ?? null,
       lead_id: leadId,
-      customer_id: customerId,
+      customer_id: null,
       phone,
     }));
     const { error: eventError } = await (supabaseAdmin.from("landing_page_events" as any) as any).insert(eventRows);
     if (eventError) throw eventError;
+
+    // Só depois da captura estar persistida, vincula o contato ao CRM. Se o CRM falhar,
+    // a captura e os eventos continuam disponíveis para o relatório.
+    const customerId = await upsertLandingPageCRMContact(supabaseAdmin, phone, p.slug);
+    const { error: leadLinkError } = await (supabaseAdmin.from("landing_page_leads") as any)
+      .update({ customer_id: customerId })
+      .eq("id", leadId);
+    if (leadLinkError) throw leadLinkError;
+    const { error: eventLinkError } = await (supabaseAdmin.from("landing_page_events" as any) as any)
+      .update({ customer_id: customerId })
+      .eq("lead_id", leadId);
+    if (eventLinkError) throw eventLinkError;
+
     return { success: true as const, leadId, customerId };
   });
 

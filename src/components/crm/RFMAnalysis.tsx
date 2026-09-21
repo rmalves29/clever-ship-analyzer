@@ -176,7 +176,8 @@ export function RFMAnalysis() {
   const hasValidOrders = (data?.validOrders ?? 0) > 0;
 
   return (
-    <Stack spacing={4} sx={{ pb: 6 }}>
+    <>
+      <Stack spacing={4} sx={{ pb: 6 }}>
       <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 700 }}>Análise RFM</Typography>
@@ -573,5 +574,6 @@ export function RFMAnalysis() {
           )}
         </DialogActions>
       </Dialog>
+    </>
   );
 }

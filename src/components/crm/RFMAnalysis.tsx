@@ -11,6 +11,10 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import {
@@ -27,7 +31,7 @@ import {
   Crown,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getRFMStats, calculateRFMSegments } from "@/lib/crm-rfm.functions";
+import { getRFMStats, calculateRFMSegments, generateRFMAnalysis } from "@/lib/crm-rfm.functions";
 import { RFM_SEGMENTS_CONFIG, CLASSIC_MODE_MIN_HISTORY_DAYS, type RFMSegment } from "@/lib/crm-rfm-shared";
 import { brl } from "@/lib/crm-mock";
 
@@ -84,6 +88,7 @@ export function RFMAnalysis() {
   const queryClient = useQueryClient();
   const fetchStats = useServerFn(getRFMStats);
   const runCalculate = useServerFn(calculateRFMSegments);
+  const runGenerateAI = useServerFn(generateRFMAnalysis);
 
   const {
     data,
@@ -96,6 +101,11 @@ export function RFMAnalysis() {
     queryKey: ["rfm-stats"],
     queryFn: () => fetchStats(),
     retry: 1,
+  });
+
+  const aiMutation = useMutation({
+    mutationFn: () => runGenerateAI(),
+    onError: (err: unknown) => toast.error("Erro ao gerar análise com IA: " + errorMessage(err)),
   });
 
   const calculateMutation = useMutation({
@@ -178,14 +188,24 @@ export function RFMAnalysis() {
             Fonte lida: {new Intl.NumberFormat().format(data?.sourceCustomers ?? 0)} clientes · {new Intl.NumberFormat().format(data?.sourceOrders ?? 0)} pedidos importados · {new Intl.NumberFormat().format(data?.validOrders ?? 0)} pedidos válidos para RFM
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={calculateMutation.isPending ? <CircularProgress size={16} color="inherit" /> : <Sparkles size={16} />}
-          onClick={() => calculateMutation.mutate()}
-          disabled={calculateMutation.isPending}
-        >
-          {calculateMutation.isPending ? "Recalculando..." : "Recalcular Análise RFM"}
-        </Button>
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <Button
+            variant="outlined"
+            startIcon={aiMutation.isPending ? <CircularProgress size={16} color="inherit" /> : <Sparkles size={16} />}
+            onClick={() => aiMutation.mutate()}
+            disabled={aiMutation.isPending}
+          >
+            {aiMutation.isPending ? "Analisando..." : "Analisar com IA"}
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={calculateMutation.isPending ? <CircularProgress size={16} color="inherit" /> : <RefreshCw size={16} />}
+            onClick={() => calculateMutation.mutate()}
+            disabled={calculateMutation.isPending}
+          >
+            {calculateMutation.isPending ? "Recalculando..." : "Recalcular Análise RFM"}
+          </Button>
+        </Stack>
       </Stack>
 
       {!hasSourceCustomers && (
@@ -368,6 +388,7 @@ export function RFMAnalysis() {
                 <TableCell align="right">Receita Válida</TableCell>
                 <TableCell align="right">% Receita</TableCell>
                 <TableCell align="right">AOV</TableCell>
+                <TableCell align="right">Recência</TableCell>
                 <TableCell align="right">Receita / Cliente</TableCell>
                 <TableCell align="right">Tempo de Base</TableCell>
               </TableRow>
@@ -375,7 +396,7 @@ export function RFMAnalysis() {
             <TableBody>
               {(data?.totalClientes ?? 0) === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} align="center" sx={{ py: 4, color: "text.secondary" }}>Nenhum cliente disponível para análise RFM.</TableCell>
+                  <TableCell colSpan={11} align="center" sx={{ py: 4, color: "text.secondary" }}>Nenhum cliente disponível para análise RFM.</TableCell>
                 </TableRow>
               ) : (
                 [...summary]
@@ -400,6 +421,10 @@ export function RFMAnalysis() {
                         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5, fontSize: 10 }}>{s.pctReceita.toFixed(1)}%</Typography>
                       </TableCell>
                       <TableCell align="right">{brl(s.aov)}</TableCell>
+                      <TableCell align="right" sx={{ color: "text.secondary" }}>
+                        {s.recenciaMediaDias === null ? "—" : `${Math.round(s.recenciaMediaDias)}d`}
+                        {s.recenciaMedianaDias !== null && <Typography component="span" variant="caption" sx={{ display: "block" }}>med. {Math.round(s.recenciaMedianaDias)}d</Typography>}
+                      </TableCell>
                       <TableCell align="right" sx={{ color: "info.main" }}>{brl(s.receitaPorCliente)}</TableCell>
                       <TableCell align="right" sx={{ color: "text.secondary" }}>{s.tenureMedioDias === null ? "—" : `${Math.round(s.tenureMedioDias)}d`}</TableCell>
                     </TableRow>
@@ -426,5 +451,127 @@ export function RFMAnalysis() {
         ))}
       </Grid>
     </Stack>
+
+      <Dialog
+        open={aiMutation.isPending || Boolean(aiMutation.data)}
+        onClose={() => { if (!aiMutation.isPending) aiMutation.reset(); }}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>
+          <Stack direction="row" spacing={1.25} sx={{ alignItems: "center" }}>
+            <Box sx={{ p: 1, borderRadius: 2, bgcolor: "primary.50", color: "primary.main", display: "flex" }}>
+              <Sparkles size={20} />
+            </Box>
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 800 }}>Análise RFM por IA</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Diagnóstico baseado nos dados atuais, na comparação mensal e nos dias de recência.
+              </Typography>
+            </Box>
+          </Stack>
+        </DialogTitle>
+        <DialogContent dividers>
+          {aiMutation.isPending ? (
+            <Stack spacing={2} sx={{ minHeight: 300, alignItems: "center", justifyContent: "center", textAlign: "center" }}>
+              <CircularProgress size={36} />
+              <Box>
+                <Typography sx={{ fontWeight: 700 }}>Lendo sua matriz RFM...</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  A IA está cruzando recência em dias, frequência, receita e movimentação entre os segmentos.
+                </Typography>
+              </Box>
+            </Stack>
+          ) : aiMutation.data ? (
+            <Stack spacing={3}>
+              <Box sx={{ borderRadius: 3, p: 2.5, bgcolor: "action.hover", border: "1px solid", borderColor: "divider" }}>
+                <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 800 }}>Diagnóstico executivo</Typography>
+                <Typography variant="body1" sx={{ mt: 0.5, lineHeight: 1.7 }}>{aiMutation.data.executiveSummary}</Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>Como está a base hoje</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>{aiMutation.data.currentSituation}</Typography>
+              </Box>
+
+              <Grid container spacing={2}>
+                {aiMutation.data.metricHighlights?.map((item: any) => (
+                  <Grid key={item.metric} size={{ xs: 12, sm: 6 }}>
+                    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+                      <Typography variant="caption" color="text.secondary">{item.metric}</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 800, mt: 0.25 }}>{item.value}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5, lineHeight: 1.5 }}>{item.interpretation}</Typography>
+                    </Box>
+                  </Grid>
+                ))}
+              </Grid>
+
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <Box sx={{ height: "100%", border: "1px solid", borderColor: "success.200", borderRadius: 3, p: 2 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>Sinais positivos</Typography>
+                    <Stack spacing={1}>
+                      {(aiMutation.data.positiveSignals ?? []).map((item: string, i: number) => <Typography key={i} variant="body2" sx={{ lineHeight: 1.55 }}>• {item}</Typography>)}
+                    </Stack>
+                  </Box>
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <Box sx={{ height: "100%", border: "1px solid", borderColor: "warning.200", borderRadius: 3, p: 2 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>Pontos de atenção</Typography>
+                    <Stack spacing={1}>
+                      {(aiMutation.data.attentionPoints ?? []).map((item: string, i: number) => <Typography key={i} variant="body2" sx={{ lineHeight: 1.55 }}>• {item}</Typography>)}
+                    </Stack>
+                  </Box>
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <Box sx={{ height: "100%", border: "1px solid", borderColor: "info.200", borderRadius: 3, p: 2 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>Oportunidades</Typography>
+                    <Stack spacing={1}>
+                      {(aiMutation.data.opportunities ?? []).map((item: string, i: number) => <Typography key={i} variant="body2" sx={{ lineHeight: 1.55 }}>• {item}</Typography>)}
+                    </Stack>
+                  </Box>
+                </Grid>
+              </Grid>
+
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1.5 }}>Plano de ação sugerido</Typography>
+                <Stack spacing={1.25}>
+                  {(aiMutation.data.actionPlan ?? []).map((item: any, i: number) => (
+                    <Box key={i} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2.5, p: 2 }}>
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ justifyContent: "space-between" }}>
+                        <Box>
+                          <Chip size="small" label={item.horizon} sx={{ mb: 0.75 }} />
+                          <Typography variant="body2" sx={{ fontWeight: 800 }}>{item.title}</Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, lineHeight: 1.6 }}>{item.action}</Typography>
+                        </Box>
+                        <Box sx={{ minWidth: { sm: 210 } }}>
+                          <Typography variant="caption" color="text.secondary">Alvo</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 700 }}>{item.target}</Typography>
+                        </Box>
+                      </Stack>
+                    </Box>
+                  ))}
+                </Stack>
+              </Box>
+
+              {(aiMutation.data.caveats ?? []).length > 0 && (
+                <Box sx={{ pt: 1, borderTop: "1px solid", borderColor: "divider" }}>
+                  <Typography variant="caption" color="text.secondary">
+                    <strong>Cuidados:</strong> {aiMutation.data.caveats.join(" ")}
+                  </Typography>
+                </Box>
+              )}
+            </Stack>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => aiMutation.reset()}>{aiMutation.data ? "Fechar" : "Cancelar"}</Button>
+          {aiMutation.data && (
+            <Button variant="outlined" startIcon={<Sparkles size={16} />} onClick={() => aiMutation.mutate()}>
+              Gerar nova análise
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
   );
 }

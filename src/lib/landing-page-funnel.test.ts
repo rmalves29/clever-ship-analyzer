@@ -7,6 +7,10 @@ describe("landing page funnel", () => {
   it("normaliza telefone com ou sem DDI", () => {
     expect(landingPagePhoneKey("+55 (31) 98212-5522")).toBe("31982125522");
     expect(landingPagePhoneKey("31982125522")).toBe("31982125522");
+    expect(landingPagePhoneKey("+55 69 9388-8206")).toBe("69993888206");
+    expect(landingPagePhoneKey("6993888206")).toBe("69993888206");
+    expect(landingPagePhoneKey("+55 31 9553-5156")).toBe("31995535156");
+    expect(landingPagePhoneKey("+55 31 99553-5156")).toBe("31995535156");
   });
 
   it("conta pessoas unicas e somente entradas de quem clicou", () => {

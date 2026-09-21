@@ -15,6 +15,9 @@ export type ResolvedLandingPage = {
   groupId: string | null;
   groupName: string | null;
   groupInviteLink: string | null;
+  groupJid: string | null;
+  equivalentGroupIds: string[];
+  currentParticipantPhones: string[];
 };
 
 export type LandingPageCustomerActivity = {
@@ -27,7 +30,7 @@ export type LandingPageCustomerActivity = {
   joinedAt: string | null;
 };
 
-type LiveGroup = { id: string; group_name: string; invite_link: string | null };
+type LiveGroup = { id: string; group_jid: string; group_name: string; invite_link: string | null };
 
 function normalizedInviteLink(value: unknown): string {
   const raw = String(value ?? "").trim();
@@ -59,7 +62,7 @@ async function loadLiveGroups(): Promise<LiveGroup[]> {
   );
   const live = await getLiveLaunchpadAdmin();
   const { data, error } = await (live.from("fe_groups" as any) as any)
-    .select("id, group_name, invite_link")
+    .select("id, group_jid, group_name, invite_link")
     .eq("tenant_id", MANIA_DE_MULHER_TENANT_ID);
   if (error) throw new Error(`Erro ao carregar os grupos do WhatsApp: ${error.message}`);
   return (data ?? []) as LiveGroup[];
@@ -81,9 +84,18 @@ export async function loadResolvedLandingPages(landingPageId?: string): Promise<
       .filter(([link]) => Boolean(link)),
   );
 
-  return ((pageRows ?? []) as Array<{ id: string; nome: string; slug: string; conteudo: unknown }>).map((page) => {
+  const [{ canonicalWhatsappGroupJid, currentWhatsappGroupSnapshot, whatsappGroupSourceJid, whatsappParticipantPhone }, uazapi] =
+    await Promise.all([import("./envio-group-sync"), import("./envio-uazapi.server")]);
+  const groupsByJid = new Map<string, LiveGroup[]>();
+  for (const group of groups) {
+    const jid = canonicalWhatsappGroupJid(group.group_jid);
+    if (jid) groupsByJid.set(jid, [...(groupsByJid.get(jid) ?? []), group]);
+  }
+
+  const basePages = ((pageRows ?? []) as Array<{ id: string; nome: string; slug: string; conteudo: unknown }>).map((page) => {
     const explicitId = contentGroupId(page.conteudo);
-    const inferred = contentCtaLinks(page.conteudo).map((link) => groupByInvite.get(link)).find(Boolean);
+    const ctaLinks = contentCtaLinks(page.conteudo);
+    const inferred = ctaLinks.map((link) => groupByInvite.get(link)).find(Boolean);
     const group = (explicitId ? groupById.get(explicitId) : null) ?? inferred ?? null;
     const groupId = explicitId ?? group?.id ?? null;
     return {
@@ -92,30 +104,97 @@ export async function loadResolvedLandingPages(landingPageId?: string): Promise<
       slug: page.slug,
       groupId,
       groupName: group?.group_name ?? null,
-      groupInviteLink: group?.invite_link ?? null,
+      groupInviteLink: ctaLinks[0] ?? group?.invite_link ?? null,
+      groupJid: group ? canonicalWhatsappGroupJid(group.group_jid) : null,
+      equivalentGroupIds: group
+        ? (groupsByJid.get(canonicalWhatsappGroupJid(group.group_jid)) ?? [group]).map((item) => item.id)
+        : groupId
+          ? [groupId]
+          : [],
+      currentParticipantPhones: [] as string[],
     };
   });
+
+  const creds = await uazapi.loadUazapiCreds().catch(() => null);
+  if (!creds) return basePages;
+
+  const inviteInfoByLink = new Map<string, Promise<any>>();
+  const getInviteInfo = (link: string) => {
+    let request = inviteInfoByLink.get(link);
+    if (!request) {
+      request = uazapi.getGroupInviteInfo(creds, link);
+      inviteInfoByLink.set(link, request);
+    }
+    return request;
+  };
+
+  return Promise.all(
+    basePages.map(async (page) => {
+      if (!page.groupInviteLink) return page;
+      try {
+        const info = await getInviteInfo(page.groupInviteLink);
+        const snapshot = currentWhatsappGroupSnapshot(null, info);
+        const resolvedJid = whatsappGroupSourceJid(info);
+        const matchingGroups = resolvedJid ? groupsByJid.get(resolvedJid) ?? [] : [];
+        const explicitStillMatches = matchingGroups.find((group) => group.id === page.groupId);
+        const preferredGroup =
+          explicitStillMatches ?? matchingGroups.find((group) => /@g\.us$/i.test(group.group_jid)) ?? matchingGroups[0];
+        return {
+          ...page,
+          groupId: preferredGroup?.id ?? page.groupId,
+          groupName: snapshot.name || page.groupName,
+          groupJid: resolvedJid || page.groupJid,
+          equivalentGroupIds: matchingGroups.length > 0 ? matchingGroups.map((group) => group.id) : page.equivalentGroupIds,
+          currentParticipantPhones: snapshot.participants.map(whatsappParticipantPhone).filter(Boolean),
+        };
+      } catch (error) {
+        console.error(`landing-page-funnel: falha ao resolver convite da landing ${page.id}`, error);
+        return page;
+      }
+    }),
+  );
 }
 
 export async function loadLandingPageGroupJoins(
   pages: ResolvedLandingPage[],
   options?: { since?: string; until?: string; phones?: string[] },
 ): Promise<LandingPageJoin[]> {
-  const groupIds = [...new Set(pages.map((page) => page.groupId).filter((id): id is string => Boolean(id)))];
-  if (groupIds.length === 0) return [];
+  const groupIds = [
+    ...new Set(
+      pages.flatMap((page) => page.equivalentGroupIds.length > 0 ? page.equivalentGroupIds : page.groupId ? [page.groupId] : []),
+    ),
+  ];
 
   const { getLiveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
   const live = await getLiveLaunchpadAdmin();
   const events: Array<{ group_id: string; phone: string; created_at: string }> = [];
 
-  const phoneBatches = options?.phones?.length
-    ? Array.from({ length: Math.ceil(options.phones.length / 500) }, (_, index) =>
-        options.phones!.slice(index * 500, index * 500 + 500),
+  const phoneVariants = (value: string): string[] => {
+    const digits = value.replace(/\D/g, "");
+    const national = digits.startsWith("55") && (digits.length === 12 || digits.length === 13) ? digits.slice(2) : digits;
+    const variants = new Set([digits, national, `55${national}`]);
+    if (national.length === 10) {
+      const withNine = `${national.slice(0, 2)}9${national.slice(2)}`;
+      variants.add(withNine);
+      variants.add(`55${withNine}`);
+    } else if (national.length === 11 && national[2] === "9") {
+      const withoutNine = `${national.slice(0, 2)}${national.slice(3)}`;
+      variants.add(withoutNine);
+      variants.add(`55${withoutNine}`);
+    }
+    return [...variants].filter(Boolean);
+  };
+  const filteredPhones = options?.phones?.length
+    ? [...new Set(options.phones.flatMap(phoneVariants))]
+    : [];
+  const phoneBatches = filteredPhones.length
+    ? Array.from({ length: Math.ceil(filteredPhones.length / 500) }, (_, index) =>
+        filteredPhones.slice(index * 500, index * 500 + 500),
       )
     : [undefined];
 
   for (const phoneBatch of phoneBatches) {
-    for (let page = 0; ; page++) {
+    for (let page = 0; groupIds.length > 0; page++) {
       let query = (live.from("fe_group_events" as any) as any)
         .select("group_id, phone, created_at")
         .eq("event_type", "join")
@@ -136,21 +215,48 @@ export async function loadLandingPageGroupJoins(
 
   const pagesByGroup = new Map<string, ResolvedLandingPage[]>();
   for (const page of pages) {
-    if (!page.groupId) continue;
-    const list = pagesByGroup.get(page.groupId) ?? [];
-    list.push(page);
-    pagesByGroup.set(page.groupId, list);
+    const ids = page.equivalentGroupIds.length > 0 ? page.equivalentGroupIds : page.groupId ? [page.groupId] : [];
+    for (const id of ids) {
+      const list = pagesByGroup.get(id) ?? [];
+      list.push(page);
+      pagesByGroup.set(id, list);
+    }
   }
 
   const joins: LandingPageJoin[] = [];
+  const phonesWithEvent = new Set<string>();
   for (const event of events) {
     for (const page of pagesByGroup.get(event.group_id) ?? []) {
+      const phoneKey = landingPagePhoneKey(event.phone);
+      if (!phoneKey) continue;
+      phonesWithEvent.add(`${page.id}|${phoneKey}`);
       joins.push({
         landingPageId: page.id,
         phone: event.phone,
         joinedAt: event.created_at,
         groupId: event.group_id,
         groupName: page.groupName ?? "Grupo do WhatsApp",
+        detectionSource: "event",
+      });
+    }
+  }
+
+  const allowedPhoneKeys = options?.phones?.length
+    ? new Set(options.phones.map(landingPagePhoneKey).filter(Boolean))
+    : null;
+  const detectedAt = new Date().toISOString();
+  for (const page of pages) {
+    for (const phone of page.currentParticipantPhones) {
+      const phoneKey = landingPagePhoneKey(phone);
+      if (!phoneKey || (allowedPhoneKeys && !allowedPhoneKeys.has(phoneKey))) continue;
+      if (phonesWithEvent.has(`${page.id}|${phoneKey}`)) continue;
+      joins.push({
+        landingPageId: page.id,
+        phone,
+        joinedAt: detectedAt,
+        groupId: page.groupId ?? page.groupJid ?? "whatsapp-group",
+        groupName: page.groupName ?? "Grupo do WhatsApp",
+        detectionSource: "current_member",
       });
     }
   }

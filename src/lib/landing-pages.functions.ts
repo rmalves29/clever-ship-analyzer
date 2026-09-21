@@ -829,7 +829,7 @@ export const getLandingPageFunnelReport = createServerFn({ method: "GET" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const [{ loadResolvedLandingPages, loadLandingPageGroupJoins }, { computeLandingPageFunnel }] = await Promise.all([
+    const [{ loadResolvedLandingPages, loadLandingPageGroupJoins }, { computeLandingPageFunnel, landingPagePhoneKey }] = await Promise.all([
       import("./landing-page-funnel.server"),
       import("./landing-page-funnel"),
     ]);
@@ -843,7 +843,15 @@ export const getLandingPageFunnelReport = createServerFn({ method: "GET" })
       const { data: pageRows, error: pageError } = await supabaseAdmin.from("landing_pages").select("id, nome, slug").order("criado_em", { ascending: false });
       if (pageError) throw pageError;
       pages = ((pageRows ?? []) as Array<{ id: string; nome: string; slug: string }>).map((page) => ({
-        id: page.id, nome: page.nome, slug: page.slug, groupId: null, groupName: null, groupInviteLink: null,
+        id: page.id,
+        nome: page.nome,
+        slug: page.slug,
+        groupId: null,
+        groupName: null,
+        groupInviteLink: null,
+        groupJid: null,
+        equivalentGroupIds: [],
+        currentParticipantPhones: [],
       }));
       if (data.landingPageId) pages = pages.filter((page) => page.id === data.landingPageId);
     }
@@ -889,12 +897,43 @@ export const getLandingPageFunnelReport = createServerFn({ method: "GET" })
         console.warn("Landing reports: WhatsApp join enrichment unavailable; continuing without joins.", error);
       }
     }
+    const pageById = new Map(pages.map((page) => [page.id, page]));
+    const clickedPhonesByPage = new Map<string, Set<string>>();
+    for (const event of events) {
+      if (event.event_type !== "link_click") continue;
+      const phoneKey = landingPagePhoneKey(event.phone);
+      if (!phoneKey) continue;
+      const phones = clickedPhonesByPage.get(event.landing_page_id) ?? new Set<string>();
+      phones.add(phoneKey);
+      clickedPhonesByPage.set(event.landing_page_id, phones);
+    }
     const report = computeLandingPageFunnel(
       pages.map((page) => ({ ...page })),
       events.map((event) => ({ id: String(event.id), landingPageId: String(event.landing_page_id), eventType: event.event_type, visitorId: event.visitor_id ?? null, phone: event.phone ?? null, createdAt: event.criado_em })),
       joins,
     );
-    return { ...report, period: data.period, pagesWithoutGroup: pages.filter((page) => !page.groupId).map((page) => ({ id: page.id, nome: page.nome })), diagnostics: { eventStoreAvailable, groupEnrichmentAvailable } };
+    return {
+      ...report,
+      period: data.period,
+      recentGroupEntries: joins
+        .slice()
+        .sort((a, b) => b.joinedAt.localeCompare(a.joinedAt))
+        .slice(0, 100)
+        .map((join) => ({
+          phone: join.phone,
+          landingPageId: join.landingPageId,
+          landingPageName: pageById.get(join.landingPageId)?.nome ?? "—",
+          groupId: join.groupId,
+          groupName: join.groupName,
+          joinedAt: join.joinedAt,
+          detectionSource: join.detectionSource ?? "event",
+          isLandingContact: Boolean(
+            clickedPhonesByPage.get(join.landingPageId)?.has(landingPagePhoneKey(join.phone)),
+          ),
+        })),
+      pagesWithoutGroup: pages.filter((page) => !page.groupId).map((page) => ({ id: page.id, nome: page.nome })),
+      diagnostics: { eventStoreAvailable, groupEnrichmentAvailable },
+    };
   });
 
 /** Garante os segmentos e devolve o publico correto pre-selecionado para abrir o editor da

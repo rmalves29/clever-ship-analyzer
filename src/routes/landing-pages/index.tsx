@@ -492,6 +492,13 @@ function ReportsTab() {
         </Alert>
       )}
 
+      {landingPageId !== "todas" && report?.porLandingPage?.[0]?.groupId && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          Grupo contabilizado nesta landing page: <strong>{report.porLandingPage[0].groupName ?? report.porLandingPage[0].groupId}</strong>.
+          Somente entradas deste grupo são cruzadas com os contatos capturados pela página.
+        </Alert>
+      )}
+
       {!isLoading && report?.diagnostics && (!report.diagnostics.eventStoreAvailable || !report.diagnostics.groupEnrichmentAvailable) && (
         <Alert severity="warning" sx={{ mb: 3 }}>
           {!report.diagnostics.eventStoreAvailable
@@ -593,6 +600,7 @@ function ReportsTab() {
                 <TableHead>
                   <TableRow>
                     <TableCell>Landing page</TableCell>
+                    <TableCell>Grupo contabilizado</TableCell>
                     <TableCell align="right">Acessos</TableCell>
                     <TableCell align="right">Cadastros</TableCell>
                     <TableCell align="right">Cliques</TableCell>
@@ -605,6 +613,7 @@ function ReportsTab() {
                   {report.porLandingPage.map((row) => (
                     <TableRow key={row.landingPageId} hover>
                       <TableCell>{row.nome}</TableCell>
+                      <TableCell>{row.groupName ?? "Não configurado"}</TableCell>
                       <TableCell align="right">{row.visits}</TableCell>
                       <TableCell align="right">{row.submissions}</TableCell>
                       <TableCell align="right">{row.clicks}</TableCell>
@@ -616,6 +625,55 @@ function ReportsTab() {
                 </TableBody>
               </Table>
             </TableContainer>
+          </Box>
+
+          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
+            <Box sx={{ p: 2, pb: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>Entradas recentes nos grupos contabilizados</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Eventos do Fluxo de Envio cruzados pelo telefone com os contatos que clicaram na landing page.
+              </Typography>
+            </Box>
+            {!report.recentGroupEntries || report.recentGroupEntries.length === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ px: 2, pb: 2 }}>
+                Nenhuma entrada encontrada para o grupo e período selecionados.
+              </Typography>
+            ) : (
+              <TableContainer sx={{ maxHeight: 440 }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Telefone</TableCell>
+                      <TableCell>Landing page</TableCell>
+                      <TableCell>Grupo</TableCell>
+                      <TableCell>Identificação</TableCell>
+                      <TableCell>Data</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {report.recentGroupEntries.map((entry, index) => (
+                      <TableRow key={`${entry.landingPageId}-${entry.phone}-${entry.joinedAt}-${index}`} hover>
+                        <TableCell>{entry.phone}</TableCell>
+                        <TableCell>{entry.landingPageName}</TableCell>
+                        <TableCell>{entry.groupName}</TableCell>
+                        <TableCell>
+                          {entry.isLandingContact ? (
+                            <Chip size="small" color="success" variant="outlined" icon={<CheckCircle2 size={12} />} label="Contato da landing" />
+                          ) : (
+                            <Chip size="small" variant="outlined" label="Não identificado na landing" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {entry.detectionSource === "current_member"
+                            ? "Presente no grupo agora"
+                            : new Date(entry.joinedAt).toLocaleString("pt-BR")}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
           </Box>
         </Stack>
       )}

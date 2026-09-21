@@ -1,4 +1,4 @@
-import { loadUazapiCreds, listGroupsRaw, getGroupInfo } from "./envio-uazapi.server";
+import { loadUazapiCreds, listGroupsRaw, getGroupInfo, getGroupInviteInfo } from "./envio-uazapi.server";
 import {
   canonicalWhatsappGroupJid,
   currentWhatsappGroupSnapshot,
@@ -146,6 +146,21 @@ export async function syncEnvioGroupsFromWhatsapp(): Promise<EnvioGroupSyncResul
           snapshot = currentWhatsappGroupSnapshot(snapshot, infoWithInvite);
         } catch (error) {
           console.error(`syncEnvioGroupsFromWhatsapp: falha ao buscar convite de ${groupJid}`, error);
+        }
+      }
+
+      const savedInvite = (existingByJid.get(groupJid) ?? [])
+        .map((group) => group.invite_link)
+        .find((link): link is string => Boolean(link));
+      const inviteLink = snapshot.inviteLink ?? savedInvite;
+      if (inviteLink) {
+        try {
+          const inviteInfo = await getGroupInviteInfo(creds, inviteLink);
+          if (whatsappGroupSourceJid(inviteInfo) === groupJid) {
+            snapshot = currentWhatsappGroupSnapshot(snapshot, inviteInfo);
+          }
+        } catch (error) {
+          console.error(`syncEnvioGroupsFromWhatsapp: falha ao resolver convite de ${groupJid}`, error);
         }
       }
     } catch (error) {

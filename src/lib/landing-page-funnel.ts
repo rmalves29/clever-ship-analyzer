@@ -15,6 +15,7 @@ export type LandingPageJoin = {
   joinedAt: string;
   groupId: string;
   groupName: string;
+  detectionSource?: "event" | "current_member";
 };
 
 export type LandingPageFunnelDefinition = {
@@ -41,9 +42,17 @@ export type LandingPageFunnelRow = {
   accessToJoinRate: number;
 };
 
-/** Ultimos 11 digitos, suficiente para conciliar +55, telefone cru do WhatsApp e formatacoes. */
+/** Normaliza celulares brasileiros vindos do formulário e do WhatsApp. O WhatsApp ainda pode
+ * devolver números antigos com 8 dígitos; nesse caso, acrescenta o 9 depois do DDD. */
 export function landingPagePhoneKey(value: string | null | undefined): string {
-  return String(value ?? "").replace(/\D/g, "").slice(-11);
+  let digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+    digits = digits.slice(2);
+  }
+  if (digits.length === 10) {
+    digits = `${digits.slice(0, 2)}9${digits.slice(2)}`;
+  }
+  return digits.slice(-11);
 }
 
 function rate(part: number, total: number): number {

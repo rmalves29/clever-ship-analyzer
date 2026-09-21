@@ -120,6 +120,15 @@ export async function getGroupInfo(
   });
 }
 
+/** Resolve o grupo diretamente pelo link/código de convite, sem depender do nome em cache. */
+export async function getGroupInviteInfo(creds: UazapiCreds, inviteCodeOrUrl: string): Promise<any> {
+  return uazapiFetch(creds, "/group/inviteInfo", {
+    method: "POST",
+    body: { invitecode: inviteCodeOrUrl },
+    timeoutMs: 30_000,
+  });
+}
+
 export async function sendText(creds: UazapiCreds, groupJid: string, text: string): Promise<{ id?: string }> {
   const data = await uazapiFetch(creds, "/send/text", { method: "POST", body: { number: groupJid, text }, timeoutMs: 60_000 });
   return { id: data?.id ?? data?.messageid ?? data?.key?.id };

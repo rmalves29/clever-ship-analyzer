@@ -94,6 +94,32 @@ export async function listEventDates(): Promise<string[]> {
   return Array.from(dates).sort((a, b) => b.localeCompare(a));
 }
 
+export type AIAnalysisEventInput = {
+  module: string;
+  title: string;
+  analysis: unknown;
+  generatedAt?: string;
+  period?: string | null;
+};
+
+/** Registra uma análise gerada por IA no mesmo histórico usado pelo calendário de Eventos. */
+export async function createAIAnalysisEvent(input: AIAnalysisEventInput): Promise<CrmEvent> {
+  const analysisText = typeof input.analysis === "string"
+    ? input.analysis
+    : JSON.stringify(input.analysis, null, 2);
+  const generatedAt = input.generatedAt ?? new Date().toISOString();
+  const eventDate = new Date(generatedAt).toLocaleDateString("sv-SE", { timeZone: TZ });
+  const periodLine = input.period ? `\nPeríodo analisado: ${input.period}` : "";
+
+  return createEvent({
+    eventDate,
+    title: `🤖 Análise IA — ${input.module} — ${input.title}`,
+    description: `Análise gerada automaticamente pela IA em ${new Date(generatedAt).toLocaleString("pt-BR", { timeZone: TZ })}.${periodLine}\n\n${analysisText}`,
+    category: "outro",
+    canais: ["crm"],
+  }, "auto");
+}
+
 export async function createEvent(
   input: {
     eventDate: string;

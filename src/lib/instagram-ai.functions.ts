@@ -165,5 +165,18 @@ export const generateInstagramAnalysis = createServerFn({ method: "POST" })
       return { success: false as const, error: `Análise gerada, mas falhou ao salvar: ${saveError.message}` };
     }
 
+    try {
+      const { createAIAnalysisEvent } = await import("./events.server");
+      await createAIAnalysisEvent({
+        module: "Instagram",
+        title: "Análise de conteúdo",
+        analysis,
+        generatedAt,
+        period: data.datePreset,
+      });
+    } catch (eventErr) {
+      console.error("[Instagram] Falha ao registrar análise de IA no calendário:", eventErr);
+    }
+
     return { success: true as const, analysis, generatedAt };
   });

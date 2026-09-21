@@ -208,5 +208,18 @@ export const generateMetaAdsAnalysis = createServerFn({ method: "POST" })
       return { success: false as const, error: `Análise gerada, mas falhou ao salvar: ${saveError.message}` };
     }
 
+    try {
+      const { createAIAnalysisEvent } = await import("./events.server");
+      await createAIAnalysisEvent({
+        module: "Meta Ads",
+        title: "Análise de tráfego",
+        analysis,
+        generatedAt,
+        period: datePreset,
+      });
+    } catch (eventErr) {
+      console.error("[Meta Ads] Falha ao registrar análise de IA no calendário:", eventErr);
+    }
+
     return { success: true as const, analysis, generatedAt };
   });

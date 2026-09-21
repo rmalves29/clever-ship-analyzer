@@ -305,6 +305,20 @@ export async function getRFMStatsData(now: Date = new Date()) {
     previousCounts.set(customer.segment, (previousCounts.get(customer.segment) ?? 0) + 1);
   }
   const previousTotal = previousComputed.customers.length;
+  const previousByCustomer = new Map(previousComputed.customers.map((customer) => [customer.customerId, customer.segment]));
+  const transitionCounts = new Map<string, { from: RFMSegment; to: RFMSegment; clientes: number }>();
+  for (const customer of currentComputed.customers) {
+    const from = previousByCustomer.get(customer.customerId);
+    if (!from || from === customer.segment) continue;
+    const key = `${from} → ${customer.segment}`;
+    const existing = transitionCounts.get(key);
+    if (existing) existing.clientes += 1;
+    else transitionCounts.set(key, { from, to: customer.segment, clientes: 1 });
+  }
+  const segmentTransitions = [...transitionCounts.values()]
+    .sort((a, b) => b.clientes - a.clientes)
+    .slice(0, 20);
+
   const monthlyComparison = activeSegments.map((segment) => {
     const currentClients = acc.get(segment)?.clientes ?? 0;
     const previousClients = previousCounts.get(segment) ?? 0;
@@ -323,6 +337,7 @@ export async function getRFMStatsData(now: Date = new Date()) {
   return {
     summary,
     monthlyComparison,
+    segmentTransitions,
     comparisonPeriod: {
       currentMonth: new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(now),
       previousMonth: new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(previousMonthEnd),
@@ -381,6 +396,7 @@ function buildRFMAnalysisPrompt(data: Awaited<ReturnType<typeof getRFMStatsData>
       tempoDeBaseMedioDias: s.tenureMedioDias,
     })),
     comparacaoMensal: data.monthlyComparison,
+    movimentosDeSegmento: data.segmentTransitions,
     frequencia: data.frequencia,
     receitaExcluida: data.receitaExcluida,
     pedidosExcluidos: data.pedidosExcluidos,

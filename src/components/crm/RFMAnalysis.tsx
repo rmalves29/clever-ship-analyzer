@@ -268,7 +268,8 @@ export function RFMAnalysis() {
             </Stack>
             <Stack spacing={1.5}>
               {chartData.map((item) => {
-                const share = data?.totalClientes ?? 0 > 0 ? (item.clientes / TOTAL_SAFE) * 100 : 0;
+                const totalCustomers = data?.totalClientes ?? 0;
+                const share = totalCustomers > 0 ? (item.clientes / totalCustomers) * 100 : 0;
                 return (
                   <Box key={item.name}>
                     <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 0.6 }}>
@@ -279,7 +280,7 @@ export function RFMAnalysis() {
                       <Typography variant="body2" sx={{ fontWeight: 800, ml: 2 }}>{new Intl.NumberFormat().format(item.clientes)} <Typography component="span" variant="caption" color="text.secondary">({share.toFixed(1)}%)</Typography></Typography>
                     </Stack>
                     <Box sx={{ height: 10, borderRadius: 999, bgcolor: "action.hover", overflow: "hidden" }}>
-                      <Box sx={{ height: "100%", width: `${Math.min(100, share)}%", bgcolor: item.color, borderRadius: 999, transition: "width .35s ease" }} />
+                      <Box sx={{ height: "100%", width: `${Math.min(100, share)}%`, bgcolor: item.color, borderRadius: 999, transition: "width .35s ease" }} />
                     </Box>
                   </Box>
                 );

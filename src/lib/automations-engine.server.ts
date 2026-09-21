@@ -806,6 +806,55 @@ async function markRunsWaitingSend(runIds: string[], campaignId: string): Promis
   if (error) throw new Error(`Erro ao aguardar confirmação de envio: ${error.message}`);
 }
 
+async function recoverWaitingSendRuns(automation: any): Promise<number> {
+  const supabaseAdmin = await admin();
+  const { data: runs, error } = await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+    .select("id, customer_id, campaign_id, event_context")
+    .eq("automation_id", automation.id)
+    .eq("status", "waiting_send")
+    .not("campaign_id", "is", null)
+    .limit(500);
+  if (error) throw new Error(`Erro ao recuperar envios pendentes de automação: ${error.message}`);
+  if (!runs?.length) return 0;
+
+  let recovered = 0;
+  for (const run of runs as any[]) {
+    const eventKey = String(
+      run.event_context?.automationEnrollmentKey ??
+        run.event_context?.order?.id ??
+        run.event_context?.checkout?.id ??
+        "",
+    );
+    let query = (supabaseAdmin.from("wa_campaign_recipients") as any)
+      .select("id, customer_id, status")
+      .eq("campaign_id", run.campaign_id)
+      .eq("customer_id", run.customer_id);
+    if (eventKey) query = query.eq("event_key", eventKey);
+    const { data: recipients, error: recipientError } = await query.limit(2);
+    if (recipientError) throw new Error(`Erro ao conferir envio da automação: ${recipientError.message}`);
+    const recipient = (recipients ?? [])[0];
+    if (!recipient) continue;
+
+    if (recipient.status === "sent" || recipient.status === "delivered" || recipient.status === "read") {
+      await handleAutomationQueueResult({
+        campaignId: String(run.campaign_id),
+        customerId: String(run.customer_id),
+        outcome: "sent",
+      });
+      recovered++;
+    } else if (recipient.status === "failed" || recipient.status === "cancelled") {
+      await handleAutomationQueueResult({
+        campaignId: String(run.campaign_id),
+        customerId: String(run.customer_id),
+        outcome: "failed",
+        error: "Envio encerrado sem confirmação de sucesso.",
+      });
+      recovered++;
+    }
+  }
+  return recovered;
+}
+
 async function processDueRuns(automation: any, steps: AutomationStep[]): Promise<number> {
   const supabaseAdmin = await admin();
   const { dispatchCampaign, createCampaignRow, findAutomationStepCampaignId, syncCampaignMessageConfig } = await import("./whatsapp-meta.server");

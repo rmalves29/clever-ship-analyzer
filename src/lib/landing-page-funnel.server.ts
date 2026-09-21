@@ -99,7 +99,7 @@ export async function loadResolvedLandingPages(landingPageId?: string): Promise<
 
 export async function loadLandingPageGroupJoins(
   pages: ResolvedLandingPage[],
-  options?: { since?: string; until?: string },
+  options?: { since?: string; until?: string; phones?: string[] },
 ): Promise<LandingPageJoin[]> {
   const groupIds = [...new Set(pages.map((page) => page.groupId).filter((id): id is string => Boolean(id)))];
   if (groupIds.length === 0) return [];
@@ -118,6 +118,7 @@ export async function loadLandingPageGroupJoins(
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
     if (options?.since) query = query.gte("created_at", options.since);
     if (options?.until) query = query.lte("created_at", options.until);
+    if (options?.phones?.length) query = query.in("phone", options.phones);
     const { data, error } = await query;
     if (error) throw new Error(`Erro ao carregar entradas nos grupos: ${error.message}`);
     const rows = (data ?? []) as typeof events;

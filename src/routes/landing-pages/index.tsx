@@ -402,6 +402,7 @@ function ReviewsTab() {
 }
 
 function ReportsTab() {
+  const queryClient = useQueryClient();
   const runReport = useServerFn(getLandingPageFunnelReport);
   const runRecoverySetup = useServerFn(getLandingPageRecoverySetup);
   const runPages = useServerFn(listLandingPages);
@@ -419,7 +420,7 @@ function ReportsTab() {
   });
   const createRecoveryAutomation = async () => {
     if (landingPageId === "todas") return;
-    const { data: setup } = await queryClient.fetchQuery({
+    const setup = await queryClient.fetchQuery({
       queryKey: ["landing-page-recovery-setup", landingPageId],
       queryFn: () => runRecoverySetup({ data: { landingPageId } }),
       staleTime: 30_000,
@@ -486,7 +487,7 @@ function ReportsTab() {
         )}
       </Stack>
 
-      {landingPageId !== "todas" && recoverySetup && !recoverySetup.groupId && (
+      {landingPageId !== "todas" && (report?.pagesWithoutGroup?.length ?? 0) > 0 && (
         <Alert severity="warning" sx={{ mb: 3 }}>
           Esta landing page ainda não tem um grupo do WhatsApp vinculado. Selecione o grupo no editor para medir entradas e ativar a recuperação.
         </Alert>

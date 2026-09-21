@@ -849,43 +849,10 @@ export const getLandingPageFunnelReport = createServerFn({ method: "GET" })
     }
 
     const since = landingPageReportStart(data.period);
-    const rpc = await supabaseAdmin.rpc("get_landing_page_funnel_report", {
-      p_landing_page_id: data.landingPageId ?? null,
-      p_since: since ?? null,
-    });
 
-    if (!rpc.error) {
-      const rows = (rpc.data ?? []) as Array<{ landing_page_id: string; visits: number; submissions: number; clicks: number; joins: number }>;
-      const byId = new Map(rows.map((row) => [row.landing_page_id, row]));
-      const reportRows = pages.map((page) => {
-        const row = byId.get(page.id);
-        const visits = Number(row?.visits ?? 0), submissions = Number(row?.submissions ?? 0), clicks = Number(row?.clicks ?? 0), joins = Number(row?.joins ?? 0);
-        return {
-          landingPageId: page.id, nome: page.nome, slug: page.slug, groupId: page.groupId, groupName: page.groupName,
-          visits, submissions, clicks, joins, abandoned: Math.max(0, clicks - joins),
-          accessToClickRate: visits > 0 ? (clicks / visits) * 100 : 0,
-          clickToJoinRate: clicks > 0 ? (joins / clicks) * 100 : 0,
-          accessToJoinRate: visits > 0 ? (joins / visits) * 100 : 0,
-        };
-      });
-      const aggregate = reportRows.reduce((t, r) => ({
-        visits: t.visits + r.visits, submissions: t.submissions + r.submissions, clicks: t.clicks + r.clicks, joins: t.joins + r.joins, abandoned: t.abandoned + r.abandoned,
-      }), { visits: 0, submissions: 0, clicks: 0, joins: 0, abandoned: 0 });
-      return {
-        totals: {
-          ...aggregate,
-          accessToClickRate: aggregate.visits > 0 ? (aggregate.clicks / aggregate.visits) * 100 : 0,
-          clickToJoinRate: aggregate.clicks > 0 ? (aggregate.joins / aggregate.clicks) * 100 : 0,
-          accessToJoinRate: aggregate.visits > 0 ? (aggregate.joins / aggregate.visits) * 100 : 0,
-        },
-        porLandingPage: reportRows.sort((a, b) => b.visits - a.visits || b.clicks - a.clicks),
-        period: data.period,
-        pagesWithoutGroup: pages.filter((page) => !page.groupId).map((page) => ({ id: page.id, nome: page.nome })),
-        diagnostics: { eventStoreAvailable: true, groupEnrichmentAvailable },
-      };
-    }
+    // O funil e montado a partir de landing_page_events + entradas no grupo (que vivem em outro
+    // banco), entao nao ha agregacao possivel num unico RPC.
 
-    console.warn("Landing reports: aggregation RPC unavailable; falling back to paginated event processing.", rpc.error);
     const events: any[] = [];
     let eventStoreAvailable = true;
     try {

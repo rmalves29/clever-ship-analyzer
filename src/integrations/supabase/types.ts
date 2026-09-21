@@ -1352,24 +1352,81 @@ export type Database = {
         }
         Relationships: []
       }
-      landing_page_leads: {
+      landing_page_events: {
         Row: {
           criado_em: string
+          customer_id: string | null
+          event_type: string
           id: string
           landing_page_id: string
-          phone: string
+          lead_id: string | null
+          phone: string | null
+          visitor_id: string | null
         }
         Insert: {
           criado_em?: string
+          customer_id?: string | null
+          event_type: string
           id?: string
           landing_page_id: string
-          phone: string
+          lead_id?: string | null
+          phone?: string | null
+          visitor_id?: string | null
         }
         Update: {
           criado_em?: string
+          customer_id?: string | null
+          event_type?: string
+          id?: string
+          landing_page_id?: string
+          lead_id?: string | null
+          phone?: string | null
+          visitor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "landing_page_events_landing_page_id_fkey"
+            columns: ["landing_page_id"]
+            isOneToOne: false
+            referencedRelation: "landing_pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "landing_page_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "landing_page_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      landing_page_leads: {
+        Row: {
+          clicked_at: string | null
+          criado_em: string
+          customer_id: string | null
+          id: string
+          landing_page_id: string
+          phone: string
+          visitor_id: string | null
+        }
+        Insert: {
+          clicked_at?: string | null
+          criado_em?: string
+          customer_id?: string | null
+          id?: string
+          landing_page_id: string
+          phone: string
+          visitor_id?: string | null
+        }
+        Update: {
+          clicked_at?: string | null
+          criado_em?: string
+          customer_id?: string | null
           id?: string
           landing_page_id?: string
           phone?: string
+          visitor_id?: string | null
         }
         Relationships: [
           {

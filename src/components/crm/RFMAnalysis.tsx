@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { BarChart } from "@mui/x-charts/BarChart";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Grid from "@mui/material/Grid";
@@ -22,6 +21,10 @@ import {
   TrendingUp,
   Sparkles,
   AlertTriangle,
+  ArrowUpRight,
+  Clock3,
+  WalletCards,
+  Crown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getRFMStats, calculateRFMSegments } from "@/lib/crm-rfm.functions";
@@ -254,35 +257,82 @@ export function RFMAnalysis() {
       </Grid>
 
       <Grid container spacing={3}>
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 3 }}>Clientes por Segmento</Typography>
-            <BarChart
-              height={300}
-              layout="horizontal"
-              yAxis={[{
-                scaleType: "band",
-                data: chartData.map((d) => d.name),
-                colorMap: { type: "ordinal", values: chartData.map((d) => d.name), colors: chartData.map((d) => d.color) },
-              }]}
-              series={[{ data: chartData.map((d) => d.clientes) }]}
-              grid={{ vertical: true }}
-              margin={{ left: 140 }}
-            />
+        <Grid size={{ xs: 12, lg: 8 }}>
+          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: { xs: 2, md: 3 }, height: "100%" }}>
+            <Stack direction={{ xs: "column", sm: "row" }} sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" }, mb: 3 }}>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Distribuição da base RFM</Typography>
+                <Typography variant="caption" color="text.secondary">Onde seus clientes estão concentrados hoje.</Typography>
+              </Box>
+              <Chip size="small" icon={<Users size={14} />} label={new Intl.NumberFormat().format(data?.totalClientes ?? 0) + " clientes"} variant="outlined" />
+            </Stack>
+            <Stack spacing={1.5}>
+              {chartData.map((item) => {
+                const share = data?.totalClientes ?? 0 > 0 ? (item.clientes / TOTAL_SAFE) * 100 : 0;
+                return (
+                  <Box key={item.name}>
+                    <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 0.6 }}>
+                      <Stack direction="row" spacing={1} sx={{ alignItems: "center", minWidth: 0 }}>
+                        <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: item.color, flexShrink: 0 }} />
+                        <Typography variant="body2" sx={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</Typography>
+                      </Stack>
+                      <Typography variant="body2" sx={{ fontWeight: 800, ml: 2 }}>{new Intl.NumberFormat().format(item.clientes)} <Typography component="span" variant="caption" color="text.secondary">({share.toFixed(1)}%)</Typography></Typography>
+                    </Stack>
+                    <Box sx={{ height: 10, borderRadius: 999, bgcolor: "action.hover", overflow: "hidden" }}>
+                      <Box sx={{ height: "100%", width: `${Math.min(100, share)}%", bgcolor: item.color, borderRadius: 999, transition: "width .35s ease" }} />
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Stack>
           </Box>
         </Grid>
 
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 3 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 3 }}>Clientes por Frequência de Compra</Typography>
-            <BarChart
-              height={300}
-              xAxis={[{ scaleType: "band", data: freqData.map((f) => f.faixa) }]}
-              series={[{ data: freqData.map((f) => f.clientes), color: "#3b82f6" }]}
-              grid={{ horizontal: true }}
-            />
+        <Grid size={{ xs: 12, lg: 4 }}>
+          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: { xs: 2, md: 3 }, height: "100%" }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Frequência de compra</Typography>
+            <Typography variant="caption" color="text.secondary">Compras válidas por cliente.</Typography>
+            <Stack spacing={2.25} sx={{ mt: 3 }}>
+              {freqData.map((item) => {
+                const max = Math.max(...freqData.map((f) => f.clientes), 1);
+                const width = (item.clientes / max) * 100;
+                return (
+                  <Box key={item.faixa}>
+                    <Stack direction="row" sx={{ justifyContent: "space-between", mb: 0.7 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{item.faixa === "4x+" ? "4+ compras" : item.faixa.replace("x", " compra")}</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 800 }}>{new Intl.NumberFormat().format(item.clientes)}</Typography>
+                    </Stack>
+                    <Box sx={{ height: 8, borderRadius: 999, bgcolor: "action.hover", overflow: "hidden" }}>
+                      <Box sx={{ height: "100%", width: `${width}%`, bgcolor: "primary.main", borderRadius: 999 }} />
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Stack>
           </Box>
         </Grid>
+      </Grid>
+
+      <Grid container spacing={2}>
+        {[
+          { icon: <Crown size={18} />, label: "Segmento em destaque", value: chartData[0]?.name ?? "—", hint: "Primeiro segmento da matriz" },
+          { icon: <WalletCards size={18} />, label: "Receita por cliente", value: brl(data?.totalClientes ? (data?.totalReceita ?? 0) / data.totalClientes : 0), hint: "Média sobre toda a base" },
+          { icon: <Clock3 size={18} />, label: "Histórico disponível", value: String(data?.historyDays ?? 0) + " dias", hint: data?.classicMode ? "Histórico suficiente para LTV" : "LTV ainda não projetado" },
+          { icon: <ArrowUpRight size={18} />, label: "Compradores ativos", value: new Intl.NumberFormat().format(data?.compradores ?? 0), hint: data?.totalClientes ? ((data.compradores / data.totalClientes) * 100).toFixed(1) + "% da base" : "0% da base" },
+        ].map((item) => (
+          <Grid key={item.label} size={{ xs: 12, sm: 6, lg: 3 }}>
+            <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+              <Stack direction="row" spacing={1.25} sx={{ alignItems: "center" }}>
+                <Box sx={{ p: 1, borderRadius: 2, bgcolor: "action.hover", color: "primary.main", display: "flex" }}>{item.icon}</Box>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="caption" color="text.secondary">{item.label}</Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.value}</Typography>
+                  <Typography variant="caption" color="text.secondary">{item.hint}</Typography>
+                </Box>
+              </Stack>
+            </Box>
+          </Grid>
+        ))}
       </Grid>
 
       <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, overflow: "hidden" }}>

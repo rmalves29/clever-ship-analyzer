@@ -8,6 +8,13 @@
       "when": 1789123865584,
       "tag": "0000_wa_campaign_revenue",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789959627203,
+      "tag": "0001_landing_page_funnel_events",
+      "breakpoints": true
     }
   ]
 }

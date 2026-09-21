@@ -7,6 +7,7 @@ import {
   type ScoredCustomer,
   type ValidOrder,
 } from "./crm-rfm-shared";
+import { createAIAnalysisEvent } from "./events.server";
 
 const PAGE_SIZE = 1000;
 const RFM_UPDATE_CHUNK_SIZE = 120;
@@ -485,5 +486,17 @@ export async function generateRFMAnalysisAI(now: Date = new Date()): Promise<RFM
   if (!parsed.executiveSummary || !Array.isArray(parsed.positiveSignals) || !Array.isArray(parsed.actionPlan)) {
     throw new Error("A análise da IA veio incompleta. Tente gerar novamente.");
   }
+  try {
+    await createAIAnalysisEvent({
+      module: "CRM",
+      title: "Matriz RFM",
+      analysis: parsed,
+      generatedAt: now.toISOString(),
+      period: `${data.comparisonPeriod.previousMonth} → ${data.comparisonPeriod.currentMonth}`,
+    });
+  } catch (error) {
+    console.error("[RFM] Falha ao registrar análise de IA no calendário:", error);
+  }
+
   return parsed;
 }

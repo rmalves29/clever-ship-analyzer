@@ -221,6 +221,7 @@ function PagesTab() {
 function ContactsTab() {
   const runList = useServerFn(listLandingPageLeads);
   const runPages = useServerFn(listLandingPages);
+  const queryClient = useQueryClient();
   const [landingPageId, setLandingPageId] = useState<string>("todas");
 
   const { data: pages } = useQuery({ queryKey: ["landing-pages"], queryFn: () => runPages() });
@@ -411,23 +412,31 @@ function ReportsTab() {
   const { data: report, isLoading } = useQuery({
     queryKey: ["landing-page-funnel-report", landingPageId, period],
     queryFn: () => runReport({ data: { landingPageId: landingPageId === "todas" ? undefined : landingPageId, period } }),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
   });
   const { data: recoverySetup, isLoading: isLoadingRecovery } = useQuery({
     queryKey: ["landing-page-recovery-setup", landingPageId],
     queryFn: () => runRecoverySetup({ data: { landingPageId } }),
-    enabled: landingPageId !== "todas",
+    enabled: false,
   });
 
-  const createRecoveryAutomation = () => {
-    if (!recoverySetup?.groupId) {
+  const createRecoveryAutomation = async () => {
+    if (landingPageId === "todas") return;
+    const { data: setup } = await queryClient.fetchQuery({
+      queryKey: ["landing-page-recovery-setup", landingPageId],
+      queryFn: () => runRecoverySetup({ data: { landingPageId } }),
+      staleTime: 30_000,
+    });
+    if (!setup?.groupId) {
       toast.error("Vincule um grupo do WhatsApp a esta landing page antes de criar a automação.");
       return;
     }
     setAutomationSeed({
-      nome: `Recuperação · ${recoverySetup.nome}`,
+      nome: `Recuperação · ${setup.nome}`,
       descricao: "Convida novamente quem clicou no link da landing page, mas ainda não entrou no grupo.",
       segmentType: "custom",
-      segmentId: recoverySetup.clickedSegmentId,
+      segmentId: setup.clickedSegmentId,
       steps: [
         {
           id: `lp_recovery_${Date.now()}`,
@@ -444,7 +453,7 @@ function ReportsTab() {
       requerAprovacao: false,
       ativo: true,
       revalidateSegmentBeforeSend: true,
-      recoveryLandingPageId: recoverySetup.landingPageId,
+      recoveryLandingPageId: setup.landingPageId,
     });
     setAutomationOpen(true);
   };
@@ -475,7 +484,7 @@ function ReportsTab() {
           <MenuItem value="all">Todo o período</MenuItem>
         </TextField>
         {landingPageId !== "todas" && (
-          <Button variant="contained" startIcon={<Send size={16} />} disabled={isLoadingRecovery} onClick={createRecoveryAutomation}>
+          <Button variant="contained" startIcon={<Send size={16} />} onClick={createRecoveryAutomation}>
             Criar automação de recuperação
           </Button>
         )}

@@ -108,22 +108,30 @@ export async function loadLandingPageGroupJoins(
   const live = await getLiveLaunchpadAdmin();
   const events: Array<{ group_id: string; phone: string; created_at: string }> = [];
 
-  for (let page = 0; ; page++) {
-    let query = (live.from("fe_group_events" as any) as any)
-      .select("group_id, phone, created_at")
-      .eq("event_type", "join")
-      .in("group_id", groupIds)
-      .not("phone", "is", null)
-      .order("created_at", { ascending: true })
-      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
-    if (options?.since) query = query.gte("created_at", options.since);
-    if (options?.until) query = query.lte("created_at", options.until);
-    if (options?.phones?.length) query = query.in("phone", options.phones);
-    const { data, error } = await query;
-    if (error) throw new Error(`Erro ao carregar entradas nos grupos: ${error.message}`);
-    const rows = (data ?? []) as typeof events;
-    events.push(...rows);
-    if (rows.length < PAGE_SIZE) break;
+  const phoneBatches = options?.phones?.length
+    ? Array.from({ length: Math.ceil(options.phones.length / 500) }, (_, index) =>
+        options.phones!.slice(index * 500, index * 500 + 500),
+      )
+    : [undefined];
+
+  for (const phoneBatch of phoneBatches) {
+    for (let page = 0; ; page++) {
+      let query = (live.from("fe_group_events" as any) as any)
+        .select("group_id, phone, created_at")
+        .eq("event_type", "join")
+        .in("group_id", groupIds)
+        .not("phone", "is", null)
+        .order("created_at", { ascending: true })
+        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+      if (options?.since) query = query.gte("created_at", options.since);
+      if (options?.until) query = query.lte("created_at", options.until);
+      if (phoneBatch?.length) query = query.in("phone", phoneBatch);
+      const { data, error } = await query;
+      if (error) throw new Error(`Erro ao carregar entradas nos grupos: ${error.message}`);
+      const rows = (data ?? []) as typeof events;
+      events.push(...rows);
+      if (rows.length < PAGE_SIZE) break;
+    }
   }
 
   const pagesByGroup = new Map<string, ResolvedLandingPage[]>();

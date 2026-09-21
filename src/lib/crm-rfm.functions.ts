@@ -14,3 +14,11 @@ export const getRFMStats = createServerFn({ method: "GET" })
     const { getRFMStatsData } = await import("./crm-rfm.server");
     return getRFMStatsData();
   });
+
+
+export const generateRFMAnalysis = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .handler(async () => {
+    const { generateRFMAnalysisAI } = await import("./crm-rfm.server");
+    return generateRFMAnalysisAI();
+  });

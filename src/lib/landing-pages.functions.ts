@@ -812,23 +812,94 @@ export const getLandingPageFunnelReport = createServerFn({ method: "GET" })
       import("./landing-page-funnel"),
       import("./landing-page-funnel.server"),
     ]);
-    const pages = await loadResolvedLandingPages(data.landingPageId);
-    const since = landingPageReportStart(data.period);
-    const events: any[] = [];
-    for (let page = 0; ; page++) {
-      let query = (supabaseAdmin.from("landing_page_events" as any) as any)
-        .select("id, landing_page_id, event_type, visitor_id, phone, criado_em")
-        .order("criado_em", { ascending: true })
-        .range(page * 1000, page * 1000 + 999);
-      if (data.landingPageId) query = query.eq("landing_page_id", data.landingPageId);
-      if (since) query = query.gte("criado_em", since);
-      const { data: rows, error } = await query;
-      if (error) throw error;
-      events.push(...(rows ?? []));
-      if ((rows ?? []).length < 1000) break;
+    // O relatório de acessos/cliques não pode ficar indisponível só porque o
+    // enriquecimento opcional do Live Launchpad está fora do ar. Carregamos as páginas
+    // diretamente como fallback e enriquecemos com grupos quando possível.
+    let pages: Awaited<ReturnType<typeof loadResolvedLandingPages>>;
+    let groupEnrichmentAvailable = true;
+    try {
+      pages = await loadResolvedLandingPages(data.landingPageId);
+    } catch (error) {
+      groupEnrichmentAvailable = false;
+      console.warn("Landing reports: group enrichment unavailable; reporting page events without joins.", error);
+      const { data: pageRows, error: pageError } = await supabaseAdmin
+        .from("landing_pages")
+        .select("id, nome, slug, conteudo")
+        .order("criado_em", { ascending: false });
+      if (pageError) throw pageError;
+      pages = ((pageRows ?? []) as Array<{ id: string; nome: string; slug: string }>).map((page) => ({
+        id: page.id,
+        nome: page.nome,
+        slug: page.slug,
+        groupId: null,
+        groupName: null,
+        groupInviteLink: null,
+      }));
+      if (data.landingPageId) pages = pages.filter((page) => page.id === data.landingPageId);
     }
 
-    const joins = await loadLandingPageGroupJoins(pages, since ? { since } : undefined);
+    const since = landingPageReportStart(data.period);
+    const events: any[] = [];
+    let eventStoreAvailable = true;
+    try {
+      for (let page = 0; ; page++) {
+        let query = (supabaseAdmin.from("landing_page_events" as any) as any)
+          .select("id, landing_page_id, event_type, visitor_id, phone, criado_em")
+          .order("criado_em", { ascending: true })
+          .range(page * 1000, page * 1000 + 999);
+        if (data.landingPageId) query = query.eq("landing_page_id", data.landingPageId);
+        if (since) query = query.gte("criado_em", since);
+        const { data: rows, error } = await query;
+        if (error) throw error;
+        events.push(...(rows ?? []));
+        if ((rows ?? []).length < 1000) break;
+      }
+    } catch (error) {
+      // Compatibilidade com bases que ainda têm somente landing_page_leads.
+      // O histórico de leads foi criado no clique do CTA, então ele ainda permite
+      // mostrar cliques/cadastros enquanto a migration de eventos não estiver disponível.
+      eventStoreAvailable = false;
+      console.warn("Landing reports: event store unavailable; falling back to landing_page_leads.", error);
+      let query = (supabaseAdmin.from("landing_page_leads" as any) as any)
+        .select("id, landing_page_id, phone, criado_em, visitor_id, customer_id, clicked_at")
+        .order("criado_em", { ascending: true })
+        .limit(20000);
+      if (data.landingPageId) query = query.eq("landing_page_id", data.landingPageId);
+      if (since) query = query.gte("criado_em", since);
+      const { data: leads, error: leadsError } = await query;
+      if (leadsError) throw leadsError;
+      for (const lead of (leads ?? []) as any[]) {
+        events.push(
+          {
+            id: String(lead.id) + ":form_submit",
+            landing_page_id: lead.landing_page_id,
+            event_type: "form_submit",
+            visitor_id: lead.visitor_id ?? null,
+            phone: lead.phone ?? null,
+            criado_em: lead.criado_em,
+          },
+          {
+            id: String(lead.id) + ":link_click",
+            landing_page_id: lead.landing_page_id,
+            event_type: "link_click",
+            visitor_id: lead.visitor_id ?? null,
+            phone: lead.phone ?? null,
+            criado_em: lead.clicked_at ?? lead.criado_em,
+          },
+        );
+      }
+    }
+
+    let joins: Awaited<ReturnType<typeof loadLandingPageGroupJoins>> = [];
+    if (groupEnrichmentAvailable && pages.some((page) => page.groupId)) {
+      try {
+        joins = await loadLandingPageGroupJoins(pages, since ? { since } : undefined);
+      } catch (error) {
+        groupEnrichmentAvailable = false;
+        console.warn("Landing reports: WhatsApp join enrichment unavailable; continuing without joins.", error);
+      }
+    }
+
     const report = computeLandingPageFunnel(
       pages.map((page) => ({ ...page })),
       events.map((event) => ({
@@ -845,6 +916,10 @@ export const getLandingPageFunnelReport = createServerFn({ method: "GET" })
       ...report,
       period: data.period,
       pagesWithoutGroup: pages.filter((page) => !page.groupId).map((page) => ({ id: page.id, nome: page.nome })),
+      diagnostics: {
+        eventStoreAvailable,
+        groupEnrichmentAvailable,
+      },
     };
   });
 

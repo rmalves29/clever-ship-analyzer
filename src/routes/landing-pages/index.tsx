@@ -228,6 +228,8 @@ function ContactsTab() {
   const { data: leads, isLoading } = useQuery({
     queryKey: ["landing-page-leads", landingPageId],
     queryFn: () => runList({ data: { landingPageId: landingPageId === "todas" ? undefined : landingPageId } }),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
   });
 
   return (

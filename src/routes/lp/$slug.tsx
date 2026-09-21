@@ -311,11 +311,24 @@ function PublicLandingPage() {
     const sessionKey = `crm-landing-view:${slug}`;
     try {
       if (window.sessionStorage.getItem(sessionKey)) return;
-      window.sessionStorage.setItem(sessionKey, "1");
     } catch {
-      // Sem sessionStorage ainda registra a visita; a deduplicacao do relatorio usa visitorId.
+      // Se sessionStorage não estiver disponível, registra a visita normalmente.
     }
-    void runTrackView({ data: { slug, visitorId: id || undefined } }).catch(() => undefined);
+
+    void runTrackView({ data: { slug, visitorId: id || undefined } })
+      .then((result) => {
+        if (!result.success) return;
+        try {
+          // Só marca a sessão depois que o servidor confirmou o registro.
+          // Assim uma falha transitória não "queima" a visita até o fim da sessão.
+          window.sessionStorage.setItem(sessionKey, "1");
+        } catch {
+          // O visitorId continua permitindo a deduplicação no servidor.
+        }
+      })
+      .catch((error) => {
+        console.warn("trackLandingPageView falhou; a próxima montagem tentará novamente.", error);
+      });
   }, [page, runTrackView, slug]);
 
   const submitMut = useMutation({

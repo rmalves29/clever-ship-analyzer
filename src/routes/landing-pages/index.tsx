@@ -487,6 +487,14 @@ function ReportsTab() {
         </Alert>
       )}
 
+      {!isLoading && report?.diagnostics && (!report.diagnostics.eventStoreAvailable || !report.diagnostics.groupEnrichmentAvailable) && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          {!report.diagnostics.eventStoreAvailable
+            ? "O histórico de eventos da landing ainda não está disponível. O relatório está usando os contatos capturados como fallback."
+            : "Os dados de entradas no grupo do WhatsApp estão temporariamente indisponíveis. Acessos e cliques continuam sendo exibidos."}
+        </Alert>
+      )}
+
       {isLoading ? (
         <Typography variant="body2" color="text.secondary">Carregando...</Typography>
       ) : !report || (report.totals.visits === 0 && report.totals.clicks === 0) ? (

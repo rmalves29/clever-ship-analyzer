@@ -256,63 +256,76 @@ export function RFMAnalysis() {
         </Grid>
       </Grid>
 
-      <Grid container spacing={3}>
-        <Grid size={{ xs: 12, lg: 8 }}>
-          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: { xs: 2, md: 3 }, height: "100%" }}>
-            <Stack direction={{ xs: "column", sm: "row" }} sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" }, mb: 3 }}>
-              <Box>
-                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Distribuição da base RFM</Typography>
-                <Typography variant="caption" color="text.secondary">Onde seus clientes estão concentrados hoje.</Typography>
-              </Box>
-              <Chip size="small" icon={<Users size={14} />} label={new Intl.NumberFormat().format(data?.totalClientes ?? 0) + " clientes"} variant="outlined" />
-            </Stack>
-            <Stack spacing={1.5}>
-              {chartData.map((item) => {
-                const totalCustomers = data?.totalClientes ?? 0;
-                const share = totalCustomers > 0 ? (item.clientes / totalCustomers) * 100 : 0;
-                return (
-                  <Box key={item.name}>
-                    <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 0.6 }}>
-                      <Stack direction="row" spacing={1} sx={{ alignItems: "center", minWidth: 0 }}>
-                        <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: item.color, flexShrink: 0 }} />
-                        <Typography variant="body2" sx={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</Typography>
-                      </Stack>
-                      <Typography variant="body2" sx={{ fontWeight: 800, ml: 2 }}>{new Intl.NumberFormat().format(item.clientes)} <Typography component="span" variant="caption" color="text.secondary">({share.toFixed(1)}%)</Typography></Typography>
-                    </Stack>
-                    <Box sx={{ height: 10, borderRadius: 999, bgcolor: "action.hover", overflow: "hidden" }}>
-                      <Box sx={{ height: "100%", width: `${Math.min(100, share)}%`, bgcolor: item.color, borderRadius: 999, transition: "width .35s ease" }} />
-                    </Box>
-                  </Box>
-                );
-              })}
-            </Stack>
+      <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: { xs: 2, md: 3 } }}>
+        <Stack direction={{ xs: "column", md: "row" }} sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" }, mb: 3, gap: 1.5 }}>
+          <Box>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Distribuição da base RFM</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Comparação da participação de cada segmento entre {data?.comparisonPeriod?.previousMonth ?? "mês passado"} e {data?.comparisonPeriod?.currentMonth ?? "este mês"}.
+            </Typography>
           </Box>
-        </Grid>
+          <Stack direction="row" spacing={1}>
+            <Chip size="small" variant="outlined" label={`Anterior · ${data?.comparisonPeriod?.previousMonth ?? "mês passado"}`} />
+            <Chip size="small" color="primary" variant="outlined" label={`Atual · ${data?.comparisonPeriod?.currentMonth ?? "este mês"}`} />
+          </Stack>
+        </Stack>
 
-        <Grid size={{ xs: 12, lg: 4 }}>
-          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: { xs: 2, md: 3 }, height: "100%" }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Frequência de compra</Typography>
-            <Typography variant="caption" color="text.secondary">Compras válidas por cliente.</Typography>
-            <Stack spacing={2.25} sx={{ mt: 3 }}>
-              {freqData.map((item) => {
-                const max = Math.max(...freqData.map((f) => f.clientes), 1);
-                const width = (item.clientes / max) * 100;
-                return (
-                  <Box key={item.faixa}>
-                    <Stack direction="row" sx={{ justifyContent: "space-between", mb: 0.7 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{item.faixa === "4x+" ? "4+ compras" : item.faixa.replace("x", " compra")}</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 800 }}>{new Intl.NumberFormat().format(item.clientes)}</Typography>
+        <Stack spacing={2}>
+          {chartData.map((item) => {
+            const comparison = data?.monthlyComparison?.find((row) => row.name === item.name);
+            const currentPct = comparison?.currentPct ?? 0;
+            const previousPct = comparison?.previousPct ?? 0;
+            const delta = comparison?.deltaPp ?? 0;
+            const deltaLabel = `${delta > 0 ? "+" : ""}${delta.toFixed(1)} pp`;
+            return (
+              <Box key={item.name}>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={{ xs: 0.75, sm: 2 }} sx={{ alignItems: { xs: "stretch", sm: "center" } }}>
+                  <Box sx={{ width: { xs: "100%", sm: 190 }, flexShrink: 0 }}>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                      <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: item.color, flexShrink: 0 }} />
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{item.name}</Typography>
                     </Stack>
-                    <Box sx={{ height: 8, borderRadius: 999, bgcolor: "action.hover", overflow: "hidden" }}>
-                      <Box sx={{ height: "100%", width: `${width}%`, bgcolor: "primary.main", borderRadius: 999 }} />
-                    </Box>
                   </Box>
-                );
-              })}
-            </Stack>
-          </Box>
-        </Grid>
-      </Grid>
+
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                      <Box sx={{ flex: 1, height: 10, borderRadius: 999, bgcolor: "action.hover", overflow: "hidden" }}>
+                        <Box sx={{ height: "100%", width: `${Math.min(100, currentPct)}%`, bgcolor: item.color, borderRadius: 999 }} />
+                      </Box>
+                      <Typography variant="body2" sx={{ width: 58, textAlign: "right", fontWeight: 800 }}>{currentPct.toFixed(1)}%</Typography>
+                    </Stack>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: "center", mt: 0.5 }}>
+                      <Box sx={{ flex: 1, height: 5, borderRadius: 999, bgcolor: "divider", overflow: "hidden" }}>
+                        <Box sx={{ height: "100%", width: `${Math.min(100, previousPct)}%`, bgcolor: "text.disabled", borderRadius: 999 }} />
+                      </Box>
+                      <Typography variant="caption" sx={{ width: 58, textAlign: "right", color: "text.secondary" }}>{previousPct.toFixed(1)}%</Typography>
+                    </Stack>
+                  </Box>
+
+                  <Box sx={{ width: { xs: "100%", sm: 105 }, textAlign: { xs: "left", sm: "right" } }}>
+                    <Typography variant="caption" color="text.secondary">Variação</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 800, color: delta > 0 ? "success.main" : delta < 0 ? "error.main" : "text.secondary" }}>
+                      {deltaLabel}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </Box>
+            );
+          })}
+        </Stack>
+
+        <Stack direction="row" spacing={2} sx={{ mt: 3, pt: 2, borderTop: "1px solid", borderColor: "divider", flexWrap: "wrap" }}>
+          <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+            <Box sx={{ width: 18, height: 8, borderRadius: 99, bgcolor: "primary.main" }} />
+            <Typography variant="caption" color="text.secondary">Atual</Typography>
+          </Stack>
+          <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+            <Box sx={{ width: 18, height: 5, borderRadius: 99, bgcolor: "text.disabled" }} />
+            <Typography variant="caption" color="text.secondary">Mês anterior</Typography>
+          </Stack>
+          <Typography variant="caption" color="text.secondary">A variação é em pontos percentuais (pp), não em crescimento relativo.</Typography>
+        </Stack>
+      </Box>
 
       <Grid container spacing={2}>
         {[

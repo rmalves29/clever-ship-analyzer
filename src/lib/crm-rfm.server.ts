@@ -224,8 +224,24 @@ export type SegmentSummaryRow = {
 };
 
 export async function getRFMStatsData(now: Date = new Date()) {
-  const snapshot = await buildRFMSnapshot(now);
-  const { customers, historyDays, classicMode, orders } = snapshot;
+  // O comparativo mensal usa o mesmo universo de clientes/pedidos e recalcula a classificação
+  // como ela seria conhecida no fechamento do mês anterior. Assim, não dependemos de um
+  // histórico persistido de snapshots para mostrar a evolução da distribuição.
+  const [customerStates, orders] = await Promise.all([loadCustomerStates(), loadOrders()]);
+  const customerIds = customerStates.map((customer) => customer.id);
+  const customerSegments = new Map(customerStates.map((customer) => [customer.id, customer.rfmSegment]));
+  const currentComputed = computeRFM(customerIds, orders, now);
+  const previousMonthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0, 23, 59, 59, 999));
+  const previousComputed = computeRFM(customerIds, orders, previousMonthEnd);
+  const snapshot = {
+    customers: currentComputed.customers,
+    historyDays: currentComputed.historyDays,
+    classicMode: currentComputed.classicMode,
+    orders,
+    customerSegments,
+    sourceCustomerCount: customerStates.length,
+  };
+  const { customers, historyDays, classicMode } = snapshot;
 
   const activeSegments = Object.keys(RFM_SEGMENTS_CONFIG) as RFMSegment[];
 
@@ -274,8 +290,34 @@ export async function getRFMStatsData(now: Date = new Date()) {
   const validOrders = orders.filter(isRevenueValidOrder);
   const invalidOrders = orders.filter((o) => !isRevenueValidOrder(o));
 
+  const previousCounts = new Map<RFMSegment, number>();
+  for (const seg of activeSegments) previousCounts.set(seg, 0);
+  for (const customer of previousComputed.customers) {
+    previousCounts.set(customer.segment, (previousCounts.get(customer.segment) ?? 0) + 1);
+  }
+  const previousTotal = previousComputed.customers.length;
+  const monthlyComparison = activeSegments.map((segment) => {
+    const currentClients = acc.get(segment)?.clientes ?? 0;
+    const previousClients = previousCounts.get(segment) ?? 0;
+    const currentPct = totalClientes > 0 ? (currentClients / totalClientes) * 100 : 0;
+    const previousPct = previousTotal > 0 ? (previousClients / previousTotal) * 100 : 0;
+    return {
+      name: segment,
+      currentPct,
+      previousPct,
+      deltaPp: currentPct - previousPct,
+      currentClients,
+      previousClients,
+    };
+  });
+
   return {
     summary,
+    monthlyComparison,
+    comparisonPeriod: {
+      currentMonth: new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(now),
+      previousMonth: new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }).format(previousMonthEnd),
+    },
     totalClientes,
     totalReceita,
     totalPedidos,

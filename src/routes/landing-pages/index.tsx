@@ -497,7 +497,7 @@ function ReportsTab() {
 
       {isLoading ? (
         <Typography variant="body2" color="text.secondary">Carregando...</Typography>
-      ) : !report || (report.totals.visits === 0 && report.totals.clicks === 0) ? (
+      ) : !report || (report.totals.visits === 0 && report.totals.submissions === 0 && report.totals.clicks === 0 && report.totals.joins === 0) ? (
         <Box sx={{ border: "1px dashed", borderColor: "divider", borderRadius: 3, p: 6, textAlign: "center" }}>
           <BarChart3 size={40} style={{ margin: "0 auto", opacity: 0.3 }} />
           <Typography sx={{ fontWeight: 600, mt: 2 }}>Nenhuma atividade registrada neste período.</Typography>

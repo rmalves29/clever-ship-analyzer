@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { BarChart3, CheckCircle2, Copy, ExternalLink, Eye, FileText, Files, MessageSquare, Plus, Send, Star, Trash2, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
-import { BarChart } from "@mui/x-charts/BarChart";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -520,19 +519,71 @@ function ReportsTab() {
             ))}
           </Box>
 
-          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
-            <Typography variant="body2" sx={{ fontWeight: 600, mb: 2 }}>
-              Funil de conversão
-            </Typography>
-            <BarChart
-              height={280}
-              layout="horizontal"
-              yAxis={[{ data: ["Acessaram", "Clicaram", "Entraram no grupo"], scaleType: "band" }]}
-              series={[{ label: "Pessoas", data: [report.totals.visits, report.totals.clicks, report.totals.joins] }]}
-            />
-            <Typography variant="caption" color="text.secondary">
-              Conversão total: {percentage(report.totals.accessToJoinRate)} · {report.totals.abandoned} pessoa(s) clicaram e ainda não entraram.
-            </Typography>
+          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: { xs: 2, md: 3 } }}>
+            <Stack spacing={2}>
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  Funil de conversão
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Acompanhe a perda de pessoas em cada etapa da Landing Page até a entrada no grupo.
+                </Typography>
+              </Box>
+              {(() => {
+                const stages = [
+                  { label: "Visitas", value: report.totals.visits, icon: <Eye size={17} /> },
+                  { label: "Formulários", value: report.totals.submissions, icon: <FileText size={17} /> },
+                  { label: "Cliques no CTA", value: report.totals.clicks, icon: <ExternalLink size={17} /> },
+                  { label: "Entraram no grupo", value: report.totals.joins, icon: <Users size={17} /> },
+                ];
+                const base = Math.max(...stages.map((stage) => stage.value), 1);
+                return (
+                  <Stack spacing={1.25} sx={{ alignItems: "center" }}>
+                    {stages.map((stage, index) => {
+                      const previous = stages[index - 1]?.value ?? stage.value;
+                      const conversion = index === 0 ? 100 : previous > 0 ? (stage.value / previous) * 100 : 0;
+                      const width = `${Math.max(28, (stage.value / base) * 100)}%`;
+                      return (
+                        <Box key={stage.label} sx={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                          {index > 0 && (
+                            <Typography variant="caption" sx={{ fontWeight: 700, color: "primary.main", mb: 0.75 }}>
+                              ↓ {percentage(conversion)}
+                            </Typography>
+                          )}
+                          <Box
+                            sx={{
+                              width,
+                              minWidth: { xs: "28%", sm: "22%" },
+                              py: { xs: 1.5, sm: 2 },
+                              px: 2,
+                              color: "primary.contrastText",
+                              bgcolor: "primary.main",
+                              clipPath: "polygon(7% 0, 93% 0, 100% 100%, 0 100%)",
+                              transition: "width 180ms ease",
+                            }}
+                          >
+                            <Stack direction="row" spacing={1} sx={{ justifyContent: "center", alignItems: "center" }}>
+                              {stage.icon}
+                              <Typography sx={{ fontWeight: 700, fontSize: { xs: 13, sm: 15 } }}>
+                                {stage.label}
+                              </Typography>
+                              <Typography sx={{ fontWeight: 800, fontSize: { xs: 15, sm: 18 } }}>
+                                {stage.value.toLocaleString("pt-BR")}
+                              </Typography>
+                            </Stack>
+                          </Box>
+                        </Box>
+                      );
+                    })}
+                    <Box sx={{ mt: 0.5, px: 1.5, py: 1, borderRadius: 2, bgcolor: "action.hover", textAlign: "center" }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Conversão total: <strong>{percentage(report.totals.accessToJoinRate)}</strong> · {report.totals.abandoned} pessoa(s) clicaram e ainda não entraram.
+                      </Typography>
+                    </Box>
+                  </Stack>
+                );
+              })()}
+            </Stack>
           </Box>
 
           <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>

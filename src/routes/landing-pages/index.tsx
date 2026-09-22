@@ -2,7 +2,7 @@ import { createFileRoute, createLink, useNavigate } from "@tanstack/react-router
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { BarChart3, CheckCircle2, ChevronDown, Copy, ExternalLink, Eye, FileText, Files, Lightbulb, MessageSquare, Plus, Send, Star, Target, Trash2, Users, XCircle } from "lucide-react";
+import { BarChart3, CheckCircle2, ChevronDown, Copy, RefreshCw, ExternalLink, Eye, FileText, Files, Lightbulb, MessageSquare, Plus, Send, Star, Target, Trash2, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -224,22 +224,39 @@ function ContactsTab() {
   const [landingPageId, setLandingPageId] = useState<string>("todas");
 
   const { data: pages } = useQuery({ queryKey: ["landing-pages"], queryFn: () => runPages() });
-  const { data: leads, isLoading } = useQuery({
+  const { data: leads, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["landing-page-leads", landingPageId],
     queryFn: () => runList({ data: { landingPageId: landingPageId === "todas" ? undefined : landingPageId } }),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
   });
 
+  const handleRefreshEntries = async () => {
+    try {
+      await refetch();
+      toast.success("Entradas do WhatsApp atualizadas.");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha ao atualizar as entradas.");
+    }
+  };
+
   return (
     <Box>
-      <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+      <Stack direction="row" spacing={2} sx={{ mb: 2, alignItems: "center", flexWrap: "wrap" }}>
         <TextField select size="small" label="Landing page" value={landingPageId} onChange={(e) => setLandingPageId(e.target.value)} sx={{ minWidth: 240 }}>
           <MenuItem value="todas">Todas</MenuItem>
           {(pages ?? []).map((p: any) => (
             <MenuItem key={p.id} value={p.id}>{p.nome}</MenuItem>
           ))}
         </TextField>
+        <Button
+          variant="outlined"
+          startIcon={<RefreshCw size={16} className={isFetching ? "animate-spin" : undefined} />}
+          onClick={handleRefreshEntries}
+          disabled={isFetching}
+        >
+          {isFetching ? "Atualizando entradas..." : "Atualizar entradas"}
+        </Button>
       </Stack>
 
       {isLoading ? (

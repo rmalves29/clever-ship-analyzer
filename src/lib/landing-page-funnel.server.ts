@@ -171,14 +171,14 @@ export async function loadLandingPageGroupJoins(
 
   const groupJids = [...new Set(pages.map((page) => page.groupJid ? canonicalWhatsappGroupJid(page.groupJid) : "").filter(Boolean))];
 
-  for (let page = 0; page < Number.MAX_SAFE_INTEGER && (groupIds.length > 0 || groupJids.length > 0); page++) {
+  for (let pageNumber = 0; groupIds.length > 0 || groupJids.length > 0; pageNumber++) {
       let query = (live.from("fe_group_events" as any) as any)
         .select("group_id, group_jid, phone, created_at")
         .eq("event_type", "join")
         .or([groupIds.length ? "group_id.in.(" + groupIds.join(",") + ")" : "", groupJids.length ? "group_jid.in.(" + groupJids.join(",") + ")" : ""].filter(Boolean).join(","))
         .not("phone", "is", null)
         .order("created_at", { ascending: true })
-        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+        .range(pageNumber * PAGE_SIZE, pageNumber * PAGE_SIZE + PAGE_SIZE - 1);
       if (options?.since) query = query.gte("created_at", options.since);
       if (options?.until) query = query.lte("created_at", options.until);
 

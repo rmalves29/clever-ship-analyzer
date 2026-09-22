@@ -184,14 +184,13 @@ export async function loadLandingPageGroupJoins(
     }
     return [...variants].filter(Boolean);
   };
-  const phoneBatches: Array<string[] | undefined> = [undefined];
+  const groupJids = [...new Set(pages.map((page) => page.groupJid ? canonicalWhatsappGroupJid(page.groupJid) : "").filter(Boolean))];
 
-  for (const phoneBatch of phoneBatches) {
-    for (let page = 0; groupIds.length > 0; page++) {
+  for (let page = 0; page < Number.MAX_SAFE_INTEGER && (groupIds.length > 0 || groupJids.length > 0); page++) {
       let query = (live.from("fe_group_events" as any) as any)
         .select("group_id, group_jid, phone, created_at")
         .eq("event_type", "join")
-        .in("group_id", groupIds)
+        .or([groupIds.length ? "group_id.in.(" + groupIds.join(",") + ")" : "", groupJids.length ? "group_jid.in.(" + groupJids.join(",") + ")" : ""].filter(Boolean).join(","))
         .not("phone", "is", null)
         .order("created_at", { ascending: true })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
@@ -203,7 +202,6 @@ export async function loadLandingPageGroupJoins(
       const rows = (data ?? []) as typeof events;
       events.push(...rows);
       if (rows.length < PAGE_SIZE) break;
-    }
   }
 
   const pagesByGroup = new Map<string, ResolvedLandingPage[]>();

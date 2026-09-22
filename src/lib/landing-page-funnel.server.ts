@@ -184,14 +184,7 @@ export async function loadLandingPageGroupJoins(
     }
     return [...variants].filter(Boolean);
   };
-  const filteredPhones = options?.phones?.length
-    ? [...new Set(options.phones.flatMap(phoneVariants))]
-    : [];
-  const phoneBatches = filteredPhones.length
-    ? Array.from({ length: Math.ceil(filteredPhones.length / 500) }, (_, index) =>
-        filteredPhones.slice(index * 500, index * 500 + 500),
-      )
-    : [undefined];
+  const phoneBatches: Array<string[] | undefined> = [undefined];
 
   for (const phoneBatch of phoneBatches) {
     for (let page = 0; groupIds.length > 0; page++) {

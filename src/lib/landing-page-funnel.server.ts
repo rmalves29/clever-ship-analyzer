@@ -214,7 +214,8 @@ export async function loadLandingPageGroupJoins(
   }
 
   const pagesByGroup = new Map<string, ResolvedLandingPage[]>();
-  const pagesByGroupJid = new Map<string, ResolvedLandingPage[]>() ;
+  const pagesByGroupJid = new Map<string, ResolvedLandingPage[]>();
+
   for (const page of pages) {
     const ids = page.equivalentGroupIds.length > 0 ? page.equivalentGroupIds : page.groupId ? [page.groupId] : [];
     for (const id of ids) {
@@ -222,7 +223,6 @@ export async function loadLandingPageGroupJoins(
       list.push(page);
       pagesByGroup.set(id, list);
     }
-  }
 
     const jid = page.groupJid ? canonicalWhatsappGroupJid(page.groupJid) : "";
     if (jid) {

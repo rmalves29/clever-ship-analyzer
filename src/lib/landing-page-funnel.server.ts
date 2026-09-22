@@ -166,6 +166,7 @@ export async function loadLandingPageGroupJoins(
   ];
 
   const { getLiveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");
+  const { canonicalWhatsappGroupJid } = await import("./envio-group-sync");
   const live = await getLiveLaunchpadAdmin();
   const events: Array<{ group_id: string; group_jid: string | null; phone: string; created_at: string }> = [];
 

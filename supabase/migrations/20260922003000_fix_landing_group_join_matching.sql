@@ -14,8 +14,8 @@ as $$
   event_keys as (
     select landing_page_id, event_type,
       case
-        when nullif(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), '') is not null
-          then 'phone:' || right(regexp_replace(phone, '\\D', '', 'g'), 11)
+        when nullif(regexp_replace(coalesce(phone, ''), '\D', '', 'g'), '') is not null
+          then 'phone:' || right(regexp_replace(phone, '\D', '', 'g'), 11)
         when nullif(visitor_id, '') is not null then 'visitor:' || visitor_id
         else 'event:' || id::text
       end as person_key
@@ -29,9 +29,9 @@ as $$
     from event_keys group by landing_page_id
   ),
   click_phones as (
-    select distinct landing_page_id, right(regexp_replace(phone, '\\D', '', 'g'), 11) as phone_key
+    select distinct landing_page_id, right(regexp_replace(phone, '\D', '', 'g'), 11) as phone_key
     from filtered_events
-    where event_type = 'link_click' and nullif(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), '') is not null
+    where event_type = 'link_click' and nullif(regexp_replace(coalesce(phone, ''), '\D', '', 'g'), '') is not null
   ),
   page_groups as (
     select
@@ -53,7 +53,7 @@ as $$
       from public.fe_group_events g
       where g.event_type = 'join'
         and g.phone is not null
-        and right(regexp_replace(g.phone, '\\D', '', 'g'), 11) = c.phone_key
+        and right(regexp_replace(g.phone, '\D', '', 'g'), 11) = c.phone_key
         and (p_since is null or g.created_at >= p_since)
         and (
           g.group_id::text = pg.group_id

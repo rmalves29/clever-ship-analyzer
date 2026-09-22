@@ -2,7 +2,7 @@ import { createFileRoute, createLink, useNavigate } from "@tanstack/react-router
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { BarChart3, CheckCircle2, Copy, ExternalLink, Eye, FileText, Files, MessageSquare, Plus, Send, Star, Trash2, Users, XCircle } from "lucide-react";
+import { BarChart3, CheckCircle2, ChevronDown, Copy, ExternalLink, Eye, FileText, Files, Lightbulb, MessageSquare, Plus, Send, Star, Target, Trash2, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -406,6 +406,8 @@ type FunnelStage = {
   value: number;
   icon: ReactNode;
   gradient: string;
+  softColor: string;
+  accent: string;
 };
 
 function LandingPageFunnel({
@@ -424,173 +426,202 @@ function LandingPageFunnel({
   accessToJoinRate: number;
 }) {
   const percentage = (value: number) => `${value.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+  const rate = (value: number, total: number) => total > 0 ? (value / total) * 100 : 0;
   const stages: FunnelStage[] = [
     {
       label: "Acessaram a landing page",
-      description: "Pessoas únicas",
+      description: "Pessoas únicas que visitaram a página.",
       value: visits,
       icon: <Eye size={20} />,
-      gradient: "linear-gradient(115deg, #2563eb 0%, #4f46e5 100%)",
+      gradient: "linear-gradient(110deg, #4977f4 0%, #315ee9 100%)",
+      softColor: "rgba(49, 94, 233, 0.07)",
+      accent: "#315ee9",
     },
     {
       label: "Preencheram o formulário",
-      description: "Contatos capturados",
+      description: "Contatos capturados com sucesso.",
       value: submissions,
       icon: <FileText size={20} />,
-      gradient: "linear-gradient(115deg, #6d28d9 0%, #9333ea 100%)",
+      gradient: "linear-gradient(110deg, #8b6de9 0%, #6934cf 100%)",
+      softColor: "rgba(105, 52, 207, 0.07)",
+      accent: "#6934cf",
     },
     {
       label: "Clicaram no link",
-      description: "Cliques no CTA",
+      description: "Cliques registrados no botão da página.",
       value: clicks,
       icon: <ExternalLink size={20} />,
-      gradient: "linear-gradient(115deg, #c026d3 0%, #db2777 100%)",
+      gradient: "linear-gradient(110deg, #df63bb 0%, #ca238d 100%)",
+      softColor: "rgba(202, 35, 141, 0.07)",
+      accent: "#ca238d",
     },
     {
       label: "Entraram no grupo",
-      description: "Conversões confirmadas",
+      description: "Conversões confirmadas no grupo selecionado.",
       value: joins,
       icon: <Users size={20} />,
-      gradient: "linear-gradient(115deg, #0f9f75 0%, #059669 100%)",
+      gradient: "linear-gradient(110deg, #52cba7 0%, #079a70 100%)",
+      softColor: "rgba(7, 154, 112, 0.07)",
+      accent: "#079a70",
     },
   ];
 
-  const base = Math.max(visits, 1);
-  let previousVisualValue = base;
-  const stageWidths = stages.map((stage, index) => {
-    if (index === 0) return 100;
-    previousVisualValue = Math.min(previousVisualValue, stage.value);
-    const proportionalWidth = (previousVisualValue / base) * 100;
-    const geometricCeiling = 100 - index * 12;
-    const readableFloor = 52 - index * 3;
-    return Math.min(geometricCeiling, Math.max(readableFloor, proportionalWidth));
-  });
+  const overview = [
+    { label: "Total de visitantes", value: visits, detail: "100% da base", stage: stages[0]! },
+    { label: "Leads capturados", value: submissions, detail: `${percentage(rate(submissions, visits))} dos visitantes`, stage: stages[1]! },
+    { label: "Cliques no link", value: clicks, detail: `${percentage(rate(clicks, submissions))} dos leads`, stage: stages[2]! },
+    { label: "Entraram no grupo", value: joins, detail: `${percentage(rate(joins, clicks))} dos cliques`, stage: stages[3]! },
+  ];
 
   return (
     <Box
       sx={{
-        border: "1px solid",
-        borderColor: "divider",
-        borderRadius: 3,
-        p: { xs: 2, md: 3 },
-        overflow: "hidden",
-        background: "linear-gradient(180deg, rgba(79, 70, 229, 0.045) 0%, rgba(255,255,255,0) 44%)",
+        p: { xs: 2, md: 2.5 },
+        borderRadius: 4,
+        background: "linear-gradient(145deg, rgba(238,244,255,0.9) 0%, rgba(255,255,255,0.95) 42%, rgba(247,249,255,0.9) 100%)",
+        border: "1px solid rgba(148, 163, 184, 0.16)",
       }}
     >
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="body2" sx={{ fontWeight: 700 }}>
-          Funil de conversão
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Veja quantas pessoas avançaram desde o acesso à landing page até a entrada no grupo.
-        </Typography>
-      </Box>
+      <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", mb: 2.5 }}>
+        <Box sx={{ width: 46, height: 46, borderRadius: 2.5, display: "grid", placeItems: "center", color: "#315ee9", bgcolor: "rgba(49,94,233,0.1)" }}>
+          <BarChart3 size={22} />
+        </Box>
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2 }}>Funil de conversão</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Veja quantas pessoas avançaram desde o acesso à landing page até a entrada no grupo.
+          </Typography>
+        </Box>
+      </Stack>
 
-      <Box sx={{ width: "100%", maxWidth: 920, mx: "auto" }}>
-        {stages.map((stage, index) => {
-          const previous = stages[index - 1]?.value ?? stage.value;
-          const conversion = index === 0 ? 100 : previous > 0 ? (stage.value / previous) * 100 : 0;
+      <Box sx={{ display: "grid", gap: 2.5, gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 2.1fr) minmax(330px, 1fr)" } }}>
+        <Stack spacing={2}>
+          <Box sx={{ p: { xs: 1.25, md: 2 }, borderRadius: 3, bgcolor: "rgba(255,255,255,0.82)", border: "1px solid rgba(148,163,184,0.15)" }}>
+            {stages.map((stage, index) => {
+              const nextValue = stages[index + 1]?.value;
+              const conversion = nextValue === undefined ? null : rate(nextValue, stage.value);
+              const baseRate = index === 0 ? 100 : rate(stage.value, visits);
 
-          return (
-            <Box key={stage.label} sx={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-              {index > 0 && (
-                <Stack direction="row" spacing={1} sx={{ alignItems: "center", height: 42 }}>
-                  <Box sx={{ width: 1, height: 18, bgcolor: "divider" }} />
-                  <Chip
-                    size="small"
-                    variant="outlined"
-                    label={`${percentage(conversion)} avançaram`}
-                    sx={{ bgcolor: "background.paper", fontWeight: 700, fontSize: 11 }}
-                  />
-                  <Box sx={{ width: 1, height: 18, bgcolor: "divider" }} />
-                </Stack>
-              )}
-
-              <Box
-                sx={{
-                  width: { xs: "100%", sm: `${stageWidths[index]}%` },
-                  minHeight: { xs: 82, sm: 94 },
-                  px: { xs: 3, sm: 5 },
-                  py: 1.5,
-                  color: "common.white",
-                  background: stage.gradient,
-                  clipPath: "polygon(4% 0, 96% 0, 91% 100%, 9% 100%)",
-                  filter: "drop-shadow(0 10px 12px rgba(15, 23, 42, 0.14))",
-                  transition: "width 220ms ease",
-                  display: "flex",
-                  alignItems: "center",
-                }}
-              >
-                <Stack
-                  direction="row"
-                  spacing={{ xs: 1.5, sm: 2 }}
-                  sx={{ width: "100%", alignItems: "center", justifyContent: "center" }}
-                >
+              return (
+                <Box key={stage.label}>
                   <Box
                     sx={{
-                      width: 42,
-                      height: 42,
-                      borderRadius: "50%",
-                      bgcolor: "rgba(255,255,255,0.18)",
-                      border: "1px solid rgba(255,255,255,0.3)",
-                      display: { xs: "none", sm: "grid" },
-                      placeItems: "center",
-                      flexShrink: 0,
+                      display: { xs: "block", md: "flex" },
+                      minHeight: { xs: 132, md: 100 },
+                      borderRadius: 2.5,
+                      overflow: "hidden",
+                      bgcolor: stage.softColor,
                     }}
                   >
-                    {stage.icon}
+                    <Box
+                      sx={{
+                        width: { xs: "100%", md: "78%" },
+                        color: "common.white",
+                        background: stage.gradient,
+                        clipPath: { xs: "none", md: "polygon(0 0, 100% 0, 93% 100%, 0 100%)" },
+                        px: { xs: 2, md: 2.5 },
+                        py: 1.5,
+                        pr: { md: 5 },
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                    >
+                      <Box sx={{ width: 48, height: 48, borderRadius: "50%", bgcolor: "rgba(255,255,255,0.76)", color: stage.accent, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                        {stage.icon}
+                      </Box>
+                      <Box sx={{ ml: 2, minWidth: 0 }}>
+                        <Typography sx={{ fontWeight: 800, fontSize: { xs: 14, md: 15 } }}>{stage.label}</Typography>
+                        <Typography sx={{ fontSize: 11.5, opacity: 0.88, mt: 0.35 }}>{stage.description}</Typography>
+                      </Box>
+                      <Box sx={{ ml: "auto", pl: { xs: 1.5, md: 3 }, minWidth: { xs: 92, md: 150 }, textAlign: "center", borderLeft: "1px solid rgba(255,255,255,0.38)" }}>
+                        <Typography sx={{ fontWeight: 900, fontSize: { xs: 26, md: 30 }, lineHeight: 1 }}>
+                          {stage.value.toLocaleString("pt-BR")}
+                        </Typography>
+                        <Typography sx={{ fontSize: 11, fontWeight: 700, mt: 0.6, opacity: 0.95 }}>{percentage(baseRate)} da base</Typography>
+                      </Box>
+                    </Box>
+
+                    <Box sx={{ flex: 1, px: { xs: 2, md: 2.5 }, py: { xs: 1.25, md: 1 }, display: "flex", alignItems: "center", gap: 1.25 }}>
+                      <Box sx={{ width: 32, height: 32, borderRadius: 2, display: "grid", placeItems: "center", bgcolor: "rgba(255,255,255,0.72)", color: stage.accent, flexShrink: 0 }}>
+                        <Users size={16} />
+                      </Box>
+                      <Box>
+                        <Typography sx={{ color: stage.accent, fontWeight: 900, fontSize: 20, lineHeight: 1.1 }}>
+                          {conversion === null ? "—" : percentage(conversion)}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {conversion === null ? "última etapa" : "avançaram para o próximo passo"}
+                        </Typography>
+                      </Box>
+                    </Box>
                   </Box>
-                  <Box sx={{ minWidth: 0, textAlign: { xs: "center", sm: "left" } }}>
-                    <Typography sx={{ fontWeight: 800, fontSize: { xs: 13, sm: 15 }, lineHeight: 1.2 }}>
-                      {stage.label}
-                    </Typography>
-                    <Typography sx={{ fontSize: 11, opacity: 0.8, mt: 0.4, display: { xs: "none", md: "block" } }}>
-                      {stage.description}
-                    </Typography>
+
+                  {index < stages.length - 1 && (
+                    <Box sx={{ height: 32, display: "grid", placeItems: "center", color: "text.secondary" }}>
+                      <ChevronDown size={20} />
+                    </Box>
+                  )}
+                </Box>
+              );
+            })}
+          </Box>
+
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ px: 2, py: 1.5, borderRadius: 2.5, bgcolor: "rgba(49,94,233,0.06)", alignItems: { sm: "center" } }}>
+            <Typography variant="body2" color="text.secondary">
+              A conversão total do funil foi de <strong>{percentage(accessToJoinRate)}</strong>.
+            </Typography>
+            <Typography color="text.disabled" sx={{ display: { xs: "none", sm: "block" } }}>•</Typography>
+            <Typography variant="body2" color="text.secondary">
+              <strong>{abandoned.toLocaleString("pt-BR")}</strong> pessoa(s) clicaram no link e ainda não entraram no grupo.
+            </Typography>
+          </Stack>
+        </Stack>
+
+        <Box sx={{ p: 2.25, borderRadius: 3, bgcolor: "rgba(255,255,255,0.88)", border: "1px solid rgba(148,163,184,0.22)", alignSelf: "stretch" }}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 2 }}>
+            <Box sx={{ width: 34, height: 34, borderRadius: 2, display: "grid", placeItems: "center", color: "#315ee9", bgcolor: "rgba(49,94,233,0.09)" }}>
+              <Target size={18} />
+            </Box>
+            <Typography sx={{ fontWeight: 800 }}>Visão geral do funil</Typography>
+          </Stack>
+
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", xl: "repeat(2, minmax(0, 1fr))" }, gap: 1.25 }}>
+            {overview.map((item) => (
+              <Box key={item.label} sx={{ p: 1.5, minHeight: 118, borderRadius: 2.5, border: "1px solid", borderColor: "divider", bgcolor: "background.paper" }}>
+                <Stack direction="row" spacing={1.25} sx={{ alignItems: "flex-start" }}>
+                  <Box sx={{ width: 36, height: 36, borderRadius: 2, display: "grid", placeItems: "center", bgcolor: item.stage.softColor, color: item.stage.accent, flexShrink: 0 }}>
+                    {item.stage.icon}
                   </Box>
-                  <Typography
-                    sx={{
-                      fontWeight: 900,
-                      fontSize: { xs: 24, sm: 30 },
-                      lineHeight: 1,
-                      letterSpacing: "-0.04em",
-                      ml: { xs: "4px !important", sm: "auto !important" },
-                      flexShrink: 0,
-                    }}
-                  >
-                    {stage.value.toLocaleString("pt-BR")}
-                  </Typography>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="caption" color="text.secondary">{item.label}</Typography>
+                    <Typography sx={{ fontSize: 24, fontWeight: 900, lineHeight: 1.15 }}>{item.value.toLocaleString("pt-BR")}</Typography>
+                    <Typography sx={{ fontSize: 11, color: item.stage.accent, fontWeight: 700, mt: 0.5 }}>{item.detail}</Typography>
+                  </Box>
                 </Stack>
               </Box>
-            </Box>
-          );
-        })}
-      </Box>
+            ))}
+          </Box>
 
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        spacing={{ xs: 0.5, sm: 2 }}
-        sx={{
-          mt: 3,
-          mx: "auto",
-          px: 2,
-          py: 1.25,
-          width: "fit-content",
-          maxWidth: "100%",
-          borderRadius: 2,
-          bgcolor: "action.hover",
-          textAlign: "center",
-          alignItems: "center",
-        }}
-      >
-        <Typography variant="caption" color="text.secondary">
-          Conversão total: <strong>{percentage(accessToJoinRate)}</strong>
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ display: { xs: "none", sm: "block" } }}>•</Typography>
-        <Typography variant="caption" color="text.secondary">
-          <strong>{abandoned.toLocaleString("pt-BR")}</strong> pessoa(s) clicaram e ainda não entraram
-        </Typography>
-      </Stack>
+          <Box sx={{ mt: 2, p: 2, borderRadius: 2.5, bgcolor: "rgba(7,154,112,0.06)" }}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1.5 }}>
+              <Lightbulb size={18} color="#079a70" />
+              <Typography sx={{ fontWeight: 800 }}>Destaques do período</Typography>
+            </Stack>
+            <Stack spacing={1.25}>
+              {[
+                `${percentage(rate(submissions, visits))} dos visitantes preencheram o formulário.`,
+                `${percentage(rate(clicks, submissions))} dos leads clicaram no link.`,
+                `A conversão final para o grupo foi de ${percentage(accessToJoinRate)}.`,
+              ].map((text) => (
+                <Stack key={text} direction="row" spacing={1} sx={{ alignItems: "flex-start" }}>
+                  <CheckCircle2 size={15} color="#079a70" style={{ marginTop: 2, flexShrink: 0 }} />
+                  <Typography variant="caption" color="text.secondary">{text}</Typography>
+                </Stack>
+              ))}
+            </Stack>
+          </Box>
+        </Box>
+      </Box>
     </Box>
   );
 }
@@ -650,14 +681,6 @@ function ReportsTab() {
   };
 
   const percentage = (value: number) => `${value.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
-  const metricCards = report
-    ? [
-        { label: "Acessaram", value: report.totals.visits, detail: "pessoas únicas" },
-        { label: "Preencheram", value: report.totals.submissions, detail: "contatos capturados" },
-        { label: "Clicaram", value: report.totals.clicks, detail: percentage(report.totals.accessToClickRate) + " dos acessos" },
-        { label: "Entraram no grupo", value: report.totals.joins, detail: percentage(report.totals.clickToJoinRate) + " dos cliques" },
-      ]
-    : [];
 
   return (
     <Box>
@@ -711,16 +734,6 @@ function ReportsTab() {
         </Box>
       ) : (
         <Stack spacing={3}>
-          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(4, 1fr)" } }}>
-            {metricCards.map((metric) => (
-              <Box key={metric.label} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
-                <Typography variant="caption" color="text.secondary">{metric.label}</Typography>
-                <Typography variant="h4" sx={{ fontWeight: 700, my: 0.5 }}>{metric.value}</Typography>
-                <Typography variant="caption" color="text.secondary">{metric.detail}</Typography>
-              </Box>
-            ))}
-          </Box>
-
           <LandingPageFunnel
             visits={report.totals.visits}
             submissions={report.totals.submissions}

@@ -1,5 +1,5 @@
 import { createFileRoute, createLink, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { BarChart3, CheckCircle2, Copy, ExternalLink, Eye, FileText, Files, MessageSquare, Plus, Send, Star, Trash2, Users, XCircle } from "lucide-react";
@@ -400,6 +400,201 @@ function ReviewsTab() {
   );
 }
 
+type FunnelStage = {
+  label: string;
+  description: string;
+  value: number;
+  icon: ReactNode;
+  gradient: string;
+};
+
+function LandingPageFunnel({
+  visits,
+  submissions,
+  clicks,
+  joins,
+  abandoned,
+  accessToJoinRate,
+}: {
+  visits: number;
+  submissions: number;
+  clicks: number;
+  joins: number;
+  abandoned: number;
+  accessToJoinRate: number;
+}) {
+  const percentage = (value: number) => `${value.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+  const stages: FunnelStage[] = [
+    {
+      label: "Acessaram a landing page",
+      description: "Pessoas únicas",
+      value: visits,
+      icon: <Eye size={20} />,
+      gradient: "linear-gradient(115deg, #2563eb 0%, #4f46e5 100%)",
+    },
+    {
+      label: "Preencheram o formulário",
+      description: "Contatos capturados",
+      value: submissions,
+      icon: <FileText size={20} />,
+      gradient: "linear-gradient(115deg, #6d28d9 0%, #9333ea 100%)",
+    },
+    {
+      label: "Clicaram no link",
+      description: "Cliques no CTA",
+      value: clicks,
+      icon: <ExternalLink size={20} />,
+      gradient: "linear-gradient(115deg, #c026d3 0%, #db2777 100%)",
+    },
+    {
+      label: "Entraram no grupo",
+      description: "Conversões confirmadas",
+      value: joins,
+      icon: <Users size={20} />,
+      gradient: "linear-gradient(115deg, #0f9f75 0%, #059669 100%)",
+    },
+  ];
+
+  const base = Math.max(visits, 1);
+  let previousVisualValue = base;
+  const stageWidths = stages.map((stage, index) => {
+    if (index === 0) return 100;
+    previousVisualValue = Math.min(previousVisualValue, stage.value);
+    const proportionalWidth = (previousVisualValue / base) * 100;
+    const geometricCeiling = 100 - index * 12;
+    const readableFloor = 52 - index * 3;
+    return Math.min(geometricCeiling, Math.max(readableFloor, proportionalWidth));
+  });
+
+  return (
+    <Box
+      sx={{
+        border: "1px solid",
+        borderColor: "divider",
+        borderRadius: 3,
+        p: { xs: 2, md: 3 },
+        overflow: "hidden",
+        background: "linear-gradient(180deg, rgba(79, 70, 229, 0.045) 0%, rgba(255,255,255,0) 44%)",
+      }}
+    >
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+          Funil de conversão
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          Veja quantas pessoas avançaram desde o acesso à landing page até a entrada no grupo.
+        </Typography>
+      </Box>
+
+      <Box sx={{ width: "100%", maxWidth: 920, mx: "auto" }}>
+        {stages.map((stage, index) => {
+          const previous = stages[index - 1]?.value ?? stage.value;
+          const conversion = index === 0 ? 100 : previous > 0 ? (stage.value / previous) * 100 : 0;
+
+          return (
+            <Box key={stage.label} sx={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              {index > 0 && (
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center", height: 42 }}>
+                  <Box sx={{ width: 1, height: 18, bgcolor: "divider" }} />
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={`${percentage(conversion)} avançaram`}
+                    sx={{ bgcolor: "background.paper", fontWeight: 700, fontSize: 11 }}
+                  />
+                  <Box sx={{ width: 1, height: 18, bgcolor: "divider" }} />
+                </Stack>
+              )}
+
+              <Box
+                sx={{
+                  width: { xs: "100%", sm: `${stageWidths[index]}%` },
+                  minHeight: { xs: 82, sm: 94 },
+                  px: { xs: 3, sm: 5 },
+                  py: 1.5,
+                  color: "common.white",
+                  background: stage.gradient,
+                  clipPath: "polygon(4% 0, 96% 0, 91% 100%, 9% 100%)",
+                  filter: "drop-shadow(0 10px 12px rgba(15, 23, 42, 0.14))",
+                  transition: "width 220ms ease",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <Stack
+                  direction="row"
+                  spacing={{ xs: 1.5, sm: 2 }}
+                  sx={{ width: "100%", alignItems: "center", justifyContent: "center" }}
+                >
+                  <Box
+                    sx={{
+                      width: 42,
+                      height: 42,
+                      borderRadius: "50%",
+                      bgcolor: "rgba(255,255,255,0.18)",
+                      border: "1px solid rgba(255,255,255,0.3)",
+                      display: { xs: "none", sm: "grid" },
+                      placeItems: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {stage.icon}
+                  </Box>
+                  <Box sx={{ minWidth: 0, textAlign: { xs: "center", sm: "left" } }}>
+                    <Typography sx={{ fontWeight: 800, fontSize: { xs: 13, sm: 15 }, lineHeight: 1.2 }}>
+                      {stage.label}
+                    </Typography>
+                    <Typography sx={{ fontSize: 11, opacity: 0.8, mt: 0.4, display: { xs: "none", md: "block" } }}>
+                      {stage.description}
+                    </Typography>
+                  </Box>
+                  <Typography
+                    sx={{
+                      fontWeight: 900,
+                      fontSize: { xs: 24, sm: 30 },
+                      lineHeight: 1,
+                      letterSpacing: "-0.04em",
+                      ml: { xs: "4px !important", sm: "auto !important" },
+                      flexShrink: 0,
+                    }}
+                  >
+                    {stage.value.toLocaleString("pt-BR")}
+                  </Typography>
+                </Stack>
+              </Box>
+            </Box>
+          );
+        })}
+      </Box>
+
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={{ xs: 0.5, sm: 2 }}
+        sx={{
+          mt: 3,
+          mx: "auto",
+          px: 2,
+          py: 1.25,
+          width: "fit-content",
+          maxWidth: "100%",
+          borderRadius: 2,
+          bgcolor: "action.hover",
+          textAlign: "center",
+          alignItems: "center",
+        }}
+      >
+        <Typography variant="caption" color="text.secondary">
+          Conversão total: <strong>{percentage(accessToJoinRate)}</strong>
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ display: { xs: "none", sm: "block" } }}>•</Typography>
+        <Typography variant="caption" color="text.secondary">
+          <strong>{abandoned.toLocaleString("pt-BR")}</strong> pessoa(s) clicaram e ainda não entraram
+        </Typography>
+      </Stack>
+    </Box>
+  );
+}
+
 function ReportsTab() {
   const queryClient = useQueryClient();
   const runReport = useServerFn(getLandingPageFunnelReport);
@@ -526,72 +721,14 @@ function ReportsTab() {
             ))}
           </Box>
 
-          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: { xs: 2, md: 3 } }}>
-            <Stack spacing={2}>
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                  Funil de conversão
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Acompanhe a perda de pessoas em cada etapa da Landing Page até a entrada no grupo.
-                </Typography>
-              </Box>
-              {(() => {
-                const stages = [
-                  { label: "Visitas", value: report.totals.visits, icon: <Eye size={17} /> },
-                  { label: "Formulários", value: report.totals.submissions, icon: <FileText size={17} /> },
-                  { label: "Cliques no CTA", value: report.totals.clicks, icon: <ExternalLink size={17} /> },
-                  { label: "Entraram no grupo", value: report.totals.joins, icon: <Users size={17} /> },
-                ];
-                const base = Math.max(...stages.map((stage) => stage.value), 1);
-                return (
-                  <Stack spacing={1.25} sx={{ alignItems: "center" }}>
-                    {stages.map((stage, index) => {
-                      const previous = stages[index - 1]?.value ?? stage.value;
-                      const conversion = index === 0 ? 100 : previous > 0 ? (stage.value / previous) * 100 : 0;
-                      const width = `${Math.max(28, (stage.value / base) * 100)}%`;
-                      return (
-                        <Box key={stage.label} sx={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
-                          {index > 0 && (
-                            <Typography variant="caption" sx={{ fontWeight: 700, color: "primary.main", mb: 0.75 }}>
-                              ↓ {percentage(conversion)}
-                            </Typography>
-                          )}
-                          <Box
-                            sx={{
-                              width,
-                              minWidth: { xs: "28%", sm: "22%" },
-                              py: { xs: 1.5, sm: 2 },
-                              px: 2,
-                              color: "primary.contrastText",
-                              bgcolor: "primary.main",
-                              clipPath: "polygon(7% 0, 93% 0, 100% 100%, 0 100%)",
-                              transition: "width 180ms ease",
-                            }}
-                          >
-                            <Stack direction="row" spacing={1} sx={{ justifyContent: "center", alignItems: "center" }}>
-                              {stage.icon}
-                              <Typography sx={{ fontWeight: 700, fontSize: { xs: 13, sm: 15 } }}>
-                                {stage.label}
-                              </Typography>
-                              <Typography sx={{ fontWeight: 800, fontSize: { xs: 15, sm: 18 } }}>
-                                {stage.value.toLocaleString("pt-BR")}
-                              </Typography>
-                            </Stack>
-                          </Box>
-                        </Box>
-                      );
-                    })}
-                    <Box sx={{ mt: 0.5, px: 1.5, py: 1, borderRadius: 2, bgcolor: "action.hover", textAlign: "center" }}>
-                      <Typography variant="caption" color="text.secondary">
-                        Conversão total: <strong>{percentage(report.totals.accessToJoinRate)}</strong> · {report.totals.abandoned} pessoa(s) clicaram e ainda não entraram.
-                      </Typography>
-                    </Box>
-                  </Stack>
-                );
-              })()}
-            </Stack>
-          </Box>
+          <LandingPageFunnel
+            visits={report.totals.visits}
+            submissions={report.totals.submissions}
+            clicks={report.totals.clicks}
+            joins={report.totals.joins}
+            abandoned={report.totals.abandoned}
+            accessToJoinRate={report.totals.accessToJoinRate}
+          />
 
           <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
             <Typography variant="body2" sx={{ fontWeight: 600, p: 2, pb: 0 }}>Consolidado por landing page</Typography>

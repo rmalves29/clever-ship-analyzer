@@ -169,21 +169,6 @@ export async function loadLandingPageGroupJoins(
   const live = await getLiveLaunchpadAdmin();
   const events: Array<{ group_id: string; group_jid: string | null; phone: string; created_at: string }> = [];
 
-  const phoneVariants = (value: string): string[] => {
-    const digits = value.replace(/\D/g, "");
-    const national = digits.startsWith("55") && (digits.length === 12 || digits.length === 13) ? digits.slice(2) : digits;
-    const variants = new Set([digits, national, `55${national}`]);
-    if (national.length === 10) {
-      const withNine = `${national.slice(0, 2)}9${national.slice(2)}`;
-      variants.add(withNine);
-      variants.add(`55${withNine}`);
-    } else if (national.length === 11 && national[2] === "9") {
-      const withoutNine = `${national.slice(0, 2)}${national.slice(3)}`;
-      variants.add(withoutNine);
-      variants.add(`55${withoutNine}`);
-    }
-    return [...variants].filter(Boolean);
-  };
   const groupJids = [...new Set(pages.map((page) => page.groupJid ? canonicalWhatsappGroupJid(page.groupJid) : "").filter(Boolean))];
 
   for (let page = 0; page < Number.MAX_SAFE_INTEGER && (groupIds.length > 0 || groupJids.length > 0); page++) {

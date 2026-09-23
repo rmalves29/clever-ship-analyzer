@@ -1393,6 +1393,7 @@ export type AutomationInput = {
   origem?: string | undefined;
   revalidateSegmentBeforeSend?: boolean | undefined;
   recoveryLandingPageId?: string | undefined;
+  apenasContatosNovos?: boolean | undefined;
 };
 
 export async function upsertAutomation(input: AutomationInput) {
@@ -1460,6 +1461,7 @@ export async function upsertAutomation(input: AutomationInput) {
     steps,
     requer_aprovacao: input.requerAprovacao,
     ativo: input.ativo,
+    apenas_contatos_novos: input.apenasContatosNovos ?? false,
     ...(!input.id || input.origem !== undefined ? { origem: input.origem ?? "crm" } : {}),
     ...(input.revalidateSegmentBeforeSend !== undefined || input.recoveryLandingPageId !== undefined
       ? {
@@ -1508,6 +1510,7 @@ export async function listAutomationsRows() {
     steps: (Array.isArray(a.steps) ? a.steps : []) as AutomationStepInput[],
     requerAprovacao: a.requer_aprovacao as boolean,
     ativo: a.ativo as boolean,
+    apenasContatosNovos: Boolean(a.apenas_contatos_novos),
     origem: (a.origem ?? "crm") as string,
     automationKind: (a.automation_kind ?? "segment") as "segment" | "rfm" | "cashback",
     triggerConfig: (a.trigger_config ?? {}) as Record<string, string | number | boolean | null>,

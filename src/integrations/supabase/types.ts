@@ -2622,6 +2622,7 @@ export type Database = {
       }
       whatsapp_automations: {
         Row: {
+          apenas_contatos_novos: boolean
           ativo: boolean
           automation_kind: string
           created_at: string
@@ -2642,6 +2643,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          apenas_contatos_novos?: boolean
           ativo?: boolean
           automation_kind?: string
           created_at?: string
@@ -2662,6 +2664,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          apenas_contatos_novos?: boolean
           ativo?: boolean
           automation_kind?: string
           created_at?: string

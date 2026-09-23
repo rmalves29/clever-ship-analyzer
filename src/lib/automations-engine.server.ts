@@ -586,8 +586,31 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
   const ids: string[] = await resolveWhatsappSegmentCustomerIds(automation.segment_type, automation.segment_id || undefined);
   if (ids.length === 0) return 0;
 
-  const recipients = (await resolveSegmentRecipients(automation.segment_type, ids)) as Array<{ id: string; phone: string }>;
+  let recipients = (await resolveSegmentRecipients(automation.segment_type, ids)) as Array<{ id: string; phone: string }>;
   if (recipients.length === 0) return 0;
+
+  // "Só contatos novos": a régua ignora quem já era cliente antes dela existir — sem isso, ativar
+  // uma automação nova varre o histórico inteiro do segmento de uma vez (ex.: toda a base "sem
+  // compra" acumulada em meses) e cria um lote gigante de primeira leva, em vez de pegar só quem
+  // passar a se qualificar dali pra frente.
+  if (automation.apenas_contatos_novos) {
+    const recipientIds = recipients.map((r) => r.id);
+    const createdAtByCustomer = new Map<string, string>();
+    for (let start = 0; start < recipientIds.length; start += 200) {
+      const batch = recipientIds.slice(start, start + 200);
+      const { data, error: customersError } = await supabaseAdmin
+        .from("shopify_customers")
+        .select("id, created_at")
+        .in("id", batch);
+      if (customersError) throw new Error(`Erro ao consultar data de cadastro dos clientes: ${customersError.message}`);
+      for (const row of (data ?? []) as any[]) createdAtByCustomer.set(String(row.id), row.created_at as string);
+    }
+    recipients = recipients.filter((r) => {
+      const createdAt = createdAtByCustomer.get(r.id);
+      return createdAt ? createdAt >= automation.created_at : false;
+    });
+    if (recipients.length === 0) return 0;
+  }
 
   const firstStep = steps[0];
   if (!firstStep || firstStep.type !== "send") return 0;
@@ -794,16 +817,23 @@ async function advanceRuns(runs: any[], steps: AutomationStep[], campaignId: str
 async function markRunsWaitingSend(runIds: string[], campaignId: string): Promise<void> {
   if (runIds.length === 0) return;
   const supabaseAdmin = await admin();
-  const { error } = await (supabaseAdmin.from("whatsapp_automation_runs") as any)
-    .update({
-      campaign_id: campaignId,
-      status: "waiting_send",
-      next_run_at: null,
-      last_error: null,
-      updated_at: new Date().toISOString(),
-    })
-    .in("id", runIds);
-  if (error) throw new Error(`Erro ao aguardar confirmação de envio: ${error.message}`);
+  // Em lotes de 200 (mesmo padrão de markRunsExited acima): uma automação com atraso acumulado
+  // grande pode ter milhares de runs vencidos de uma vez, e um `.in("id", ...)` desse tamanho
+  // vira uma URL grande demais pro PostgREST, que responde só "Bad Request" sem detalhe nenhum —
+  // travando a automação pra sempre, já que nada avança e o atraso só cresce a cada tentativa.
+  for (let start = 0; start < runIds.length; start += 200) {
+    const batch = runIds.slice(start, start + 200);
+    const { error } = await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+      .update({
+        campaign_id: campaignId,
+        status: "waiting_send",
+        next_run_at: null,
+        last_error: null,
+        updated_at: new Date().toISOString(),
+      })
+      .in("id", batch);
+    if (error) throw new Error(`Erro ao aguardar confirmação de envio: ${error.message}`);
+  }
 }
 
 async function recoverWaitingSendRuns(automation: any): Promise<number> {
@@ -900,10 +930,13 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
   for (const [stepId, stepRuns] of byStep) {
     const step = steps.find((s) => s.id === stepId);
     if (!step || step.type !== "send") {
-      await supabaseAdmin
-        .from("whatsapp_automation_runs")
-        .update({ status: "failed", last_error: "Etapa não encontrada (automação editada)" } as never)
-        .in("id", stepRuns.map((r) => r.id));
+      for (let start = 0; start < stepRuns.length; start += 200) {
+        const batch = stepRuns.slice(start, start + 200).map((r) => r.id);
+        await supabaseAdmin
+          .from("whatsapp_automation_runs")
+          .update({ status: "failed", last_error: "Etapa não encontrada (automação editada)" } as never)
+          .in("id", batch);
+      }
       continue;
     }
 
@@ -913,14 +946,17 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
       const suppressedPhones = await getSuppressedWhatsappPhones(stepRuns.map((run) => String(run.phone ?? "")));
       const suppressedRuns = stepRuns.filter((run) => suppressedPhones.has(String(run.phone ?? "")));
       if (suppressedRuns.length > 0) {
-        await (supabaseAdmin.from("whatsapp_automation_runs") as any)
-          .update({
-            status: "failed",
-            next_run_at: null,
-            last_error: "opt-out de marketing",
-            updated_at: new Date().toISOString(),
-          })
-          .in("id", suppressedRuns.map((run) => run.id));
+        for (let start = 0; start < suppressedRuns.length; start += 200) {
+          const batch = suppressedRuns.slice(start, start + 200).map((run) => run.id);
+          await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+            .update({
+              status: "failed",
+              next_run_at: null,
+              last_error: "opt-out de marketing",
+              updated_at: new Date().toISOString(),
+            })
+            .in("id", batch);
+        }
         processed += suppressedRuns.length;
         const suppressedIds = new Set(suppressedRuns.map((run) => String(run.id)));
         eligibleRuns = stepRuns.filter((run) => !suppressedIds.has(String(run.id)));
@@ -928,47 +964,53 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
     }
     if (eligibleRuns.length === 0) continue;
 
-    const customerIds = eligibleRuns.map((r) => r.customer_id as string);
+    // Lotes de no máximo 200 destinatários por disparo — mesmo motivo do markRunsWaitingSend:
+    // um atraso acumulado grande não pode virar uma única campanha/chamada com milhares de
+    // clientes de uma vez.
+    for (let start = 0; start < eligibleRuns.length; start += 200) {
+      const runsBatch = eligibleRuns.slice(start, start + 200);
+      const customerIds = runsBatch.map((r) => r.customer_id as string);
 
-    // Reaproveita a campanha já existente pra essa etapa — disparos sucessivos do tick somam
-    // no mesmo registro em vez de criar uma campanha nova a cada execução (refreshCampaignStatus
-    // recalcula os totais reais a partir da fila, então não precisa somar totalDestinatarios aqui).
-    let campaignId = await findAutomationStepCampaignId(automation.id, stepId);
-    if (!campaignId) {
-      const created = await createCampaignRow(
-        {
-          nome: automation.nome,
-          segmentType: automation.segment_type,
-          segmentId: automation.segment_id || undefined,
-          messageType: step.messageType,
-          templateName: step.templateName,
-          templateLanguage: step.templateLanguage,
-          bodyParams: step.bodyParams,
-          bodyParamTokens: step.bodyParamTokens,
-          couponCode: step.couponCode ?? undefined,
-          origem: "automacao",
-          automationId: automation.id,
-          automationStepId: stepId,
-          totalDestinatariosOverride: customerIds.length,
-        },
-        "enviando",
-      );
-      if (!created.success) continue;
-      campaignId = created.campaignId;
-    } else {
-      await syncCampaignMessageConfig(campaignId, step);
-    }
+      // Reaproveita a campanha já existente pra essa etapa — disparos sucessivos do tick somam
+      // no mesmo registro em vez de criar uma campanha nova a cada execução (refreshCampaignStatus
+      // recalcula os totais reais a partir da fila, então não precisa somar totalDestinatarios aqui).
+      let campaignId = await findAutomationStepCampaignId(automation.id, stepId);
+      if (!campaignId) {
+        const created = await createCampaignRow(
+          {
+            nome: automation.nome,
+            segmentType: automation.segment_type,
+            segmentId: automation.segment_id || undefined,
+            messageType: step.messageType,
+            templateName: step.templateName,
+            templateLanguage: step.templateLanguage,
+            bodyParams: step.bodyParams,
+            bodyParamTokens: step.bodyParamTokens,
+            couponCode: step.couponCode ?? undefined,
+            origem: "automacao",
+            automationId: automation.id,
+            automationStepId: stepId,
+            totalDestinatariosOverride: customerIds.length,
+          },
+          "enviando",
+        );
+        if (!created.success) continue;
+        campaignId = created.campaignId;
+      } else {
+        await syncCampaignMessageConfig(campaignId, step);
+      }
 
-    const runIds = eligibleRuns.map((r) => String(r.id));
-    await markRunsWaitingSend(runIds, campaignId);
-    const dispatchResult = await dispatchCampaign(campaignId, customerIds);
-    if (!dispatchResult.success) {
-      await (supabaseAdmin.from("whatsapp_automation_runs") as any)
-        .update({ status: "failed", last_error: dispatchResult.error ?? "Falha ao enfileirar mensagem", updated_at: new Date().toISOString() })
-        .in("id", runIds);
-      continue;
+      const runIds = runsBatch.map((r) => String(r.id));
+      await markRunsWaitingSend(runIds, campaignId);
+      const dispatchResult = await dispatchCampaign(campaignId, customerIds);
+      if (!dispatchResult.success) {
+        await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+          .update({ status: "failed", last_error: dispatchResult.error ?? "Falha ao enfileirar mensagem", updated_at: new Date().toISOString() })
+          .in("id", runIds);
+        continue;
+      }
+      processed += runsBatch.length;
     }
-    processed += eligibleRuns.length;
   }
   return processed;
 }

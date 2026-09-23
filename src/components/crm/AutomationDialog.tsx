@@ -127,6 +127,7 @@ export type AutomationSeed = {
   automationKind?: "segment" | "rfm" | "cashback" | undefined;
   revalidateSegmentBeforeSend?: boolean | undefined;
   recoveryLandingPageId?: string | undefined;
+  apenasContatosNovos?: boolean | undefined;
 };
 
 function newId() {
@@ -369,6 +370,7 @@ export function AutomationDialog({
   const [requerAprovacao, setRequerAprovacao] = useState(true);
   const [ativo, setAtivo] = useState(true);
   const [revalidateSegmentBeforeSend, setRevalidateSegmentBeforeSend] = useState(false);
+  const [apenasContatosNovos, setApenasContatosNovos] = useState(true);
   const [busy, setBusy] = useState(false);
   const [manualPositions, setManualPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(TRIGGER_ID);
@@ -387,6 +389,10 @@ export function AutomationDialog({
     setRequerAprovacao(seed?.requerAprovacao ?? true);
     setAtivo(seed?.ativo ?? true);
     setRevalidateSegmentBeforeSend(seed?.revalidateSegmentBeforeSend ?? false);
+    // Automação nova (sem id ainda): por padrão só pega quem virar cliente dali pra frente, pra
+    // não varrer de uma vez o histórico inteiro do segmento assim que ativada. Editando uma já
+    // existente, respeita o que já estava salvo.
+    setApenasContatosNovos(seed?.apenasContatosNovos ?? !seed?.id);
     setManualPositions({});
     setSelectedNodeId(TRIGGER_ID);
     setAddPanelOpen(false);
@@ -702,6 +708,7 @@ export function AutomationDialog({
           ativo,
           revalidateSegmentBeforeSend,
           recoveryLandingPageId: seed?.recoveryLandingPageId,
+          apenasContatosNovos,
         },
       });
       if (!res.success) {
@@ -964,6 +971,19 @@ export function AutomationDialog({
                     </div>
                     <Switch checked={ativo} onCheckedChange={setAtivo} />
                   </div>
+                  {!isLifecycleAutomation && (
+                    <div className="flex items-center justify-between rounded-lg border border-border p-3">
+                      <div>
+                        <p className="text-sm font-medium">Só contatos novos</p>
+                        <p className="text-xs text-muted-foreground">
+                          Ignora quem já era cliente antes desta régua existir — pega só quem virar cliente
+                          (ou entrar no segmento) dali pra frente. Desligado, matricula todo o histórico do
+                          segmento de uma vez ao ativar.
+                        </p>
+                      </div>
+                      <Switch checked={apenasContatosNovos} onCheckedChange={setApenasContatosNovos} />
+                    </div>
+                  )}
                 </>
               )}
 

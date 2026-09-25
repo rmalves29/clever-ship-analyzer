@@ -67,43 +67,86 @@ function seededRandom(seed: number) {
 }
 
 function radiusFor(n: GraphNode) {
-  if (n.type === "event") return Math.min(9, 4 + Math.sqrt(n.degree) * 1.6);
-  return Math.min(46, 15 + Math.sqrt(n.degree) * 5.2);
+  if (n.type === "event") return Math.min(8, 4 + Math.sqrt(n.degree) * 1.4);
+  return Math.min(36, 14 + Math.sqrt(n.degree) * 3.8);
 }
 
-/** Layout força-dirigida (repulsão entre nós, mola nas arestas, centralização) — mesmo princípio
- *  do grafo do Obsidian, sem depender de lib externa. O espaço da simulação cresce com o número
- *  de nós (senão tudo amontoa no centro conforme o período tem mais eventos) e termina com uma
- *  passada de separação que garante nenhum nó sobrepondo outro, mesmo que a força não convirja
- *  perfeitamente. */
+/** Layout em duas camadas — muito poucos "hubs" (categoria/canal) recebem centenas de eventos
+ *  cada, e nesse formato (poucos nós com grau altíssimo) a física pura sempre puxa os hubs de
+ *  volta pro centro comum, colando um no outro e embolando tudo. Em vez de deixar isso pro acaso:
+ *  1) hubs vão num círculo com espaçamento calculado pra nunca se tocarem (posição fixa durante
+ *     a simulação, então nunca colidem entre si);
+ *  2) só os eventos se movem por força (repulsão entre eles + mola puxando pro(s) hub(s)
+ *     conectado(s)), formando um "halo" ao redor de cada hub — mesmo efeito de cluster do
+ *     grafo de conhecimento de referência, só que garantido por construção. */
 function layoutGraph(nodes: GraphNode[], edges: GraphEdge[]) {
   const rand = seededRandom(42);
-  const size = Math.max(620, Math.sqrt(nodes.length * 2600));
 
   const radius = new Map<string, number>();
   nodes.forEach((n) => radius.set(n.id, radiusFor(n)));
 
-  const pos = new Map<string, { x: number; y: number; vx: number; vy: number }>();
-  nodes.forEach((n) => {
-    pos.set(n.id, {
-      x: size / 2 + (rand() - 0.5) * size * 0.85,
-      y: size / 2 + (rand() - 0.5) * size * 0.85,
+  const hubs = nodes.filter((n) => n.type !== "event");
+  const leaves = nodes.filter((n) => n.type === "event");
+
+  const pos = new Map<string, { x: number; y: number; vx: number; vy: number; fixed: boolean }>();
+
+  const maxHubR = hubs.reduce((m, h) => Math.max(m, radius.get(h.id)!), 20);
+  const hubOrbit = hubs.length <= 1 ? 0 : Math.max(190, ((maxHubR * 2 + 70) * hubs.length) / (2 * Math.PI));
+  hubs.forEach((h, i) => {
+    const angle = (2 * Math.PI * i) / Math.max(1, hubs.length) - Math.PI / 2;
+    pos.set(h.id, {
+      x: hubs.length <= 1 ? 0 : Math.cos(angle) * hubOrbit,
+      y: hubs.length <= 1 ? 0 : Math.sin(angle) * hubOrbit,
       vx: 0,
       vy: 0,
+      fixed: true,
     });
   });
 
-  const REPULSION = 2200 * (size / 620);
-  const SPRING_LENGTH = 70;
-  const SPRING_K = 0.02;
-  const CENTER_K = 0.01;
-  const DAMPING = 0.85;
+  const neighborsOf = new Map<string, string[]>();
+  const addNeighbor = (a: string, b: string) => {
+    const list = neighborsOf.get(a);
+    if (list) list.push(b);
+    else neighborsOf.set(a, [b]);
+  };
+  for (const e of edges) {
+    addNeighbor(e.source, e.target);
+    addNeighbor(e.target, e.source);
+  }
 
-  for (let iter = 0; iter < 260; iter++) {
+  // Evento começa perto do centroide dos hubs que ele conecta (categoria + canal(is)), já
+  // aproximando bastante do resultado final antes mesmo da simulação rodar.
+  leaves.forEach((n) => {
+    const neigh = neighborsOf.get(n.id) ?? [];
+    let cx = 0;
+    let cy = 0;
+    let count = 0;
+    for (const nb of neigh) {
+      const p = pos.get(nb);
+      if (p) {
+        cx += p.x;
+        cy += p.y;
+        count++;
+      }
+    }
+    if (count > 0) {
+      cx /= count;
+      cy /= count;
+    }
+    pos.set(n.id, { x: cx + (rand() - 0.5) * 140, y: cy + (rand() - 0.5) * 140, vx: 0, vy: 0, fixed: false });
+  });
+
+  const REPULSION = 950;
+  const SPRING_LENGTH = 64;
+  const SPRING_K = 0.05;
+  const DAMPING = 0.82;
+
+  for (let iter = 0; iter < 240; iter++) {
     for (let i = 0; i < nodes.length; i++) {
       const a = pos.get(nodes[i]!.id)!;
       for (let j = i + 1; j < nodes.length; j++) {
         const b = pos.get(nodes[j]!.id)!;
+        if (a.fixed && b.fixed) continue; // hubs já espaçados por construção
         const dx = a.x - b.x;
         const dy = a.y - b.y;
         const distSq = Math.max(1, dx * dx + dy * dy);
@@ -111,10 +154,14 @@ function layoutGraph(nodes: GraphNode[], edges: GraphEdge[]) {
         const force = REPULSION / distSq;
         const fx = (dx / dist) * force;
         const fy = (dy / dist) * force;
-        a.vx += fx;
-        a.vy += fy;
-        b.vx -= fx;
-        b.vy -= fy;
+        if (!a.fixed) {
+          a.vx += fx;
+          a.vy += fy;
+        }
+        if (!b.fixed) {
+          b.vx -= fx;
+          b.vy -= fy;
+        }
       }
     }
 
@@ -127,16 +174,18 @@ function layoutGraph(nodes: GraphNode[], edges: GraphEdge[]) {
       const diff = dist - SPRING_LENGTH;
       const fx = (dx / dist) * diff * SPRING_K;
       const fy = (dy / dist) * diff * SPRING_K;
-      a.vx += fx;
-      a.vy += fy;
-      b.vx -= fx;
-      b.vy -= fy;
+      if (!a.fixed) {
+        a.vx += fx;
+        a.vy += fy;
+      }
+      if (!b.fixed) {
+        b.vx -= fx;
+        b.vy -= fy;
+      }
     }
 
-    for (const n of nodes) {
+    for (const n of leaves) {
       const p = pos.get(n.id)!;
-      p.vx += (size / 2 - p.x) * CENTER_K;
-      p.vy += (size / 2 - p.y) * CENTER_K;
       p.vx *= DAMPING;
       p.vy *= DAMPING;
       p.x += p.vx;
@@ -144,28 +193,38 @@ function layoutGraph(nodes: GraphNode[], edges: GraphEdge[]) {
     }
   }
 
-  // Passada de separação: empurra qualquer par de nós ainda sobrepondo pra fora, garantindo
-  // rótulos e círculos legíveis mesmo quando a força não convergiu perfeitamente.
-  for (let pass = 0; pass < 40; pass++) {
+  // Passada de separação: empurra qualquer par de nós ainda sobrepondo pra fora (hubs ficam
+  // parados — só entram como obstáculo pros eventos ao redor), garantindo rótulos e círculos
+  // legíveis mesmo quando a força não convergiu perfeitamente.
+  for (let pass = 0; pass < 50; pass++) {
     let moved = false;
     for (let i = 0; i < nodes.length; i++) {
       const a = pos.get(nodes[i]!.id)!;
       const ra = radius.get(nodes[i]!.id)!;
       for (let j = i + 1; j < nodes.length; j++) {
         const b = pos.get(nodes[j]!.id)!;
+        if (a.fixed && b.fixed) continue;
         const rb = radius.get(nodes[j]!.id)!;
         const minDist = ra + rb + 14;
         const dx = b.x - a.x;
         const dy = b.y - a.y;
         const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
         if (dist < minDist) {
-          const push = (minDist - dist) / 2;
+          const push = minDist - dist;
           const ux = dx / dist;
           const uy = dy / dist;
-          a.x -= ux * push;
-          a.y -= uy * push;
-          b.x += ux * push;
-          b.y += uy * push;
+          if (a.fixed) {
+            b.x += ux * push;
+            b.y += uy * push;
+          } else if (b.fixed) {
+            a.x -= ux * push;
+            a.y -= uy * push;
+          } else {
+            a.x -= ux * (push / 2);
+            a.y -= uy * (push / 2);
+            b.x += ux * (push / 2);
+            b.y += uy * (push / 2);
+          }
           moved = true;
         }
       }
@@ -327,7 +386,7 @@ export function EventsGraph({
               <stop offset="100%" stopColor="#0a0d14" />
             </radialGradient>
             <filter id="graph-glow" x="-200%" y="-200%" width="500%" height="500%">
-              <feGaussianBlur stdDeviation="6" result="blur" />
+              <feGaussianBlur stdDeviation="4" result="blur" />
               <feMerge>
                 <feMergeNode in="blur" />
                 <feMergeNode in="SourceGraphic" />
@@ -372,7 +431,7 @@ export function EventsGraph({
                   opacity={dim ? 0.22 : 1}
                 >
                   {isHub && (
-                    <circle cx={n.x} cy={n.y} r={n.r} fill={TYPE_GLOW[n.type]} opacity={0.35} filter="url(#graph-glow)" />
+                    <circle cx={n.x} cy={n.y} r={n.r} fill={TYPE_GLOW[n.type]} opacity={0.28} filter="url(#graph-glow)" />
                   )}
                   <circle
                     cx={n.x}

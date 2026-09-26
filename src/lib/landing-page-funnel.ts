@@ -152,3 +152,47 @@ export function computeLandingPageFunnel(
     porLandingPage: porLandingPage.sort((a, b) => b.visits - a.visits || b.clicks - a.clicks),
   };
 }
+
+export type LandingPageDailyJoinsPoint = { date: string; joins: number };
+
+/** Mesma régua de contagem do funil (só conta a entrada se o telefone clicou no CTA daquela
+ *  landing page, uma vez por pessoa) — só que quebrada por dia, pra bater exatamente com o
+ *  número "Entraram no grupo" do funil quando somada. */
+export function computeLandingPageDailyJoins(
+  pages: LandingPageFunnelDefinition[],
+  events: LandingPageFunnelEvent[],
+  joins: LandingPageJoin[],
+): LandingPageDailyJoinsPoint[] {
+  const clickPhoneKeysByPage = new Map<string, Set<string>>();
+  for (const event of events) {
+    if (event.eventType !== "link_click") continue;
+    const phoneKey = landingPagePhoneKey(event.phone);
+    if (!phoneKey) continue;
+    const set = clickPhoneKeysByPage.get(event.landingPageId) ?? new Set<string>();
+    set.add(phoneKey);
+    clickPhoneKeysByPage.set(event.landingPageId, set);
+  }
+
+  const pageIds = new Set(pages.map((page) => page.id));
+  const countedByPage = new Map<string, Set<string>>();
+  const countByDay = new Map<string, number>();
+
+  for (const join of [...joins].sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))) {
+    if (!pageIds.has(join.landingPageId)) continue;
+    const phoneKey = landingPagePhoneKey(join.phone);
+    if (!phoneKey) continue;
+    if (!clickPhoneKeysByPage.get(join.landingPageId)?.has(phoneKey)) continue;
+
+    const counted = countedByPage.get(join.landingPageId) ?? new Set<string>();
+    if (counted.has(phoneKey)) continue; // mesma pessoa ja contada nessa pagina (reentrada)
+    counted.add(phoneKey);
+    countedByPage.set(join.landingPageId, counted);
+
+    const day = join.joinedAt.slice(0, 10);
+    countByDay.set(day, (countByDay.get(day) ?? 0) + 1);
+  }
+
+  return Array.from(countByDay.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, count]) => ({ date, joins: count }));
+}

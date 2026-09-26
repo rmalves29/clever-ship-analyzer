@@ -829,7 +829,7 @@ export const getLandingPageFunnelReport = createServerFn({ method: "GET" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const [{ loadResolvedLandingPages, loadLandingPageGroupJoins }, { computeLandingPageFunnel, landingPagePhoneKey }] = await Promise.all([
+    const [{ loadResolvedLandingPages, loadLandingPageGroupJoins }, { computeLandingPageFunnel, computeLandingPageDailyJoins, landingPagePhoneKey }] = await Promise.all([
       import("./landing-page-funnel.server"),
       import("./landing-page-funnel"),
     ]);
@@ -907,14 +907,13 @@ export const getLandingPageFunnelReport = createServerFn({ method: "GET" })
       phones.add(phoneKey);
       clickedPhonesByPage.set(event.landing_page_id, phones);
     }
-    const report = computeLandingPageFunnel(
-      pages.map((page) => ({ ...page })),
-      events.map((event) => ({ id: String(event.id), landingPageId: String(event.landing_page_id), eventType: event.event_type, visitorId: event.visitor_id ?? null, phone: event.phone ?? null, createdAt: event.criado_em })),
-      joins,
-    );
+    const normalizedEvents = events.map((event) => ({ id: String(event.id), landingPageId: String(event.landing_page_id), eventType: event.event_type, visitorId: event.visitor_id ?? null, phone: event.phone ?? null, createdAt: event.criado_em }));
+    const report = computeLandingPageFunnel(pages.map((page) => ({ ...page })), normalizedEvents, joins);
+    const dailyJoins = computeLandingPageDailyJoins(pages.map((page) => ({ ...page })), normalizedEvents, joins);
     return {
       ...report,
       period: data.period,
+      dailyJoins,
       recentGroupEntries: joins
         .slice()
         .sort((a, b) => b.joinedAt.localeCompare(a.joinedAt))

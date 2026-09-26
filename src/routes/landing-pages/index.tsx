@@ -22,6 +22,7 @@ import TableRow from "@mui/material/TableRow";
 import Tabs from "@mui/material/Tabs";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { BarChart } from "@mui/x-charts/BarChart";
 import { z } from "zod";
 import { AutomationDialog, type AutomationSeed } from "@/components/crm/AutomationDialog";
 import {
@@ -759,6 +760,30 @@ function ReportsTab() {
             abandoned={report.totals.abandoned}
             accessToJoinRate={report.totals.accessToJoinRate}
           />
+
+          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 2 }}>Entradas por dia</Typography>
+            {report.dailyJoins.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">Nenhuma entrada contabilizada no período selecionado.</Typography>
+            ) : (
+              <BarChart
+                height={280}
+                dataset={report.dailyJoins}
+                xAxis={[
+                  {
+                    scaleType: "band",
+                    dataKey: "date",
+                    valueFormatter: (value: string) => {
+                      const [year, month, day] = value.split("-");
+                      return `${day}/${month}`;
+                    },
+                  },
+                ]}
+                series={[{ dataKey: "joins", label: "Entradas no grupo", color: "#2e7d32" }]}
+                margin={{ left: 40, right: 16, top: 16, bottom: 30 }}
+              />
+            )}
+          </Box>
 
           <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
             <Typography variant="body2" sx={{ fontWeight: 600, p: 2, pb: 0 }}>Consolidado por landing page</Typography>

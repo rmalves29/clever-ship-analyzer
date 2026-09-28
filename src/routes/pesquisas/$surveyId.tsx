@@ -4,7 +4,6 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, Copy, Download, ExternalLink, GripVertical, Plus, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { BarChart } from "@mui/x-charts/BarChart";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
@@ -34,7 +33,14 @@ import {
 
 export const Route = createFileRoute("/pesquisas/$surveyId")({
   head: () => ({
-    meta: [{ title: "Editar pesquisa | CRM Insights" }],
+    meta: [
+      { title: "Editar pesquisa | CRM Insights" },
+      { name: "description", content: "Edite a pesquisa e acompanhe as respostas recebidas." },
+      { property: "og:title", content: "Editar pesquisa | CRM Insights" },
+      { property: "og:description", content: "Edite a pesquisa e acompanhe as respostas recebidas." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
   }),
   component: SurveyEditorPage,
 });
@@ -51,6 +57,101 @@ const QUESTION_TYPE_LABEL: Record<SurveyQuestionType, string> = {
 };
 
 const HAS_OPTIONS: SurveyQuestionType[] = ["multipla_escolha", "escolha_unica"];
+
+type AggregatedOption = {
+  label: string;
+  count: number;
+  percentage: number;
+};
+
+type ClosedQuestionResult = {
+  question: SurveyQuestion;
+  options: AggregatedOption[];
+  validResponses: number;
+  unanswered: number;
+};
+
+const percentageFormatter = new Intl.NumberFormat("pt-BR", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
+function isValidAnswer(value: string | string[] | undefined): boolean {
+  if (Array.isArray(value)) return value.some((item) => item.trim().length > 0);
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function ClosedQuestionChart({ result }: { result: ClosedQuestionResult }) {
+  const { question, options, validResponses, unanswered } = result;
+  const isMultipleChoice = question.type === "multipla_escolha";
+
+  return (
+    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: { xs: 2, sm: 2.5 }, minWidth: 0 }}>
+      <Typography variant="body1" sx={{ fontWeight: 700, overflowWrap: "anywhere" }}>
+        {question.label}
+      </Typography>
+
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={{ xs: 0.25, sm: 2 }}
+        sx={{ mt: 0.75, color: "text.secondary" }}
+      >
+        <Typography variant="caption">
+          {validResponses} {validResponses === 1 ? "resposta válida" : "respostas válidas"}
+        </Typography>
+        <Typography variant="caption">
+          {unanswered} {unanswered === 1 ? "registro sem resposta" : "registros sem resposta"}
+        </Typography>
+      </Stack>
+
+      {isMultipleChoice && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+          Cada pessoa pode selecionar mais de uma opção; por isso, os percentuais podem somar mais de 100%.
+        </Typography>
+      )}
+
+      <Stack spacing={1.75} sx={{ mt: 2.5 }}>
+        {options.map((option) => (
+          <Box key={option.label} sx={{ minWidth: 0 }}>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "minmax(0, 1fr)", sm: "minmax(0, 1fr) auto" },
+                gap: { xs: 0.25, sm: 2 },
+                alignItems: "start",
+                mb: 0.75,
+                minWidth: 0,
+              }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 0, overflowWrap: "anywhere" }}>
+                {option.label}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: { sm: "nowrap" } }}>
+                {option.count} {option.count === 1 ? "resposta" : "respostas"} · {percentageFormatter.format(option.percentage)}%
+              </Typography>
+            </Box>
+            <Box
+              role="img"
+              aria-label={`${option.label}: ${option.count} respostas, ${percentageFormatter.format(option.percentage)}%`}
+              sx={{ height: 9, overflow: "hidden", borderRadius: 999, bgcolor: "action.hover" }}
+            >
+              <Box
+                sx={{
+                  width: `${Math.min(option.percentage, 100)}%`,
+                  height: "100%",
+                  borderRadius: "inherit",
+                  bgcolor: "primary.main",
+                  transition: "width 300ms ease",
+                  "@media (prefers-reduced-motion: reduce)": { transition: "none" },
+                }}
+              />
+            </Box>
+          </Box>
+        ))}
+      </Stack>
+    </Box>
+  );
+}
 
 function slugify(text: string): string {
   return text
@@ -158,15 +259,49 @@ function SurveyEditorPage() {
       .filter((q) => HAS_OPTIONS.includes(q.type) || q.type === "sim_nao" || q.type === "nota")
       .map((q) => {
         const tally = new Map<string, number>();
-        const labels =
+        const configuredLabels =
           q.type === "sim_nao" ? ["Sim", "Não"] : q.type === "nota" ? ["1", "2", "3", "4", "5"] : q.options ?? [];
-        for (const label of labels) tally.set(label, 0);
+        for (const label of configuredLabels) tally.set(label, 0);
+
+        let validResponses = 0;
         for (const r of responses) {
           const v = r.answers[q.id];
-          const values = Array.isArray(v) ? v : v != null ? [String(v)] : [];
-          for (const val of values) tally.set(val, (tally.get(val) ?? 0) + 1);
+          if (!isValidAnswer(v)) continue;
+          validResponses += 1;
+
+          const values = Array.isArray(v) ? v : typeof v === "string" ? [v] : [];
+          const uniqueValues = new Set(values.map((value) => value.trim()).filter(Boolean));
+          for (const value of uniqueValues) tally.set(value, (tally.get(value) ?? 0) + 1);
         }
-        return { question: q, dataset: labels.map((label) => ({ label, count: tally.get(label) ?? 0 })) };
+
+        const allLabels = [...configuredLabels, ...[...tally.keys()].filter((label) => !configuredLabels.includes(label))];
+        const withMetrics = allLabels.map((label, originalIndex) => {
+          const count = tally.get(label) ?? 0;
+          return {
+            label,
+            count,
+            percentage: validResponses > 0 ? (count / validResponses) * 100 : 0,
+            originalIndex,
+          };
+        });
+
+        const preserveSemanticOrder = q.type === "sim_nao" || q.type === "nota";
+        const options = preserveSemanticOrder
+          ? withMetrics
+          : withMetrics.sort((a, b) => {
+              const aHasResponses = a.count > 0;
+              const bHasResponses = b.count > 0;
+              if (aHasResponses !== bHasResponses) return aHasResponses ? -1 : 1;
+              if (a.count !== b.count) return b.count - a.count;
+              return a.originalIndex - b.originalIndex;
+            });
+
+        return {
+          question: q,
+          options,
+          validResponses,
+          unanswered: responses.length - validResponses,
+        };
       });
   }, [questions, responses]);
 
@@ -360,19 +495,8 @@ function SurveyEditorPage() {
 
           {closedQuestionCharts.length > 0 && (
             <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
-              {closedQuestionCharts.map(({ question, dataset }) => (
-                <Box key={question.id} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap title={question.label}>{question.label}</Typography>
-                  <Box sx={{ mt: 1, height: 200 }}>
-                    <BarChart
-                      dataset={dataset}
-                      xAxis={[{ dataKey: "label", scaleType: "band" }]}
-                      series={[{ dataKey: "count", color: "#7367F0" }]}
-                      height={200}
-                      margin={{ left: 36, right: 10, top: 10, bottom: 30 }}
-                    />
-                  </Box>
-                </Box>
+              {closedQuestionCharts.map((result) => (
+                <ClosedQuestionChart key={result.question.id} result={result} />
               ))}
             </Box>
           )}

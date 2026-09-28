@@ -269,7 +269,7 @@ function SurveyEditorPage() {
           if (!isValidAnswer(v)) continue;
           validResponses += 1;
 
-          const values = Array.isArray(v) ? v : [v];
+          const values = Array.isArray(v) ? v : typeof v === "string" ? [v] : [];
           const uniqueValues = new Set(values.map((value) => value.trim()).filter(Boolean));
           for (const value of uniqueValues) tally.set(value, (tally.get(value) ?? 0) + 1);
         }

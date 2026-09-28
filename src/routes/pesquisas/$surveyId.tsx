@@ -33,14 +33,7 @@ import {
 
 export const Route = createFileRoute("/pesquisas/$surveyId")({
   head: () => ({
-    meta: [
-      { title: "Editar pesquisa | CRM Insights" },
-      { name: "description", content: "Edite a pesquisa e acompanhe as respostas recebidas." },
-      { property: "og:title", content: "Editar pesquisa | CRM Insights" },
-      { property: "og:description", content: "Edite a pesquisa e acompanhe as respostas recebidas." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
-    ],
+    meta: [{ title: "Editar pesquisa | CRM Insights" }],
   }),
   component: SurveyEditorPage,
 });
@@ -494,7 +487,13 @@ function SurveyEditorPage() {
           </Stack>
 
           {closedQuestionCharts.length > 0 && (
-            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" } }}>
+            <Box
+              sx={{
+                display: "grid",
+                gap: 2,
+                gridTemplateColumns: { xs: "1fr", lg: closedQuestionCharts.length > 1 ? "1fr 1fr" : "1fr" },
+              }}
+            >
               {closedQuestionCharts.map((result) => (
                 <ClosedQuestionChart key={result.question.id} result={result} />
               ))}

@@ -108,10 +108,21 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
     const validOrderIds = validOrders.map((o: any) => o.id as string);
     let curvaAbcProdutos: ReturnType<typeof computeProductAbcCurve> = [];
     if (validOrderIds.length > 0) {
-      const { data: abcItems } = await supabaseAdmin
-        .from("shopify_order_items")
-        .select("product_id, variant_id, title, variant_title, sku, quantity, price")
-        .in("order_id", validOrderIds);
+      // Busca em blocos (URL com milhares de IDs estoura) e paginada (limite de 1000 linhas).
+      const abcItems: any[] = [];
+      for (let i = 0; i < validOrderIds.length; i += 150) {
+        const chunk = validOrderIds.slice(i, i + 150);
+        for (let from = 0; ; from += 1000) {
+          const { data: page, error } = await supabaseAdmin
+            .from("shopify_order_items")
+            .select("product_id, variant_id, title, variant_title, sku, quantity, price")
+            .in("order_id", chunk)
+            .range(from, from + 999);
+          if (error) throw new Error(`Falha ao ler itens da curva ABC: ${error.message}`);
+          abcItems.push(...(page ?? []));
+          if (!page || page.length < 1000) break;
+        }
+      }
 
       const abcByKey = new Map<string, ProductAbcInput>();
       for (const item of (abcItems ?? []) as {

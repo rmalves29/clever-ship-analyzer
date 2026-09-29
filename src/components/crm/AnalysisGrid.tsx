@@ -1,8 +1,9 @@
 import { BarChart } from "@mui/x-charts/BarChart";
 import { LineChart } from "@mui/x-charts/LineChart";
 import { PieChart } from "@mui/x-charts/PieChart";
-import { Maximize2 } from "lucide-react";
+import { Maximize2, Download } from "lucide-react";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import LinearProgress from "@mui/material/LinearProgress";
 import Stack from "@mui/material/Stack";
@@ -356,7 +357,12 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
 
       <Box sx={{ gridColumn: { lg: "span 2" }, border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
         <Box sx={{ borderBottom: "1px solid", borderColor: "divider", pb: 1.5 }}>
-          <PanelHeader index="13" title="Curva ABC de produtos" />
+          <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
+            <PanelHeader index="13" title="Curva ABC de produtos" />
+            <Button size="small" variant="outlined" startIcon={<Download size={14} />} disabled={data.curvaAbcProdutos.length === 0} onClick={() => exportAbcCsv(data.curvaAbcProdutos)}>
+              Exportar CSV
+            </Button>
+          </Stack>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, ml: 4 }}>
             Classificação por receita (A até 80% acumulado, B até 95%, C o resto) e por itens vendidos, cada uma com seu
             próprio ranking. Ordenado por valor vendido, do maior pro menor.

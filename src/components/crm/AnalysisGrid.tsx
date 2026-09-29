@@ -424,3 +424,20 @@ function AbcBadge({ tier }: { tier: "A" | "B" | "C" }) {
     />
   );
 }
+
+function exportAbcCsv(rows: DashboardData["curvaAbcProdutos"]) {
+  const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const header = ["Código", "Produto", "Variação", "Valor vendido", "Qtd. vendida", "Curva (receita)", "Curva (itens)"];
+  const lines = rows.map((p) =>
+    [p.sku ?? "", p.nome, p.variacao ?? "", p.valorVendido.toFixed(2).replace(".", ","), p.quantidadeVendida, p.curvaReceita, p.curvaItens]
+      .map(esc)
+      .join(";"),
+  );
+  const blob = new Blob(["\uFEFF" + [header.map(esc).join(";"), ...lines].join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `curva-abc-produtos-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}

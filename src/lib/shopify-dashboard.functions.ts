@@ -77,24 +77,41 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
 
     // Buscas independentes rodam em paralelo. O filtro de status já vai no banco;
     // o filtro de cancelamento (raw_data.cancelledAt) é reaplicado em memória.
+    // Paginação: a API devolve no máximo 1000 linhas por consulta — sem isso, períodos longos
+    // (anual/tudo) ficavam truncados e mostravam menos que o mensal.
+    const fetchAll = async (build: () => any): Promise<{ data: any[] | null }> => {
+      const rows: any[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await build().order("id", { ascending: true }).range(from, from + 999);
+        if (error) return { data: null };
+        rows.push(...(data ?? []));
+        if (!data || data.length < 1000) break;
+      }
+      return { data: rows };
+    };
+
     const [{ data: orders }, { data: fulfillments }, { data: allOrders }, bestSellers] = await Promise.all([
-      supabaseAdmin
-        .from("shopify_orders")
-        .select("id, customer_id, total_price, processed_at, created_at, province, financial_status, landing_site, raw_data")
-        .gte("processed_at", startISO)
-        .lte("processed_at", endISO)
-        .in("financial_status", validStatuses),
+      fetchAll(() =>
+        supabaseAdmin
+          .from("shopify_orders")
+          .select("id, customer_id, total_price, processed_at, created_at, province, financial_status, landing_site, raw_data")
+          .gte("processed_at", startISO)
+          .lte("processed_at", endISO)
+          .in("financial_status", validStatuses),
+      ),
       supabaseAdmin
         .from("shopify_fulfillments")
         .select("order_id, created_at, updated_at, tracking_number, shopify_orders!inner(processed_at, financial_status)")
         .not("tracking_number", "is", null)
         .gte("created_at", startISO)
         .lte("created_at", endISO),
-      supabaseAdmin
-        .from("shopify_orders")
-        .select("customer_id, total_price, processed_at, created_at, province, financial_status, raw_data")
-        .lte("processed_at", endISO)
-        .in("financial_status", validStatuses),
+      fetchAll(() =>
+        supabaseAdmin
+          .from("shopify_orders")
+          .select("id, customer_id, total_price, processed_at, created_at, province, financial_status, raw_data")
+          .lte("processed_at", endISO)
+          .in("financial_status", validStatuses),
+      ),
       getBestSellingProducts({ startISO, endISO, limit: 5 }).catch(() => []),
     ]);
 

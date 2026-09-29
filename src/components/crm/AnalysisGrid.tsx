@@ -357,7 +357,7 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
 
       <Box sx={{ gridColumn: { lg: "span 2" }, border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
         <Box sx={{ borderBottom: "1px solid", borderColor: "divider", pb: 1.5 }}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
+          <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", gap: 1 }}>
             <PanelHeader index="13" title="Curva ABC de produtos" />
             <Button size="small" variant="outlined" startIcon={<Download size={14} />} disabled={data.curvaAbcProdutos.length === 0} onClick={() => exportAbcCsv(data.curvaAbcProdutos)}>
               Exportar CSV

@@ -34,6 +34,14 @@ const BADGE_LABEL: Record<PanelBadge, string> = {
 
 const CHART = ["#7367F0", "#00CFE8", "#FF9F43", "#28C76F"];
 
+// Rótulo acima de cada barra; retorna null para barras vazias (0) para não poluir.
+function makeBarLabel(format: (v: number) => string) {
+  return (item: { value: number | null }) => (item.value == null || item.value === 0 ? null : format(item.value));
+}
+const pctBarLabel = makeBarLabel((v) => `${v}%`);
+const brlCompactBarLabel = makeBarLabel((v) => `R$ ${Math.round(v).toLocaleString("pt-BR")}`);
+const countBarLabel = makeBarLabel((v) => String(Math.round(v)));
+
 function EmptyState({ children }: { children: React.ReactNode }) {
   return (
     <Stack sx={{ height: "100%", alignItems: "center", justifyContent: "center", border: "1px dashed", borderColor: "divider", borderRadius: 2, p: 2, textAlign: "center" }}>
@@ -119,9 +127,9 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         <BarChart
           dataset={data.clv}
           xAxis={[{ dataKey: "name", scaleType: "band" }]}
-          series={[{ dataKey: "value", color: "#00CFE8", valueFormatter: (v) => brlCents(v ?? 0) }]}
+          series={[{ dataKey: "value", color: "#00CFE8", valueFormatter: (v) => brlCents(v ?? 0), barLabel: brlCompactBarLabel, barLabelPlacement: "outside" }]}
           height={240}
-          margin={{ left: 56, right: 10, top: 10, bottom: 30 }}
+          margin={{ left: 56, right: 10, top: 24, bottom: 30 }}
         />
       </Panel>
 
@@ -165,9 +173,9 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         <BarChart
           dataset={data.faixaTicket}
           xAxis={[{ dataKey: "name", scaleType: "band" }]}
-          series={[{ dataKey: "value", color: "#FF9F43", valueFormatter: (v) => `${v}%` }]}
+          series={[{ dataKey: "value", color: "#FF9F43", valueFormatter: (v) => `${v}%`, barLabel: pctBarLabel, barLabelPlacement: "outside" }]}
           height={240}
-          margin={{ left: 44, right: 10, top: 10, bottom: 30 }}
+          margin={{ left: 44, right: 10, top: 24, bottom: 30 }}
         />
       </Panel>
 
@@ -182,9 +190,9 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         <BarChart
           dataset={data.regioes}
           xAxis={[{ dataKey: "name", scaleType: "band" }]}
-          series={[{ dataKey: "value", color: "#00CFE8", valueFormatter: (v) => `${v}%` }]}
+          series={[{ dataKey: "value", color: "#00CFE8", valueFormatter: (v) => `${v}%`, barLabel: pctBarLabel, barLabelPlacement: "outside" }]}
           height={240}
-          margin={{ left: 44, right: 10, top: 10, bottom: 30 }}
+          margin={{ left: 44, right: 10, top: 24, bottom: 30 }}
         />
       </Panel>
 
@@ -225,9 +233,9 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
         <BarChart
           dataset={data.tempoEntreCompras}
           xAxis={[{ dataKey: "name", scaleType: "band" }]}
-          series={[{ dataKey: "value", color: "#28C76F", valueFormatter: (v) => `${v}%` }]}
+          series={[{ dataKey: "value", color: "#28C76F", valueFormatter: (v) => `${v}%`, barLabel: pctBarLabel, barLabelPlacement: "outside" }]}
           height={240}
-          margin={{ left: 44, right: 10, top: 10, bottom: 30 }}
+          margin={{ left: 44, right: 10, top: 24, bottom: 30 }}
         />
       </Panel>
 
@@ -262,11 +270,11 @@ export function AnalysisGrid({ data }: { data: DashboardData }) {
             dataset={data.enviosPorDia}
             xAxis={[{ dataKey: "dia", scaleType: "band" }]}
             series={[
-              { dataKey: "pedidos", label: "Pedidos enviados", color: "#7367F0" },
-              { dataKey: "produtos", label: "Produtos enviados", color: "#00CFE8" },
+              { dataKey: "pedidos", label: "Pedidos enviados", color: "#7367F0", barLabel: countBarLabel, barLabelPlacement: "outside" },
+              { dataKey: "produtos", label: "Produtos enviados", color: "#00CFE8", barLabel: countBarLabel, barLabelPlacement: "outside" },
             ]}
             height={280}
-            margin={{ left: 44, right: 10, top: 10, bottom: 50 }}
+            margin={{ left: 44, right: 10, top: 24, bottom: 50 }}
           />
         </Box>
       </Box>

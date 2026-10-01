@@ -29,7 +29,7 @@ export const Route = createFileRoute("/whatsapp/$campaignId")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  errorComponent: ({ error }) => <Typography variant="body2" color="error" sx={{ p: 4 }}>{error.message}</Typography>,
+  errorComponent: ({ error }) => <Typography variant="body2" color="error" sx={{ p: 4 }}>{String((error as Error)?.message ?? error)}</Typography>,
   notFoundComponent: () => <Typography variant="body2" color="text.secondary" sx={{ p: 4 }}>Campanha não encontrada.</Typography>,
   component: CampaignDetailPage,
 });

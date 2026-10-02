@@ -193,7 +193,7 @@ function CashbackPage() {
     const used = derived.filter((c) => c.derivedStatus === "used");
     const failed = derived.filter((c) => c.derivedStatus === "failed" || c.derivedStatus === "cancel_pending");
     const outstanding = [...active, ...pending].reduce((sum, c) => sum + Number(c.cashback_amount ?? 0), 0);
-    const usedAmount = used.reduce((sum, c) => sum + Number(c.cashback_amount ?? 0), 0);
+    const usedAmount = used.reduce((sum, c) => sum + Number(c.redeemed_order_total ?? 0), 0);
     return { total: derived.length, active: active.length, pending: pending.length, used: used.length, failed: failed.length, outstanding, usedAmount };
   }, [derived]);
 
@@ -398,7 +398,7 @@ function CashbackPage() {
                   </Typography>
                 </Stack>
                 <Typography variant="caption" color="text.secondary">
-                  Soma dos cupons já resgatados pelas clientes.
+                  Soma do valor total dos pedidos que usaram cashback.
                 </Typography>
               </CardContent>
             </Card>

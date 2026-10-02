@@ -145,14 +145,16 @@ export async function reconcileCashbackUsageViaShopify(): Promise<{ checked: num
     if (row.shopify_customer_gid) {
       const { data: candidateOrders } = await db
         .from("shopify_orders")
-        .select("id, processed_at, raw_data")
+        .select("id, processed_at, total_discounts, raw_data")
         .neq("id", row.shopify_order_id)
         .gte("processed_at", row.starts_at)
         .lte("processed_at", row.ends_at)
         .order("processed_at", { ascending: true });
-      const match = ((candidateOrders ?? []) as any[]).find(
+      // Se a cliente tem mais de um pedido na janela, prefere o que teve desconto aplicado.
+      const customerOrders = ((candidateOrders ?? []) as any[]).filter(
         (order) => (order.raw_data as any)?.customer?.id === row.shopify_customer_gid,
       );
+      const match = customerOrders.find((order) => Number(order.total_discounts ?? 0) > 0) ?? customerOrders[0];
       if (match) {
         redeemedOrderId = match.id;
         usedAt = match.processed_at ?? usedAt;

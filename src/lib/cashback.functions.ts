@@ -54,13 +54,37 @@ export const listCashbackCoupons = createServerFn({ method: "GET" })
   .middleware([requireAppAuth])
   .handler(async () => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await (supabaseAdmin as any)
-      .from("cashback_coupons")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(500);
-    if (error) throw new Error(`Erro ao listar cupons de cashback: ${error.message}`);
-    return (data ?? []) as any[];
+    // Pagina até trazer TODOS os cupons — os cards de resumo somam em cima dessa lista, e um
+    // limite fixo deixava os cupons mais antigos (ex.: já utilizados) de fora da conta.
+    const rows: any[] = [];
+    const pageSize = 1000;
+    for (let page = 0; page < 50; page++) {
+      const { data, error } = await (supabaseAdmin as any)
+        .from("cashback_coupons")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .range(page * pageSize, page * pageSize + pageSize - 1);
+      if (error) throw new Error(`Erro ao listar cupons de cashback: ${error.message}`);
+      rows.push(...((data ?? []) as any[]));
+      if (!data || data.length < pageSize) break;
+    }
+
+    // Valor total do pedido que resgatou cada cupom (não só o valor do cashback).
+    const redeemedIds = Array.from(new Set(rows.map((row) => row.redeemed_order_id).filter(Boolean))) as string[];
+    const totalByOrderId = new Map<string, number>();
+    for (let start = 0; start < redeemedIds.length; start += 200) {
+      const batch = redeemedIds.slice(start, start + 200);
+      const { data: orders, error: ordersError } = await (supabaseAdmin as any)
+        .from("shopify_orders")
+        .select("id, total_price")
+        .in("id", batch);
+      if (ordersError) throw new Error(`Erro ao buscar pedidos que usaram cashback: ${ordersError.message}`);
+      for (const order of (orders ?? []) as any[]) totalByOrderId.set(String(order.id), Number(order.total_price ?? 0));
+    }
+    return rows.map((row) => ({
+      ...row,
+      redeemed_order_total: row.redeemed_order_id ? (totalByOrderId.get(String(row.redeemed_order_id)) ?? null) : null,
+    })) as any[];
   });
 
 export const reprocessCashbackFailures = createServerFn({ method: "POST" })

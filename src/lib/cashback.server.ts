@@ -108,6 +108,69 @@ export async function reconcileCashbackRedemptions(): Promise<{ scannedOrders: n
   return { scannedOrders, used };
 }
 
+/** Fonte de verdade real sobre o resgate: pergunta pra Shopify o contador de uso de cada cupom
+ *  em aberto, em vez de depender de achar o código como texto num pedido sincronizado. Isso
+ *  cobre o caso de pedido criado/editado manualmente no Admin (ex.: venda fechada pelo WhatsApp),
+ *  onde a Shopify não devolve o código em `discountCodes` — só um rótulo genérico — e o cupom
+ *  ficava preso em "pending" pra sempre mesmo já tendo sido usado de verdade. */
+export async function reconcileCashbackUsageViaShopify(): Promise<{ checked: number; used: number }> {
+  const db = await admin();
+  const { data: openRows, error } = await db
+    .from("cashback_coupons")
+    .select("id, shopify_discount_id, shopify_customer_gid, shopify_order_id, starts_at, ends_at")
+    .in("status", ["pending", "active"])
+    .not("shopify_discount_id", "is", null);
+  if (error) throw new Error(`Erro ao carregar cupons em aberto: ${error.message}`);
+  const open = (openRows ?? []) as {
+    id: number;
+    shopify_discount_id: string;
+    shopify_customer_gid: string | null;
+    shopify_order_id: string;
+    starts_at: string;
+    ends_at: string;
+  }[];
+  if (open.length === 0) return { checked: 0, used: 0 };
+
+  const { getShopifyDiscountUsageCounts } = await import("./shopify.server");
+  const usageByDiscountId = await getShopifyDiscountUsageCounts(open.map((row) => row.shopify_discount_id));
+
+  let used = 0;
+  for (const row of open) {
+    if ((usageByDiscountId.get(row.shopify_discount_id) ?? 0) <= 0) continue;
+
+    // Tenta achar o pedido que resgatou, só pra manter o histórico completo — mas marca "used"
+    // mesmo sem achar, porque o contador da própria Shopify já é prova suficiente do uso.
+    let redeemedOrderId: string | null = null;
+    let usedAt = new Date().toISOString();
+    if (row.shopify_customer_gid) {
+      const { data: candidateOrders } = await db
+        .from("shopify_orders")
+        .select("id, processed_at, raw_data")
+        .neq("id", row.shopify_order_id)
+        .gte("processed_at", row.starts_at)
+        .lte("processed_at", row.ends_at)
+        .order("processed_at", { ascending: true });
+      const match = ((candidateOrders ?? []) as any[]).find(
+        (order) => (order.raw_data as any)?.customer?.id === row.shopify_customer_gid,
+      );
+      if (match) {
+        redeemedOrderId = match.id;
+        usedAt = match.processed_at ?? usedAt;
+      }
+    }
+
+    const { error: updateError } = await db
+      .from("cashback_coupons")
+      .update({ status: "used", used_at: usedAt, redeemed_order_id: redeemedOrderId, last_error: null })
+      .eq("id", row.id)
+      .in("status", ["pending", "active"]);
+    if (updateError) throw new Error(`Erro ao registrar uso confirmado do cashback: ${updateError.message}`);
+    used++;
+  }
+
+  return { checked: open.length, used };
+}
+
 export async function loadCashbackSettings(): Promise<CashbackSettings> {
   const db = await admin();
   const { data } = await db.from("cashback_settings").select("*").eq("id", 1).maybeSingle();

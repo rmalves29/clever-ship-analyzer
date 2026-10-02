@@ -223,6 +223,7 @@ export async function runShopifySync(fullSync: boolean) {
       reconcileCashbackForOrder,
       reconcileCashbackRedemptionForOrder,
       reconcileCashbackRedemptions,
+      reconcileCashbackUsageViaShopify,
       reprocessPendingCashback,
     } = await import(
       "./cashback.server"
@@ -373,6 +374,9 @@ export async function runShopifySync(fullSync: boolean) {
     // Reprocessa cupons que falharam ou cancelamentos pendentes de sincronizações anteriores.
     try {
       await reconcileCashbackRedemptions();
+      // Confere direto na Shopify o contador de uso de cada cupom em aberto — pega os resgates
+      // que o match por texto do código nunca veria (pedido criado manualmente no Admin).
+      await reconcileCashbackUsageViaShopify();
       await reprocessPendingCashback();
     } catch (cashbackError) {
       cashbackErrors++;

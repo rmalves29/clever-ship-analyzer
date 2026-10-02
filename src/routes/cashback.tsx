@@ -193,7 +193,8 @@ function CashbackPage() {
     const used = derived.filter((c) => c.derivedStatus === "used");
     const failed = derived.filter((c) => c.derivedStatus === "failed" || c.derivedStatus === "cancel_pending");
     const outstanding = [...active, ...pending].reduce((sum, c) => sum + Number(c.cashback_amount ?? 0), 0);
-    return { total: derived.length, active: active.length, pending: pending.length, used: used.length, failed: failed.length, outstanding };
+    const usedAmount = used.reduce((sum, c) => sum + Number(c.cashback_amount ?? 0), 0);
+    return { total: derived.length, active: active.length, pending: pending.length, used: used.length, failed: failed.length, outstanding, usedAmount };
   }, [derived]);
 
   const minExpiration = minExpirationDays(Number(activationDelayDays) || 0);
@@ -382,6 +383,22 @@ function CashbackPage() {
                 </Stack>
                 <Typography variant="caption" color="text.secondary">
                   Soma dos cupons aguardando liberação e ativos.
+                </Typography>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent>
+                <Typography variant="body2" color="text.secondary">
+                  Cashback utilizado
+                </Typography>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center", mt: 0.5 }}>
+                  <Ticket size={20} color="var(--mui-palette-success-main, #28c76f)" />
+                  <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                    {formatBRL(summary.usedAmount)}
+                  </Typography>
+                </Stack>
+                <Typography variant="caption" color="text.secondary">
+                  Soma dos cupons já resgatados pelas clientes.
                 </Typography>
               </CardContent>
             </Card>

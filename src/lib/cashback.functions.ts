@@ -66,10 +66,13 @@ export const listCashbackCoupons = createServerFn({ method: "GET" })
 export const reprocessCashbackFailures = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .handler(async () => {
-    const { reconcileCashbackRedemptions, reprocessPendingCashback } = await import("./cashback.server");
+    const { reconcileCashbackRedemptions, reconcileCashbackUsageViaShopify, reprocessPendingCashback } = await import(
+      "./cashback.server"
+    );
     const redemptions = await reconcileCashbackRedemptions();
+    const usageViaShopify = await reconcileCashbackUsageViaShopify();
     const failures = await reprocessPendingCashback();
-    return { ...failures, redemptions };
+    return { ...failures, redemptions, usageViaShopify };
   });
 
 /** Ajuste único (chamado manualmente da tela): antecipa a liberação dos cupons ainda não

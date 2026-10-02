@@ -625,3 +625,38 @@ export async function updateShopifyDiscountStartsAt(
     return { success: false, error: error instanceof Error ? error.message : "Falha ao atualizar cupom na Shopify." };
   }
 }
+
+const DISCOUNT_USAGE_COUNT_QUERY = `
+  query getDiscountUsageCounts($ids: [ID!]!) {
+    nodes(ids: $ids) {
+      id
+      ... on DiscountCodeNode {
+        codeDiscount {
+          ... on DiscountCodeBasic { asyncUsageCount }
+          ... on DiscountCodeBxgy { asyncUsageCount }
+          ... on DiscountCodeFreeShipping { asyncUsageCount }
+        }
+      }
+    }
+  }
+`;
+
+/** Pergunta direto pra Shopify quantas vezes cada cupom já foi resgatado de verdade no
+ *  checkout — o contador vive no próprio desconto e é incrementado em qualquer forma de uso,
+ *  diferente do nosso sync de pedidos, que só reconhece o resgate quando o código aparece
+ *  como texto em `discountCodes` (e fica cego quando o desconto é aplicado manualmente no
+ *  Admin, caso em que a Shopify devolve só um rótulo genérico tipo "Desconto personalizado"). */
+export async function getShopifyDiscountUsageCounts(discountIds: string[]): Promise<Map<string, number>> {
+  const usage = new Map<string, number>();
+  const uniqueIds = Array.from(new Set(discountIds.filter(Boolean)));
+  for (let start = 0; start < uniqueIds.length; start += 100) {
+    const batch = uniqueIds.slice(start, start + 100);
+    const data = await shopifyGraphQL(DISCOUNT_USAGE_COUNT_QUERY, { ids: batch });
+    for (const node of (data?.nodes ?? []) as any[]) {
+      if (!node?.id) continue;
+      const count = node?.codeDiscount?.asyncUsageCount;
+      if (typeof count === "number") usage.set(node.id, count);
+    }
+  }
+  return usage;
+}

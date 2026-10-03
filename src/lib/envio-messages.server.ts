@@ -1,11 +1,11 @@
-import { loadUazapiCreds, sendText, sendMedia, toGroupJid, type MediaType } from "./envio-uazapi.server";
+import { loadUazapiCreds, sendText, sendMedia, sendPoll, toGroupJid, type MediaType } from "./envio-uazapi.server";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
 }
 
-export type EnvioContentType = "text" | "image" | "audio" | "video" | "video_note";
+export type EnvioContentType = "text" | "image" | "audio" | "video" | "video_note" | "poll";
 
 export type EnvioMessage = {
   id: string;
@@ -14,6 +14,8 @@ export type EnvioMessage = {
   content_type: EnvioContentType;
   content_text: string | null;
   media_url: string | null;
+  poll_options: string[] | null;
+  poll_selectable_count: number | null;
   status: "pending" | "sending" | "sent" | "failed";
   scheduled_at: string | null;
   sent_at: string | null;
@@ -35,7 +37,7 @@ async function syncAiQueueState(messageId: string): Promise<void> {
   }
 }
 
-const CONTENT_TO_MEDIA_TYPE: Record<Exclude<EnvioContentType, "text">, MediaType> = {
+const CONTENT_TO_MEDIA_TYPE: Record<Exclude<EnvioContentType, "text" | "poll">, MediaType> = {
   image: "image",
   audio: "audio",
   video: "video",
@@ -65,6 +67,9 @@ async function sendOneMessage(messageId: string): Promise<void> {
     let waMessageId: string | undefined;
     if (m.content_type === "text") {
       const res = await sendText(creds, waJid, m.content_text ?? "");
+      waMessageId = res.id;
+    } else if (m.content_type === "poll") {
+      const res = await sendPoll(creds, waJid, m.content_text ?? "", m.poll_options ?? [], m.poll_selectable_count ?? 1);
       waMessageId = res.id;
     } else {
       if (!m.media_url) throw new Error("Mensagem de mídia sem media_url");
@@ -104,6 +109,8 @@ export async function createAndSendEnvioMessage(input: {
   contentType: EnvioContentType;
   contentText?: string | undefined;
   mediaUrl?: string | undefined;
+  pollOptions?: string[] | undefined;
+  pollSelectableCount?: number | undefined;
   scheduledAt?: string | undefined;
 }): Promise<{ messageIds: string[] }> {
   const supabaseAdmin = await admin();
@@ -114,6 +121,8 @@ export async function createAndSendEnvioMessage(input: {
     content_type: input.contentType,
     content_text: input.contentText ?? null,
     media_url: input.mediaUrl ?? null,
+    poll_options: input.contentType === "poll" ? (input.pollOptions ?? null) : null,
+    poll_selectable_count: input.contentType === "poll" ? (input.pollSelectableCount ?? 1) : null,
     status: isScheduled ? "pending" : "sending",
     scheduled_at: input.scheduledAt ?? null,
   }));

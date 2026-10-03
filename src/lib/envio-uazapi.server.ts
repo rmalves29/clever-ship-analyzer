@@ -134,6 +134,31 @@ export async function sendText(creds: UazapiCreds, groupJid: string, text: strin
   return { id: data?.id ?? data?.messageid ?? data?.key?.id };
 }
 
+/** Enquete nativa do WhatsApp via /send/menu (type "poll"). Imagem não é suportada pelo próprio
+ *  WhatsApp dentro de enquete — quem quiser foto manda uma mensagem de imagem antes. */
+export async function sendPoll(
+  creds: UazapiCreds,
+  groupJid: string,
+  question: string,
+  options: string[],
+  selectableCount = 1,
+): Promise<{ id?: string }> {
+  const choices = options.map((o) => o.trim()).filter(Boolean);
+  if (!question.trim() || choices.length < 2) throw new Error("Enquete precisa de pergunta e ao menos 2 opções");
+  const data = await uazapiFetch(creds, "/send/menu", {
+    method: "POST",
+    body: {
+      number: groupJid,
+      type: "poll",
+      text: question,
+      choices,
+      selectableCount: Math.min(Math.max(1, selectableCount), choices.length),
+    },
+    timeoutMs: 60_000,
+  });
+  return { id: data?.id ?? data?.messageid ?? data?.key?.id };
+}
+
 export type MediaType = "image" | "video" | "videoplay" | "document" | "audio" | "myaudio" | "ptt" | "ptv" | "sticker";
 
 export async function sendMedia(

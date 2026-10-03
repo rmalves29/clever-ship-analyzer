@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Send, Paperclip, X, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Send, Paperclip, X, ThumbsUp, ThumbsDown, Plus, Trash2 } from "lucide-react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
@@ -34,6 +34,7 @@ const CONTENT_TYPES = [
   { value: "audio", label: "Áudio" },
   { value: "video", label: "Vídeo" },
   { value: "video_note", label: "Vídeo redondo" },
+  { value: "poll", label: "Enquete" },
 ] as const;
 
 const STATUS_LABEL: Record<string, string> = { pending: "Agendada", sending: "Enviando", sent: "Enviada", failed: "Falhou" };
@@ -80,6 +81,8 @@ export function MessageComposer() {
   const [contentType, setContentType] = useState<(typeof CONTENT_TYPES)[number]["value"]>("text");
   const [text, setText] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
+  const [pollMultiple, setPollMultiple] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [targetMode, setTargetMode] = useState<"groups" | "campaign">("groups");
   const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
@@ -112,12 +115,21 @@ export function MessageComposer() {
         groupIds = Array.from(selectedGroupIds);
       }
       if (groupIds.length === 0) throw new Error("Selecione ao menos 1 grupo");
+      const cleanOptions = pollOptions.map((o) => o.trim()).filter(Boolean);
+      if (contentType === "poll") {
+        if (!text.trim()) throw new Error("Escreva a pergunta da enquete");
+        if (cleanOptions.length < 2) throw new Error("A enquete precisa de pelo menos 2 opções");
+        if (new Set(cleanOptions.map((o) => o.toLowerCase())).size !== cleanOptions.length) throw new Error("Há opções repetidas na enquete");
+      }
       return send({
         data: {
           groupIds,
           contentType,
           contentText: text || undefined,
           mediaUrl: mediaUrl || undefined,
+          ...(contentType === "poll"
+            ? { pollOptions: cleanOptions, pollSelectableCount: pollMultiple ? cleanOptions.length : 1 }
+            : {}),
           scheduledAt: scheduleMode === "scheduled" && scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
         },
       });
@@ -126,6 +138,8 @@ export function MessageComposer() {
       toast.success(scheduleMode === "scheduled" ? "Mensagem agendada." : "Enviando…");
       setText("");
       setMediaUrl("");
+      setPollOptions(["", ""]);
+      setPollMultiple(false);
       setSelectedGroupIds(new Set());
       qc.invalidateQueries({ queryKey: ["envio-messages"] });
     },
@@ -170,10 +184,46 @@ export function MessageComposer() {
               rows={4}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder={contentType === "text" ? "Mensagem…" : "Legenda (opcional)…"}
+              placeholder={contentType === "text" ? "Mensagem…" : contentType === "poll" ? "Pergunta da enquete (ex.: Qual coleção você quer ver na live?)" : "Legenda (opcional)…"}
             />
 
-            {contentType !== "text" && (
+            {contentType === "poll" && (
+              <Stack spacing={1}>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  Opções (de 2 a 12)
+                </Typography>
+                {pollOptions.map((opt, idx) => (
+                  <Stack key={idx} direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      value={opt}
+                      placeholder={`Opção ${idx + 1}`}
+                      slotProps={{ htmlInput: { maxLength: 100 } }}
+                      onChange={(e) => setPollOptions((prev) => prev.map((o, i) => (i === idx ? e.target.value : o)))}
+                    />
+                    <IconButton
+                      size="small"
+                      disabled={pollOptions.length <= 2}
+                      onClick={() => setPollOptions((prev) => prev.filter((_, i) => i !== idx))}
+                    >
+                      <Trash2 size={16} />
+                    </IconButton>
+                  </Stack>
+                ))}
+                <Box>
+                  <Button size="small" variant="outline" startIcon={<Plus size={14} />} disabled={pollOptions.length >= 12} onClick={() => setPollOptions((prev) => [...prev, ""])}>
+                    Adicionar opção
+                  </Button>
+                </Box>
+                <FormControlLabel
+                  control={<Checkbox size="small" checked={pollMultiple} onChange={(e) => setPollMultiple(e.target.checked)} />}
+                  label={<Typography variant="body2">Permitir selecionar mais de uma opção</Typography>}
+                />
+              </Stack>
+            )}
+
+            {contentType !== "text" && contentType !== "poll" && (
               <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                 <input ref={fileInputRef} type="file" hidden onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
                 <Button variant="outline" startIcon={<Paperclip size={16} />} onClick={() => fileInputRef.current?.click()} disabled={uploading}>
@@ -297,7 +347,7 @@ export function MessageComposer() {
                   )}
                 </Stack>
                 <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {m.content_text || m.content_type}
+                  {m.content_type === "poll" ? `Enquete: ${m.content_text ?? ""}` : m.content_text || m.content_type}
                 </Typography>
               </Box>
             ))}

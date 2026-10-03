@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 
-const contentTypeSchema = z.enum(["text", "image", "audio", "video", "video_note"]);
+const contentTypeSchema = z.enum(["text", "image", "audio", "video", "video_note", "poll"]);
 
 export const createAndSendEnvioMessage = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
@@ -13,7 +13,12 @@ export const createAndSendEnvioMessage = createServerFn({ method: "POST" })
         contentType: contentTypeSchema,
         contentText: z.string().optional(),
         mediaUrl: z.string().optional(),
+        pollOptions: z.array(z.string().trim().min(1).max(100)).min(2).max(12).optional(),
+        pollSelectableCount: z.number().int().min(1).max(12).optional(),
         scheduledAt: z.string().optional(),
+      })
+      .refine((v) => v.contentType !== "poll" || (Boolean(v.contentText?.trim()) && (v.pollOptions?.length ?? 0) >= 2), {
+        message: "Enquete precisa de pergunta e de 2 a 12 opções.",
       })
       .parse(data),
   )

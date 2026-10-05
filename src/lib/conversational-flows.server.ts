@@ -438,16 +438,29 @@ export async function matchIncomingMessage(message: IncomingMessage): Promise<vo
   let matched: any = null;
 
   if (buttonText && message.context?.id) {
-    const { data: recipient } = await supabaseAdmin
-      .from("whatsapp_campaign_recipients")
+    // Campanhas e automações enviam pela fila nova (wa_campaigns / wa_campaign_recipients) desde
+    // 24/09; as tabelas whatsapp_campaign* ficaram só com o histórico antigo. Procura nas duas.
+    let templateName: string | null = null;
+    const { data: newRecipient } = await (supabaseAdmin.from("wa_campaign_recipients" as any) as any)
       .select("campaign_id")
       .eq("wa_message_id", message.context.id)
       .maybeSingle();
-    const campaignId = (recipient as { campaign_id: string } | null)?.campaign_id;
-    let templateName: string | null = null;
-    if (campaignId) {
-      const { data: campaign } = await supabaseAdmin.from("whatsapp_campaigns").select("template_name").eq("id", campaignId).maybeSingle();
-      templateName = (campaign as { template_name: string } | null)?.template_name ?? null;
+    const newCampaignId = (newRecipient as { campaign_id: string } | null)?.campaign_id;
+    if (newCampaignId) {
+      const { data: newCampaign } = await (supabaseAdmin.from("wa_campaigns" as any) as any).select("template_name").eq("id", newCampaignId).maybeSingle();
+      templateName = (newCampaign as { template_name: string } | null)?.template_name ?? null;
+    }
+    if (!templateName) {
+      const { data: recipient } = await supabaseAdmin
+        .from("whatsapp_campaign_recipients")
+        .select("campaign_id")
+        .eq("wa_message_id", message.context.id)
+        .maybeSingle();
+      const campaignId = (recipient as { campaign_id: string } | null)?.campaign_id;
+      if (campaignId) {
+        const { data: campaign } = await supabaseAdmin.from("whatsapp_campaigns").select("template_name").eq("id", campaignId).maybeSingle();
+        templateName = (campaign as { template_name: string } | null)?.template_name ?? null;
+      }
     }
     matched = flows.find(
       (f) => f.trigger_type === "button_click" && f.trigger_template_name === templateName && (f.trigger_values as string[]).includes(buttonText),

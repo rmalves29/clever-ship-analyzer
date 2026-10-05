@@ -13,12 +13,14 @@ import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { previewWhatsappAudience } from "@/lib/whatsapp-audience-preview.functions";
 import { createAndSendCampaign, listMetaTemplates } from "@/lib/whatsapp-meta.functions";
 import { getSegmentOptions } from "@/lib/crm-segmentation.functions";
 import { getStaticLists } from "@/lib/crm-static-lists.functions";
 import { extractTemplateBodyTokens } from "@/lib/whatsapp-template-body-tokens";
+import { DYNAMIC_VARS } from "@/lib/whatsapp-dynamic-vars";
 import { normalizeWhatsappAudienceSelection } from "@/lib/whatsapp-audience-selection";
 
 export const Route = createFileRoute("/whatsapp/nova")({
@@ -65,6 +67,7 @@ function NovaCampanha() {
   const [audience, setAudience] = useState("sem_recompra");
   const [templateName, setTemplateName] = useState("");
   const [params, setParams] = useState<string[]>([]);
+  const [activeVar, setActiveVar] = useState(0);
   const [coupon, setCoupon] = useState("");
   const [tag, setTag] = useState("");
   const [requireApproval, setRequireApproval] = useState(false);
@@ -108,7 +111,9 @@ function NovaCampanha() {
   const renderedBody = useMemo(() => {
     let text = bodyText(template);
     tokens.forEach((token, i) => {
-      const value = params[i]?.trim() || (i === 0 ? (sample?.name ?? "Cliente") : `«${token}»`);
+      const firstName = (sample?.name ?? "Cliente").split(" ")[0] ?? "Cliente";
+      const typed = params[i]?.trim().replace(/\{\{\s*NOME_CLIENTE\s*\}\}/g, firstName);
+      const value = typed || (i === 0 ? (sample?.name ?? "Cliente") : `«${token}»`);
       text = text.replace(new RegExp(`\\{\\{\\s*${token}\\s*\\}\\}`, "g"), value);
     });
     return text;
@@ -221,10 +226,39 @@ function NovaCampanha() {
                 label={`Variável {{${token}}}`}
                 value={params[i] ?? ""}
                 onChange={(e) => setParams((prev) => prev.map((v, idx) => (idx === i ? e.target.value : v)))}
+                onFocus={() => setActiveVar(i)}
                 placeholder={i === 0 ? "{{NOME_CLIENTE}}" : "Texto ou token"}
                 fullWidth
               />
             ))}
+            <Box sx={{ border: "1px dashed", borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+              <Typography variant="caption" sx={{ display: "block", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary", mb: 1 }}>
+                Variáveis do cliente (viram o dado real de cada um no envio)
+              </Typography>
+              <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.75 }}>
+                {DYNAMIC_VARS.map((v) => (
+                  <Tooltip key={v.token} title={v.label}>
+                    <span>
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        label={v.token}
+                        disabled={tokens.length === 0}
+                        onClick={() =>
+                          setParams((prev) => prev.map((value, idx) => (idx === Math.min(activeVar, tokens.length - 1) ? `${value}${v.token}` : value)))
+                        }
+                        sx={{ fontFamily: "monospace", fontSize: 11 }}
+                      />
+                    </span>
+                  </Tooltip>
+                ))}
+              </Stack>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+                {tokens.length === 0
+                  ? "Escolha um modelo aprovado com variáveis para usar estes dados. Ex.: {{1}} = {{NOME_CLIENTE}}, {{2}} = {{NUMERO_PEDIDO}}."
+                  : `Clique numa variável para inserir no campo selecionado (agora: {{${tokens[Math.min(activeVar, tokens.length - 1)]}}}). Ex.: "Oi {{NOME_CLIENTE}}, seu pedido {{NUMERO_PEDIDO}}…"`}
+              </Typography>
+            </Box>
             <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}>
               <TextField label="Cupom (opcional)" value={coupon} onChange={(e) => setCoupon(e.target.value)} fullWidth />
               <TextField label="Etiqueta (opcional)" value={tag} onChange={(e) => setTag(e.target.value)} fullWidth />

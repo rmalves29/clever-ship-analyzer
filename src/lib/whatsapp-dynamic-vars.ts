@@ -1,0 +1,20 @@
+/** Tokens dinâmicos que o motor de envio resolve por destinatário (dispatchCampaign,
+ *  whatsapp-meta.server.ts) — funcionam nos campos de variável de campanhas e automações. */
+export const DYNAMIC_VARS: { token: string; label: string }[] = [
+  { token: "{{NOME_CLIENTE}}", label: "Primeiro nome do cliente" },
+  { token: "{{NUMERO_PEDIDO}}", label: "Número do pedido mais recente" },
+  { token: "{{VALOR_TOTAL}}", label: "Valor total do pedido mais recente" },
+  { token: "{{ITENS_COMPRADOS}}", label: "Resumo dos itens comprados" },
+  { token: "{{CUPOM_DESCONTO}}", label: "Código de cupom do pedido (se houver)" },
+  { token: "{{FRETE_ESCOLHIDO}}", label: "Método de frete escolhido" },
+  { token: "{{RASTREIO}}", label: "Código de rastreio" },
+  { token: "{{STATUS_PEDIDO}}", label: "Status do envio (Enviado/Processando)" },
+  { token: "{{LINK_CHECKOUT}}", label: "Link do checkout (carrinho abandonado)" },
+  { token: "{{LINK_PAGAMENTO}}", label: "Link para concluir o pagamento (Pix/Mercado Pago)" },
+  { token: "{{CUPOM_CASHBACK}}", label: "Cupom de cashback do pedido" },
+  { token: "{{VALOR_CASHBACK}}", label: "Valor do cashback gerado" },
+  { token: "{{COMPRA_MINIMA_CASHBACK}}", label: "Compra mínima para usar o cashback" },
+  { token: "{{VALIDADE_CASHBACK}}", label: "Data de validade do cashback" },
+  { token: "{{NOME_LANDING_PAGE}}", label: "Nome da landing page de origem" },
+  { token: "{{LINK_GRUPO_LANDING}}", label: "Link do grupo da landing page" },
+];

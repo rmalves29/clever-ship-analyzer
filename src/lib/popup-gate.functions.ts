@@ -10,6 +10,10 @@ const gateSchema = z
     headline: z.string().trim().min(1, "Escreva o título.").max(120),
     bodyText: z.string().trim().max(800),
     imageUrl: z.string().url().nullable(),
+    imageSize: z.number().int().min(120).max(480),
+    imagePosX: z.number().int().min(0).max(100),
+    imagePosY: z.number().int().min(0).max(100),
+    imageZoom: z.number().min(1).max(3),
     password: z.string().trim().max(64),
     passwordPlaceholder: z.string().trim().min(1).max(60),
     buttonText: z.string().trim().min(1).max(40),
@@ -18,6 +22,7 @@ const gateSchema = z
     backgroundColor: hexColor,
     textColor: hexColor,
     buttonColor: hexColor,
+    groupButtonColor: hexColor,
   })
   .refine((v) => !v.enabled || v.password.length >= 4, {
     path: ["password"],

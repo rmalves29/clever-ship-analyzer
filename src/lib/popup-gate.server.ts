@@ -12,6 +12,10 @@ export type GateSettings = {
   headline: string;
   bodyText: string;
   imageUrl: string | null;
+  imageSize: number;
+  imagePosX: number;
+  imagePosY: number;
+  imageZoom: number;
   password: string;
   passwordPlaceholder: string;
   buttonText: string;
@@ -20,6 +24,7 @@ export type GateSettings = {
   backgroundColor: string;
   textColor: string;
   buttonColor: string;
+  groupButtonColor: string;
 };
 
 export const DEFAULT_GATE_SETTINGS: GateSettings = {
@@ -27,6 +32,10 @@ export const DEFAULT_GATE_SETTINGS: GateSettings = {
   headline: "Área exclusiva",
   bodyText: "Para entrar no site, digite a senha. Ela é enviada no nosso grupo VIP.",
   imageUrl: null,
+  imageSize: 280,
+  imagePosX: 50,
+  imagePosY: 50,
+  imageZoom: 1,
   password: "",
   passwordPlaceholder: "Digite a senha",
   buttonText: "Entrar",
@@ -35,6 +44,7 @@ export const DEFAULT_GATE_SETTINGS: GateSettings = {
   backgroundColor: "#0f172a",
   textColor: "#ffffff",
   buttonColor: "#25d366",
+  groupButtonColor: "#25d366",
 };
 
 function rowToSettings(row: any): GateSettings {
@@ -44,6 +54,10 @@ function rowToSettings(row: any): GateSettings {
     headline: row.headline ?? DEFAULT_GATE_SETTINGS.headline,
     bodyText: row.body_text ?? DEFAULT_GATE_SETTINGS.bodyText,
     imageUrl: row.image_url ?? null,
+    imageSize: Number(row.image_size ?? DEFAULT_GATE_SETTINGS.imageSize),
+    imagePosX: Number(row.image_pos_x ?? DEFAULT_GATE_SETTINGS.imagePosX),
+    imagePosY: Number(row.image_pos_y ?? DEFAULT_GATE_SETTINGS.imagePosY),
+    imageZoom: Number(row.image_zoom ?? DEFAULT_GATE_SETTINGS.imageZoom),
     password: row.password ?? "",
     passwordPlaceholder: row.password_placeholder ?? DEFAULT_GATE_SETTINGS.passwordPlaceholder,
     buttonText: row.button_text ?? DEFAULT_GATE_SETTINGS.buttonText,
@@ -52,6 +66,7 @@ function rowToSettings(row: any): GateSettings {
     backgroundColor: row.background_color ?? DEFAULT_GATE_SETTINGS.backgroundColor,
     textColor: row.text_color ?? DEFAULT_GATE_SETTINGS.textColor,
     buttonColor: row.button_color ?? DEFAULT_GATE_SETTINGS.buttonColor,
+    groupButtonColor: row.group_button_color ?? DEFAULT_GATE_SETTINGS.groupButtonColor,
   };
 }
 
@@ -77,6 +92,10 @@ export async function saveGateSettings(input: GateSettings): Promise<GateSetting
       headline: input.headline,
       body_text: input.bodyText,
       image_url: input.imageUrl,
+      image_size: input.imageSize,
+      image_pos_x: input.imagePosX,
+      image_pos_y: input.imagePosY,
+      image_zoom: input.imageZoom,
       password: input.password,
       password_placeholder: input.passwordPlaceholder,
       button_text: input.buttonText,
@@ -85,6 +104,7 @@ export async function saveGateSettings(input: GateSettings): Promise<GateSetting
       background_color: input.backgroundColor,
       text_color: input.textColor,
       button_color: input.buttonColor,
+      group_button_color: input.groupButtonColor,
       ...(passwordChanged ? { gate_version: crypto.randomUUID() } : {}),
       updated_at: new Date().toISOString(),
     },
@@ -103,6 +123,10 @@ export async function getPublicGateConfig(): Promise<Record<string, unknown>> {
     headline: settings.headline,
     bodyText: settings.bodyText,
     imageUrl: settings.imageUrl,
+    imageSize: settings.imageSize,
+    imagePosX: settings.imagePosX,
+    imagePosY: settings.imagePosY,
+    imageZoom: settings.imageZoom,
     passwordPlaceholder: settings.passwordPlaceholder,
     buttonText: settings.buttonText,
     groupUrl: settings.groupUrl,
@@ -110,6 +134,7 @@ export async function getPublicGateConfig(): Promise<Record<string, unknown>> {
     backgroundColor: settings.backgroundColor,
     textColor: settings.textColor,
     buttonColor: settings.buttonColor,
+    groupButtonColor: settings.groupButtonColor,
   };
 }
 

@@ -332,6 +332,15 @@ export function renderPopupLoaderJs(): string {
       .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
 
+  // Texto branco ou preto, conforme a cor do botão, para sempre dar para ler.
+  function gateTextOn(hex) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ""));
+    if (!m) return "#ffffff";
+    var n = parseInt(m[1], 16);
+    var lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+    return lum > 0.62 ? "#111827" : "#ffffff";
+  }
+
   function postGate(payload) {
     return fetch(API + "/api/popup/gate-unlock", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -354,15 +363,20 @@ export function renderPopupLoaderJs(): string {
     overlay.setAttribute("aria-modal", "true");
     overlay.style.cssText = "position:fixed;top:0;right:0;bottom:0;left:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;background:" + bg + ";color:" + fg + ";font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;";
 
-    var image = g.imageUrl ? '<img src="' + gateEsc(g.imageUrl) + '" alt="" style="display:block;max-width:100%;max-height:240px;margin:0 auto 20px;border-radius:14px;object-fit:contain;">' : "";
-    var groupButton = g.groupUrl ? '<a id="mm_gate_group" href="' + gateEsc(g.groupUrl) + '" target="_blank" rel="noopener" style="display:block;box-sizing:border-box;width:100%;margin-top:12px;padding:13px 16px;border:2px solid ' + btn + ';border-radius:12px;color:' + fg + ';font-size:13px;font-weight:800;letter-spacing:.02em;text-align:center;text-decoration:none;">' + gateEsc(g.groupButtonText) + '</a>' : "";
+    var imgSize = Math.max(120, Math.min(480, Number(g.imageSize) || 280));
+    var imgX = Math.max(0, Math.min(100, Number(g.imagePosX))); if (isNaN(imgX)) imgX = 50;
+    var imgY = Math.max(0, Math.min(100, Number(g.imagePosY))); if (isNaN(imgY)) imgY = 50;
+    var imgZoom = Math.max(1, Math.min(3, Number(g.imageZoom) || 1));
+    var image = g.imageUrl ? '<div style="width:' + imgSize + 'px;max-width:100%;aspect-ratio:1/1;margin:0 auto 22px;border-radius:18px;overflow:hidden;background:rgba(255,255,255,.06);"><img src="' + gateEsc(g.imageUrl) + '" alt="" style="display:block;width:100%;height:100%;object-fit:cover;object-position:' + imgX + '% ' + imgY + '%;transform:scale(' + imgZoom + ');transform-origin:' + imgX + '% ' + imgY + '%;"></div>' : "";
+    var groupBtn = g.groupButtonColor || btn;
+    var groupButton = g.groupUrl ? '<a id="mm_gate_group" href="' + gateEsc(g.groupUrl) + '" target="_blank" rel="noopener" style="display:block;box-sizing:border-box;width:100%;margin-top:12px;padding:14px 16px;border:none;border-radius:12px;background:' + groupBtn + ';color:' + gateTextOn(groupBtn) + ';font-size:13px;font-weight:800;letter-spacing:.02em;text-align:center;text-decoration:none;">' + gateEsc(g.groupButtonText) + '</a>' : "";
 
-    overlay.innerHTML = '<div style="width:100%;max-width:440px;text-align:center;">' + image +
+    overlay.innerHTML = '<div style="width:100%;max-width:480px;text-align:center;">' + image +
       '<h2 style="margin:0 0 10px;font-size:28px;line-height:1.1;font-weight:900;letter-spacing:-.02em;color:' + fg + ';">' + gateEsc(g.headline) + '</h2>' +
       (g.bodyText ? '<p style="margin:0 0 22px;font-size:15px;line-height:1.55;opacity:.85;white-space:pre-line;">' + gateEsc(g.bodyText) + '</p>' : '') +
       '<input id="mm_gate_input" type="password" autocomplete="off" placeholder="' + gateEsc(g.passwordPlaceholder) + '" style="width:100%;height:50px;padding:0 16px;box-sizing:border-box;border:1px solid rgba(255,255,255,.35);border-radius:12px;background:#fff;color:#111827;font-size:16px;text-align:center;outline:none;">' +
       '<div id="mm_gate_msg" style="min-height:20px;margin:8px 0 4px;font-size:13px;color:#fca5a5;"></div>' +
-      '<button id="mm_gate_submit" type="button" style="width:100%;padding:14px 16px;border:none;border-radius:12px;background:' + btn + ';color:#fff;font-size:14px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;">' + gateEsc(g.buttonText) + '</button>' +
+      '<button id="mm_gate_submit" type="button" style="width:100%;padding:14px 16px;border:none;border-radius:12px;background:' + btn + ';color:' + gateTextOn(btn) + ';font-size:14px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;">' + gateEsc(g.buttonText) + '</button>' +
       groupButton + '</div>';
 
     document.documentElement.style.overflow = "hidden";

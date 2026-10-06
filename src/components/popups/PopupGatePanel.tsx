@@ -10,6 +10,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
+import Slider from "@mui/material/Slider";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
@@ -22,6 +23,10 @@ type GateForm = {
   headline: string;
   bodyText: string;
   imageUrl: string;
+  imageSize: number;
+  imagePosX: number;
+  imagePosY: number;
+  imageZoom: number;
   password: string;
   passwordPlaceholder: string;
   buttonText: string;
@@ -30,6 +35,7 @@ type GateForm = {
   backgroundColor: string;
   textColor: string;
   buttonColor: string;
+  groupButtonColor: string;
 };
 
 const EMPTY: GateForm = {
@@ -37,6 +43,10 @@ const EMPTY: GateForm = {
   headline: "Área exclusiva",
   bodyText: "Para entrar no site, digite a senha. Ela é enviada no nosso grupo VIP.",
   imageUrl: "",
+  imageSize: 280,
+  imagePosX: 50,
+  imagePosY: 50,
+  imageZoom: 1,
   password: "",
   passwordPlaceholder: "Digite a senha",
   buttonText: "Entrar",
@@ -45,7 +55,16 @@ const EMPTY: GateForm = {
   backgroundColor: "#0f172a",
   textColor: "#ffffff",
   buttonColor: "#25d366",
+  groupButtonColor: "#25d366",
 };
+
+function textOn(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return "#ffffff";
+  const n = parseInt(m[1]!, 16);
+  const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  return lum > 0.62 ? "#111827" : "#ffffff";
+}
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -89,6 +108,10 @@ export function PopupGatePanel() {
       headline: data.headline,
       bodyText: data.bodyText,
       imageUrl: data.imageUrl ?? "",
+      imageSize: data.imageSize,
+      imagePosX: data.imagePosX,
+      imagePosY: data.imagePosY,
+      imageZoom: data.imageZoom,
       password: data.password,
       passwordPlaceholder: data.passwordPlaceholder,
       buttonText: data.buttonText,
@@ -97,6 +120,7 @@ export function PopupGatePanel() {
       backgroundColor: data.backgroundColor,
       textColor: data.textColor,
       buttonColor: data.buttonColor,
+      groupButtonColor: data.groupButtonColor,
     });
   }, [data]);
 
@@ -110,6 +134,10 @@ export function PopupGatePanel() {
           headline: form.headline,
           bodyText: form.bodyText,
           imageUrl: form.imageUrl || null,
+          imageSize: form.imageSize,
+          imagePosX: Math.round(form.imagePosX),
+          imagePosY: Math.round(form.imagePosY),
+          imageZoom: form.imageZoom,
           password: form.password,
           passwordPlaceholder: form.passwordPlaceholder,
           buttonText: form.buttonText,
@@ -118,6 +146,7 @@ export function PopupGatePanel() {
           backgroundColor: form.backgroundColor,
           textColor: form.textColor,
           buttonColor: form.buttonColor,
+          groupButtonColor: form.groupButtonColor,
         },
       }),
     onSuccess: () => {
@@ -136,7 +165,7 @@ export function PopupGatePanel() {
     try {
       const base64 = await fileToBase64(file);
       const res = await upload({ data: { fileName: file.name, base64Data: base64, contentType: file.type } });
-      patch({ imageUrl: res.url });
+      patch({ imageUrl: res.url, imagePosX: 50, imagePosY: 50, imageZoom: 1 });
     } catch (e: any) {
       toast.error("Falha no upload: " + e.message);
     } finally {
@@ -202,14 +231,31 @@ export function PopupGatePanel() {
               {uploading ? "Enviando…" : form.imageUrl ? "Trocar imagem" : "Subir imagem"}
             </Button>
             {form.imageUrl && (
-              <>
-                <Box component="img" src={form.imageUrl} alt="" sx={{ height: 44, borderRadius: 1, objectFit: "contain" }} />
-                <IconButton size="small" onClick={() => patch({ imageUrl: "" })} title="Remover imagem">
-                  <Trash2 size={16} />
-                </IconButton>
-              </>
+              <IconButton size="small" onClick={() => patch({ imageUrl: "" })} title="Remover imagem">
+                <Trash2 size={16} />
+              </IconButton>
             )}
           </Stack>
+          {form.imageUrl && (
+            <Stack spacing={0.5} sx={{ mt: 1.5 }}>
+              <Typography variant="caption" color="text.secondary">
+                A imagem aparece num quadrado. Arraste a imagem na prévia ao lado para escolher o que fica visível, ou use os controles abaixo.
+              </Typography>
+              <Typography variant="caption" sx={{ fontWeight: 600 }}>Tamanho: {form.imageSize}px</Typography>
+              <Slider size="small" min={120} max={480} step={10} value={form.imageSize} onChange={(_, v) => patch({ imageSize: v as number })} />
+              <Typography variant="caption" sx={{ fontWeight: 600 }}>Zoom: {form.imageZoom.toFixed(1)}x</Typography>
+              <Slider size="small" min={1} max={3} step={0.1} value={form.imageZoom} onChange={(_, v) => patch({ imageZoom: v as number })} />
+              <Typography variant="caption" sx={{ fontWeight: 600 }}>Subir / descer</Typography>
+              <Slider size="small" min={0} max={100} step={1} value={form.imagePosY} onChange={(_, v) => patch({ imagePosY: v as number })} />
+              <Typography variant="caption" sx={{ fontWeight: 600 }}>Esquerda / direita</Typography>
+              <Slider size="small" min={0} max={100} step={1} value={form.imagePosX} onChange={(_, v) => patch({ imagePosX: v as number })} />
+              <Box>
+                <Button size="small" variant="outline" onClick={() => patch({ imageSize: 280, imageZoom: 1, imagePosX: 50, imagePosY: 50 })}>
+                  Centralizar e restaurar
+                </Button>
+              </Box>
+            </Stack>
+          )}
         </Box>
 
         <TextField
@@ -248,7 +294,8 @@ export function PopupGatePanel() {
         <Stack direction="row" spacing={3} sx={{ flexWrap: "wrap" }}>
           <ColorField label="Fundo" value={form.backgroundColor} onChange={(v) => patch({ backgroundColor: v })} />
           <ColorField label="Texto" value={form.textColor} onChange={(v) => patch({ textColor: v })} />
-          <ColorField label="Botão" value={form.buttonColor} onChange={(v) => patch({ buttonColor: v })} />
+          <ColorField label="Botão de entrar" value={form.buttonColor} onChange={(v) => patch({ buttonColor: v })} />
+          <ColorField label="Botão do grupo VIP" value={form.groupButtonColor} onChange={(v) => patch({ groupButtonColor: v })} />
         </Stack>
 
         <Box>
@@ -284,7 +331,64 @@ export function PopupGatePanel() {
           }}
         >
           <Box sx={{ width: "100%", maxWidth: 400, textAlign: "center" }}>
-            {form.imageUrl && <Box component="img" src={form.imageUrl} alt="" sx={{ display: "block", maxWidth: "100%", maxHeight: 200, mx: "auto", mb: 2.5, borderRadius: 2, objectFit: "contain" }} />}
+            {form.imageUrl && (
+              <Box
+                title="Arraste para ajustar o enquadramento"
+                onPointerDown={(e) => {
+                  const frame = e.currentTarget;
+                  const rect = frame.getBoundingClientRect();
+                  const start = { x: e.clientX, y: e.clientY, px: form.imagePosX, py: form.imagePosY };
+                  frame.setPointerCapture(e.pointerId);
+                  const move = (ev: PointerEvent) => {
+                    const dx = ((ev.clientX - start.x) / rect.width) * 100;
+                    const dy = ((ev.clientY - start.y) / rect.height) * 100;
+                    patch({
+                      imagePosX: Math.max(0, Math.min(100, start.px - dx)),
+                      imagePosY: Math.max(0, Math.min(100, start.py - dy)),
+                    });
+                  };
+                  const up = () => {
+                    frame.removeEventListener("pointermove", move);
+                    frame.removeEventListener("pointerup", up);
+                    frame.removeEventListener("pointercancel", up);
+                  };
+                  frame.addEventListener("pointermove", move);
+                  frame.addEventListener("pointerup", up);
+                  frame.addEventListener("pointercancel", up);
+                }}
+                sx={{
+                  width: form.imageSize,
+                  maxWidth: "100%",
+                  aspectRatio: "1 / 1",
+                  mx: "auto",
+                  mb: 2.75,
+                  borderRadius: "18px",
+                  overflow: "hidden",
+                  bgcolor: "rgba(255,255,255,.06)",
+                  cursor: "grab",
+                  touchAction: "none",
+                  userSelect: "none",
+                  "&:active": { cursor: "grabbing" },
+                }}
+              >
+                <Box
+                  component="img"
+                  src={form.imageUrl}
+                  alt=""
+                  draggable={false}
+                  sx={{
+                    display: "block",
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    objectPosition: `${form.imagePosX}% ${form.imagePosY}%`,
+                    transform: `scale(${form.imageZoom})`,
+                    transformOrigin: `${form.imagePosX}% ${form.imagePosY}%`,
+                    pointerEvents: "none",
+                  }}
+                />
+              </Box>
+            )}
             <Typography sx={{ fontSize: 26, fontWeight: 900, lineHeight: 1.1, mb: 1.25 }}>{form.headline || "Título"}</Typography>
             {form.bodyText && (
               <Typography sx={{ fontSize: 14, lineHeight: 1.55, opacity: 0.85, whiteSpace: "pre-line", mb: 2.5 }}>{form.bodyText}</Typography>
@@ -292,11 +396,11 @@ export function PopupGatePanel() {
             <Box sx={{ height: 46, borderRadius: 2, bgcolor: "#fff", color: "#6b7280", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>
               {form.passwordPlaceholder || "Digite a senha"}
             </Box>
-            <Box sx={{ mt: 1.5, py: 1.5, borderRadius: 2, bgcolor: form.buttonColor, color: "#fff", fontWeight: 800, fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5 }}>
+            <Box sx={{ mt: 1.5, py: 1.5, borderRadius: 2, bgcolor: form.buttonColor, color: textOn(form.buttonColor), fontWeight: 800, fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5 }}>
               {form.buttonText || "Entrar"}
             </Box>
             {form.groupUrl.trim() && (
-              <Box sx={{ mt: 1.5, py: 1.5, px: 1, borderRadius: 2, border: "2px solid", borderColor: form.buttonColor, fontWeight: 800, fontSize: 12 }}>
+              <Box sx={{ mt: 1.5, py: 1.5, px: 1, borderRadius: 2, bgcolor: form.groupButtonColor, color: textOn(form.groupButtonColor), fontWeight: 800, fontSize: 12 }}>
                 {form.groupButtonText}
               </Box>
             )}

@@ -38,6 +38,8 @@ const POPUP_LOADER_JS_PATH = "/api/popup/loader.js";
 const POPUP_CONFIG_PATH = "/api/popup/config";
 const POPUP_VISIT_PATH = "/api/popup/visit";
 const POPUP_CAPTURE_PATH = "/api/popup/capture";
+const POPUP_GATE_CONFIG_PATH = "/api/popup/gate-config";
+const POPUP_GATE_UNLOCK_PATH = "/api/popup/gate-unlock";
 
 // Webhook da Meta é chamado diretamente por eles, fora do protocolo de RPC do
 // createServerFn — por isso é tratado aqui, antes do handler SSR do TanStack Start.
@@ -510,6 +512,50 @@ async function handlePopupCapture(request: Request): Promise<Response> {
   }
 }
 
+async function handlePopupGateConfig(request: Request): Promise<Response> {
+  if (request.method === "OPTIONS") return popupCorsPreflight(request);
+  if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
+  const allowed = await getAllowedPopupOrigin(request.headers.get("Origin"));
+  try {
+    const { getPublicGateConfig } = await import("./lib/popup-gate.server");
+    const config = await getPublicGateConfig();
+    return new Response(JSON.stringify(config), {
+      status: 200,
+      headers: { "content-type": "application/json", "cache-control": "no-store", ...popupCorsHeaders(allowed) },
+    });
+  } catch (error) {
+    console.error("Falha ao buscar config da trava de acesso:", error);
+    return new Response(JSON.stringify({ enabled: false }), {
+      status: 200,
+      headers: { "content-type": "application/json", "cache-control": "no-store", ...popupCorsHeaders(allowed) },
+    });
+  }
+}
+
+async function handlePopupGateUnlock(request: Request): Promise<Response> {
+  if (request.method === "OPTIONS") return popupCorsPreflight(request);
+  if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+  const allowed = await getAllowedPopupOrigin(request.headers.get("Origin"));
+  try {
+    const body = await request.json();
+    const { verifyGateUnlock } = await import("./lib/popup-gate.server");
+    const result = await verifyGateUnlock({
+      password: body?.password != null ? String(body.password) : undefined,
+      token: body?.token != null ? String(body.token) : undefined,
+    });
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { "content-type": "application/json", "cache-control": "no-store", ...popupCorsHeaders(allowed) },
+    });
+  } catch (error) {
+    console.error("Falha ao validar a senha da trava de acesso:", error);
+    return new Response(JSON.stringify({ success: false }), {
+      status: 500,
+      headers: { "content-type": "application/json", ...popupCorsHeaders(allowed) },
+    });
+  }
+}
+
 async function handleEnvioCleanupEvents(request: Request): Promise<Response> {
   if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
   if (!(await checkAutomationSecret(request))) return new Response("Forbidden", { status: 401 });
@@ -619,6 +665,12 @@ export default {
     }
     if (pathname === POPUP_CAPTURE_PATH) {
       return handlePopupCapture(request);
+    }
+    if (pathname === POPUP_GATE_CONFIG_PATH) {
+      return handlePopupGateConfig(request);
+    }
+    if (pathname === POPUP_GATE_UNLOCK_PATH) {
+      return handlePopupGateUnlock(request);
     }
     try {
       const handler = await getServerEntry();

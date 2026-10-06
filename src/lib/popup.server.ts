@@ -300,27 +300,138 @@ export function renderPopupLoaderJs(): string {
     }).catch(function () {});
   }
 
-  try {
-    if (localStorage.getItem(STORAGE_CAPTURED) === "1") return;
-    var hideUntil = Number(localStorage.getItem(STORAGE_HIDE_UNTIL) || 0);
-    if (Date.now() < hideUntil) return;
-  } catch (e) {}
+  function startCapturePopup() {
+    try {
+      if (localStorage.getItem(STORAGE_CAPTURED) === "1") return;
+      var hideUntil = Number(localStorage.getItem(STORAGE_HIDE_UNTIL) || 0);
+      if (Date.now() < hideUntil) return;
+    } catch (e) {}
 
-  fetch(API + "/api/popup/config").then(function (r) { return r.json(); }).then(function (cfg) {
-    if (!cfg || !cfg.id) return;
-    try { window.dispatchEvent(new CustomEvent("mm:capture-popup-scheduled")); } catch (e) {}
-    var shown = false;
-    function show() {
-      if (shown) return;
-      shown = true;
-      renderPopup(cfg, token);
+    fetch(API + "/api/popup/config").then(function (r) { return r.json(); }).then(function (cfg) {
+      if (!cfg || !cfg.id) return;
+      try { window.dispatchEvent(new CustomEvent("mm:capture-popup-scheduled")); } catch (e) {}
+      var shown = false;
+      function show() {
+        if (shown) return;
+        shown = true;
+        renderPopup(cfg, token);
+      }
+      if (typeof cfg.trigger_time_seconds === "number") setTimeout(show, Math.max(0, cfg.trigger_time_seconds) * 1000);
+      if (cfg.trigger_exit_intent) {
+        document.addEventListener("mouseout", function (e) { if (!e.relatedTarget && e.clientY < 10) show(); });
+      }
+      if (typeof cfg.trigger_time_seconds !== "number" && !cfg.trigger_exit_intent) show();
+    }).catch(function () {});
+  }
+
+  var STORAGE_GATE = "mm_gate_token";
+
+  function gateEsc(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+
+  function postGate(payload) {
+    return fetch(API + "/api/popup/gate-unlock", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(function (r) { return r.json(); });
+  }
+
+  // Trava de acesso por senha: tela cheia, sem botão de fechar. Só some com a senha certa.
+  function renderGate(g) {
+    var prevHtmlOverflow = document.documentElement.style.overflow;
+    var prevBodyOverflow = document.body.style.overflow;
+    var unlocked = false;
+    var bg = g.backgroundColor || "#0f172a";
+    var fg = g.textColor || "#ffffff";
+    var btn = g.buttonColor || "#25d366";
+
+    var overlay = document.createElement("div");
+    overlay.id = "mm_gate_overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.style.cssText = "position:fixed;top:0;right:0;bottom:0;left:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;background:" + bg + ";color:" + fg + ";font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;";
+
+    var image = g.imageUrl ? '<img src="' + gateEsc(g.imageUrl) + '" alt="" style="display:block;max-width:100%;max-height:240px;margin:0 auto 20px;border-radius:14px;object-fit:contain;">' : "";
+    var groupButton = g.groupUrl ? '<a id="mm_gate_group" href="' + gateEsc(g.groupUrl) + '" target="_blank" rel="noopener" style="display:block;box-sizing:border-box;width:100%;margin-top:12px;padding:13px 16px;border:2px solid ' + btn + ';border-radius:12px;color:' + fg + ';font-size:13px;font-weight:800;letter-spacing:.02em;text-align:center;text-decoration:none;">' + gateEsc(g.groupButtonText) + '</a>' : "";
+
+    overlay.innerHTML = '<div style="width:100%;max-width:440px;text-align:center;">' + image +
+      '<h2 style="margin:0 0 10px;font-size:28px;line-height:1.1;font-weight:900;letter-spacing:-.02em;color:' + fg + ';">' + gateEsc(g.headline) + '</h2>' +
+      (g.bodyText ? '<p style="margin:0 0 22px;font-size:15px;line-height:1.55;opacity:.85;white-space:pre-line;">' + gateEsc(g.bodyText) + '</p>' : '') +
+      '<input id="mm_gate_input" type="password" autocomplete="off" placeholder="' + gateEsc(g.passwordPlaceholder) + '" style="width:100%;height:50px;padding:0 16px;box-sizing:border-box;border:1px solid rgba(255,255,255,.35);border-radius:12px;background:#fff;color:#111827;font-size:16px;text-align:center;outline:none;">' +
+      '<div id="mm_gate_msg" style="min-height:20px;margin:8px 0 4px;font-size:13px;color:#fca5a5;"></div>' +
+      '<button id="mm_gate_submit" type="button" style="width:100%;padding:14px 16px;border:none;border-radius:12px;background:' + btn + ';color:#fff;font-size:14px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;">' + gateEsc(g.buttonText) + '</button>' +
+      groupButton + '</div>';
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    document.body.appendChild(overlay);
+
+    // Sem botão de fechar, sem Esc e sem recarregar o conteúdo por baixo: se alguém remover a
+    // tela pelo inspetor sem a senha, ela volta.
+    document.addEventListener("keydown", function (e) { if (!unlocked && e.key === "Escape") e.preventDefault(); }, true);
+    var watcher = new MutationObserver(function () {
+      if (!unlocked && !document.getElementById("mm_gate_overlay")) document.body.appendChild(overlay);
+    });
+    watcher.observe(document.body, { childList: true });
+
+    var input = overlay.querySelector("#mm_gate_input");
+    var submit = overlay.querySelector("#mm_gate_submit");
+    var msg = overlay.querySelector("#mm_gate_msg");
+    var busy = false;
+
+    function tryUnlock() {
+      var typed = (input.value || "").trim();
+      if (!typed) { msg.textContent = "Digite a senha para entrar."; return; }
+      if (busy) return;
+      busy = true;
+      msg.style.color = fg;
+      msg.textContent = "Conferindo...";
+      postGate({ password: typed }).then(function (res) {
+        busy = false;
+        if (res && res.success) {
+          unlocked = true;
+          watcher.disconnect();
+          try { localStorage.setItem(STORAGE_GATE, res.token || "ok"); } catch (e) {}
+          overlay.remove();
+          document.documentElement.style.overflow = prevHtmlOverflow;
+          document.body.style.overflow = prevBodyOverflow;
+          startCapturePopup();
+        } else {
+          msg.style.color = "#fca5a5";
+          msg.textContent = "Senha incorreta. Pegue a senha no grupo VIP.";
+          input.select();
+        }
+      }).catch(function () {
+        busy = false;
+        msg.style.color = "#fca5a5";
+        msg.textContent = "Não foi possível conferir agora. Tente novamente.";
+      });
     }
-    if (typeof cfg.trigger_time_seconds === "number") setTimeout(show, Math.max(0, cfg.trigger_time_seconds) * 1000);
-    if (cfg.trigger_exit_intent) {
-      document.addEventListener("mouseout", function (e) { if (!e.relatedTarget && e.clientY < 10) show(); });
-    }
-    if (typeof cfg.trigger_time_seconds !== "number" && !cfg.trigger_exit_intent) show();
-  }).catch(function () {});
+
+    submit.onclick = tryUnlock;
+    input.addEventListener("keydown", function (e) { if (e.key === "Enter") tryUnlock(); });
+    setTimeout(function () { try { input.focus(); } catch (e) {} }, 50);
+  }
+
+  function startWithGate() {
+    fetch(API + "/api/popup/gate-config").then(function (r) { return r.json(); }).then(function (g) {
+      if (!g || !g.enabled) return startCapturePopup();
+      var saved = null;
+      try { saved = localStorage.getItem(STORAGE_GATE); } catch (e) {}
+      if (!saved) return renderGate(g);
+      // Já entrou antes: não bloqueia a tela; só confere em segundo plano se a senha não foi trocada.
+      startCapturePopup();
+      postGate({ token: saved }).then(function (res) {
+        if (!res || !res.success) { try { localStorage.removeItem(STORAGE_GATE); } catch (e) {} renderGate(g); }
+      }).catch(function () {});
+    }).catch(function () { startCapturePopup(); });
+  }
+
+  startWithGate();
+
 
   function renderPopup(cfg, visitorToken) {
     var d = cfg.design_config || {};

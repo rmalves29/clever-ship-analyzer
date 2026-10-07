@@ -885,6 +885,33 @@ async function recoverWaitingSendRuns(automation: any): Promise<number> {
   return recovered;
 }
 
+/** Contatos com esta tag (ex.: importados de outro sistema) nunca recebem disparo automático:
+ *  as entradas deles nas automações são encerradas antes do envio. Tirar a tag libera o contato.
+ *  Campanhas manuais continuam funcionando — só o piloto automático é bloqueado. */
+const AUTOMATION_BLOCK_TAG = "sem-automacao";
+
+async function excludeAutomationBlockedRuns(runs: any[]): Promise<any[]> {
+  const supabaseAdmin = await admin();
+  const customerIds = Array.from(new Set(runs.map((run) => String(run.customer_id ?? "")).filter(Boolean)));
+  const blocked = new Set<string>();
+  for (let start = 0; start < customerIds.length; start += 200) {
+    const { data, error } = await (supabaseAdmin.from("shopify_customers") as any)
+      .select("id")
+      .in("id", customerIds.slice(start, start + 200))
+      .contains("tags_custom", [AUTOMATION_BLOCK_TAG]);
+    // Falha fechada: se não deu pra conferir a tag, não envia nada neste ciclo.
+    if (error) throw new Error(`Erro ao conferir bloqueio de automação: ${error.message}`);
+    for (const row of data ?? []) blocked.add(String(row.id));
+  }
+  if (blocked.size === 0) return runs;
+  const blockedRuns = runs.filter((run) => blocked.has(String(run.customer_id)));
+  await markRunsExited(
+    blockedRuns.map((run) => String(run.id)),
+    "Contato marcado como sem automação.",
+  );
+  return runs.filter((run) => !blocked.has(String(run.customer_id)));
+}
+
 async function processDueRuns(automation: any, steps: AutomationStep[]): Promise<number> {
   const supabaseAdmin = await admin();
   const { dispatchCampaign, createCampaignRow, findAutomationStepCampaignId, syncCampaignMessageConfig } = await import("./whatsapp-meta.server");
@@ -897,6 +924,9 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
     .lte("next_run_at", new Date().toISOString());
 
   let runs = (dueRuns ?? []) as any[];
+  if (runs.length === 0) return 0;
+
+  runs = await excludeAutomationBlockedRuns(runs);
   if (runs.length === 0) return 0;
 
   if (automation.trigger_config?.revalidateSegmentBeforeSend === true) {

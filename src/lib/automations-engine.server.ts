@@ -890,7 +890,10 @@ async function recoverWaitingSendRuns(automation: any): Promise<number> {
  *  Campanhas manuais continuam funcionando — só o piloto automático é bloqueado. */
 const AUTOMATION_BLOCK_TAG = "sem-automacao";
 
-async function excludeAutomationBlockedRuns(runs: any[]): Promise<any[]> {
+async function excludeAutomationBlockedRuns(runs: any[], automation: any): Promise<any[]> {
+  // Fluxos marcados com allowBlockedContacts (ex.: o disparo para "todos os leads") podem atingir
+  // contatos bloqueados — é a forma de liberar só aquele fluxo, sem liberar as demais automações.
+  if (automation?.trigger_config?.allowBlockedContacts === true) return runs;
   const supabaseAdmin = await admin();
   const customerIds = Array.from(new Set(runs.map((run) => String(run.customer_id ?? "")).filter(Boolean)));
   const blocked = new Set<string>();
@@ -926,7 +929,7 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
   let runs = (dueRuns ?? []) as any[];
   if (runs.length === 0) return 0;
 
-  runs = await excludeAutomationBlockedRuns(runs);
+  runs = await excludeAutomationBlockedRuns(runs, automation);
   if (runs.length === 0) return 0;
 
   if (automation.trigger_config?.revalidateSegmentBeforeSend === true) {

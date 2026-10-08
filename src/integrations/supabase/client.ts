@@ -44,7 +44,11 @@ function createSupabaseClient() {
     throw new Error(message);
   }
 
+  // Schema do CRM: 'public' por padrão; 'crm' quando o banco é compartilhado (VITE_CRM_DB_SCHEMA).
+  const CRM_DB_SCHEMA = (import.meta.env['VITE_CRM_DB_SCHEMA'] || process.env['CRM_DB_SCHEMA'] || 'public') as 'public';
+
   return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    db: { schema: CRM_DB_SCHEMA },
     global: {
       fetch: createSupabaseFetch(SUPABASE_PUBLISHABLE_KEY),
     },

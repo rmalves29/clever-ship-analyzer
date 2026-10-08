@@ -953,6 +953,8 @@ export type Database = {
           group_id: string | null
           id: string
           media_url: string | null
+          poll_options: Json | null
+          poll_selectable_count: number | null
           scheduled_at: string | null
           sent_at: string | null
           status: string
@@ -967,6 +969,8 @@ export type Database = {
           group_id?: string | null
           id?: string
           media_url?: string | null
+          poll_options?: Json | null
+          poll_selectable_count?: number | null
           scheduled_at?: string | null
           sent_at?: string | null
           status?: string
@@ -981,6 +985,8 @@ export type Database = {
           group_id?: string | null
           id?: string
           media_url?: string | null
+          poll_options?: Json | null
+          poll_selectable_count?: number | null
           scheduled_at?: string | null
           sent_at?: string | null
           status?: string
@@ -2033,6 +2039,75 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      site_gate_settings: {
+        Row: {
+          background_color: string
+          body_text: string
+          button_color: string
+          button_text: string
+          enabled: boolean
+          gate_version: string
+          group_button_color: string
+          group_button_text: string
+          group_url: string | null
+          headline: string
+          id: number
+          image_pos_x: number
+          image_pos_y: number
+          image_size: number
+          image_url: string | null
+          image_zoom: number
+          password: string
+          password_placeholder: string
+          text_color: string
+          updated_at: string
+        }
+        Insert: {
+          background_color?: string
+          body_text?: string
+          button_color?: string
+          button_text?: string
+          enabled?: boolean
+          gate_version?: string
+          group_button_color?: string
+          group_button_text?: string
+          group_url?: string | null
+          headline?: string
+          id?: number
+          image_pos_x?: number
+          image_pos_y?: number
+          image_size?: number
+          image_url?: string | null
+          image_zoom?: number
+          password?: string
+          password_placeholder?: string
+          text_color?: string
+          updated_at?: string
+        }
+        Update: {
+          background_color?: string
+          body_text?: string
+          button_color?: string
+          button_text?: string
+          enabled?: boolean
+          gate_version?: string
+          group_button_color?: string
+          group_button_text?: string
+          group_url?: string | null
+          headline?: string
+          id?: number
+          image_pos_x?: number
+          image_pos_y?: number
+          image_size?: number
+          image_url?: string | null
+          image_zoom?: number
+          password?: string
+          password_placeholder?: string
+          text_color?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       site_visits: {
         Row: {

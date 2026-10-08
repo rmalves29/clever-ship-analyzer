@@ -29,3 +29,10 @@ webhooks do Shopify e `/api/popup/*` (snippet do pop-up na loja — URL do loade
 
 ## Tempo de função
 Ajustar Max Duration em Vercel → Settings → Functions (sincronização Shopify, envios em lote).
+
+## Banco compartilhado: schema `crm` (hfm)
+O CRM roda em um schema próprio dentro de um Supabase que também hospeda outro sistema (devoluções, schema `public`).
+Defina na Vercel: `CRM_DB_SCHEMA=crm` e `VITE_CRM_DB_SCHEMA=crm`. Sem elas o código usa `public` (Lovable Cloud).
+No painel do Supabase: Settings → API → **Exposed schemas** → adicionar `crm` (e conceder uso ao `service_role`/`authenticated`).
+Os nomes das tabelas NÃO mudam. O schema precisa ser criado a partir do banco vivo — as migrações do repo cobrem só 42 das 67 tabelas.
+Storage (`envio-uploads`) e `auth.users` são compartilhados entre os sistemas.

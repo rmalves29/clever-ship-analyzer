@@ -43,7 +43,12 @@ function createSupabaseAdminClient() {
     throw new Error(message);
   }
 
+  // Schema do CRM: 'public' no Lovable Cloud; 'crm' quando o banco é compartilhado com outro sistema
+  // (Vercel + Supabase próprio). Definir CRM_DB_SCHEMA no ambiente.
+  const CRM_DB_SCHEMA = (process.env['CRM_DB_SCHEMA'] || 'public') as 'public';
+
   return createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    db: { schema: CRM_DB_SCHEMA },
     global: {
       fetch: createSupabaseFetch(SUPABASE_SERVICE_ROLE_KEY),
     },

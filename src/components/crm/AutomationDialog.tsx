@@ -356,6 +356,8 @@ export function AutomationDialog({
   const [manualPositions, setManualPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(TRIGGER_ID);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
+  /** Onde a próxima etapa adicionada será ligada: "auto" (primeira saída livre) ou "<stepId>|next|yes|no". */
+  const [addTargetKey, setAddTargetKey] = useState<string>("auto");
   const isLifecycleAutomation = seed?.automationKind === "rfm" || seed?.automationKind === "cashback";
 
   useEffect(() => {
@@ -463,7 +465,27 @@ export function AutomationDialog({
    *  (ou na primeira saída livre do fluxo, se nada estiver selecionado) — assim clicar em
    *  "Adicionar etapa" repetidamente já vai montando a sequência sem precisar arrastar toda vez. */
   const addStep = (step: AutomationStepSeed) => {
+    const chosen = addTargetKey !== "auto" ? addTargetKey.split("|") : null;
     setSteps((prev) => {
+      if (chosen) {
+        const [targetId, slot] = chosen;
+        const target = prev.find((s) => s.id === targetId);
+        const slotOpen =
+          !!target &&
+          ((target.type === "send" && slot === "next" && target.nextStepId === null) ||
+            (target.type === "decision" && slot === "yes" && target.yesStepId === null) ||
+            (target.type === "decision" && slot === "no" && target.noStepId === null));
+        if (target && slotOpen) {
+          const updated = prev.map((s) => {
+            if (s.id !== target.id) return s;
+            if (s.type === "send" && slot === "next" && s.nextStepId === null) return { ...s, nextStepId: step.id };
+            if (s.type === "decision" && slot === "yes" && s.yesStepId === null) return { ...s, yesStepId: step.id };
+            if (s.type === "decision" && slot === "no" && s.noStepId === null) return { ...s, noStepId: step.id };
+            return s;
+          });
+          return [...updated, step];
+        }
+      }
       const preferred = selectedNodeId && selectedNodeId !== TRIGGER_ID ? prev.find((s) => s.id === selectedNodeId) : undefined;
       const hasOpenSlot = (s: AutomationStepSeed) => (s.type === "send" ? s.nextStepId === null : s.yesStepId === null || s.noStepId === null);
       const target = (preferred && hasOpenSlot(preferred) ? preferred : undefined) ?? prev.find(hasOpenSlot);
@@ -478,6 +500,7 @@ export function AutomationDialog({
     });
     setSelectedNodeId(step.id);
     setAddPanelOpen(false);
+    setAddTargetKey("auto");
   };
 
   const onConnect = useCallback(
@@ -708,6 +731,19 @@ export function AutomationDialog({
 
   const selectedStep = selectedNodeId && selectedNodeId !== TRIGGER_ID ? steps.find((s) => s.id === selectedNodeId) : undefined;
   const panelOpen = addPanelOpen || selectedNodeId !== null;
+  /** Saídas ainda sem destino: é a lista que o usuário escolhe em "Ligar em" ao adicionar uma etapa. */
+  const openSlots = steps.flatMap((s, i) => {
+    const title =
+      s.type === "send"
+        ? `Etapa ${i + 1} · Enviar WhatsApp${s.templateName ? ` (${s.templateName})` : ""}`
+        : `Etapa ${i + 1} · ${conditionLabel(s.condition)}`;
+    if (s.type === "send") return s.nextStepId === null ? [{ key: `${s.id}|next`, label: `${title} → próxima` }] : [];
+    return [
+      ...(s.yesStepId === null ? [{ key: `${s.id}|yes`, label: `${title} → Sim` }] : []),
+      ...(s.noStepId === null ? [{ key: `${s.id}|no`, label: `${title} → Não` }] : []),
+    ];
+  });
+  const effectiveAddTarget = openSlots.some((o) => o.key === addTargetKey) ? addTargetKey : "auto";
   const rootStepForValidation = steps.find((s) => s.id === rootStepId);
   const reachable = reachableStepIds(steps, rootStepId);
   const missingTemplate = steps.some((s) => reachable.has(s.id) && s.type === "send" && !s.templateName);
@@ -764,6 +800,7 @@ export function AutomationDialog({
             className="gap-1.5"
             onClick={() => {
               setSelectedNodeId(null);
+              setAddTargetKey("auto");
               setAddPanelOpen(true);
             }}
           >
@@ -816,6 +853,26 @@ export function AutomationDialog({
                       <Plus className="size-4 rotate-45" />
                     </Button>
                   </div>
+
+                  {openSlots.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ligar em</p>
+                      <Select value={effectiveAddTarget} onValueChange={setAddTargetKey}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto">Automático (primeira saída livre)</SelectItem>
+                          {openSlots.map((o) => (
+                            <SelectItem key={o.key} value={o.key}>
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">Escolha de qual saída a nova etapa vai partir (ex.: "Sim" ou "Não" de uma decisão).</p>
+                    </div>
+                  )}
 
                   <div className="space-y-1.5">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ação</p>

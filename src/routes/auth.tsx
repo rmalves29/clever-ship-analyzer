@@ -57,6 +57,12 @@ function AuthPage() {
     >
       <Card sx={{ width: "100%", maxWidth: 384 }}>
         <CardContent sx={{ p: 3 }}>
+          <Box
+            component="img"
+            src="/logo.png"
+            alt="Mania de Mulher"
+            sx={{ width: 120, height: "auto", display: "block", mx: "auto", mb: 2.5 }}
+          />
           <Typography variant="h6" sx={{ fontWeight: 700 }}>
             Entrar
           </Typography>

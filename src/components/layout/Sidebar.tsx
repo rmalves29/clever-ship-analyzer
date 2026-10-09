@@ -22,7 +22,6 @@ import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
-import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import { alpha } from "@mui/material/styles";
 
@@ -157,26 +156,14 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
 
   const content = (
     <>
-      <Toolbar sx={{ gap: 1.5 }}>
+      <Box sx={{ display: "flex", justifyContent: "center", px: 2, pt: 2.5, pb: 2 }}>
         <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: 36,
-            height: 36,
-            borderRadius: 2,
-            background: "linear-gradient(135deg, #7367F0, #9C93F3)",
-            color: "#FFFFFF",
-            flexShrink: 0,
-          }}
-        >
-          <Sparkles size={16} />
-        </Box>
-        <Typography variant="subtitle1" noWrap sx={{ fontWeight: 700 }}>
-          CRM Analytics
-        </Typography>
-      </Toolbar>
+          component="img"
+          src="/logo.png"
+          alt="Mania de Mulher"
+          sx={{ width: 112, height: "auto", display: "block" }}
+        />
+      </Box>
       <Box component="nav" sx={{ flex: 1, overflowY: "auto", px: 1.5, pb: 3 }}>
         {NAV_GROUPS.map((group) => (
           <Box key={group.label} sx={{ mb: 3 }}>

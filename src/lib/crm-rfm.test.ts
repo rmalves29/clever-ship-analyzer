@@ -101,3 +101,56 @@ describe("matriz completa sem bloqueio por idade da base", () => {
     expect(classicMode).toBe(false);
   });
 });
+
+import { historicalOrders } from "./crm-rfm-shared";
+
+describe("histórico importado entra só na matriz RFM", () => {
+  it("vira N pedidos na data da última compra, somando o valor estimado", () => {
+    const orders = historicalOrders({ customerId: "h1", ordersCount: 3, estimatedValue: 594, lastPurchaseAt: daysAgo(400) });
+    expect(orders).toHaveLength(3);
+    expect(orders.reduce((a, o) => a + o.totalPrice, 0)).toBeCloseTo(594, 5);
+    const { customers } = computeRFM(["h1"], orders, NOW);
+    expect(customers[0]!.frequency).toBe(3);
+    expect(customers[0]!.recency).toBe(400);
+    expect(customers[0]!.monetary).toBeCloseTo(594, 5);
+  });
+
+  it("a régua de valor vem só dos clientes reais: histórico de 1 pedido antigo cai em Perdidos", () => {
+    const real = [100, 200, 300, 400, 500].map((v, i) => order(`r${i}`, v, 5 + i));
+    const hist = new Set(["a", "b"]);
+    const list = computeRFM(
+      ["a", "b", ...real.map((o) => o.customerId)],
+      [
+        ...real,
+        ...historicalOrders({ customerId: "a", ordersCount: 1, estimatedValue: 198, lastPurchaseAt: daysAgo(500) }),
+        ...historicalOrders({ customerId: "b", ordersCount: 3, estimatedValue: 594, lastPurchaseAt: daysAgo(500) }),
+      ],
+      NOW,
+      { excludeFromMonetaryScale: hist },
+    ).customers;
+    expect(list.find((c) => c.customerId === "a")!.segment).toBe("Perdidos");
+    expect(["Hibernando", "Em risco", "Não pode perder"]).toContain(list.find((c) => c.customerId === "b")!.segment);
+  });
+
+  it("muitos históricos iguais não inflam a nota de valor de ninguém", () => {
+    const real = [100, 200, 300].map((v, i) => order(`r${i}`, v, 5 + i));
+    const ids = Array.from({ length: 50 }, (_, i) => `h${i}`);
+    const hist = ids.flatMap((id) => historicalOrders({ customerId: id, ordersCount: 1, estimatedValue: 198, lastPurchaseAt: daysAgo(500) }));
+    const withScale = computeRFM([...ids, ...real.map((o) => o.customerId)], [...real, ...hist], NOW, { excludeFromMonetaryScale: new Set(ids) }).customers;
+    expect(withScale.filter((c) => c.customerId.startsWith("h")).every((c) => c.segment === "Perdidos" || c.m <= 3)).toBe(true);
+    const without = computeRFM([...ids, ...real.map((o) => o.customerId)], [...real, ...hist], NOW).customers;
+    // sem a exclusão, a massa de 50 valores iguais sobe a própria nota: o comportamento que a régua separada evita
+    expect(without.find((c) => c.customerId === "h0")!.m).toBeGreaterThanOrEqual(withScale.find((c) => c.customerId === "h0")!.m);
+  });
+
+  it("ignora histórico sem data ou sem pedidos", () => {
+    expect(historicalOrders({ customerId: "x", ordersCount: 0, estimatedValue: 0, lastPurchaseAt: daysAgo(10) })).toEqual([]);
+    expect(historicalOrders({ customerId: "x", ordersCount: 2, estimatedValue: 100, lastPurchaseAt: "" })).toEqual([]);
+    expect(historicalOrders({ customerId: "x", ordersCount: 2, estimatedValue: 100, lastPurchaseAt: "lixo" })).toEqual([]);
+  });
+
+  it("sem valor estimado os pedidos têm valor zero", () => {
+    const o = historicalOrders({ customerId: "x", ordersCount: 2, estimatedValue: 0, lastPurchaseAt: daysAgo(10) });
+    expect(o.every((x) => x.totalPrice === 0)).toBe(true);
+  });
+});

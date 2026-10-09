@@ -83,7 +83,8 @@ export function CampaignsManager() {
 
       <Grid container spacing={2}>
         {(campaigns ?? []).map((c) => {
-          const url = `https://clever-ship-analyzer.lovable.app/fluxo/${c.slug}`;
+          const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://clever-ship-analyzer.lovable.app";
+          const url = `${baseUrl}/fluxo/${c.slug}`;
           return (
             <Grid key={c.id} size={{ xs: 12, sm: 6, lg: 4 }}>
               <Card variant="outlined" sx={{ cursor: "pointer", height: "100%" }} onClick={() => setDetailId(c.id)}>

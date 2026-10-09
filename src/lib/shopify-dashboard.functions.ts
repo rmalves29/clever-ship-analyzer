@@ -213,7 +213,7 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
     const gapsDias = computeGapsPrimeiraSegunda(customers);
     const tempoEntreCompras = computeTempoEntreCompras(gapsDias);
     const curvaRecompra = computeCurvaRecompra(gapsDias);
-    const { taxaRecompra, recomprasCount, baseClientes } = computeTaxaRecompra(customers);
+    const { taxaRecompra, recomprasCount, baseClientes, recomprasDiasDistintos, taxaRecompraDiasDistintos } = computeTaxaRecompra(customers);
 
     // Envios por dia da semana (com base no created_at do fulfillment).
     const diasLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -276,6 +276,8 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
       tempoMedioEnvioHoras,
       tempoMedioEnvioAmostra: countWithTime,
       taxaRecompra,
+      recomprasDiasDistintos,
+      taxaRecompraDiasDistintos,
       recomprasCount,
       totalClientesBase: baseClientes,
       historyDays,

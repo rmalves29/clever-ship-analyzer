@@ -150,7 +150,7 @@ function Index() {
             value: baseClientes >= minSample ? `${taxa.toFixed(1)}%` : "—",
             hint:
               baseClientes >= minSample
-                ? `${s.recomprasCount} de ${baseClientes} clientes recompraram`
+                ? `${s.recomprasCount} de ${baseClientes} clientes recompraram · em dias diferentes: ${s.recomprasDiasDistintos ?? 0} (${(s.taxaRecompraDiasDistintos ?? 0).toFixed(1)}%)`
                 : `Base insuficiente (${baseClientes} clientes)`,
             status:
               baseClientes >= minSample
@@ -198,7 +198,7 @@ function Index() {
         title: "Recompra da base",
         text:
           baseClientes >= minSample
-            ? `${s.recomprasCount} de ${baseClientes} clientes com pedido pago voltaram a comprar.`
+            ? `${s.recomprasCount} de ${baseClientes} clientes com pedido pago voltaram a comprar. Contando só quem voltou em outro dia (sem os pedidos fechados na mesma live): ${s.recomprasDiasDistintos ?? 0} clientes, ${(s.taxaRecompraDiasDistintos ?? 0).toFixed(2)}%.`
             : "Base de clientes ainda pequena para uma leitura confiável de recompra.",
         highlight: baseClientes >= minSample ? `${taxa.toFixed(2)}%` : undefined,
         tone:

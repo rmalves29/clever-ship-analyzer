@@ -77,6 +77,35 @@ export function computeCommercialKpis(validOrders: OrderRow[]): CommercialKpis {
   };
 }
 
+/* ------------------------------------------------- normalização de estado */
+
+const UF_NAMES: Record<string, string> = {
+  AC: "Acre", AL: "Alagoas", AP: "Amapá", AM: "Amazonas", BA: "Bahia", CE: "Ceará", DF: "Distrito Federal",
+  ES: "Espírito Santo", GO: "Goiás", MA: "Maranhão", MT: "Mato Grosso", MS: "Mato Grosso do Sul",
+  MG: "Minas Gerais", PA: "Pará", PB: "Paraíba", PR: "Paraná", PE: "Pernambuco", PI: "Piauí",
+  RJ: "Rio de Janeiro", RN: "Rio Grande do Norte", RS: "Rio Grande do Sul", RO: "Rondônia", RR: "Roraima",
+  SC: "Santa Catarina", SP: "São Paulo", SE: "Sergipe", TO: "Tocantins",
+};
+
+const stripAccents = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const UF_BY_KEY = new Map<string, string>();
+for (const [uf, name] of Object.entries(UF_NAMES)) {
+  UF_BY_KEY.set(uf.toLowerCase(), name);
+  UF_BY_KEY.set(stripAccents(name).toLowerCase(), name);
+}
+
+/** O mesmo estado chega da Shopify como "SP", "São Paulo", "sao paulo"...: junta tudo no nome completo. */
+export function normalizeProvince(raw: string | null | undefined): string | null {
+  const v = (raw ?? "").trim();
+  if (!v) return null;
+  return UF_BY_KEY.get(stripAccents(v).toLowerCase()) ?? v;
+}
+
+/** Dia de calendário de Brasília (UTC-3) de um instante, como número de dias desde 1970. */
+export function brazilDayNumber(ms: number): number {
+  return Math.floor((ms - 3 * 3_600_000) / 86_400_000);
+}
+
 /* -------------------------------------------------- agregado por cliente */
 
 export type CustomerAgg = {
@@ -93,10 +122,10 @@ export function buildCustomerAggregates(orders: OrderRow[]): CustomerAgg[] {
   for (const o of filterValidOrders(orders)) {
     const key = o.customer_id;
     if (!key) continue;
-    const agg = map.get(key) ?? { customerId: key, dates: [], total: 0, count: 0, province: o.province ?? null };
+    const agg = map.get(key) ?? { customerId: key, dates: [], total: 0, count: 0, province: normalizeProvince(o.province) };
     agg.dates.push(orderDate(o));
     agg.total += money(o.total_price);
-    if (!agg.province && o.province) agg.province = o.province;
+    if (!agg.province && o.province) agg.province = normalizeProvince(o.province);
     map.set(key, agg);
   }
   return Array.from(map.values()).map((c) => ({
@@ -253,10 +282,15 @@ export function computeCurvaRecompra(gaps: number[]) {
 export function computeTaxaRecompra(customers: CustomerAgg[]) {
   const base = customers.length;
   const recompras = customers.filter((c) => c.count >= 2).length;
+  // Recompra "de verdade": cliente que voltou em OUTRO dia. Em venda por live, a mesma cliente fecha
+  // vários pedidos na mesma noite — isso conta como 2+ pedidos acima, mas não é retorno.
+  const recomprasDiasDistintos = customers.filter((c) => new Set(c.dates.map(brazilDayNumber)).size >= 2).length;
   return {
     taxaRecompra: base > 0 ? Number(((recompras / base) * 100).toFixed(2)) : 0,
     recomprasCount: recompras,
     baseClientes: base,
+    recomprasDiasDistintos,
+    taxaRecompraDiasDistintos: base > 0 ? Number(((recomprasDiasDistintos / base) * 100).toFixed(2)) : 0,
   };
 }
 

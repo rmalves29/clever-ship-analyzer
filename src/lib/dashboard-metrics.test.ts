@@ -72,7 +72,7 @@ describe("agregados por cliente", () => {
   });
 
   it("taxa de recompra usa clientes com 2+ pedidos válidos", () => {
-    expect(computeTaxaRecompra(customers)).toEqual({ taxaRecompra: 50, recomprasCount: 1, baseClientes: 2 });
+    expect(computeTaxaRecompra(customers)).toMatchObject({ taxaRecompra: 50, recomprasCount: 1, baseClientes: 2 });
   });
 
   it("frequência soma 100%", () => {
@@ -133,7 +133,8 @@ describe("regiões", () => {
       order({ id: "sp0", customer_id: "SP0", province: "SP" }),
     ];
     const regioes = computeRegioesRecompra(buildCustomerAggregates(rows), 5);
-    expect(regioes).toEqual([{ name: "MG", value: 20, clientes: 5, recompraram: 1 }]);
+    // o estado agora vem com o nome completo ("MG" -> "Minas Gerais"), para não separar sigla e nome
+    expect(regioes).toEqual([{ name: "Minas Gerais", value: 20, clientes: 5, recompraram: 1 }]);
   });
 });
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Sparkles } from "lucide-react";
+import { Download, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { alpha } from "@mui/material/styles";
 import Alert from "@mui/material/Alert";
@@ -19,7 +19,8 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import type { ChipProps } from "@mui/material/Chip";
 import { generateCreativeMatrix } from "@/lib/creative-matrix.functions";
-import { CreativeIdeasPanel } from "./CreativeIdeasPanel";
+import { CreativeIdeasPanel, type GeneratedIdeas } from "./CreativeIdeasPanel";
+import { downloadCreativeReportPdf } from "@/lib/creative-report-pdf";
 import type { CreativeMatrixResult } from "@/lib/creative-matrix.server";
 import {
   ANGLE_LABEL,
@@ -68,6 +69,20 @@ export function CreativeMatrixTab({ datePreset }: { datePreset: InstagramDatePre
   const runGenerate = useServerFn(generateCreativeMatrix);
   const [result, setResult] = useState<CreativeMatrixResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [ideas, setIdeas] = useState<GeneratedIdeas | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    if (!result) return;
+    setExporting(true);
+    try {
+      await downloadCreativeReportPdf(result, ideas?.items ?? null);
+    } catch (error) {
+      toast.error(error instanceof Error ? `Falha ao gerar o PDF: ${error.message}` : "Falha ao gerar o PDF.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleGenerate = async () => {
     setLoading(true);
@@ -77,6 +92,7 @@ export function CreativeMatrixTab({ datePreset }: { datePreset: InstagramDatePre
         toast.error(res.error || "Falha ao montar a matriz.");
         return;
       }
+      setIdeas(null);
       setResult(res.result);
       toast.success("Matriz criativa pronta.");
     } catch (error) {
@@ -101,16 +117,23 @@ export function CreativeMatrixTab({ datePreset }: { datePreset: InstagramDatePre
               A IA só classifica cada peça (pela legenda; anúncios, pelo nome). Todas as taxas e o ROAS vêm das métricas reais.
             </Typography>
           </Box>
-          <Button variant="contained" startIcon={<Sparkles size={16} />} onClick={handleGenerate} disabled={loading}>
-            {loading ? "Analisando…" : "Analisar e montar matriz"}
-          </Button>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
+            {result && (
+              <Button variant="outlined" startIcon={<Download size={16} />} onClick={handleDownloadPdf} disabled={exporting}>
+                {exporting ? "Gerando PDF…" : ideas ? "Baixar PDF (com ideias)" : "Baixar PDF"}
+              </Button>
+            )}
+            <Button variant="contained" startIcon={<Sparkles size={16} />} onClick={handleGenerate} disabled={loading}>
+              {loading ? "Analisando…" : "Analisar e montar matriz"}
+            </Button>
+          </Stack>
         </Stack>
       </Card>
 
       {result && <CreativeMatrixView result={result} />}
       {result && (
         <Box sx={{ mt: 2 }}>
-          <CreativeIdeasPanel key={result.generatedAt} result={result} />
+          <CreativeIdeasPanel key={result.generatedAt} result={result} generated={ideas} onGenerated={setIdeas} />
         </Box>
       )}
     </Box>

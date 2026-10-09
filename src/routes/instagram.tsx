@@ -30,6 +30,7 @@ import Typography from "@mui/material/Typography";
 import type { ChipProps } from "@mui/material/Chip";
 import { getInstagramConnectionStatus, connectInstagram, getInstagramOverview, getInstagramAudience, getInstagramTopContent } from "@/lib/instagram.functions";
 import { getLatestInstagramAnalysis, generateInstagramAnalysis } from "@/lib/instagram-ai.functions";
+import { CreativeMatrixTab } from "@/components/instagram/CreativeMatrixTab";
 import type { InstagramDatePreset } from "@/lib/instagram.server";
 
 export const Route = createFileRoute("/instagram")({
@@ -103,7 +104,7 @@ function SectionCard({ children }: { children: React.ReactNode }) {
 }
 
 function InstagramPage() {
-  const [view, setView] = useState<"geral" | "conteudo" | "publico" | "ia">("geral");
+  const [view, setView] = useState<"geral" | "conteudo" | "publico" | "matriz" | "ia">("geral");
   const [datePreset, setDatePreset] = useState<InstagramDatePreset>("last_7d");
   const runStatus = useServerFn(getInstagramConnectionStatus);
   const runConnect = useServerFn(connectInstagram);
@@ -218,15 +219,23 @@ function InstagramPage() {
       </Stack>
 
       <Box sx={{ mt: 2, borderBottom: 1, borderColor: "divider" }}>
-        <Tabs value={view} onChange={(_, v) => setView(v)}>
+        <Tabs
+          value={view}
+          onChange={(_, v) => {
+            setView(v);
+            // A matriz precisa de amostra: períodos de 1 a 7 dias costumam ter poucos posts.
+            if (v === "matriz" && ["today", "yesterday", "last_7d"].includes(datePreset)) setDatePreset("last_30d");
+          }}
+        >
           <Tab value="geral" icon={<Eye size={14} />} iconPosition="start" label="Visão Geral" sx={{ minHeight: 40 }} />
           <Tab value="conteudo" icon={<ImageIcon size={14} />} iconPosition="start" label="Conteúdo" sx={{ minHeight: 40 }} />
           <Tab value="publico" icon={<Users size={14} />} iconPosition="start" label="Público" sx={{ minHeight: 40 }} />
+          <Tab value="matriz" icon={<Grid3x3 size={14} />} iconPosition="start" label="Matriz criativa" sx={{ minHeight: 40 }} />
           <Tab value="ia" icon={<Sparkles size={14} />} iconPosition="start" label="Análise IA" sx={{ minHeight: 40 }} />
         </Tabs>
       </Box>
 
-      {(view === "geral" || view === "conteudo") && (
+      {(view === "geral" || view === "conteudo" || view === "matriz") && (
         <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
           {DATE_PRESETS.map((p) => (
             <Button
@@ -617,6 +626,8 @@ function InstagramPage() {
           )}
         </>
       )}
+
+      {view === "matriz" && <CreativeMatrixTab datePreset={datePreset} />}
 
       {view === "ia" && (
         <Box sx={{ mt: 2 }}>

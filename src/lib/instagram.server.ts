@@ -291,7 +291,7 @@ export type InstagramMedia = {
 /** Fetch+mapeamento compartilhado entre `getInstagramTopContent` (presets fechados) e
  *  `getInstagramTopContentInRange` (range arbitrário, ex: "semana anterior" pro lote de IA).
  *  `untilISO` é exclusivo (mesma semântica dos outros usos de range nesse arquivo). */
-async function fetchTopContentInRange(pageToken: string, igId: string, sinceISO: string, untilISO: string): Promise<InstagramMedia[]> {
+async function fetchTopContentInRange(pageToken: string, igId: string, sinceISO: string, untilISO: string, limit = 10): Promise<InstagramMedia[]> {
   const sinceTs = instagramRangeBoundarySeconds(sinceISO);
   const untilTs = instagramRangeBoundarySeconds(untilISO);
   if (sinceTs === null || untilTs === null || sinceTs >= untilTs) {
@@ -337,7 +337,7 @@ async function fetchTopContentInRange(pageToken: string, igId: string, sinceISO:
 
   return withInsights
     .sort((a, b) => b.totalInteractions - a.totalInteractions)
-    .slice(0, 10);
+    .slice(0, limit);
 }
 
 /** Aceita tanto `AAAA-MM-DD` quanto um ISO completo. O calendário usa limites com fuso de São
@@ -387,6 +387,22 @@ export async function getInstagramTopContent(datePreset: InstagramDatePreset): P
 
   try {
     const media = await fetchTopContentInRange(pageToken, igId, since, until);
+    return { success: true, media };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar o Instagram." };
+  }
+}
+
+/** Todas as publicações do período (até as 50 que a Graph API devolve numa página), para a
+ *  matriz criativa — `getInstagramTopContent` devolve só as 10 melhores. */
+export async function getInstagramAllContent(datePreset: InstagramDatePreset): Promise<{ success: true; media: InstagramMedia[] } | { success: false; error: string }> {
+  const { pageToken, igId } = await loadInstagramSettings();
+  if (!pageToken || !igId) return { success: false, error: "Instagram não conectado. Configure em Configurações." };
+
+  const { since, until } = datePresetToRange(datePreset);
+
+  try {
+    const media = await fetchTopContentInRange(pageToken, igId, since, until, 50);
     return { success: true, media };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar o Instagram." };

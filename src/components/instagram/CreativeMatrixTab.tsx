@@ -19,6 +19,7 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import type { ChipProps } from "@mui/material/Chip";
 import { generateCreativeMatrix } from "@/lib/creative-matrix.functions";
+import { CreativeIdeasPanel } from "./CreativeIdeasPanel";
 import type { CreativeMatrixResult } from "@/lib/creative-matrix.server";
 import {
   ANGLE_LABEL,
@@ -107,6 +108,11 @@ export function CreativeMatrixTab({ datePreset }: { datePreset: InstagramDatePre
       </Card>
 
       {result && <CreativeMatrixView result={result} />}
+      {result && (
+        <Box sx={{ mt: 2 }}>
+          <CreativeIdeasPanel key={result.generatedAt} result={result} />
+        </Box>
+      )}
     </Box>
   );
 }

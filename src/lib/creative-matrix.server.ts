@@ -8,6 +8,7 @@ import {
   normalizeCategory,
   type AdMatrix,
   type ClassifiedAd,
+  type IdeasInput,
   type ClassifiedPost,
   type MatrixInsight,
   type PostMatrix,
@@ -60,13 +61,13 @@ const recommendationSchema = z.object({
   recomendacoes: z.array(z.string()).max(6),
 });
 
-async function callOpenAiJson<T>(apiKey: string, system: string, user: string, schema: z.ZodType<T>): Promise<T> {
+async function callOpenAiJson<T>(apiKey: string, system: string, user: string, schema: z.ZodType<T>, temperature = 0.2): Promise<T> {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: "gpt-4o-mini",
-      temperature: 0.2,
+      temperature,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: system },
@@ -169,13 +170,9 @@ function fallbackRecommendations(insights: MatrixInsight[]): { resumo: string; r
   };
 }
 
-/** Quantas peças de cada tipo entram na classificação (limita tokens e custo da OpenAI). */
-const MAX_POSTS = 50;
-const MAX_ADS = 60;
+const NO_OPENAI_KEY = "Nenhuma API key da OpenAI configurada em Configurações.";
 
-export async function buildCreativeMatrix(
-  datePreset: InstagramDatePreset,
-): Promise<{ success: true; result: CreativeMatrixResult } | { success: false; error: string }> {
+async function loadOpenAiKey(): Promise<string | null> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: settings } = await supabaseAdmin
     .from("store_settings")
@@ -183,8 +180,18 @@ export async function buildCreativeMatrix(
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
-  const apiKey = (settings as { openai_api_key?: string | null } | null)?.openai_api_key;
-  if (!apiKey) return { success: false, error: "Nenhuma API key da OpenAI configurada em Configurações." };
+  return (settings as { openai_api_key?: string | null } | null)?.openai_api_key ?? null;
+}
+
+/** Quantas peças de cada tipo entram na classificação (limita tokens e custo da OpenAI). */
+const MAX_POSTS = 50;
+const MAX_ADS = 60;
+
+export async function buildCreativeMatrix(
+  datePreset: InstagramDatePreset,
+): Promise<{ success: true; result: CreativeMatrixResult } | { success: false; error: string }> {
+  const apiKey = await loadOpenAiKey();
+  if (!apiKey) return { success: false, error: NO_OPENAI_KEY };
 
   const { getInstagramAllContent } = await import("./instagram.server");
   const igRes = await getInstagramAllContent(datePreset);
@@ -294,4 +301,66 @@ export async function buildCreativeMatrix(
       recomendacoes: summary.recomendacoes,
     },
   };
+}
+
+/* ------------------------------------------------------------ ideias a partir da matriz */
+
+const ideaSchema = z.object({
+  tipo: z.enum(["post", "anuncio"]),
+  formato: z.string(),
+  angulo: z.string(),
+  produto: z.string(),
+  gancho: z.string(),
+  roteiro: z.array(z.string()).min(1).max(8),
+  legenda: z.string(),
+  cta: z.string(),
+  baseado_em: z.string(),
+  prioridade: z.enum(["alta", "media"]),
+});
+export type CreativeIdea = z.infer<typeof ideaSchema>;
+
+const ideasResponseSchema = z.object({ ideas: z.array(ideaSchema).min(1).max(12) });
+
+function ideasPrompt(input: IdeasInput): string {
+  return `Você é diretor criativo de uma loja de semijoias e acessórios femininos (Mania de Mulher). Tom: próximo, feminino, acolhedor, sem exagero. Use a matriz criativa abaixo (período: ${input.datePreset}) para propor as PRÓXIMAS peças.
+
+REGRAS
+- Baseie cada ideia em um número real da matriz e cite-o em "baseado_em". Não invente dados.
+- Priorize ângulos com bom engajamento orgânico ou bom ROAS (com compras suficientes) e ângulos que funcionam num canal e ainda não foram testados no outro.
+- Nunca invente preço, desconto, cupom, prazo ou garantia. Quando uma oferta fizer sentido, escreva "[informe a oferta]".
+- Não prometa resultado. Não cite concorrentes. Português do Brasil.
+- Gere 5 ideias de "post" (Instagram) e 3 de "anuncio" (Meta Ads). Varie formato e produto.
+- "formato": para post use Reels, Carrossel, Foto ou Vídeo; para anúncio use Imagem ou Vídeo.
+- "roteiro": de 3 a 6 passos curtos (cenas do Reels, slides do carrossel ou composição da imagem do anúncio).
+- "legenda": o texto final pronto para publicar (no anúncio, o texto principal), até 450 caracteres.
+- "gancho": a primeira frase/tela que prende a atenção.
+
+ORGÂNICO POR ÂNGULO: ${JSON.stringify(input.postsByAngle)}
+ORGÂNICO POR FORMATO: ${JSON.stringify(input.postsByFormat)}
+ANÚNCIOS POR ÂNGULO: ${JSON.stringify(input.adsByAngle)}
+ACHADOS: ${JSON.stringify(input.insights.map((i) => `${i.title}: ${i.text}`))}
+POSTS QUE MAIS ENGAJARAM (exemplos reais): ${JSON.stringify(input.topPosts)}
+ANÚNCIOS QUE MAIS VENDERAM (exemplos reais): ${JSON.stringify(input.topAds)}
+
+Responda neste formato exato:
+{ "ideas": [ { "tipo": "post"|"anuncio", "formato": string, "angulo": string, "produto": string, "gancho": string, "roteiro": [string], "legenda": string, "cta": string, "baseado_em": string, "prioridade": "alta"|"media" } ] }`;
+}
+
+export async function buildCreativeIdeas(
+  input: IdeasInput,
+): Promise<{ success: true; ideas: CreativeIdea[]; generatedAt: string } | { success: false; error: string }> {
+  const apiKey = await loadOpenAiKey();
+  if (!apiKey) return { success: false, error: NO_OPENAI_KEY };
+  try {
+    const parsed = await callOpenAiJson(
+      apiKey,
+      "Você é diretor criativo de e-commerce de semijoias. Responda sempre em JSON válido.",
+      ideasPrompt(input),
+      ideasResponseSchema,
+      0.7,
+    );
+    return { success: true, ideas: parsed.ideas, generatedAt: new Date().toISOString() };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Falha ao gerar ideias com a OpenAI." };
+  }
 }

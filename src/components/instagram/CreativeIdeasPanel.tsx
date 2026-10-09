@@ -69,11 +69,21 @@ export function IdeaCard({ idea }: { idea: CreativeIdea }) {
   );
 }
 
-export function CreativeIdeasPanel({ result }: { result: CreativeMatrixResult }) {
+export type GeneratedIdeas = { items: CreativeIdea[]; generatedAt: string };
+
+export function CreativeIdeasPanel({
+  result,
+  generated,
+  onGenerated,
+}: {
+  result: CreativeMatrixResult;
+  generated: GeneratedIdeas | null;
+  onGenerated: (value: GeneratedIdeas) => void;
+}) {
   const runGenerate = useServerFn(generateCreativeIdeas);
-  const [ideas, setIdeas] = useState<CreativeIdea[] | null>(null);
-  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const ideas = generated?.items ?? null;
+  const generatedAt = generated?.generatedAt ?? null;
 
   const handleGenerate = async () => {
     setLoading(true);
@@ -91,8 +101,7 @@ export function CreativeIdeasPanel({ result }: { result: CreativeMatrixResult })
         toast.error(res.error || "Falha ao gerar ideias.");
         return;
       }
-      setIdeas(res.ideas);
-      setGeneratedAt(res.generatedAt);
+      onGenerated({ items: res.ideas, generatedAt: res.generatedAt });
       toast.success("Ideias geradas.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Falha ao gerar ideias.");

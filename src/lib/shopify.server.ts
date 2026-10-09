@@ -145,6 +145,7 @@ export const ORDERS_QUERY = `
           email
           phone
           sourceName
+          customerJourneySummary { firstVisit { landingPage referrerUrl } }
           subtotalPriceSet { presentmentMoney { amount } }
           totalDiscountsSet { presentmentMoney { amount } }
           discountCodes

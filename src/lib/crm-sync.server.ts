@@ -289,8 +289,14 @@ export async function runShopifySync(fullSync: boolean) {
           total_tax: parseFloat(order.totalTaxSet?.presentmentMoney?.amount ?? "0"),
           total_price: parseFloat(order.totalPriceSet?.presentmentMoney?.amount ?? "0"),
           source_name: order.sourceName,
-          landing_site: null,
-          referring_site: null,
+          // Página por onde o cliente entrou e de onde veio (só existe em pedido feito no site; pedido de
+          // live/rascunho não tem jornada). Não sobrescreve com null um valor já gravado de uma sync anterior.
+          ...(order.customerJourneySummary?.firstVisit
+            ? {
+                landing_site: order.customerJourneySummary.firstVisit.landingPage ?? null,
+                referring_site: order.customerJourneySummary.firstVisit.referrerUrl ?? null,
+              }
+            : {}),
           city: addr?.city ?? null,
           province: addr?.province ?? null,
           country: addr?.country ?? null,

@@ -39,6 +39,10 @@ export const Route = createFileRoute("/instagram")({
     meta: [
       { title: "Instagram | Performance" },
       { name: "description", content: "Insights reais da conta do Instagram — alcance, engajamento, público e conteúdo." },
+      { property: "og:title", content: "Instagram | Performance" },
+      { property: "og:description", content: "Insights reais do Instagram e agente de matriz criativa para campanhas." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
 });
@@ -221,11 +225,7 @@ function InstagramPage() {
       <Box sx={{ mt: 2, borderBottom: 1, borderColor: "divider" }}>
         <Tabs
           value={view}
-          onChange={(_, v) => {
-            setView(v);
-            // A matriz precisa de amostra: períodos de 1 a 7 dias costumam ter poucos posts.
-            if (v === "matriz" && ["today", "yesterday", "last_7d"].includes(datePreset)) setDatePreset("last_30d");
-          }}
+          onChange={(_, v) => setView(v)}
         >
           <Tab value="geral" icon={<Eye size={14} />} iconPosition="start" label="Visão Geral" sx={{ minHeight: 40 }} />
           <Tab value="conteudo" icon={<ImageIcon size={14} />} iconPosition="start" label="Conteúdo" sx={{ minHeight: 40 }} />
@@ -235,7 +235,7 @@ function InstagramPage() {
         </Tabs>
       </Box>
 
-      {(view === "geral" || view === "conteudo" || view === "matriz") && (
+      {(view === "geral" || view === "conteudo") && (
         <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
           {DATE_PRESETS.map((p) => (
             <Button
@@ -627,7 +627,7 @@ function InstagramPage() {
         </>
       )}
 
-      {view === "matriz" && <CreativeMatrixTab datePreset={datePreset} />}
+      {view === "matriz" && <CreativeMatrixTab />}
 
       {view === "ia" && (
         <Box sx={{ mt: 2 }}>

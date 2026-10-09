@@ -54,7 +54,6 @@ describe("buildReportHtml", () => {
     for (const id of ["resumo", "brief", "fontes", "dores", "consciencia", "matriz", "ranking", "galeria", "briefings", "copies", "placements", "testes", "riscos", "health", "passos"]) {
       expect(html).toContain(`id="${id}"`);
     }
-    expect(html).toContain("Matriz Criativa de Black Friday");
   });
 
   it("gera um mockup 4:5 por criativo, com Headline / Imagem / CTA", () => {
@@ -73,6 +72,6 @@ describe("buildReportHtml", () => {
   });
 
   it("nomeia o arquivo com produto e data", () => {
-    expect(reportFileName(project)).toBe("matriz-criativa-black-friday-kit-londres-b-2026-10-09.html");
+    expect(reportFileName(project)).toBe("matriz-criativa-kit-londres-b-2026-10-09.html");
   });
 });

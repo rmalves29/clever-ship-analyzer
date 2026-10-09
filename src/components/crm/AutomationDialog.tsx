@@ -50,7 +50,7 @@ export const SEGMENT_LABEL: Record<string, string> = {
 };
 
 type DecisionCondition =
-  | { kind: "novo_pedido" }
+  | { kind: "novo_pedido"; windowDays?: number | null | undefined }
   | { kind: "pedido_status"; field: "financial_status" | "fulfillment_status"; value: string }
   | { kind: "segmento"; segmentType: string; segmentId?: string | undefined }
   | { kind: "valor_pedido"; operator: "gt" | "gte" | "lt" | "lte"; value: number }
@@ -145,7 +145,10 @@ const FULFILLMENT_STATUSES = ["FULFILLED", "UNFULFILLED", "IN_PROGRESS", "PARTIA
 const OPERATOR_LABEL: Record<"gt" | "gte" | "lt" | "lte", string> = { gt: ">", gte: "≥", lt: "<", lte: "≤" };
 
 function conditionLabel(c: DecisionCondition): string {
-  if (c.kind === "novo_pedido") return "Fez um novo pedido?";
+  if (c.kind === "novo_pedido") {
+    if (c.windowDays === undefined) return "Fez um novo pedido?";
+    return !c.windowDays ? "Pagou um pedido hoje?" : `Pagou um pedido (hoje + ${c.windowDays} dia${c.windowDays === 1 ? "" : "s"} atrás)?`;
+  }
   if (c.kind === "pedido_status") return `Pedido ${c.field === "financial_status" ? "pagamento" : "envio"} = ${c.value}`;
   if (c.kind === "valor_pedido") return `Valor do pedido ${OPERATOR_LABEL[c.operator]} R$ ${c.value}`;
   if (c.kind === "localizacao") return `${c.field === "city" ? "Cidade" : "Estado"} = ${c.value || "..."}`;
@@ -356,6 +359,8 @@ export function AutomationDialog({
   const [manualPositions, setManualPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(TRIGGER_ID);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
+  /** Onde a próxima etapa adicionada será ligada: "auto" (primeira saída livre) ou "<stepId>|next|yes|no". */
+  const [addTargetKey, setAddTargetKey] = useState<string>("auto");
   const isLifecycleAutomation = seed?.automationKind === "rfm" || seed?.automationKind === "cashback";
 
   useEffect(() => {
@@ -463,7 +468,27 @@ export function AutomationDialog({
    *  (ou na primeira saída livre do fluxo, se nada estiver selecionado) — assim clicar em
    *  "Adicionar etapa" repetidamente já vai montando a sequência sem precisar arrastar toda vez. */
   const addStep = (step: AutomationStepSeed) => {
+    const chosen = addTargetKey !== "auto" ? addTargetKey.split("|") : null;
     setSteps((prev) => {
+      if (chosen) {
+        const [targetId, slot] = chosen;
+        const target = prev.find((s) => s.id === targetId);
+        const slotOpen =
+          !!target &&
+          ((target.type === "send" && slot === "next" && target.nextStepId === null) ||
+            (target.type === "decision" && slot === "yes" && target.yesStepId === null) ||
+            (target.type === "decision" && slot === "no" && target.noStepId === null));
+        if (target && slotOpen) {
+          const updated = prev.map((s) => {
+            if (s.id !== target.id) return s;
+            if (s.type === "send" && slot === "next" && s.nextStepId === null) return { ...s, nextStepId: step.id };
+            if (s.type === "decision" && slot === "yes" && s.yesStepId === null) return { ...s, yesStepId: step.id };
+            if (s.type === "decision" && slot === "no" && s.noStepId === null) return { ...s, noStepId: step.id };
+            return s;
+          });
+          return [...updated, step];
+        }
+      }
       const preferred = selectedNodeId && selectedNodeId !== TRIGGER_ID ? prev.find((s) => s.id === selectedNodeId) : undefined;
       const hasOpenSlot = (s: AutomationStepSeed) => (s.type === "send" ? s.nextStepId === null : s.yesStepId === null || s.noStepId === null);
       const target = (preferred && hasOpenSlot(preferred) ? preferred : undefined) ?? prev.find(hasOpenSlot);
@@ -478,6 +503,7 @@ export function AutomationDialog({
     });
     setSelectedNodeId(step.id);
     setAddPanelOpen(false);
+    setAddTargetKey("auto");
   };
 
   const onConnect = useCallback(
@@ -708,6 +734,19 @@ export function AutomationDialog({
 
   const selectedStep = selectedNodeId && selectedNodeId !== TRIGGER_ID ? steps.find((s) => s.id === selectedNodeId) : undefined;
   const panelOpen = addPanelOpen || selectedNodeId !== null;
+  /** Saídas ainda sem destino: é a lista que o usuário escolhe em "Ligar em" ao adicionar uma etapa. */
+  const openSlots = steps.flatMap((s, i) => {
+    const title =
+      s.type === "send"
+        ? `Etapa ${i + 1} · Enviar WhatsApp${s.templateName ? ` (${s.templateName})` : ""}`
+        : `Etapa ${i + 1} · ${conditionLabel(s.condition)}`;
+    if (s.type === "send") return s.nextStepId === null ? [{ key: `${s.id}|next`, label: `${title} → próxima` }] : [];
+    return [
+      ...(s.yesStepId === null ? [{ key: `${s.id}|yes`, label: `${title} → Sim` }] : []),
+      ...(s.noStepId === null ? [{ key: `${s.id}|no`, label: `${title} → Não` }] : []),
+    ];
+  });
+  const effectiveAddTarget = openSlots.some((o) => o.key === addTargetKey) ? addTargetKey : "auto";
   const rootStepForValidation = steps.find((s) => s.id === rootStepId);
   const reachable = reachableStepIds(steps, rootStepId);
   const missingTemplate = steps.some((s) => reachable.has(s.id) && s.type === "send" && !s.templateName);
@@ -764,6 +803,7 @@ export function AutomationDialog({
             className="gap-1.5"
             onClick={() => {
               setSelectedNodeId(null);
+              setAddTargetKey("auto");
               setAddPanelOpen(true);
             }}
           >
@@ -817,6 +857,26 @@ export function AutomationDialog({
                     </Button>
                   </div>
 
+                  {openSlots.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ligar em</p>
+                      <Select value={effectiveAddTarget} onValueChange={setAddTargetKey}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto">Automático (primeira saída livre)</SelectItem>
+                          {openSlots.map((o) => (
+                            <SelectItem key={o.key} value={o.key}>
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">Escolha de qual saída a nova etapa vai partir (ex.: "Sim" ou "Não" de uma decisão).</p>
+                    </div>
+                  )}
+
                   <div className="space-y-1.5">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ação</p>
                     <button
@@ -834,7 +894,7 @@ export function AutomationDialog({
                   <div className="space-y-1.5">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Decisões</p>
                     {[
-                      { cond: { kind: "novo_pedido" } as DecisionCondition, label: "Fez um novo pedido?", sub: "Desde que entrou na automação." },
+                      { cond: { kind: "novo_pedido", windowDays: null } as DecisionCondition, label: "Fez um novo pedido pago?", sub: "Pedido pago dentro do prazo em dias (vazio = hoje)." },
                       {
                         cond: { kind: "pedido_status", field: "financial_status", value: FINANCIAL_STATUSES[0]! } as DecisionCondition,
                         label: "Pedido tem status?",
@@ -1229,7 +1289,7 @@ function DecisionStepPanel({
                       ? { kind: "localizacao", field: "city", value: "" }
                       : v === "tag"
                         ? { kind: "tag", value: "" }
-                        : { kind: "novo_pedido" };
+                        : { kind: "novo_pedido", windowDays: null };
             onChange({ condition });
           }}
         >
@@ -1237,7 +1297,7 @@ function DecisionStepPanel({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="novo_pedido">Fez um novo pedido desde que entrou</SelectItem>
+            <SelectItem value="novo_pedido">Fez um novo pedido (pago)</SelectItem>
             <SelectItem value="pedido_status">Pedido mais recente tem um status</SelectItem>
             <SelectItem value="segmento">Está em um segmento</SelectItem>
             <SelectItem value="valor_pedido">Valor do pedido mais recente</SelectItem>
@@ -1246,6 +1306,32 @@ function DecisionStepPanel({
           </SelectContent>
         </Select>
       </div>
+
+      {step.condition.kind === "novo_pedido" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">Prazo em dias (opcional)</Label>
+          <Input
+            type="number"
+            min={0}
+            max={365}
+            placeholder="vazio = hoje"
+            value={step.condition.windowDays ?? ""}
+            onChange={(e) => {
+              const raw = e.target.value.trim();
+              onChange({
+                condition: {
+                  kind: "novo_pedido",
+                  windowDays: raw === "" ? null : Math.min(Math.max(Math.trunc(Number(raw)), 0), 365),
+                },
+              });
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            Conta só pedido <strong>pago</strong> e não cancelado. Vazio ou 0 = hoje · 1 = ontem e hoje · 2 = anteontem até hoje, e assim por diante (dias do calendário, horário de Brasília).
+            {step.condition.windowDays === undefined && " Esta decisão usa a regra antiga (pedido depois que o cliente entrou na automação); preencher o prazo troca para a regra nova."}
+          </p>
+        </div>
+      )}
 
       {step.condition.kind === "pedido_status" && (
         <div className="space-y-3">

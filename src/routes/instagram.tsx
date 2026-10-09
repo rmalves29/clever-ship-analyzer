@@ -177,10 +177,7 @@ function InstagramPage() {
   if (!loadingConnection && !connection?.connected) {
     return (
       <Box sx={{ p: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 700 }}>
-          Instagram
-        </Typography>
-        <Card variant="outlined" sx={{ mt: 3, p: 4, textAlign: "center" }}>
+        <Card variant="outlined" sx={{ p: 4, textAlign: "center" }}>
           <Typography sx={{ fontWeight: 500 }}>Instagram ainda não conectado.</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             {connection?.error || "Usa o mesmo token do Meta Ads — só precisa achar qual Página tem o Instagram profissional vinculado."}
@@ -203,9 +200,6 @@ function InstagramPage() {
     <Box sx={{ p: 3 }}>
       <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            Instagram
-          </Typography>
           <Typography variant="body2" color="text.secondary">
             {loadingConnection ? "Verificando conexão..." : connection?.username ? `@${connection.username}` : "Conectado"}
           </Typography>

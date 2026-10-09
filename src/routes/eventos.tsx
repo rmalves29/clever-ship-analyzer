@@ -291,11 +291,7 @@ function EventosPage() {
 
   return (
     <div className="p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Eventos</h1>
-          <p className="text-sm text-muted-foreground">Cruze o que aconteceu com o resultado — por que foi bom ou ruim.</p>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <Button onClick={() => { setEditing(emptyForm(format(new Date(), "yyyy-MM-dd"))); setDialogOpen(true); }} className="gap-2">
           <Plus className="size-4" /> Novo evento
         </Button>

@@ -207,18 +207,10 @@ function CashbackPage() {
         spacing={2}
         sx={{
           mb: 3,
-          justifyContent: "space-between",
+          justifyContent: "flex-end",
           alignItems: { xs: "flex-start", sm: "center" },
         }}
       >
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            Cashback
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Toda compra paga gera automaticamente um cupom real de cashback na Shopify, restrito ao cliente que comprou.
-          </Typography>
-        </Box>
         <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap" }}>
           <Button
             variant="outline"

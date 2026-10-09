@@ -161,11 +161,7 @@ function FlowDashboard() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>ManyChat</Typography>
-          <Typography variant="body2" color="text.secondary">Fluxos que respondem por você no Instagram — comentário vira DM automática.</Typography>
-        </Box>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
         {view === "automacoes" && (
           <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => createMut.mutate()} disabled={createMut.isPending}>
             Nova automação

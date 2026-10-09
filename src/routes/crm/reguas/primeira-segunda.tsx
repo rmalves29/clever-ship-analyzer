@@ -218,12 +218,7 @@ function RepurchasePage() {
 
   return (
     <Stack spacing={3} sx={{ p: { xs: 2, lg: 4 } }}>
-      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
-        <Box>
-          <Typography variant="body2" color="text.secondary">CRM → Réguas</Typography>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>1ª compra → 2ª compra</Typography>
-          <Typography variant="body2" color="text.secondary">Acompanhe clientes desde a primeira compra e meça a segunda compra com uma janela justa.</Typography>
-        </Box>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
           <Button variant="outline" startIcon={<Sparkles size={16} />} disabled={!actionableStage || aiMutation.isPending} onClick={() => actionableStage && aiMutation.mutate(actionableStage)}>
             {aiMutation.isPending ? "Gerando…" : "Sugerir campanha com IA"}

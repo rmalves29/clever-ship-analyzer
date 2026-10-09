@@ -886,15 +886,6 @@ function LandingPagesIndex() {
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 } }}>
-      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
-        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 700 }}>Landing Pages</Typography>
-            <Typography variant="body2" color="text.secondary">Páginas para campanhas de anúncios, com layout pronto e conteúdo editável.</Typography>
-          </Box>
-        </Stack>
-      </Stack>
-
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }}>
         <Tab value="paginas" label="Páginas" />
         <Tab value="contatos" label="Contatos" />

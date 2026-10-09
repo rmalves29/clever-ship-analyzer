@@ -36,15 +36,7 @@ function FluxoEnvio() {
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", minHeight: 520 }}>
-      <Box sx={{ px: { xs: 2, md: 4 }, pt: 3, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            Fluxo de Envio
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Mesmo painel do OrderZaps: grupos, campanhas, envios, automações e relatórios
-          </Typography>
-        </Box>
+      <Box sx={{ px: { xs: 2, md: 4 }, pt: 3, display: "flex", alignItems: "flex-start", justifyContent: "flex-end", gap: 2, flexWrap: "wrap" }}>
         {current === "painel" && (
           <Button
             size="small"

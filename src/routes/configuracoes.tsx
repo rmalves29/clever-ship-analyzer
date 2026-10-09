@@ -281,10 +281,6 @@ function Configuracoes() {
             <IconButton onClick={() => navigate({ to: "/" })}>
               <ChevronLeft size={20} />
             </IconButton>
-            <Box>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>Qual banco de dados está sendo usado no projeto?</Typography>
-              <Typography variant="body2" color="text.secondary">Exibir qual banco de dados está sendo usado nas configurações do sistema para eu conferir facilmente.</Typography>
-            </Box>
           </Stack>
           <Chip
             color={settings?.syncStatus === "connected" ? "primary" : "default"}

@@ -256,16 +256,6 @@ function CampaignsPage() {
 
   return (
     <Stack spacing={2.5}>
-      <Box>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
-          Campanhas
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Somente campanhas manuais. Os envios e resultados das réguas ficam separados na página
-          Automações.
-        </Typography>
-      </Box>
-
       <Box
         sx={{
           display: "grid",

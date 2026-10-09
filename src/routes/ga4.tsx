@@ -1041,17 +1041,7 @@ function GoogleAnalyticsPage() {
 
   return (
     <Box sx={{ maxWidth: 1700, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
-      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
-        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 700 }}>
-              Google Analytics 4
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Tempo real, histórico e oportunidades de melhoria do site.
-            </Typography>
-          </Box>
-        </Stack>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center", mb: 3 }}>
         {statusQuery.isLoading ? (
           <Chip label="Verificando..." />
         ) : status?.connected ? (

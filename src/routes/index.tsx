@@ -318,13 +318,7 @@ function Index() {
   return (
     <Box sx={{ minHeight: "100vh" }}>
       <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
-        <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
-          <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
-            <Box>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>CRM Analytics</Typography>
-              <Typography variant="body2" color="text.secondary">Análise da base • {data.periodLabel}</Typography>
-            </Box>
-          </Stack>
+        <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
           <Stack spacing={1} sx={{ alignItems: "flex-end" }}>
             <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
               <Chip

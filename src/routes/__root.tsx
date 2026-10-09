@@ -19,6 +19,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Sidebar } from "../components/layout/Sidebar";
 import { Topbar } from "../components/layout/Topbar";
 import { Toaster } from "../components/ui/sonner";
+import { supabase } from "../integrations/supabase/client";
 import { materioTheme } from "../theme/materio-theme";
 
 // Shared across SSR + hydration on the client (one per document); a fresh instance per render
@@ -153,14 +154,42 @@ function RootComponent() {
   // /lp/$slug é a mesma ideia para as landing pages de anúncio (Facebook Ads).
   const isPublicSurveyPage = pathname.startsWith("/pesquisa/");
   const isPublicLandingPage = pathname.startsWith("/lp/");
+  const isAuthPage = pathname === "/auth";
+
+  // Login do CRM: só vale quando VITE_APP_AUTH_ENABLED=true (junto de APP_AUTH_ENABLED no servidor). Páginas
+  // públicas (pesquisa, landing page) e /auth ficam de fora. Sem sessão, manda para /auth.
+  const router = useRouter();
+  const authEnabled = import.meta.env["VITE_APP_AUTH_ENABLED"] === "true";
+  const needsLogin = authEnabled && !isPublicSurveyPage && !isPublicLandingPage && !isAuthPage;
+  const [sessionChecked, setSessionChecked] = useState(!needsLogin);
+  useEffect(() => {
+    if (!needsLogin) {
+      setSessionChecked(true);
+      return;
+    }
+    let active = true;
+    const goToLogin = () => void router.navigate({ to: "/auth", replace: true });
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      if (data.session) setSessionChecked(true);
+      else goToLogin();
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) goToLogin();
+    });
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
+  }, [needsLogin, router]);
 
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={materioTheme}>
         <Toaster position="top-right" />
-        {isPublicSurveyPage || isPublicLandingPage ? (
+        {isPublicSurveyPage || isPublicLandingPage || isAuthPage ? (
           <Outlet />
-        ) : (
+        ) : !sessionChecked ? null : (
           <Box sx={{ display: "flex", minHeight: "100vh" }}>
             <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
             <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>

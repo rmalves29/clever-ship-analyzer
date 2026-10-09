@@ -970,7 +970,7 @@ export async function ensureTemplateStatusWebhookSubscribed() {
     return { success: false as const, error: "Configure o App ID e o App Secret da Meta em Configurações." };
   }
   const appToken = `${settings.appId}|${settings.appSecret}`;
-  const callbackUrl = "https://clever-ship-analyzer.lovable.app/api/whatsapp-webhook";
+  const callbackUrl = `${process.env["PUBLIC_APP_URL"] || "https://clever-ship-analyzer.lovable.app"}/api/whatsapp-webhook`;
   const verifyToken = settings.verifyToken;
   if (!verifyToken) return { success: false as const, error: "Configure o Verify Token em Configurações." };
 

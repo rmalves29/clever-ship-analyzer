@@ -4,7 +4,7 @@ import { normalizePopupDesignConfig, type PopupDesignConfig } from "./popup-desi
  *  popup_campaigns/popup_leads/site_visits (ver migração add_popup_capture). O snippet colado no
  *  theme.liquid chama os endpoints públicos em src/server.ts, que usam as funções deste arquivo. */
 
-const APP_URL = "https://clever-ship-analyzer.lovable.app";
+const APP_URL = process.env["PUBLIC_APP_URL"] || "https://clever-ship-analyzer.lovable.app";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

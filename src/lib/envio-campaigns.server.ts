@@ -212,7 +212,7 @@ export async function updateCampaignGroupWeight(campaignId: string, groupId: str
 }
 
 export function campaignPublicUrl(slug: string): string {
-  return `https://clever-ship-analyzer.lovable.app/fluxo/${slug}`;
+  return `${process.env["PUBLIC_APP_URL"] || "https://clever-ship-analyzer.lovable.app"}/fluxo/${slug}`;
 }
 
 /** Porta de fe-spawn-group: cria um clone do grupo-molde da campanha. Debounce de 2min via

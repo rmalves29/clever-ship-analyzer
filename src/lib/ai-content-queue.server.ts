@@ -18,7 +18,7 @@ import {
 } from "./ai-content-prompt";
 
 const TZ = "America/Sao_Paulo";
-const APP_BASE_URL = "https://clever-ship-analyzer.lovable.app";
+const APP_BASE_URL = process.env["PUBLIC_APP_URL"] || "https://clever-ship-analyzer.lovable.app";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

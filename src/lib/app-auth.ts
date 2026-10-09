@@ -16,6 +16,21 @@ export function isAppAuthEnabled(): boolean {
   return process.env["APP_AUTH_ENABLED"] === "true";
 }
 
+/** E-mails com acesso ao CRM (APP_AUTH_ALLOWED_EMAILS, separados por vírgula). Sem a variável, qualquer
+ *  usuário válido do Auth entra (comportamento antigo). Em banco compartilhado com outro sistema, defina-a:
+ *  sem lista, usuários do outro sistema também passariam. */
+export function allowedAppEmails(): string[] {
+  return (process.env["APP_AUTH_ALLOWED_EMAILS"] ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function isEmailAllowed(email: unknown, allowed: string[] = allowedAppEmails()): boolean {
+  if (allowed.length === 0) return true;
+  return typeof email === "string" && allowed.includes(email.trim().toLowerCase());
+}
+
 async function verifyBearer(): Promise<{ userId: string }> {
   const SUPABASE_URL = process.env["SUPABASE_URL"];
   const SUPABASE_PUBLISHABLE_KEY = process.env["SUPABASE_PUBLISHABLE_KEY"];
@@ -42,6 +57,9 @@ async function verifyBearer(): Promise<{ userId: string }> {
   const { data, error } = await supabase.auth.getClaims(token);
   if (error || !data?.claims?.sub) {
     throw new Error("Unauthorized: token inválido");
+  }
+  if (!isEmailAllowed((data.claims as { email?: unknown }).email)) {
+    throw new Error("Unauthorized: usuário sem acesso a este sistema");
   }
   return { userId: String(data.claims.sub) };
 }

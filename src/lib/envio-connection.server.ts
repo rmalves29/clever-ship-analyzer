@@ -1,6 +1,6 @@
 import { loadUazapiCreds, getInstanceStatus, connectInstance, disconnectInstance, setWebhook, type UazapiCreds } from "./envio-uazapi.server";
 
-const APP_URL = "https://clever-ship-analyzer.lovable.app";
+const APP_URL = process.env["PUBLIC_APP_URL"] || "https://clever-ship-analyzer.lovable.app";
 export const UAZAPI_WEBHOOK_PATH = "/api/uazapi-webhook";
 
 async function admin() {

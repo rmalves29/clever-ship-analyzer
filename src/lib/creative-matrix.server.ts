@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NO_OPENAI_KEY, callOpenAiJson, loadOpenAiKey } from "./openai-json.server";
 import {
   buildAdMatrix,
   buildPostMatrix,
@@ -60,30 +61,6 @@ const recommendationSchema = z.object({
   resumo: z.string(),
   recomendacoes: z.array(z.string()).max(6),
 });
-
-async function callOpenAiJson<T>(apiKey: string, system: string, user: string, schema: z.ZodType<T>, temperature = 0.2): Promise<T> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      temperature,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`OpenAI respondeu ${res.status}: ${body.slice(0, 300)}`);
-  }
-  const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  const content = json.choices?.[0]?.message?.content;
-  if (!content) throw new Error("OpenAI não retornou conteúdo.");
-  return schema.parse(JSON.parse(content));
-}
 
 const CLASSIFY_SYSTEM = "Você classifica peças de marketing de uma loja de semijoias e acessórios femininos. Responda sempre em JSON válido, sem texto fora do JSON.";
 
@@ -170,19 +147,6 @@ function fallbackRecommendations(insights: MatrixInsight[]): { resumo: string; r
   };
 }
 
-const NO_OPENAI_KEY = "Nenhuma API key da OpenAI configurada em Configurações.";
-
-async function loadOpenAiKey(): Promise<string | null> {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data: settings } = await supabaseAdmin
-    .from("store_settings")
-    .select("openai_api_key")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  return (settings as { openai_api_key?: string | null } | null)?.openai_api_key ?? null;
-}
-
 /** Quantas peças de cada tipo entram na classificação (limita tokens e custo da OpenAI). */
 const MAX_POSTS = 50;
 const MAX_ADS = 60;
@@ -224,7 +188,7 @@ export async function buildCreativeMatrix(
 
   let classified: z.infer<typeof classificationSchema>;
   try {
-    classified = await callOpenAiJson(apiKey, CLASSIFY_SYSTEM, classifyPrompt(items), classificationSchema);
+    classified = await callOpenAiJson({ apiKey, system: CLASSIFY_SYSTEM, user: classifyPrompt(items), schema: classificationSchema });
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Falha ao classificar com a OpenAI." };
   }
@@ -275,12 +239,12 @@ export async function buildCreativeMatrix(
 
   let summary: { resumo: string; recomendacoes: string[] };
   try {
-    summary = await callOpenAiJson(
+    summary = await callOpenAiJson({
       apiKey,
-      "Você é estrategista de conteúdo para e-commerce de semijoias. Responda sempre em JSON válido.",
-      recommendationPrompt({ datePreset, postMatrix, adMatrix, insights }),
-      recommendationSchema,
-    );
+      system: "Você é estrategista de conteúdo para e-commerce de semijoias. Responda sempre em JSON válido.",
+      user: recommendationPrompt({ datePreset, postMatrix, adMatrix, insights }),
+      schema: recommendationSchema,
+    });
   } catch {
     summary = fallbackRecommendations(insights);
     notices.push("As recomendações da IA falharam; mostrando só os achados calculados.");
@@ -352,13 +316,13 @@ export async function buildCreativeIdeas(
   const apiKey = await loadOpenAiKey();
   if (!apiKey) return { success: false, error: NO_OPENAI_KEY };
   try {
-    const parsed = await callOpenAiJson(
+    const parsed = await callOpenAiJson({
       apiKey,
-      "Você é diretor criativo de e-commerce de semijoias. Responda sempre em JSON válido.",
-      ideasPrompt(input),
-      ideasResponseSchema,
-      0.7,
-    );
+      system: "Você é diretor criativo de e-commerce de semijoias. Responda sempre em JSON válido.",
+      user: ideasPrompt(input),
+      schema: ideasResponseSchema,
+      temperature: 0.7,
+    });
     return { success: true, ideas: parsed.ideas, generatedAt: new Date().toISOString() };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Falha ao gerar ideias com a OpenAI." };

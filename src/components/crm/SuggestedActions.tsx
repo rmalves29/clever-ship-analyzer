@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Target, Workflow, Zap } from "lucide-react";
+import { Plus, Target, Workflow } from "lucide-react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
@@ -53,20 +53,6 @@ export function SuggestedActions({ reguas, acoes }: { reguas: DashboardData["reg
   return (
     <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, overflow: "hidden" }}>
       <Stack direction="row" spacing={2} sx={{ alignItems: "center", borderBottom: "1px solid", borderColor: "divider", p: 2.5 }}>
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: 40,
-            height: 40,
-            borderRadius: 3,
-            background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
-            color: "primary.contrastText",
-          }}
-        >
-          <Zap size={20} />
-        </Box>
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 700 }}>Ações sugeridas</Typography>
           <Typography variant="body2" color="text.secondary">Baseado nos dados acima — réguas e ações pontuais prontas.</Typography>

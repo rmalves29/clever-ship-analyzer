@@ -410,20 +410,6 @@ function CRMPage() {
       <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
         <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
           <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 44,
-                height: 44,
-                borderRadius: 4,
-                background: "linear-gradient(135deg, #7367F0, #9C93F3)",
-                color: "#fff",
-              }}
-            >
-              <Users size={20} />
-            </Box>
             <Box>
               <Typography variant="h5" sx={{ fontWeight: 700 }}>Contatos</Typography>
               <Typography variant="body2" color="text.secondary">Base completa de clientes e leads.</Typography>

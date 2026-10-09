@@ -1,5 +1,5 @@
 import { createFileRoute, createLink, Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { MessageCircle, Megaphone, Inbox, FileText, Workflow, BarChart3, Settings } from "lucide-react";
+import { Megaphone, Inbox, FileText, Workflow, BarChart3, Settings } from "lucide-react";
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -34,20 +34,6 @@ function WhatsappLayout() {
         sx={{ borderBottom: "1px solid", borderColor: "divider", backdropFilter: "blur(8px)", bgcolor: "background.default" }}
       >
         <Toolbar sx={{ maxWidth: 1400, width: "100%", mx: "auto", gap: 2, flexWrap: "wrap", py: 1.5, px: { xs: 2, md: 4 } }} disableGutters>
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 40,
-              height: 40,
-              borderRadius: 3,
-              background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
-              color: "primary.contrastText",
-            }}
-          >
-            <MessageCircle size={20} />
-          </Box>
           <Box sx={{ mr: "auto" }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>WhatsApp</Typography>
             <Typography variant="caption" color="text.secondary">API oficial da Meta — campanhas, conversas e modelos.</Typography>

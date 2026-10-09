@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Sparkles, Store, Settings, RefreshCw } from "lucide-react";
+import { Store, Settings, RefreshCw } from "lucide-react";
 import { KpiCard } from "@/components/crm/KpiCard";
 import { PeriodFilter } from "@/components/crm/PeriodFilter";
 import { ExecutiveSummary } from "@/components/crm/ExecutiveSummary";
@@ -320,20 +320,6 @@ function Index() {
       <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
         <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
           <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 44,
-                height: 44,
-                borderRadius: 4,
-                background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
-                color: "primary.contrastText",
-              }}
-            >
-              <Sparkles size={20} />
-            </Box>
             <Box>
               <Typography variant="h5" sx={{ fontWeight: 700 }}>CRM Analytics</Typography>
               <Typography variant="body2" color="text.secondary">Análise da base • {data.periodLabel}</Typography>

@@ -199,12 +199,21 @@ async function sendConversationMessage(step: ConvSendStep | ConvMenuStep, phone:
  *  mensagem que não tem uma linha lá nunca ganha status de entregue/lida. */
 async function ensureConversationStepCampaign(flowId: string, stepId: string): Promise<string | null> {
   const supabaseAdmin = await admin();
-  const { data: existing } = await (supabaseAdmin.from("whatsapp_campaigns") as any)
-    .select("id")
-    .eq("conversation_flow_id", flowId)
-    .eq("conversation_flow_step_id", stepId)
-    .maybeSingle();
-  if (existing) return (existing as { id: string }).id;
+  // limit(1) + ordem fixa (e não .maybeSingle()): se por corrida existir mais de uma linha, o
+  // maybeSingle() devolvia erro, "existing" ficava nulo e cada envio criava OUTRA campanha-espelho
+  // (chegou a 527 duplicadas na mesma etapa, deixando o funil por etapa com números quase zerados).
+  const findExisting = async () => {
+    const { data } = await (supabaseAdmin.from("whatsapp_campaigns") as any)
+      .select("id")
+      .eq("conversation_flow_id", flowId)
+      .eq("conversation_flow_step_id", stepId)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .limit(1);
+    return ((data ?? [])[0] as { id: string } | undefined)?.id ?? null;
+  };
+  const existingId = await findExisting();
+  if (existingId) return existingId;
 
   const { data: flow } = await supabaseAdmin
     .from("whatsapp_conversational_flows")
@@ -228,6 +237,9 @@ async function ensureConversationStepCampaign(flowId: string, stepId: string): P
     .select("id")
     .single();
   if (error || !created) {
+    // Outra execução concorrente pode ter criado a campanha-espelho entre o select e o insert.
+    const winner = await findExisting();
+    if (winner) return winner;
     console.error("Falha ao criar campanha-espelho do fluxo conversacional:", error?.message);
     return null;
   }
@@ -256,15 +268,15 @@ async function recordConversationDelivery(
     sent_at: new Date().toISOString(),
   } as never);
 
-  const { data: campaignRow } = await supabaseAdmin
-    .from("whatsapp_campaigns")
-    .select("enviadas")
-    .eq("id", campaignId)
-    .maybeSingle();
-  const currentEnviadas = (campaignRow as { enviadas: number } | null)?.enviadas ?? 0;
+  // O contador é recalculado a partir das linhas reais (e não "lê, soma 1 e grava"): com vários
+  // envios simultâneos, o incremento antigo perdia atualizações (526 contados para 1.107 envios).
+  const { count } = await supabaseAdmin
+    .from("whatsapp_campaign_recipients")
+    .select("id", { count: "exact", head: true })
+    .eq("campaign_id", campaignId);
   await supabaseAdmin
     .from("whatsapp_campaigns")
-    .update({ enviadas: currentEnviadas + 1 } as never)
+    .update({ enviadas: count ?? 0 } as never)
     .eq("id", campaignId);
 }
 

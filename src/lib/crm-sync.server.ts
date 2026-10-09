@@ -4,6 +4,53 @@ function normalizePhone(phone: string | null | undefined): string | null {
   return normalizeShopifyPhone(phone);
 }
 
+/** Completa a página de entrada / origem (landing_site, referring_site) de pedidos recentes do site que
+ *  ficaram sem esses campos: pedidos anteriores a essa coluna ser preenchida e pedidos cuja jornada a Shopify
+ *  ainda não tinha "fechado" (ready=false) na hora da sincronização. A Shopify só guarda a jornada por ~60 dias,
+ *  então a janela é de 58. Roda a cada sync em lotes de 100: o mês se preenche sozinho em poucas rodadas.
+ *  Pedido que a Shopify confirma não ter jornada recebe "" (vazio) e sai da fila; ready=false fica nulo e volta. */
+const JOURNEY_BACKFILL_WINDOW_DAYS = 58;
+const JOURNEY_BACKFILL_BATCH = 100;
+
+export async function backfillOrderJourney(
+  supabaseAdmin: (typeof import("@/integrations/supabase/client.server"))["supabaseAdmin"],
+  shopifyGraphQL: (query: string, variables?: Record<string, unknown>) => Promise<any>,
+): Promise<{ checked: number; filled: number }> {
+  const since = new Date(Date.now() - JOURNEY_BACKFILL_WINDOW_DAYS * 86_400_000).toISOString();
+  const { data } = await (supabaseAdmin.from("shopify_orders") as any)
+    .select("id")
+    .eq("source_name", "web")
+    .is("landing_site", null)
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(JOURNEY_BACKFILL_BATCH);
+  const ids = ((data ?? []) as { id: string }[]).map((r) => r.id);
+  if (ids.length === 0) return { checked: 0, filled: 0 };
+
+  const result = await shopifyGraphQL(
+    `query journeys($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on Order { id customerJourneySummary { ready firstVisit { landingPage referrerUrl } } }
+      }
+    }`,
+    { ids },
+  );
+
+  let filled = 0;
+  for (const node of (result?.nodes ?? []) as any[]) {
+    if (!node?.id) continue;
+    const journey = node.customerJourneySummary;
+    if (!journey?.ready) continue; // a Shopify ainda não fechou a jornada: tenta de novo na próxima rodada
+    const first = journey.firstVisit;
+    const patch = first?.landingPage
+      ? { landing_site: first.landingPage as string, referring_site: (first.referrerUrl ?? null) as string | null }
+      : { landing_site: "" }; // sem jornada na Shopify: marca como verificado para não consultar de novo
+    const { error } = await (supabaseAdmin.from("shopify_orders") as any).update(patch).eq("id", node.id);
+    if (!error && first?.landingPage) filled++;
+  }
+  return { checked: ids.length, filled };
+}
+
 /** Resolve o id definitivo pra um upsert de shopify_customers. O sync sempre calcula um id
  *  "ideal" a partir de e-mail/id numérico (`email:x` / `id:n`), mas isso não cobre uma lead que
  *  já existe localmente só por telefone (ex.: capturada pelo pop-up do site, id `phone:+55...`,
@@ -389,6 +436,14 @@ export async function runShopifySync(fullSync: boolean) {
       console.error("Reprocessamento de cashback falhou:", cashbackError);
     }
     if (cashbackErrors > 0) console.warn(`Sincronização concluída com ${cashbackErrors} erro(s) de cashback.`);
+
+    // Completa a página de entrada dos pedidos recentes do site (não derruba a sync se falhar).
+    try {
+      const journey = await backfillOrderJourney(supabaseAdmin, shopifyGraphQL);
+      if (journey.checked > 0) console.log(`Jornada dos pedidos: ${journey.filled} preenchido(s) de ${journey.checked} verificado(s).`);
+    } catch (journeyError) {
+      console.error("Preenchimento da página de entrada falhou:", journeyError);
+    }
 
 
 

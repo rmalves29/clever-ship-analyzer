@@ -280,3 +280,52 @@ export function deriveInsights(postMatrix: PostMatrix, adMatrix: AdMatrix | null
 
   return out;
 }
+
+/* ------------------------------------------------- entrada do gerador de ideias */
+
+export type IdeasInput = {
+  datePreset: string;
+  postsByAngle: Record<string, PostCell>;
+  postsByFormat: Record<string, PostCell>;
+  adsByAngle: Record<string, Pick<AdCell, "n" | "spend" | "purchases" | "roas" | "lowData">> | null;
+  insights: MatrixInsight[];
+  /** Posts com melhor engajamento (exemplos reais do que funciona). */
+  topPosts: Array<{ caption: string; format: string; angle: string; engagementRate: number | null }>;
+  /** Anúncios com compras suficientes para servir de exemplo. */
+  topAds: Array<{ name: string; angle: string; roas: number | null; purchases: number }>;
+};
+
+/**
+ * Resume a matriz num pacote pequeno para o gerador de ideias. Só exemplos com amostra mínima
+ * entram: posts com alcance e anúncios com pelo menos `MIN_PURCHASES_FOR_VERDICT` compras.
+ */
+export function buildIdeasInput(args: {
+  datePreset: string;
+  postMatrix: PostMatrix;
+  adMatrix: AdMatrix | null;
+  insights: MatrixInsight[];
+  posts: Array<ClassifiedPost & { caption: string }>;
+  ads: Array<ClassifiedAd & { name: string; roas: number }>;
+}): IdeasInput {
+  const topPosts = args.posts
+    .filter((p) => p.reach > 0)
+    .map((p) => ({ caption: p.caption.slice(0, 200), format: p.format, angle: p.angle as string, engagementRate: p.totalInteractions / p.reach }))
+    .sort((a, b) => (b.engagementRate ?? 0) - (a.engagementRate ?? 0))
+    .slice(0, 5);
+  const topAds = args.ads
+    .filter((a) => a.purchases >= MIN_PURCHASES_FOR_VERDICT)
+    .sort((a, b) => b.roas - a.roas)
+    .slice(0, 5)
+    .map((a) => ({ name: a.name.slice(0, 150), angle: a.angle as string, roas: a.roas, purchases: a.purchases }));
+  return {
+    datePreset: args.datePreset,
+    postsByAngle: args.postMatrix.byAngle,
+    postsByFormat: args.postMatrix.byFormat,
+    adsByAngle: args.adMatrix
+      ? Object.fromEntries(Object.entries(args.adMatrix.byAngle).map(([k, c]) => [k, { n: c.n, spend: c.spend, purchases: c.purchases, roas: c.roas, lowData: c.lowData }]))
+      : null,
+    insights: args.insights.slice(0, 20),
+    topPosts,
+    topAds,
+  };
+}

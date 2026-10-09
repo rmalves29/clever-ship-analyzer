@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAdMatrix,
+  buildIdeasInput,
   buildPostMatrix,
   cellKey,
   deriveInsights,
@@ -144,5 +145,37 @@ describe("deriveInsights", () => {
     const ads = [ad({ angle: "urgencia_escassez", spend: 120, purchases: 0, revenue: 0 }), ad({ angle: "novidade" })];
     const insights = deriveInsights(buildPostMatrix([post({}), post({})]), buildAdMatrix(ads));
     expect(insights.some((i) => i.tone === "critico" && i.title.includes("sem nenhuma compra"))).toBe(true);
+  });
+});
+
+describe("buildIdeasInput", () => {
+  it("só usa como exemplo anúncios com compras suficientes e posts com alcance", () => {
+    const posts = [
+      { ...post({ id: "a", reach: 1000, totalInteractions: 100 }), caption: "melhor" },
+      { ...post({ id: "b", reach: 1000, totalInteractions: 10 }), caption: "pior" },
+      { ...post({ id: "c", reach: 0, totalInteractions: 0 }), caption: "sem alcance" },
+    ];
+    const ads = [
+      { ...ad({ id: "x", purchases: 5 }), name: "bom", roas: 5 },
+      { ...ad({ id: "y", purchases: 1 }), name: "poucos dados", roas: 9 },
+    ];
+    const input = buildIdeasInput({
+      datePreset: "last_30d",
+      postMatrix: buildPostMatrix(posts),
+      adMatrix: buildAdMatrix(ads),
+      insights: [],
+      posts,
+      ads,
+    });
+    expect(input.topPosts.map((p) => p.caption)).toEqual(["melhor", "pior"]);
+    expect(input.topAds.map((a) => a.name)).toEqual(["bom"]);
+    expect(input.adsByAngle).not.toBeNull();
+  });
+
+  it("aceita matriz sem anúncios", () => {
+    const posts = [{ ...post({}), caption: "x" }];
+    const input = buildIdeasInput({ datePreset: "last_30d", postMatrix: buildPostMatrix(posts), adMatrix: null, insights: [], posts, ads: [] });
+    expect(input.adsByAngle).toBeNull();
+    expect(input.topAds).toEqual([]);
   });
 });

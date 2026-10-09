@@ -851,6 +851,31 @@ function extractErrorCode(error: string | null | undefined): string | null {
 
 const RANK: Record<string, number> = { sent: 0, delivered: 1, read: 2, failed: 3 };
 
+async function applyMetaStatusToLegacyRecipient(
+  supabaseAdmin: any,
+  status: { id: string; status: string; timestamp?: string; errors?: { code?: number; title?: string; message?: string }[] },
+): Promise<void> {
+  const { data: legacy } = await supabaseAdmin
+    .from("whatsapp_campaign_recipients")
+    .select("id, status")
+    .eq("wa_message_id", status.id)
+    .maybeSingle();
+  if (!legacy) return;
+  const row = legacy as { id: string; status: string };
+  if (status.status !== "failed" && (RANK[status.status] ?? -1) <= (RANK[row.status] ?? -1)) return;
+
+  const at = status.timestamp ? new Date(Number(status.timestamp) * 1000).toISOString() : new Date().toISOString();
+  const patch: Record<string, unknown> = { status: status.status };
+  if (status.status === "delivered") patch["delivered_at"] = at;
+  if (status.status === "read") patch["read_at"] = at;
+  if (status.status === "failed" && status.errors?.[0]) {
+    const e = status.errors[0];
+    patch["error"] = [e.code, e.title ?? e.message].filter(Boolean).join(" — ");
+  }
+  const { error } = await supabaseAdmin.from("whatsapp_campaign_recipients").update(patch as never).eq("id", row.id);
+  if (error) throw new Error(`Erro ao atualizar status (legado) da mensagem WhatsApp: ${error.message}`);
+}
+
 export async function applyMetaStatusUpdate(status: {
   id: string;
   status: string;
@@ -863,7 +888,13 @@ export async function applyMetaStatusUpdate(status: {
     .select("id, status, campaign_id")
     .eq("wa_message_id", status.id)
     .maybeSingle();
-  if (!recipient) return;
+  if (!recipient) {
+    // Os fluxos conversacionais registram o envio na tabela legada (whatsapp_campaign_recipients), não
+    // na fila nova. Sem este desvio o aviso de entregue/lida da Meta caía no vazio e o funil por
+    // etapa (entregues/lidas) ficava sempre em zero.
+    await applyMetaStatusToLegacyRecipient(supabaseAdmin, status);
+    return;
+  }
 
   const row = recipient as { id: string; status: string; campaign_id: string };
   if (status.status !== "failed" && (RANK[status.status] ?? -1) <= (RANK[row.status] ?? -1)) return;

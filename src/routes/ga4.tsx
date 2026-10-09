@@ -5,7 +5,6 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   Activity,
   AlertTriangle,
-  BarChart3,
   CheckCircle2,
   Clock3,
   ExternalLink,
@@ -1044,20 +1043,6 @@ function GoogleAnalyticsPage() {
     <Box sx={{ maxWidth: 1700, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
       <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
         <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 40,
-              height: 40,
-              borderRadius: 3,
-              bgcolor: "warning.50",
-              color: "warning.main",
-            }}
-          >
-            <BarChart3 size={20} />
-          </Box>
           <Box>
             <Typography variant="h5" sx={{ fontWeight: 700 }}>
               Google Analytics 4

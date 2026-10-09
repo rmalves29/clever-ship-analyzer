@@ -2,7 +2,7 @@ import { createFileRoute, createLink, useNavigate } from "@tanstack/react-router
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ClipboardList, Copy, ExternalLink, Eye, Plus, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, Eye, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -107,20 +107,6 @@ function PesquisasPage() {
     <Box sx={{ p: { xs: 2, md: 4 } }}>
       <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
         <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 44,
-              height: 44,
-              borderRadius: 4,
-              background: (theme) => `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
-              color: "primary.contrastText",
-            }}
-          >
-            <ClipboardList size={20} />
-          </Box>
           <Box>
             <Typography variant="h5" sx={{ fontWeight: 700 }}>Pesquisas</Typography>
             <Typography variant="body2" color="text.secondary">Landing page própria por pesquisa — link ou etiqueta NFC — com respostas tabuladas aqui.</Typography>

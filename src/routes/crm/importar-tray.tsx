@@ -199,20 +199,6 @@ function TrayImportPage() {
                 <ArrowLeft size={16} />
               </IconButton>
             </Link>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 44,
-                height: 44,
-                borderRadius: 4,
-                background: "linear-gradient(135deg, #7367F0, #9C93F3)",
-                color: "#fff",
-              }}
-            >
-              <Database size={20} />
-            </Box>
             <Box>
               <Typography variant="h5" sx={{ fontWeight: 700 }}>Importar histórico da Tray</Typography>
               <Typography variant="body2" color="text.secondary">

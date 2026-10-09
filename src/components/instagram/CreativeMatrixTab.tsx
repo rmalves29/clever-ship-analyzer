@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Download, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -11,6 +11,8 @@ import Chip from "@mui/material/Chip";
 import Link from "@mui/material/Link";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
@@ -20,6 +22,8 @@ import Typography from "@mui/material/Typography";
 import type { ChipProps } from "@mui/material/Chip";
 import { generateCreativeMatrix } from "@/lib/creative-matrix.functions";
 import { CreativeIdeasPanel, type GeneratedIdeas } from "./CreativeIdeasPanel";
+import { MatrizAgentePanel } from "./MatrizAgentePanel";
+import { buildLearningsText } from "@/lib/matriz-agente-shared";
 import { downloadCreativeReportPdf } from "@/lib/creative-report-pdf";
 import type { CreativeMatrixResult } from "@/lib/creative-matrix.server";
 import {
@@ -71,6 +75,13 @@ export function CreativeMatrixTab({ datePreset }: { datePreset: InstagramDatePre
   const [loading, setLoading] = useState(false);
   const [ideas, setIdeas] = useState<GeneratedIdeas | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [mode, setMode] = useState<"agente" | "analise">("agente");
+
+  // O que a análise de posts e anúncios aprendeu vira insumo do agente (aprendizados anteriores).
+  const learnings = useMemo(
+    () => (result ? buildLearningsText({ resumo: result.resumo, recomendacoes: result.recomendacoes, insights: result.insights, posts: result.posts, ads: result.ads }) : null),
+    [result],
+  );
 
   const handleDownloadPdf = async () => {
     if (!result) return;
@@ -104,6 +115,17 @@ export function CreativeMatrixTab({ datePreset }: { datePreset: InstagramDatePre
 
   return (
     <Box sx={{ mt: 2 }}>
+      <ToggleButtonGroup exclusive size="small" color="primary" value={mode} onChange={(_, v: "agente" | "analise" | null) => v && setMode(v)}>
+        <ToggleButton value="agente">Agente de Matriz Criativa · Black Friday</ToggleButton>
+        <ToggleButton value="analise">Análise de posts e anúncios</ToggleButton>
+      </ToggleButtonGroup>
+
+      {/* As duas áreas ficam montadas: trocar de modo não perde o resultado já gerado. */}
+      <Box sx={{ display: mode === "agente" ? "block" : "none" }}>
+        <MatrizAgentePanel learnings={learnings} />
+      </Box>
+
+      <Box sx={{ display: mode === "analise" ? "block" : "none", mt: 2 }}>
       <Card variant="outlined" sx={{ p: 2 }}>
         <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
           <Box sx={{ maxWidth: 720 }}>
@@ -136,6 +158,7 @@ export function CreativeMatrixTab({ datePreset }: { datePreset: InstagramDatePre
           <CreativeIdeasPanel key={result.generatedAt} result={result} generated={ideas} onGenerated={setIdeas} />
         </Box>
       )}
+      </Box>
     </Box>
   );
 }

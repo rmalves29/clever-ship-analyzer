@@ -12,7 +12,7 @@ import {
 } from "./popup-social-proof";
 import { getShopifyCredentials, shopifyGraphQL } from "./shopify.server";
 
-const APP_URL = "https://clever-ship-analyzer.lovable.app";
+const APP_URL = process.env["PUBLIC_APP_URL"] || "https://clever-ship-analyzer.lovable.app";
 const CACHE_TTL_MS = 5 * 60_000;
 const HOST_CACHE_TTL_MS = 10 * 60_000;
 

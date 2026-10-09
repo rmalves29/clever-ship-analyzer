@@ -393,22 +393,6 @@ export async function getInstagramTopContent(datePreset: InstagramDatePreset): P
   }
 }
 
-/** Todas as publicações do período (até as 50 que a Graph API devolve numa página), para a
- *  matriz criativa — `getInstagramTopContent` devolve só as 10 melhores. */
-export async function getInstagramAllContent(datePreset: InstagramDatePreset): Promise<{ success: true; media: InstagramMedia[] } | { success: false; error: string }> {
-  const { pageToken, igId } = await loadInstagramSettings();
-  if (!pageToken || !igId) return { success: false, error: "Instagram não conectado. Configure em Configurações." };
-
-  const { since, until } = datePresetToRange(datePreset);
-
-  try {
-    const media = await fetchTopContentInRange(pageToken, igId, since, until, 50);
-    return { success: true, media };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "Falha ao consultar o Instagram." };
-  }
-}
-
 /** Generalização pra range arbitrário (ex: "semana anterior" do lote de IA) — mesmo fetch e
  *  mapeamento de `getInstagramTopContent`, mas sem depender de um preset fechado. */
 export async function getInstagramTopContentInRange(sinceISO: string, untilISO: string): Promise<{ success: true; media: InstagramMedia[] } | { success: false; error: string }> {

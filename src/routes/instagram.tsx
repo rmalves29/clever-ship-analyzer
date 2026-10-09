@@ -39,6 +39,10 @@ export const Route = createFileRoute("/instagram")({
     meta: [
       { title: "Instagram | Performance" },
       { name: "description", content: "Insights reais da conta do Instagram — alcance, engajamento, público e conteúdo." },
+      { property: "og:title", content: "Instagram | Performance" },
+      { property: "og:description", content: "Insights reais do Instagram e agente de matriz criativa para campanhas." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
 });

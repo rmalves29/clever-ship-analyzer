@@ -29,14 +29,14 @@ export const AWARENESS_LABEL: Record<Awareness, string> = {
   muito_consciente: "Muito consciente",
 };
 
-export const PHASES = ["aquecimento", "pre_black", "pico", "recuperacao", "pos_black"] as const;
+export const PHASES = ["aquecimento", "captura_intencao", "pico", "recuperacao", "pos_campanha"] as const;
 export type Phase = (typeof PHASES)[number];
 export const PHASE_LABEL: Record<Phase, string> = {
   aquecimento: "Aquecimento",
-  pre_black: "Pré-Black (captura de intenção)",
-  pico: "Pico da Black Friday",
+  captura_intencao: "Captura de intenção",
+  pico: "Pico da campanha",
   recuperacao: "Recuperação",
-  pos_black: "Pós-Black",
+  pos_campanha: "Pós-campanha",
 };
 
 export const CLAIM_STATUS = ["comprovada", "publicada", "hipotese", "sem_fonte", "sensivel"] as const;
@@ -126,7 +126,7 @@ export const briefSchema = z.object({
   publico: text,
   beneficioCentral: text,
   objetivo: text,
-  faseBlack: enumOr(PHASES, "pico"),
+  faseCampanha: enumOr(PHASES, "pico"),
   evidencias: textList,
   assets: textList,
   restricoes: textList,
@@ -215,7 +215,7 @@ export type Adaptation = z.infer<typeof adaptationSchema>;
 export const briefingSchema = z.object({
   nome: text,
   papelNaCampanha: text,
-  faseBlack: enumOr(PHASES, "pico"),
+  faseCampanha: enumOr(PHASES, "pico"),
   publico: text,
   consciencia: enumOr(AWARENESS, "consciente_problema"),
   dor: text,
@@ -663,41 +663,6 @@ export function detectInstallmentDivergence(pages: Array<{ rotulo: string; texto
   const detail = perPage.filter((p) => p.valores.length > 0).map((p) => `${p.rotulo}: ${p.valores.map((v) => `${v}x`).join(", ")}`);
   return [`Parcelamento com valores diferentes nas páginas lidas (${detail.join(" | ")}). Confirmar a condição comercial vigente antes de usar em criativo.`];
 }
-
-/* ------------------------------------- aprendizados da análise de posts e anúncios */
-
-/**
- * Transforma a análise do que já foi publicado (matriz de posts e anúncios) em texto para o gate de
- * entrada do agente ("aprendizados de criativos anteriores"). Só entram fatos medidos.
- */
-export function buildLearningsText(analysis: {
-  resumo: string;
-  recomendacoes: string[];
-  insights: Array<{ tone: string; title: string; text: string }>;
-  posts: Array<{ caption: string; format: string; angle: string; reach: number; totalInteractions: number }>;
-  ads: Array<{ name: string; angle: string; spend: number; purchases: number; roas: number }>;
-}): string {
-  const lines: string[] = ["APRENDIZADOS DE CRIATIVOS ANTERIORES (análise real do Instagram e dos anúncios Meta, feita pelo CRM):"];
-  if (analysis.resumo.trim()) lines.push(`Resumo: ${analysis.resumo.trim()}`);
-  for (const i of analysis.insights.slice(0, 8)) lines.push(`- [${i.tone}] ${i.title}: ${i.text}`);
-  const posts = analysis.posts
-    .filter((p) => p.reach > 0)
-    .map((p) => ({ ...p, rate: p.totalInteractions / p.reach }))
-    .sort((a, b) => b.rate - a.rate);
-  if (posts.length >= 4) {
-    const fmtPost = (p: (typeof posts)[number]) => `"${p.caption.replace(/\s+/g, " ").slice(0, 80)}" (${p.format}, ${p.angle}, engajamento ${(p.rate * 100).toFixed(1).replace(".", ",")}%)`;
-    lines.push(`Posts que mais engajaram: ${posts.slice(0, 3).map(fmtPost).join("; ")}`);
-    lines.push(`Posts que menos engajaram: ${posts.slice(-3).map(fmtPost).join("; ")}`);
-  }
-  const ads = analysis.ads.filter((a) => a.purchases >= MIN_PURCHASES_FOR_LEARNING).sort((a, b) => b.roas - a.roas);
-  if (ads.length > 0) {
-    lines.push(`Anúncios com compras suficientes: ${ads.slice(0, 4).map((a) => `"${a.name.slice(0, 60)}" (${a.angle}, ROAS ${a.roas.toFixed(2).replace(".", ",")}x, ${a.purchases} compras)`).join("; ")}`);
-  }
-  for (const r of analysis.recomendacoes.slice(0, 4)) lines.push(`- Recomendação anterior: ${r}`);
-  return lines.join("\n").slice(0, 6000);
-}
-
-const MIN_PURCHASES_FOR_LEARNING = 3;
 
 /* ------------------------------------------------------ repetição entre headlines */
 

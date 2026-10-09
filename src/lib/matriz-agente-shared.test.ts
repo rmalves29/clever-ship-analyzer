@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   assertPublicHttpUrl,
   briefSchema,
+  briefingSchema,
+  motiveSchema,
   cellResponseSchema,
   clampScore,
   extractPageFacts,
@@ -187,8 +189,8 @@ describe("extractPageFacts", () => {
 
 describe("esquemas tolerantes à saída da IA", () => {
   it("brief aceita campos faltando e enum inválido", () => {
-    const parsed = briefSchema.parse({ produto: "Kit", faseBlack: "inventada", claims: [{ texto: "x", status: "???" }], perguntas: ["1", "2", "3", "4"] });
-    expect(parsed.faseBlack).toBe("pico");
+    const parsed = briefSchema.parse({ produto: "Kit", faseCampanha: "inventada", claims: [{ texto: "x", status: "???" }], perguntas: ["1", "2", "3", "4"] });
+    expect(parsed.faseCampanha).toBe("pico");
     expect(parsed.claims[0]?.status).toBe("hipotese");
     expect(parsed.perguntas).toHaveLength(3);
     expect(parsed.marca).toBe("");
@@ -222,35 +224,6 @@ describe("detectInstallmentDivergence", () => {
   });
 });
 
-import { buildLearningsText } from "./matriz-agente-shared";
-
-describe("buildLearningsText", () => {
-  const post = (caption: string, rate: number) => ({ caption, format: "Reels", angle: "novidade", reach: 1000, totalInteractions: rate * 1000 });
-
-  it("resume achados, melhores e piores posts e só anúncios com compras suficientes", () => {
-    const text = buildLearningsText({
-      resumo: "Resumo",
-      recomendacoes: ["Mais carrossel"],
-      insights: [{ tone: "positivo", title: "Presente engaja", text: "12,8%" }],
-      posts: [post("A", 0.1), post("B", 0.05), post("C", 0.03), post("D", 0.001), post("E", 0.002)],
-      ads: [
-        { name: "Bom", angle: "novidade", spend: 100, purchases: 5, roas: 4 },
-        { name: "Poucos dados", angle: "outro", spend: 100, purchases: 1, roas: 9 },
-      ],
-    });
-    expect(text).toContain("Presente engaja");
-    expect(text).toContain("Posts que mais engajaram");
-    expect(text).toContain('"Bom"');
-    expect(text).not.toContain("Poucos dados");
-    expect(text).toContain("Recomendação anterior: Mais carrossel");
-  });
-
-  it("omite listas de posts quando há amostra pequena", () => {
-    const text = buildLearningsText({ resumo: "", recomendacoes: [], insights: [], posts: [post("A", 0.1)], ads: [] });
-    expect(text).not.toContain("Posts que mais engajaram");
-  });
-});
-
 describe("validateBriefing: parcelamento em divergência", () => {
   const base = { headline: "Compre em 12x sem juros hoje", cta: "Montar meu kit", copyPrincipal: "Texto", provaFonte: "Página" };
   it("avisa quando a peça cita parcelamento que diverge entre páginas", () => {
@@ -275,5 +248,14 @@ describe("headlines repetidas", () => {
     const list = ["Elegância atemporal em cada detalhe", "Versatilidade para eventos e dia a dia", "Destaque-se com elegância atemporal", "Conforto para peles sensíveis"];
     expect(findDuplicateHeadlines(list)).toEqual([2]);
     expect(findDuplicateHeadlines([])).toEqual([]);
+  });
+});
+
+
+describe("fases de campanhas durante o ano inteiro", () => {
+  it.each(["aquecimento", "captura_intencao", "pico", "recuperacao", "pos_campanha"])("preserva a fase %s em todas as etapas", (fase) => {
+    expect(briefSchema.parse({ faseCampanha: fase }).faseCampanha).toBe(fase);
+    expect(motiveSchema.parse({ fase }).fase).toBe(fase);
+    expect(briefingSchema.parse({ faseCampanha: fase }).faseCampanha).toBe(fase);
   });
 });

@@ -56,7 +56,7 @@ export function reportFileName(project: Pick<MatrixProject, "brief" | "generated
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
-  return `matriz-criativa-black-friday-${slug || "produto"}-${project.generatedAt.slice(0, 10)}.html`;
+  return `matriz-criativa-${slug || "produto"}-${project.generatedAt.slice(0, 10)}.html`;
 }
 
 const CSS = `
@@ -127,7 +127,7 @@ function mockup(b: CreativeBriefing, image: string | null): string {
 function briefingBlock(b: CreativeBriefing): string {
   const kv = [
     row("Papel na campanha", `${esc(ROLE_LABEL[b.papel])} - ${fmt(b.papelNaCampanha)}`),
-    row("Fase da Black", esc(PHASE_LABEL[b.faseBlack])),
+    row("Fase da campanha", esc(PHASE_LABEL[b.faseCampanha])),
     row("Público", fmt(b.publico)),
     row("Nível de consciência", esc(AWARENESS_LABEL[b.consciencia])),
     row("Dor / motivo de compra", fmt(b.dor)),
@@ -169,7 +169,7 @@ export function buildReportHtml(project: MatrixProject): string {
   const avg = healthAverage(healthRows);
   const verdict = healthVerdict(avg);
 
-  const cover = `<header class="cover"><small>Growth Commerce AI · Bloco 07</small><h1>Matriz Criativa de Black Friday</h1>
+  const cover = `<header class="cover"><small>Growth Commerce AI · Bloco 07</small><h1>Matriz Criativa</h1>
 <p><b>${esc(brief.marca || "Marca")}</b> · ${esc(brief.produto || "Produto")}</p>
 <p>Fase: ${esc(PHASE_LABEL[input.fase])} · Objetivo: ${esc(input.objetivo || brief.objetivo)}</p>
 <p>Gerado em ${esc(new Date(project.generatedAt).toLocaleString("pt-BR"))}</p></header>`;
@@ -192,7 +192,7 @@ export function buildReportHtml(project: MatrixProject): string {
   const s2 = section("brief", 2, "Product Brief", "O que foi extraído das fontes. O que não estava nelas virou pendência.", `<div class="scroll"><table class="kv">${[
     row("Marca", fmt(brief.marca)), row("Produto ou kit", fmt(brief.produto)), row("URL de destino", esc(brief.urlDestino)),
     row("Preço", fmt(brief.preco)), row("Condição comercial", fmt(brief.condicaoComercial)), row("Público", fmt(brief.publico)),
-    row("Benefício central", fmt(brief.beneficioCentral)), row("Objetivo", fmt(brief.objetivo)), row("Fase da Black", esc(PHASE_LABEL[brief.faseBlack])),
+    row("Benefício central", fmt(brief.beneficioCentral)), row("Objetivo", fmt(brief.objetivo)), row("Fase da campanha", esc(PHASE_LABEL[brief.faseCampanha])),
     row("Evidências", list(brief.evidencias)), row("Assets disponíveis", list(brief.assets)), row("Restrições de compliance", list(brief.restricoes)),
     row("Aprendizados anteriores", list(brief.aprendizadosAnteriores)),
     row("CPA máximo", input.cpaMax === null ? "<mark>[CONFIRMAR NÚMERO]</mark> não informado" : esc(`R$ ${input.cpaMax.toLocaleString("pt-BR")}`)),
@@ -266,6 +266,6 @@ export function buildReportHtml(project: MatrixProject): string {
 
   const s15 = section("passos", 15, "Próximos passos", "", list(plano?.proximosPassos ?? []) + `<h3>Handoff para o tráfego</h3><p class="muted">Para cada criativo: ID, público, dor, ângulo, formato, placement, hipótese, métrica, destino e limite econômico (ver briefings e plano de teste).</p>`);
 
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Matriz Criativa de Black Friday - ${esc(brief.produto || brief.marca)}</title><style>${CSS}</style></head><body><main>${cover}${toc}${s1}${s2}${s3}${s4}${s5}${s6}${s7}${s8}${s9}${s10}${s11}${s12}${s13}${s14}${s15}<footer>Hipóteses para produção e teste. Preço, cashback, frete, prazo, garantia e provas só entram na arte depois de validados. Gerado pelo Agente Matriz Criativa do CRM.</footer></main></body></html>`;
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Matriz Criativa - ${esc(brief.produto || brief.marca)}</title><style>${CSS}</style></head><body><main>${cover}${toc}${s1}${s2}${s3}${s4}${s5}${s6}${s7}${s8}${s9}${s10}${s11}${s12}${s13}${s14}${s15}<footer>Hipóteses para produção e teste. Preço, cashback, frete, prazo, garantia e provas só entram na arte depois de validados. Gerado pelo Agente Matriz Criativa do CRM.</footer></main></body></html>`;
 }
 

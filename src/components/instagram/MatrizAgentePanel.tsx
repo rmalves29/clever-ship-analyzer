@@ -6,10 +6,8 @@ import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
-import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
-import FormControlLabel from "@mui/material/FormControlLabel";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
@@ -60,11 +58,11 @@ type AgentData = {
 const MAX_ATTACH_CHARS = 18000;
 const BRIEFING_BATCH = 4;
 
-export function MatrizAgentePanel({ learnings }: { learnings: string | null }) {
+export function MatrizAgentePanel() {
   const runStage = useServerFn(runMatrizAgenteStage);
 
   const [url, setUrl] = useState("https://maniadmulher.com");
-  const [objetivo, setObjetivo] = useState("Vendas na Black Friday");
+  const [objetivo, setObjetivo] = useState("Vendas");
   const [fase, setFase] = useState<Phase>("aquecimento");
   const [oferta, setOferta] = useState("");
   const [publico, setPublico] = useState("");
@@ -72,7 +70,6 @@ export function MatrizAgentePanel({ learnings }: { learnings: string | null }) {
   const [cpaMax, setCpaMax] = useState("");
   const [roas, setRoas] = useState("");
   const [modelo, setModelo] = useState<AgentModel>("gpt-4o");
-  const [useLearnings, setUseLearnings] = useState(true);
 
   const [steps, setSteps] = useState<Record<StepKey, StepState>>({ fontes: "pending", motivos: "pending", matriz: "pending", briefings: "pending", plano: "pending" });
   const [running, setRunning] = useState(false);
@@ -89,14 +86,13 @@ export function MatrizAgentePanel({ learnings }: { learnings: string | null }) {
     const roasNum = roas.trim() === "" ? null : Number(roas.replace(",", "."));
     if (cpa !== null && (!Number.isFinite(cpa) || cpa < 0)) return "CPA máximo inválido.";
     if (roasNum !== null && (!Number.isFinite(roasNum) || roasNum < 0)) return "ROAS de equilíbrio inválido.";
-    const parts = [materiais.trim(), useLearnings && learnings ? learnings : ""].filter(Boolean);
     return {
       url: url.trim(),
       objetivo: objetivo.trim(),
       fase,
       oferta: oferta.trim(),
       publico: publico.trim(),
-      materiais: parts.join("\n\n").slice(0, 24000),
+      materiais: materiais.trim().slice(0, 24000),
       cpaMax: cpa,
       roasEquilibrio: roasNum,
       modelo,
@@ -266,14 +262,14 @@ ${live}` : html;
   return (
     <Box sx={{ mt: 2 }}>
       <Card variant="outlined" sx={{ p: 2 }}>
-        <Typography sx={{ fontWeight: 700 }}>Agente Arquiteto da Matriz Criativa — Black Friday</Typography>
+        <Typography sx={{ fontWeight: 700 }}>Agente Arquiteto da Matriz Criativa</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, maxWidth: 820 }}>
           Informe o link da loja ou do produto. O agente lê a Home, uma categoria e a página do produto, mapeia os motivos de compra, cruza com os 5 pilares criativos, prioriza por pontuação e entrega briefings, copies, mockups 4:5, plano de teste e Health Score num arquivo visual (HTML e PDF). Ele nunca inventa desconto, avaliação ou garantia: o que falta vira pendência marcada.
         </Typography>
 
         <Box sx={{ display: "grid", gap: 2, mt: 2, gridTemplateColumns: { xs: "1fr", md: "2fr 1fr 1fr" } }}>
           <TextField size="small" label="Link da loja ou do produto" value={url} onChange={(e) => setUrl(e.target.value)} disabled={running} />
-          <TextField size="small" select label="Fase da Black Friday" value={fase} onChange={(e) => setFase(e.target.value as Phase)} disabled={running}>
+          <TextField size="small" select label="Fase da campanha" value={fase} onChange={(e) => setFase(e.target.value as Phase)} disabled={running}>
             {PHASES.map((p) => (
               <MenuItem key={p} value={p}>{PHASE_LABEL[p]}</MenuItem>
             ))}
@@ -296,16 +292,12 @@ ${live}` : html;
               <input hidden type="file" accept=".txt,.md,.csv,.json" multiple onChange={(e) => { void attach(e.target.files); e.target.value = ""; }} />
             </Button>
             <Typography variant="caption" color="text.secondary">.txt, .md, .csv ou .json (até 400 KB cada)</Typography>
-            <FormControlLabel
-              control={<Checkbox size="small" checked={useLearnings && Boolean(learnings)} disabled={!learnings || running} onChange={(e) => setUseLearnings(e.target.checked)} />}
-              label={<Typography variant="body2">{learnings ? "Usar os aprendizados da análise de posts e anúncios" : "Aprendizados de posts e anúncios: rode a análise primeiro (opcional)"}</Typography>}
-            />
           </Stack>
         </Stack>
 
         <Stack direction="row" spacing={1.5} sx={{ mt: 2, alignItems: "center", flexWrap: "wrap", rowGap: 1 }}>
           <Button variant="contained" startIcon={running ? <CircularProgress size={16} color="inherit" /> : <Sparkles size={16} />} onClick={() => void run("start")} disabled={running}>
-            {running ? "Gerando a matriz…" : project ? "Gerar novamente" : "Gerar Matriz Criativa de Black Friday"}
+            {running ? "Gerando a matriz…" : project ? "Gerar novamente" : "Gerar Matriz Criativa"}
           </Button>
           <Typography variant="caption" color="text.secondary">
             Leva de 1 a 3 minutos. Usa a sua chave da OpenAI (cerca de 16 chamadas). Nada é salvo no banco: baixe o arquivo ao final.
@@ -372,7 +364,7 @@ ${live}` : html;
             </Typography>
           </Card>
 
-          <Box component="iframe" ref={iframeRef} title="Matriz Criativa de Black Friday" srcDoc={html} sandbox="allow-same-origin allow-modals" sx={{ width: "100%", height: "78vh", border: "1px solid", borderColor: "divider", borderRadius: 2, bgcolor: "#fff" }} />
+          <Box component="iframe" ref={iframeRef} title="Matriz Criativa" srcDoc={html} sandbox="allow-same-origin allow-modals" sx={{ width: "100%", height: "78vh", border: "1px solid", borderColor: "divider", borderRadius: 2, bgcolor: "#fff" }} />
         </Stack>
       )}
     </Box>

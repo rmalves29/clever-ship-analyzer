@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createLink } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { LineChart } from "@mui/x-charts/LineChart";
-import { BarChart3, Bot, RefreshCw, Search } from "lucide-react";
+import { Bot, RefreshCw, Search } from "lucide-react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -250,23 +250,12 @@ export function ReportsTab() {
         spacing={1.5}
         sx={{ justifyContent: "space-between", alignItems: { md: "flex-start" } }}
       >
-        <Box>
-          <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
-            <BarChart3 size={21} />
-            <Typography variant="h5" sx={{ fontWeight: 700 }}>
-              Relatórios de campanhas
-            </Typography>
-            <Chip
-              size="small"
-              color="primary"
-              variant="outlined"
-              label="Somente campanhas manuais"
-            />
-          </Stack>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Entrega, leitura, gasto, vendas e retorno das campanhas enviadas manualmente.
-          </Typography>
-        </Box>
+        <Chip
+          size="small"
+          color="primary"
+          variant="outlined"
+          label="Somente campanhas manuais"
+        />
         <LinkButton
           to="/whatsapp/automacoes"
           variant="outlined"

@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import Box from "@mui/material/Box";
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
-import Typography from "@mui/material/Typography";
 import { LayoutTemplate, Users, Code2, ShoppingBag, Lock } from "lucide-react";
 import { PopupCampaignsManager } from "@/components/popups/PopupCampaignsManager";
 import { PopupLeadsTable } from "@/components/popups/PopupLeadsTable";
@@ -32,15 +31,6 @@ function Popups() {
 
   return (
     <Box sx={{ maxWidth: 1600, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 700 }}>
-          Pop-ups
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Crie experiências visuais, capture WhatsApp, entregue cupons e acompanhe as leads do site.
-        </Typography>
-      </Box>
-
       <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)}>
           <Tab value="popups" icon={<LayoutTemplate size={16} />} iconPosition="start" label="Pop-ups" sx={{ minHeight: 40 }} />

@@ -105,13 +105,7 @@ function PesquisasPage() {
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 } }}>
-      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
-        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 700 }}>Pesquisas</Typography>
-            <Typography variant="body2" color="text.secondary">Landing page própria por pesquisa — link ou etiqueta NFC — com respostas tabuladas aqui.</Typography>
-          </Box>
-        </Stack>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center", mb: 3 }}>
         <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => createMut.mutate()} disabled={createMut.isPending}>
           Nova pesquisa
         </Button>

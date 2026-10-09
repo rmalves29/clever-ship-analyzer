@@ -161,10 +161,7 @@ function MetaAdsPage() {
   if (!loadingConnection && !connection?.connected) {
     return (
       <Box sx={{ p: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 700 }}>
-          Meta Ads
-        </Typography>
-        <Card variant="outlined" sx={{ mt: 3, p: 4, textAlign: "center" }}>
+        <Card variant="outlined" sx={{ p: 4, textAlign: "center" }}>
           <Typography sx={{ fontWeight: 500 }}>Meta Ads ainda não conectado.</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             {connection?.error || "Configure o token de acesso e a conta de anúncios em Configurações."}
@@ -182,9 +179,6 @@ function MetaAdsPage() {
     <Box sx={{ p: 3 }}>
       <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            Meta Ads
-          </Typography>
           <Typography variant="body2" color="text.secondary">
             {loadingConnection
               ? "Verificando conexão..."

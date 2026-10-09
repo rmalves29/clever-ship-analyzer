@@ -408,13 +408,7 @@ function CRMPage() {
   return (
     <Box sx={{ minHeight: "100vh" }}>
       <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
-        <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
-          <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
-            <Box>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>Contatos</Typography>
-              <Typography variant="body2" color="text.secondary">Base completa de clientes e leads.</Typography>
-            </Box>
-          </Stack>
+        <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
           <Box>
             <Button variant="contained" startIcon={<UserPlus size={16} />} onClick={(e) => setAddMenuAnchor(e.currentTarget)}>
               Adicionar contatos

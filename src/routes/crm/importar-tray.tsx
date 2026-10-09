@@ -199,12 +199,6 @@ function TrayImportPage() {
                 <ArrowLeft size={16} />
               </IconButton>
             </Link>
-            <Box>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>Importar histórico da Tray</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Pedidos + produtos vendidos são unidos pelo código do pedido antes de entrar no CRM.
-              </Typography>
-            </Box>
           </Stack>
           <Chip variant="outlined" label="Origem preservada: TRAY" sx={{ px: 1 }} />
         </Stack>

@@ -51,27 +51,7 @@ function LiveViewPage() {
   return (
     <Box sx={{ minHeight: "100vh", pb: 4 }}>
       <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
-        <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 4 }}>
-          <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
-            <Box>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>Live View</Typography>
-              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                <Box
-                  sx={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    bgcolor: "success.main",
-                    animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-                    "@keyframes pulse": { "0%, 100%": { opacity: 1 }, "50%": { opacity: 0.4 } },
-                  }}
-                />
-                <Typography variant="body2" color="text.secondary">
-                  Dados reais da Shopify (sessões via ShopifyQL, pedidos sincronizados)
-                </Typography>
-              </Stack>
-            </Box>
-          </Stack>
+        <Stack direction="row" sx={{ justifyContent: "flex-end", alignItems: "center", mb: 4 }}>
           <Button variant="outline" size="small" startIcon={<RefreshCw size={16} />} onClick={() => fetchSync({ data: { fullSync: false } })}>
             Atualizar agora
           </Button>

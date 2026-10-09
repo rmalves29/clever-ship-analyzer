@@ -6,7 +6,6 @@ import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import Toolbar from "@mui/material/Toolbar";
-import Typography from "@mui/material/Typography";
 
 export const Route = createFileRoute("/whatsapp")({
   component: WhatsappLayout,
@@ -34,11 +33,7 @@ function WhatsappLayout() {
         sx={{ borderBottom: "1px solid", borderColor: "divider", backdropFilter: "blur(8px)", bgcolor: "background.default" }}
       >
         <Toolbar sx={{ maxWidth: 1400, width: "100%", mx: "auto", gap: 2, flexWrap: "wrap", py: 1.5, px: { xs: 2, md: 4 } }} disableGutters>
-          <Box sx={{ mr: "auto" }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>WhatsApp</Typography>
-            <Typography variant="caption" color="text.secondary">API oficial da Meta — campanhas, conversas e modelos.</Typography>
-          </Box>
-          <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", border: "1px solid", borderColor: "divider", borderRadius: 3, p: 0.5, bgcolor: "background.paper" }}>
+          <Stack direction="row" spacing={0.5} sx={{ ml: "auto", flexWrap: "wrap", border: "1px solid", borderColor: "divider", borderRadius: 3, p: 0.5, bgcolor: "background.paper" }}>
             {NAV.map((item) => {
               const active = item.exact ? pathname === item.to : pathname.startsWith(item.to);
               return (

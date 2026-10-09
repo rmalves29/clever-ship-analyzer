@@ -169,10 +169,6 @@ function NovaCampanha() {
         <LinkIconButton to="/whatsapp">
           <ChevronLeft size={20} />
         </LinkIconButton>
-        <Box>
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>Nova campanha</Typography>
-          <Typography variant="caption" color="text.secondary">Tudo em uma tela — a prévia muda enquanto você digita.</Typography>
-        </Box>
       </Stack>
 
       <Box sx={{ display: "grid", gap: 2.5, gridTemplateColumns: { xs: "1fr", lg: "1.2fr 1fr" } }}>

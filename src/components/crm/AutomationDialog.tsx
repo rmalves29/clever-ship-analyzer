@@ -50,7 +50,7 @@ export const SEGMENT_LABEL: Record<string, string> = {
 };
 
 type DecisionCondition =
-  | { kind: "novo_pedido" }
+  | { kind: "novo_pedido"; windowDays?: number | null | undefined }
   | { kind: "pedido_status"; field: "financial_status" | "fulfillment_status"; value: string }
   | { kind: "segmento"; segmentType: string; segmentId?: string | undefined }
   | { kind: "valor_pedido"; operator: "gt" | "gte" | "lt" | "lte"; value: number }
@@ -145,7 +145,10 @@ const FULFILLMENT_STATUSES = ["FULFILLED", "UNFULFILLED", "IN_PROGRESS", "PARTIA
 const OPERATOR_LABEL: Record<"gt" | "gte" | "lt" | "lte", string> = { gt: ">", gte: "≥", lt: "<", lte: "≤" };
 
 function conditionLabel(c: DecisionCondition): string {
-  if (c.kind === "novo_pedido") return "Fez um novo pedido?";
+  if (c.kind === "novo_pedido") {
+    if (c.windowDays === undefined) return "Fez um novo pedido?";
+    return !c.windowDays ? "Pagou um pedido hoje?" : `Pagou um pedido (hoje + ${c.windowDays} dia${c.windowDays === 1 ? "" : "s"} atrás)?`;
+  }
   if (c.kind === "pedido_status") return `Pedido ${c.field === "financial_status" ? "pagamento" : "envio"} = ${c.value}`;
   if (c.kind === "valor_pedido") return `Valor do pedido ${OPERATOR_LABEL[c.operator]} R$ ${c.value}`;
   if (c.kind === "localizacao") return `${c.field === "city" ? "Cidade" : "Estado"} = ${c.value || "..."}`;
@@ -891,7 +894,7 @@ export function AutomationDialog({
                   <div className="space-y-1.5">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Decisões</p>
                     {[
-                      { cond: { kind: "novo_pedido" } as DecisionCondition, label: "Fez um novo pedido?", sub: "Desde que entrou na automação." },
+                      { cond: { kind: "novo_pedido", windowDays: null } as DecisionCondition, label: "Fez um novo pedido pago?", sub: "Pedido pago dentro do prazo em dias (vazio = hoje)." },
                       {
                         cond: { kind: "pedido_status", field: "financial_status", value: FINANCIAL_STATUSES[0]! } as DecisionCondition,
                         label: "Pedido tem status?",
@@ -1286,7 +1289,7 @@ function DecisionStepPanel({
                       ? { kind: "localizacao", field: "city", value: "" }
                       : v === "tag"
                         ? { kind: "tag", value: "" }
-                        : { kind: "novo_pedido" };
+                        : { kind: "novo_pedido", windowDays: null };
             onChange({ condition });
           }}
         >
@@ -1294,7 +1297,7 @@ function DecisionStepPanel({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="novo_pedido">Fez um novo pedido desde que entrou</SelectItem>
+            <SelectItem value="novo_pedido">Fez um novo pedido (pago)</SelectItem>
             <SelectItem value="pedido_status">Pedido mais recente tem um status</SelectItem>
             <SelectItem value="segmento">Está em um segmento</SelectItem>
             <SelectItem value="valor_pedido">Valor do pedido mais recente</SelectItem>
@@ -1303,6 +1306,32 @@ function DecisionStepPanel({
           </SelectContent>
         </Select>
       </div>
+
+      {step.condition.kind === "novo_pedido" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">Prazo em dias (opcional)</Label>
+          <Input
+            type="number"
+            min={0}
+            max={365}
+            placeholder="vazio = hoje"
+            value={step.condition.windowDays ?? ""}
+            onChange={(e) => {
+              const raw = e.target.value.trim();
+              onChange({
+                condition: {
+                  kind: "novo_pedido",
+                  windowDays: raw === "" ? null : Math.min(Math.max(Math.trunc(Number(raw)), 0), 365),
+                },
+              });
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            Conta só pedido <strong>pago</strong> e não cancelado. Vazio ou 0 = hoje · 1 = ontem e hoje · 2 = anteontem até hoje, e assim por diante (dias do calendário, horário de Brasília).
+            {step.condition.windowDays === undefined && " Esta decisão usa a regra antiga (pedido depois que o cliente entrou na automação); preencher o prazo troca para a regra nova."}
+          </p>
+        </div>
+      )}
 
       {step.condition.kind === "pedido_status" && (
         <div className="space-y-3">

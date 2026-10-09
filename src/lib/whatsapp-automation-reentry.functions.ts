@@ -5,7 +5,7 @@ import { AUTOMATION_REENTRY_MODES } from "./whatsapp-automation-reentry";
 
 const messageTypeSchema = z.enum(["marketing", "utility"]);
 const decisionConditionSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("novo_pedido") }),
+  z.object({ kind: z.literal("novo_pedido"), windowDays: z.number().int().min(0).max(365).nullable().optional() }),
   z.object({
     kind: z.literal("pedido_status"),
     field: z.enum(["financial_status", "fulfillment_status"]),

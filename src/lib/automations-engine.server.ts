@@ -4,6 +4,7 @@
 import { automationDeliveryAction } from "./whatsapp-automation-delivery-state";
 import { decideAutomationReentry } from "./whatsapp-automation-reentry";
 import { resolveWaitInput } from "./automation-wait";
+import { startOfBrazilDay } from "./brazil-day";
 import {
   parseCashbackSendSchedule,
   pickInitialCashbackStep,
@@ -27,8 +28,10 @@ export type SendStep = {
   nextStepId: string | null;
 };
 
+/** windowDays: undefined = regra antiga (pedido feito depois que o cliente entrou na automação);
+ *  null/0 = pedido pago hoje; N = pedido pago de N dias atrás até hoje (dias de calendário, horário de Brasília). */
 export type DecisionCondition =
-  | { kind: "novo_pedido" }
+  | { kind: "novo_pedido"; windowDays?: number | null }
   | { kind: "pedido_status"; field: "financial_status" | "fulfillment_status"; value: string }
   | { kind: "segmento"; segmentType: string; segmentId?: string }
   | { kind: "valor_pedido"; operator: "gt" | "gte" | "lt" | "lte"; value: number }
@@ -108,7 +111,10 @@ function parseCondition(raw: unknown): DecisionCondition {
     };
   }
   if (c["kind"] === "tag") return { kind: "tag", value: String(c["value"] ?? "") };
-  return { kind: "novo_pedido" };
+  const rawWindow = c["windowDays"];
+  if (rawWindow === undefined) return { kind: "novo_pedido" };
+  if (rawWindow === null || rawWindow === "" || !Number.isFinite(Number(rawWindow))) return { kind: "novo_pedido", windowDays: null };
+  return { kind: "novo_pedido", windowDays: Math.min(Math.max(Math.trunc(Number(rawWindow)), 0), 365) };
 }
 
 export function parseSteps(raw: unknown): AutomationStep[] {
@@ -157,12 +163,23 @@ export async function evaluateDecision(
   const supabaseAdmin = await admin();
 
   if (condition.kind === "novo_pedido") {
-    const { data } = await supabaseAdmin
+    // Só conta pedido PAGO e não cancelado (antes qualquer pedido novo — PIX pendente, rascunho,
+    // cancelado — virava "Sim").
+    let query = supabaseAdmin
       .from("shopify_orders")
       .select("id")
       .eq("customer_id", run.customer_id)
-      .gt("created_at", run.enrolled_at)
-      .limit(1);
+      .in("financial_status", ["PAID", "PARTIALLY_PAID"])
+      .is("cancelled_at", null);
+    if (condition.windowDays === undefined) {
+      // Automações antigas: mantém "depois que entrou na automação".
+      query = query.gt("created_at", run.enrolled_at);
+    } else {
+      // Prazo em dias de calendário: vazio/0 = hoje, 1 = ontem e hoje, 2 = anteontem até hoje...
+      const since = startOfBrazilDay(condition.windowDays ?? 0).toISOString();
+      query = query.or(`created_at.gte.${since},processed_at.gte.${since}`);
+    }
+    const { data } = await query.limit(1);
     return (data ?? []).length > 0;
   }
 

@@ -1351,7 +1351,7 @@ export async function listCampaignsWithMetrics() {
 }
 
 export type AutomationDecisionCondition =
-  | { kind: "novo_pedido" }
+  | { kind: "novo_pedido"; windowDays?: number | null | undefined }
   | { kind: "pedido_status"; field: "financial_status" | "fulfillment_status"; value: string }
   | { kind: "segmento"; segmentType: string; segmentId?: string | undefined }
   | { kind: "valor_pedido"; operator: "gt" | "gte" | "lt" | "lte"; value: number }

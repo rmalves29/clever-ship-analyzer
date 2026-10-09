@@ -1,6 +1,8 @@
 import {
   computeRFM,
   frequencyBucket,
+  historicalOrders,
+  type HistoricalCustomer,
   isRevenueValidOrder,
   RFM_SEGMENTS_CONFIG,
   type RFMSegment,
@@ -16,6 +18,8 @@ const RFM_UPDATE_CONCURRENCY = 6;
 type CustomerRFMState = {
   id: string;
   rfmSegment: string | null;
+  /** Histórico importado (sem pedidos reais). Ausente na maioria dos clientes. */
+  hist?: HistoricalCustomer;
 };
 
 async function admin() {
@@ -30,18 +34,56 @@ async function admin() {
 async function loadCustomerStates(): Promise<CustomerRFMState[]> {
   const db = await admin();
   const rows: CustomerRFMState[] = [];
+  // As colunas hist_* podem não existir em um banco que ainda não recebeu a migração: nesse caso lê só o básico.
+  let withHist = true;
   for (let page = 0; ; page++) {
-    const { data, error } = await db
-      .from("shopify_customers")
-      .select("id, rfm_segment")
-      .order("id", { ascending: true })
-      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
-    if (error) throw new Error(`Erro ao buscar clientes para RFM: ${error.message}`);
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    let data: any[] | null = null;
+    if (withHist) {
+      const res = await (db.from("shopify_customers") as any)
+        .select("id, rfm_segment, last_purchase_at, hist_orders_count, hist_estimated_value")
+        .order("id", { ascending: true })
+        .range(from, to);
+      if (!res.error) data = res.data;
+      else if (/hist_/i.test(res.error.message ?? "")) withHist = false;
+      else throw new Error(`Erro ao buscar clientes para RFM: ${res.error.message}`);
+    }
+    if (!withHist) {
+      const res = await db.from("shopify_customers").select("id, rfm_segment").order("id", { ascending: true }).range(from, to);
+      if (res.error) throw new Error(`Erro ao buscar clientes para RFM: ${res.error.message}`);
+      data = res.data as any[] | null;
+    }
     if (!data || data.length === 0) break;
-    rows.push(...data.map((c) => ({ id: String(c.id), rfmSegment: c.rfm_segment ?? null })));
+    for (const c of data) {
+      const state: CustomerRFMState = { id: String(c.id), rfmSegment: c.rfm_segment ?? null };
+      if (withHist && Number(c.hist_orders_count ?? 0) > 0 && c.last_purchase_at) {
+        state.hist = {
+          customerId: String(c.id),
+          ordersCount: Number(c.hist_orders_count),
+          estimatedValue: Number(c.hist_estimated_value ?? 0),
+          lastPurchaseAt: String(c.last_purchase_at),
+        };
+      }
+      rows.push(state);
+    }
     if (data.length < PAGE_SIZE) break;
   }
   return rows;
+}
+
+/** Pedidos reais + histórico importado (em memória, só para a matriz RFM). */
+function withHistoricalOrders(orders: ValidOrder[], states: CustomerRFMState[]): { orders: ValidOrder[]; historicalIds: Set<string> } {
+  const extra: ValidOrder[] = [];
+  const historicalIds = new Set<string>();
+  for (const s of states) {
+    if (!s.hist) continue;
+    const made = historicalOrders(s.hist);
+    if (made.length === 0) continue;
+    historicalIds.add(s.id);
+    extra.push(...made);
+  }
+  return { orders: extra.length > 0 ? [...orders, ...extra] : orders, historicalIds };
 }
 
 function mapOrderRows(data: any[], hasCancelledAt: boolean): ValidOrder[] {
@@ -115,15 +157,16 @@ export type RFMSnapshot = {
 };
 
 export async function buildRFMSnapshot(now: Date = new Date()): Promise<RFMSnapshot> {
-  const [customerStates, orders] = await Promise.all([loadCustomerStates(), loadOrders()]);
+  const [customerStates, realOrders] = await Promise.all([loadCustomerStates(), loadOrders()]);
+  const { orders: ordersForRFM, historicalIds } = withHistoricalOrders(realOrders, customerStates);
   const customerIds = customerStates.map((customer) => customer.id);
   const customerSegments = new Map(customerStates.map((customer) => [customer.id, customer.rfmSegment]));
-  const { customers, historyDays, classicMode } = computeRFM(customerIds, orders, now);
+  const { customers, historyDays, classicMode } = computeRFM(customerIds, ordersForRFM, now, { excludeFromMonetaryScale: historicalIds });
   return {
     customers,
     historyDays,
     classicMode,
-    orders,
+    orders: realOrders,
     customerSegments,
     sourceCustomerCount: customerStates.length,
   };
@@ -233,11 +276,12 @@ export async function getRFMStatsData(now: Date = new Date()) {
   // como ela seria conhecida no fechamento do mês anterior. Assim, não dependemos de um
   // histórico persistido de snapshots para mostrar a evolução da distribuição.
   const [customerStates, orders] = await Promise.all([loadCustomerStates(), loadOrders()]);
+  const { orders: ordersForRFM, historicalIds } = withHistoricalOrders(orders, customerStates);
   const customerIds = customerStates.map((customer) => customer.id);
   const customerSegments = new Map(customerStates.map((customer) => [customer.id, customer.rfmSegment]));
-  const currentComputed = computeRFM(customerIds, orders, now);
+  const currentComputed = computeRFM(customerIds, ordersForRFM, now, { excludeFromMonetaryScale: historicalIds });
   const previousMonthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0, 23, 59, 59, 999));
-  const previousComputed = computeRFM(customerIds, orders, previousMonthEnd);
+  const previousComputed = computeRFM(customerIds, ordersForRFM, previousMonthEnd, { excludeFromMonetaryScale: historicalIds });
   const snapshot = {
     customers: currentComputed.customers,
     historyDays: currentComputed.historyDays,
@@ -256,16 +300,20 @@ export async function getRFMStatsData(now: Date = new Date()) {
   for (const c of customers) {
     const bucket = acc.get(c.segment) ?? { clientes: 0, pedidos: 0, receita: 0, tenure: [], recencia: [] };
     bucket.clientes += 1;
-    bucket.pedidos += c.frequency;
-    bucket.receita += c.monetary;
+    // Histórico importado é estimativa: conta como cliente na matriz, mas não soma pedidos nem receita.
+    if (!historicalIds.has(c.customerId)) {
+      bucket.pedidos += c.frequency;
+      bucket.receita += c.monetary;
+    }
     if (c.tenureDays !== null) bucket.tenure.push(c.tenureDays);
     if (c.recency !== null) bucket.recencia.push(c.recency);
     acc.set(c.segment, bucket);
   }
 
   const totalClientes = customers.length;
-  const totalReceita = customers.reduce((s, c) => s + c.monetary, 0);
-  const totalPedidos = customers.reduce((s, c) => s + c.frequency, 0);
+  const realCustomers = customers.filter((c) => !historicalIds.has(c.customerId));
+  const totalReceita = realCustomers.reduce((s, c) => s + c.monetary, 0);
+  const totalPedidos = realCustomers.reduce((s, c) => s + c.frequency, 0);
 
   const summary: SegmentSummaryRow[] = Array.from(acc.entries()).map(([name, m]) => ({
     name,
@@ -294,7 +342,7 @@ export async function getRFMStatsData(now: Date = new Date()) {
   for (const c of customers) {
     const b = buckets[frequencyBucket(c.frequency)]!;
     b.clientes += 1;
-    b.receita += c.monetary;
+    if (!historicalIds.has(c.customerId)) b.receita += c.monetary;
   }
 
   const validOrders = orders.filter(isRevenueValidOrder);
@@ -347,6 +395,8 @@ export async function getRFMStatsData(now: Date = new Date()) {
     totalReceita,
     totalPedidos,
     compradores: customers.filter((c) => c.frequency > 0).length,
+    /** Clientes na matriz só com histórico importado (valor estimado, sem pedidos reais). */
+    clientesHistoricos: historicalIds.size,
     aovGeral: totalPedidos > 0 ? totalReceita / totalPedidos : 0,
     historyDays,
     classicMode,

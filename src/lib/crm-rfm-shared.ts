@@ -270,13 +270,19 @@ export function computeRFM(
   customerIds: string[],
   orders: ValidOrder[],
   now: Date = new Date(),
+  options: { excludeFromMonetaryScale?: Set<string> } = {},
 ): { customers: ScoredCustomer[]; historyDays: number; classicMode: boolean } {
   const metrics = buildCustomerMetrics(customerIds, orders, now);
   const historyDays = computeHistoryDays(orders, now);
   const classicMode = historyDays >= CLASSIC_MODE_MIN_HISTORY_DAYS;
 
   const buyers = metrics.filter((m) => m.frequency > 0);
-  const scoreM = makeScorer(buyers.map((m) => m.monetary), true);
+  // A régua de valor (quintis) vem só de clientes com pedidos reais. Histórico importado tem valor
+  // ESTIMADO e muito repetido (pedidos x ticket): se entrasse na régua, a própria estimativa empurraria
+  // a nota de valor de todos para cima. Ele é pontuado contra a régua dos clientes reais.
+  const exclude = options.excludeFromMonetaryScale;
+  const scaleBase = exclude && exclude.size > 0 ? buyers.filter((m) => !exclude.has(m.customerId)) : buyers;
+  const scoreM = makeScorer((scaleBase.length > 0 ? scaleBase : buyers).map((m) => m.monetary), true);
 
   const customers = metrics.map((m) => {
     const scores =
@@ -296,4 +302,36 @@ export function frequencyBucket(frequency: number): "0x" | "1x" | "2x" | "3x" | 
   if (frequency === 2) return "2x";
   if (frequency === 3) return "3x";
   return "4x+";
+}
+
+/* ---------------------------------------------------- histórico importado (sem pedidos reais) */
+
+/**
+ * Cliente importado de outro sistema (ex.: exportação de clientes da Tray) que só traz a data da
+ * última compra e o total de pedidos. O valor é uma ESTIMATIVA (pedidos x ticket médio), nunca receita real.
+ */
+export type HistoricalCustomer = {
+  customerId: string;
+  ordersCount: number;
+  estimatedValue: number;
+  lastPurchaseAt: string;
+};
+
+const MAX_HISTORICAL_ORDERS = 200;
+
+/**
+ * Transforma o histórico importado em pedidos EM MEMÓRIA, só para a matriz RFM (recência, frequência e
+ * monetário). Nada é gravado em `shopify_orders`: dashboard, faturamento e ticket médio não mudam.
+ */
+export function historicalOrders(h: HistoricalCustomer): ValidOrder[] {
+  const n = Math.min(MAX_HISTORICAL_ORDERS, Math.max(0, Math.floor(h.ordersCount)));
+  if (n === 0 || !h.lastPurchaseAt || Number.isNaN(new Date(h.lastPurchaseAt).getTime())) return [];
+  const each = h.estimatedValue > 0 ? h.estimatedValue / n : 0;
+  return Array.from({ length: n }, () => ({
+    customerId: h.customerId,
+    totalPrice: each,
+    processedAt: h.lastPurchaseAt,
+    financialStatus: "PAID",
+    cancelledAt: null,
+  }));
 }

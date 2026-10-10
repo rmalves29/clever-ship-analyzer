@@ -529,6 +529,8 @@ export async function processInstagramWebhookBody(rawBody: string, signatureVali
   }
 
   const eventId = await recordWebhookEvent(body, signatureValid);
+  // Evento sem assinatura válida da Meta é só registrado (para diagnóstico): nunca dispara fluxo nem mensagem.
+  if (!signatureValid) return;
   try {
     const entries: any[] = body?.entry ?? [];
     for (const entry of entries) {

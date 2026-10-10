@@ -11,6 +11,7 @@ import {
 import { matchIncomingMessage } from "./lib/conversational-flows.server";
 import { getAutomationTickSecret, runAutomationsTickWithLog } from "./lib/automations-engine.server";
 import { runDailyEventsAnalysis } from "./lib/events.server";
+import { safeEqual, uazapiWebhookSecret } from "./lib/webhook-security.server";
 import { getFlowWebhookVerifyToken, processInstagramWebhookBody, verifyMetaSignature } from "./lib/flow-engine.server";
 import { handleEnvioCampaignRedirect, handleTrackedLinkRedirect } from "./lib/envio-redirect.server";
 import { processEnvioWebhookEvent } from "./lib/envio-webhook.server";
@@ -162,7 +163,7 @@ async function handleAutomationsTick(request: Request): Promise<Response> {
 
   const provided = request.headers.get("X-Automation-Secret");
   const storedSecret = await getAutomationTickSecret();
-  if (!storedSecret || !provided || provided !== storedSecret) {
+  if (!storedSecret || !provided || !safeEqual(provided, storedSecret)) {
     return new Response("Forbidden", { status: 401 });
   }
 
@@ -185,7 +186,7 @@ async function handleDailyEventsAnalysis(request: Request): Promise<Response> {
 
   const provided = request.headers.get("X-Automation-Secret");
   const storedSecret = await getAutomationTickSecret();
-  if (!storedSecret || !provided || provided !== storedSecret) {
+  if (!storedSecret || !provided || !safeEqual(provided, storedSecret)) {
     return new Response("Forbidden", { status: 401 });
   }
 
@@ -219,6 +220,11 @@ async function handleDailyEventsAnalysis(request: Request): Promise<Response> {
 // de assinatura (a UazAPI não assina o corpo do webhook, diferente da Meta).
 async function handleUazapiWebhook(request: Request): Promise<Response> {
   if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+  // A UazAPI não assina o corpo: o segredo vai na URL (?secret=…), gerado por uazapiWebhookUrl().
+  const expected = await uazapiWebhookSecret();
+  if (!expected || !safeEqual(new URL(request.url).searchParams.get("secret"), expected)) {
+    return new Response("Forbidden", { status: 401 });
+  }
   try {
     const body = await request.json();
     await processEnvioWebhookEvent(body);
@@ -258,7 +264,7 @@ async function handleTrackedLink(request: Request): Promise<Response> {
 async function checkAutomationSecret(request: Request): Promise<boolean> {
   const provided = request.headers.get("X-Automation-Secret");
   const storedSecret = await getAutomationTickSecret();
-  return Boolean(storedSecret && provided && provided === storedSecret);
+  return Boolean(storedSecret && provided && safeEqual(provided, storedSecret));
 }
 
 async function handleEnvioProcessScheduled(request: Request): Promise<Response> {

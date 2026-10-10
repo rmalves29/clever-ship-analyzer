@@ -1,5 +1,7 @@
 import { loadUazapiCreds, getInstanceStatus, connectInstance, disconnectInstance, setWebhook, type UazapiCreds } from "./envio-uazapi.server";
 
+import { uazapiWebhookUrl } from "./webhook-security.server";
+
 const APP_URL = process.env["PUBLIC_APP_URL"] || "https://clever-ship-analyzer.lovable.app";
 export const UAZAPI_WEBHOOK_PATH = "/api/uazapi-webhook";
 
@@ -43,7 +45,7 @@ export async function saveEnvioCredentials(input: { url: string; token: string; 
     .neq("id", "");
 
   const creds: UazapiCreds = { url: input.url.trim().replace(/\/$/, ""), token: input.token.trim(), adminToken: input.adminToken?.trim() ?? null };
-  await setWebhook(creds, `${APP_URL}${UAZAPI_WEBHOOK_PATH}`);
+  await setWebhook(creds, await uazapiWebhookUrl(APP_URL, UAZAPI_WEBHOOK_PATH));
 }
 
 export async function generateEnvioQrCode(phone?: string): Promise<{ qrcode?: string; paircode?: string; status?: string }> {
@@ -65,5 +67,5 @@ export async function disconnectEnvio(): Promise<void> {
 export async function reclaimEnvioWebhook(): Promise<void> {
   const creds = await loadUazapiCreds();
   if (!creds) throw new Error("UazAPI não configurada");
-  await setWebhook(creds, `${APP_URL}${UAZAPI_WEBHOOK_PATH}`);
+  await setWebhook(creds, await uazapiWebhookUrl(APP_URL, UAZAPI_WEBHOOK_PATH));
 }

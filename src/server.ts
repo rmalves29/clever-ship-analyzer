@@ -12,6 +12,8 @@ import { matchIncomingMessage } from "./lib/conversational-flows.server";
 import { getAutomationTickSecret, runAutomationsTickWithLog } from "./lib/automations-engine.server";
 import { runDailyEventsAnalysis } from "./lib/events.server";
 import { safeEqual, uazapiWebhookSecret } from "./lib/webhook-security.server";
+import { AUTH_LOGIN_PATH, handleAuthLogin } from "./lib/auth-login.server";
+import { clientIp, rateLimit, tooManyRequests } from "./lib/rate-limit.server";
 import { getFlowWebhookVerifyToken, processInstagramWebhookBody, verifyMetaSignature } from "./lib/flow-engine.server";
 import { handleEnvioCampaignRedirect, handleTrackedLinkRedirect } from "./lib/envio-redirect.server";
 import { processEnvioWebhookEvent } from "./lib/envio-webhook.server";
@@ -615,9 +617,31 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+// Limite por IP nas rotas públicas chamadas pelo navegador do visitante da loja. Captura de lead e desbloqueio do
+// gate gravam dados / liberam brinde, então usam o contador do banco; visita e config são alto volume e só leitura/log.
+const POPUP_RATE_LIMITS: Record<string, { limit: number; windowSec: number; persistent: boolean }> = {
+  [POPUP_CAPTURE_PATH]: { limit: 15, windowSec: 60, persistent: true },
+  [POPUP_GATE_UNLOCK_PATH]: { limit: 10, windowSec: 60, persistent: true },
+  [POPUP_VISIT_PATH]: { limit: 120, windowSec: 60, persistent: false },
+  [POPUP_CONFIG_PATH]: { limit: 120, windowSec: 60, persistent: false },
+  [POPUP_GATE_CONFIG_PATH]: { limit: 120, windowSec: 60, persistent: false },
+};
+
+async function popupRateLimited(request: Request, pathname: string): Promise<Response | null> {
+  const rule = POPUP_RATE_LIMITS[pathname];
+  if (!rule || request.method === "OPTIONS") return null;
+  const result = await rateLimit({ key: `popup:${pathname}:${clientIp(request)}`, ...rule });
+  return result.allowed ? null : tooManyRequests(result);
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     const pathname = new URL(request.url).pathname;
+    if (pathname === AUTH_LOGIN_PATH) {
+      return handleAuthLogin(request);
+    }
+    const limited = await popupRateLimited(request, pathname);
+    if (limited) return limited;
     if (pathname === WHATSAPP_WEBHOOK_PATH) {
       return handleWhatsappWebhook(request);
     }

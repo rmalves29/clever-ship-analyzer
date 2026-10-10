@@ -1,5 +1,6 @@
 import { createMiddleware } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
+import { memoryHit } from "./rate-limit.server";
 
 /**
  * Gate de autenticação das server functions.
@@ -68,5 +69,8 @@ async function verifyBearer(): Promise<{ userId: string }> {
 export const requireAppAuth = createMiddleware({ type: "function" }).server(async ({ next }) => {
   if (!isAppAuthEnabled()) return next({ context: { appUserId: null as string | null } });
   const { userId } = await verifyBearer();
+  // Teto por usuário (por instância do servidor): segura um script descontrolado ou um token vazado sem atrapalhar o uso normal.
+  const limited = memoryHit(`fn:${userId}`, 600, 60);
+  if (!limited.allowed) throw new Error(`Too many requests: aguarde ${limited.retryAfter}s`);
   return next({ context: { appUserId: userId as string | null } });
 });

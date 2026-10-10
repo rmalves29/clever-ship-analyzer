@@ -36,10 +36,36 @@ function AuthPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    // O login passa pelo servidor (/api/auth/login), que limita as tentativas por IP e por conta.
+    let tokens: { access_token?: string; refresh_token?: string; error?: string } = {};
+    let status = 0;
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      status = res.status;
+      tokens = await res.json().catch(() => ({}));
+    } catch {
+      setLoading(false);
+      setError("Não foi possível entrar agora. Verifique a conexão e tente de novo.");
+      return;
+    }
+    if (status === 429) {
+      setLoading(false);
+      setError("Muitas tentativas de login. Aguarde alguns minutos e tente de novo.");
+      return;
+    }
+    if (!tokens.access_token || !tokens.refresh_token) {
+      setLoading(false);
+      setError(tokens.error === "Invalid login credentials" ? "E-mail ou senha incorretos." : (tokens.error ?? "Não foi possível entrar."));
+      return;
+    }
+    const { error: sessionError } = await supabase.auth.setSession({ access_token: tokens.access_token, refresh_token: tokens.refresh_token });
     setLoading(false);
-    if (signInError) {
-      setError(signInError.message);
+    if (sessionError) {
+      setError(sessionError.message);
       return;
     }
     navigate({ to: "/", replace: true });

@@ -12,6 +12,13 @@
 import type { SegmentType } from "./crm-mock";
 import { resolveAutomationBodyParams, type AutomationEventContext } from "./whatsapp-automation-context";
 import { buildDirectCheckoutUrl } from "./shopify-cart-permalink";
+import {
+  chunkArray,
+  createRateGate,
+  readThroughputConfig,
+  runPool,
+  type QueueOutcome,
+} from "./wa-queue-throughput";
 
 export const CAMPAIGNS_TABLE = "wa_campaigns";
 export const RECIPIENTS_TABLE = "wa_campaign_recipients";
@@ -531,26 +538,32 @@ export async function retryFailedRecipients(campaignId: string) {
 /** Situação agregada da campanha, calculada a partir da fila e dos destinatários reais. */
 export async function refreshCampaignStatus(campaignId: string) {
   const supabaseAdmin = await admin();
-  const [{ data: jobRows }, { data: campaignRow }] = await Promise.all([
-    supabaseAdmin.from(JOBS_TABLE).select("status, scheduled_at, error").eq("campaign_id", campaignId),
+  // Só contagens (a fila de uma campanha grande passa de dezenas de milhares de linhas; ler todas a cada lote não escala).
+  const countJobs = async (statuses: string[], dueOnly = false): Promise<number> => {
+    let query = supabaseAdmin.from(JOBS_TABLE).select("id", { count: "exact", head: true }).eq("campaign_id", campaignId).in("status", statuses);
+    if (dueOnly) query = query.lte("scheduled_at", new Date().toISOString());
+    const { count } = await query;
+    return count ?? 0;
+  };
+  const [pendingCount, pendingDueCount, cancelled, { data: campaignRow }] = await Promise.all([
+    countJobs(["queued", "retry_wait", "sending"]),
+    countJobs(["queued", "retry_wait", "sending"], true),
+    countJobs(["cancelled"]),
     supabaseAdmin.from(CAMPAIGNS_TABLE).select("total_recipients, sent_count, failed_count").eq("id", campaignId).maybeSingle(),
   ]);
   if (!campaignRow) return null;
 
-  const jobs = (jobRows ?? []) as { status: string; scheduled_at: string; error: string | null }[];
   const counters = campaignRow as { total_recipients: number; sent_count: number; failed_count: number };
-  const pendingJobs = jobs.filter((j) => ["queued", "retry_wait", "sending"].includes(j.status));
-  const cancelled = jobs.filter((j) => j.status === "cancelled").length;
   const sent = counters.sent_count ?? 0;
   const failed = counters.failed_count ?? 0;
   const total = counters.total_recipients ?? 0;
 
-  const stillScheduled =
-    sent === 0 && pendingJobs.length > 0 && pendingJobs.every((j) => new Date(j.scheduled_at).getTime() > Date.now());
-  const allFailed = pendingJobs.length === 0 && sent === 0 && failed > 0;
+  // "agendada" = nada enviado ainda e todos os itens pendentes só vencem no futuro.
+  const stillScheduled = sent === 0 && pendingCount > 0 && pendingDueCount === 0;
+  const allFailed = pendingCount === 0 && sent === 0 && failed > 0;
   const status = stillScheduled
     ? "agendada"
-    : pendingJobs.length > 0
+    : pendingCount > 0
       ? "enviando"
       : allFailed
         ? "erro"
@@ -594,14 +607,14 @@ export async function refreshCampaignStatus(campaignId: string) {
     .update({
       status,
       last_error: status === "erro" ? mostCommonError : null,
-      ...(pendingJobs.length === 0 && (lastSent as { sent_at: string } | null)?.sent_at
+      ...(pendingCount === 0 && (lastSent as { sent_at: string } | null)?.sent_at
         ? { sent_at: (lastSent as { sent_at: string }).sent_at }
         : {}),
     })
     .eq("id", campaignId);
 
   await syncLegacyMirror(campaignId, { status, sent, failed, total });
-  return { status, sent, failed, cancelled, pending: pendingJobs.length, total };
+  return { status, sent, failed, cancelled, pending: pendingCount, total };
 }
 
 /** Espelha situação/contadores na tabela antiga `whatsapp_campaigns` (mesmo id).
@@ -634,10 +647,13 @@ export async function processWhatsappQueueBatch(options?: {
   workerId?: string;
   dryRun?: boolean;
   provider?: "meta" | "mock";
+  /** Instante (ms desde a época) a partir do qual não se inicia mais nenhuma onda de envio; o que sobrou volta à fila. */
+  deadlineMs?: number;
 }) {
   const supabaseAdmin = await admin();
-  const { loadSettings, sendTemplateMessage } = await import("./whatsapp-meta.server");
-  const limit = options?.limit ?? 100;
+  const { loadSettings, sendTemplateMessage, toE164 } = await import("./whatsapp-meta.server");
+  const throughput = readThroughputConfig();
+  const limit = options?.limit ?? throughput.batchSize;
   const dryRun = options?.dryRun === true;
   const useMock = options?.provider === "mock";
   const workerId = options?.workerId ?? `${useMock ? "mock" : dryRun ? "dryrun" : "worker"}-${Math.random().toString(36).slice(2, 10)}`;
@@ -714,43 +730,38 @@ export async function processWhatsappQueueBatch(options?: {
     }
   }
 
-  const processJob = async (job: JobRow) => {
+  const gate = createRateGate(throughput.ratePerSec);
+  type AutomationEvent = { campaignId: string; customerId: string; outcome: "sent" | "retry" | "failed"; error: string | null };
+  const automationEvents: AutomationEvent[] = [];
+  const queueAutomation = (campaign: CampaignRow, recipient: RecipientRow, outcome: AutomationEvent["outcome"], error: string | null) => {
+    if (automationQueueHandler && campaign.origin === "automacao" && recipient.customer_id) {
+      automationEvents.push({ campaignId: campaign.id, customerId: recipient.customer_id, outcome, error });
+    }
+  };
+
+  /** Decide o destino de um item (enviando à Meta quando for o caso) e devolve o resultado. A gravação no banco é
+   *  feita em lote, por onda, em `flushOutcomes` — não aqui. */
+  const processJob = async (job: JobRow): Promise<QueueOutcome> => {
     const recipient = recipientById.get(job.recipient_id);
     const campaign = campaignById.get(job.campaign_id);
     if (!recipient || !campaign) {
-      await supabaseAdmin.from(JOBS_TABLE).update({ status: "failed", error: "destinatário ou campanha ausente", locked_by: null, locked_at: null }).eq("id", job.id);
       failed++;
-      return;
+      return { job_id: job.id, recipient_id: job.recipient_id, kind: "failed", error: "destinatário ou campanha ausente" };
     }
     touchedCampaigns.add(campaign.id);
 
     if (campaign.message_type === "marketing" && suppressedPhones.has(recipient.phone)) {
       const reason = "opt-out de marketing";
-      await Promise.all([
-        supabaseAdmin
-          .from(JOBS_TABLE)
-          .update({ status: "cancelled", error: reason, next_attempt_at: null, locked_by: null, locked_at: null })
-          .eq("id", job.id),
-        supabaseAdmin
-          .from(RECIPIENTS_TABLE)
-          .update({ status: "cancelled", error_message: reason })
-          .eq("id", recipient.id),
-      ]);
-      if (automationQueueHandler && campaign.origin === "automacao" && recipient.customer_id) {
-        await automationQueueHandler({
-          campaignId: campaign.id,
-          customerId: recipient.customer_id,
-          outcome: "failed",
-          error: reason,
-        });
-      }
+      queueAutomation(campaign, recipient, "failed", reason);
       failed++;
-      return;
+      return { job_id: job.id, recipient_id: recipient.id, kind: "cancelled", error: reason };
     }
 
     const bodyParams = Array.isArray(recipient.params) ? recipient.params : [];
     const templateLanguage = campaign.template_language || settings.templateLanguage;
 
+    // Teto de envios por segundo (80/s = limite padrão da Meta): cada envio espera a sua vaga.
+    if (!useMock) await gate();
     const result = useMock
       ? await sendTemplateMessageMock({
           jobId: job.id,
@@ -771,69 +782,107 @@ export async function processWhatsappQueueBatch(options?: {
           ...(campaign.header_media_url ? { mediaUrl: campaign.header_media_url } : {}),
         });
 
-    const now = new Date().toISOString();
-    const canRetry = !result.ok && job.attempts < job.max_attempts;
-
     if (result.ok) {
       sent++;
-      await Promise.all([
-        supabaseAdmin
-          .from(JOBS_TABLE)
-          .update({ status: "done", error: null, next_attempt_at: null, locked_by: null, locked_at: null })
-          .eq("id", job.id),
-        supabaseAdmin
-          .from(RECIPIENTS_TABLE)
-          .update({ status: "sent", wa_message_id: result.waMessageId ?? null, sent_at: now, error_code: null, error_message: null })
-          .eq("id", recipient.id),
-      ]);
+      queueAutomation(campaign, recipient, "sent", null);
+      let phone: string | null = null;
+      let body: string | null = null;
       if (!useMock) {
         const templateBody = templateBodyByKey?.get(`${campaign.template_name}:${templateLanguage}`);
-        const renderedBody = templateBody
+        body = templateBody
           ? renderTemplateBody(templateBody, bodyParams, campaign.body_param_tokens)
           : `Template: ${campaign.template_name}`;
-        const { recordOutboundQueueMessage } = await import("./whatsapp-inbox.server");
-        await recordOutboundQueueMessage({
-          phone: recipient.phone,
-          body: renderedBody,
-          waMessageId: result.waMessageId ?? null,
-        }).catch((error) => console.error("Falha ao espelhar envio na caixa de entrada:", error));
+        phone = toE164(recipient.phone);
       }
-    } else {
-      if (canRetry) retry++;
-      else failed++;
-      await Promise.all([
-        supabaseAdmin
-          .from(JOBS_TABLE)
-          .update({
-            status: canRetry ? "retry_wait" : "failed",
-            error: result.error,
-            next_attempt_at: canRetry ? backoffFor(job.attempts) : null,
-            locked_by: null,
-            locked_at: null,
-          })
-          .eq("id", job.id),
-        canRetry
-          ? Promise.resolve()
-          : supabaseAdmin
-              .from(RECIPIENTS_TABLE)
-              .update({ status: "failed", error_message: result.error, error_code: extractErrorCode(result.error) })
-              .eq("id", recipient.id),
-      ]);
+      return { job_id: job.id, recipient_id: recipient.id, kind: "sent", wa_message_id: result.waMessageId ?? null, phone, body };
     }
 
-    if (automationQueueHandler && campaign.origin === "automacao" && recipient.customer_id) {
-      await automationQueueHandler({
-        campaignId: campaign.id,
-        customerId: recipient.customer_id,
-        outcome: result.ok ? "sent" : canRetry ? "retry" : "failed",
-        error: result.ok ? null : result.error,
-      });
-    }
+    const canRetry = job.attempts < job.max_attempts;
+    if (canRetry) retry++;
+    else failed++;
+    queueAutomation(campaign, recipient, canRetry ? "retry" : "failed", result.error);
+    return {
+      job_id: job.id,
+      recipient_id: recipient.id,
+      kind: canRetry ? "retry" : "failed",
+      error: result.error,
+      error_code: extractErrorCode(result.error),
+      next_attempt_at: canRetry ? backoffFor(job.attempts) : null,
+    };
   };
 
-  const CONCURRENCY = 10;
-  for (let i = 0; i < batch.length; i += CONCURRENCY) {
-    await Promise.all(batch.slice(i, i + CONCURRENCY).map((job) => processJob(job)));
+  /** Caminho de reserva (banco sem a função em lote, ou falha dela): grava item a item, como antes. */
+  const applyOutcomesOneByOne = async (outcomes: QueueOutcome[]) => {
+    await runPool(outcomes, 10, async (o) => {
+      const jobStatus = o.kind === "sent" ? "done" : o.kind === "retry" ? "retry_wait" : o.kind === "cancelled" ? "cancelled" : "failed";
+      await supabaseAdmin
+        .from(JOBS_TABLE)
+        .update({
+          status: jobStatus,
+          error: o.kind === "sent" ? null : (o.error ?? null),
+          next_attempt_at: o.kind === "retry" ? (o.next_attempt_at ?? null) : null,
+          locked_by: null,
+          locked_at: null,
+        })
+        .eq("id", o.job_id);
+      if (o.kind === "sent") {
+        await supabaseAdmin
+          .from(RECIPIENTS_TABLE)
+          .update({ status: "sent", wa_message_id: o.wa_message_id ?? null, sent_at: new Date().toISOString(), error_code: null, error_message: null })
+          .eq("id", o.recipient_id);
+        if (o.phone && o.body) {
+          const { recordOutboundQueueMessage } = await import("./whatsapp-inbox.server");
+          await recordOutboundQueueMessage({ phone: o.phone, body: o.body, waMessageId: o.wa_message_id ?? null }).catch((error) =>
+            console.error("Falha ao espelhar envio na caixa de entrada:", error),
+          );
+        }
+      } else if (o.kind === "failed") {
+        await supabaseAdmin
+          .from(RECIPIENTS_TABLE)
+          .update({ status: "failed", error_message: o.error ?? null, error_code: o.error_code ?? null })
+          .eq("id", o.recipient_id);
+      } else if (o.kind === "cancelled") {
+        await supabaseAdmin.from(RECIPIENTS_TABLE).update({ status: "cancelled", error_message: o.error ?? null }).eq("id", o.recipient_id);
+      }
+    });
+  };
+
+  /** Grava o resultado de uma onda inteira numa única chamada ao banco (fila + destinatários + caixa de entrada). */
+  const flushOutcomes = async (outcomes: QueueOutcome[]) => {
+    if (outcomes.length === 0) return;
+    const { error } = await supabaseAdmin.rpc("wa_queue_apply_results", { p_results: outcomes });
+    if (!error) return;
+    console.error("wa_queue_apply_results falhou, gravando item a item:", error.message);
+    await applyOutcomesOneByOne(outcomes);
+  };
+
+  // Ondas: envia até `waveSize` itens (no máximo `concurrency` ao mesmo tempo, no ritmo do `gate`) e grava tudo de uma vez.
+  // Se o prazo do tick acabar, as ondas restantes não começam e os itens reservados voltam à fila sem gastar tentativa.
+  const unprocessed: JobRow[] = [];
+  const waves = chunkArray(batch, throughput.waveSize);
+  for (let w = 0; w < waves.length; w++) {
+    const wave = waves[w] as JobRow[];
+    if (options?.deadlineMs && Date.now() > options.deadlineMs) {
+      unprocessed.push(...wave);
+      continue;
+    }
+    const outcomes: QueueOutcome[] = [];
+    await runPool(wave, throughput.concurrency, async (job) => {
+      outcomes.push(await processJob(job));
+    });
+    await flushOutcomes(outcomes);
+    const events = automationEvents.splice(0);
+    if (automationQueueHandler && events.length > 0) {
+      const handler = automationQueueHandler;
+      await runPool(events, 10, async (event) => {
+        await handler(event);
+      });
+    }
+  }
+  if (unprocessed.length > 0) {
+    for (const part of chunkArray(unprocessed, 200)) {
+      await supabaseAdmin.rpc("release_wa_jobs", { p_ids: part.map((j) => j.id) });
+    }
   }
 
   for (const campaignId of touchedCampaigns) await refreshCampaignStatus(campaignId);

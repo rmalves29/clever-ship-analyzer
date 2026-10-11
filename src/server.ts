@@ -14,6 +14,7 @@ import { runDailyEventsAnalysis } from "./lib/events.server";
 import { safeEqual, uazapiWebhookSecret } from "./lib/webhook-security.server";
 import { AUTH_LOGIN_PATH, handleAuthLogin } from "./lib/auth-login.server";
 import { clientIp, rateLimit, tooManyRequests } from "./lib/rate-limit.server";
+import { readThroughputConfig } from "./lib/wa-queue-throughput";
 import { getFlowWebhookVerifyToken, processInstagramWebhookBody, verifyMetaSignature } from "./lib/flow-engine.server";
 import { handleEnvioCampaignRedirect, handleTrackedLinkRedirect } from "./lib/envio-redirect.server";
 import { processEnvioWebhookEvent } from "./lib/envio-webhook.server";
@@ -326,7 +327,7 @@ async function handleWhatsappQueueTick(request: Request): Promise<Response> {
     const { processWhatsappQueueBatch } = await import("./lib/wa-campaigns.server");
     const url = new URL(request.url);
     const limitParam = Number(url.searchParams.get("limit"));
-    const batchLimit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 100;
+    const batchLimit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : readThroughputConfig().batchSize;
     // `?dryRun=1` e `?provider=mock` são modos de TESTE — bloqueados em produção.
     const testModesAllowed =
       process.env["NODE_ENV"] !== "production" || process.env["ALLOW_QUEUE_TEST_MODES"] === "true";
@@ -343,11 +344,12 @@ async function handleWhatsappQueueTick(request: Request): Promise<Response> {
     // ficava travada em ~20 msg/min.
     const startedAt = Date.now();
     const TIME_BUDGET_MS = 50_000;
-    const MAX_BATCHES_PER_TICK = 12;
+    const MAX_BATCHES_PER_TICK = 40; // quem manda é o orçamento de tempo; a 80/s cabem ~4.000 mensagens por tick
     const totals = { claimed: 0, sent: 0, failed: 0, retry: 0, batches: 0 };
     for (let i = 0; i < MAX_BATCHES_PER_TICK; i++) {
       const result = await processWhatsappQueueBatch({
         limit: batchLimit,
+        deadlineMs: startedAt + TIME_BUDGET_MS,
         ...(dryRun ? { dryRun: true } : {}),
         ...(useMock ? { provider: "mock" as const } : {}),
       });

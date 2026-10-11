@@ -15,6 +15,8 @@ import { buildDirectCheckoutUrl } from "./shopify-cart-permalink";
 import {
   chunkArray,
   createRateGate,
+  hasPlausiblePhoneLength,
+  isPermanentSendError,
   readThroughputConfig,
   runPool,
   type QueueOutcome,
@@ -760,6 +762,13 @@ export async function processWhatsappQueueBatch(options?: {
     const bodyParams = Array.isArray(recipient.params) ? recipient.params : [];
     const templateLanguage = campaign.template_language || settings.templateLanguage;
 
+    // Telefone com tamanho impossível (ex.: "+0800033"): falha na hora, sem chamar a Meta nem repetir depois.
+    if (!useMock && !hasPlausiblePhoneLength(recipient.phone)) {
+      failed++;
+      queueAutomation(campaign, recipient, "failed", "Telefone inválido");
+      return { job_id: job.id, recipient_id: recipient.id, kind: "failed", error: "Telefone inválido (tamanho fora do padrão)", error_code: "invalid_phone" };
+    }
+
     // Teto de envios por segundo (80/s = limite padrão da Meta): cada envio espera a sua vaga.
     if (!useMock) await gate();
     const result = useMock
@@ -797,7 +806,7 @@ export async function processWhatsappQueueBatch(options?: {
       return { job_id: job.id, recipient_id: recipient.id, kind: "sent", wa_message_id: result.waMessageId ?? null, phone, body };
     }
 
-    const canRetry = job.attempts < job.max_attempts;
+    const canRetry = job.attempts < job.max_attempts && !isPermanentSendError(result.error);
     if (canRetry) retry++;
     else failed++;
     queueAutomation(campaign, recipient, canRetry ? "retry" : "failed", result.error);

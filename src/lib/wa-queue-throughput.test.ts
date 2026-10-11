@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chunkArray, createRateGate, readThroughputConfig, runPool, type Clock } from "./wa-queue-throughput";
+import { chunkArray, createRateGate, hasPlausiblePhoneLength, isPermanentSendError, readThroughputConfig, runPool, type Clock } from "./wa-queue-throughput";
 
 function fakeClock(): Clock & { t: number } {
   const c = {
@@ -72,5 +72,24 @@ describe("readThroughputConfig / chunkArray", () => {
   it("divide em blocos", () => {
     expect(chunkArray([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
     expect(chunkArray([], 3)).toEqual([]);
+  });
+});
+
+describe("erros permanentes e telefone", () => {
+  it("não repete erros que não mudam e repete os temporários", () => {
+    expect(isPermanentSendError("(#131009) Parameter value is not valid")).toBe(true);
+    expect(isPermanentSendError("131026 — Message undeliverable")).toBe(true);
+    expect(isPermanentSendError("(#132000) Number of parameters does not match")).toBe(true);
+    expect(isPermanentSendError("(#131056) Pair rate limit hit")).toBe(false);
+    expect(isPermanentSendError("(#130429) Rate limit hit")).toBe(false);
+    expect(isPermanentSendError("Erro Meta: 500")).toBe(false);
+    expect(isPermanentSendError(null)).toBe(false);
+  });
+
+  it("recusa telefones de tamanho impossível", () => {
+    expect(hasPlausiblePhoneLength("+5531992904210")).toBe(true);
+    expect(hasPlausiblePhoneLength("+0800033")).toBe(false);
+    expect(hasPlausiblePhoneLength("+88888888990998878887878787787878676767677767")).toBe(false);
+    expect(hasPlausiblePhoneLength("")).toBe(false);
   });
 });

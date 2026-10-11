@@ -83,3 +83,33 @@ export function chunkArray<T>(items: readonly T[], size: number): T[][] {
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
   return out;
 }
+
+/**
+ * Erros da Meta em que tentar de novo não adianta (telefone inválido/fora do WhatsApp, modelo inexistente, pausado ou
+ * com variáveis fora do formato). Esses itens falham na hora, sem esperar horas por novas tentativas; os demais
+ * (limite de taxa, instabilidade) continuam com repetição.
+ */
+const PERMANENT_META_CODES = new Set([
+  "131009", // parâmetro inválido (ex.: telefone malformado)
+  "131021", // destinatário é o próprio número de envio
+  "131026", // mensagem não entregável (número sem WhatsApp, etc.)
+  "131030", // destinatário fora da lista permitida
+  "132000", // número de variáveis diferente do modelo
+  "132001", // modelo não existe naquele idioma
+  "132005", // texto traduzido longo demais
+  "132007", // política de formato do modelo
+  "132012", // variáveis fora do formato esperado
+  "132015", // modelo pausado
+  "132016", // modelo desativado
+]);
+
+export function isPermanentSendError(error: string | null | undefined): boolean {
+  const code = String(error ?? "").match(/\b(1[0-9]{5})\b/)?.[1];
+  return code !== undefined && PERMANENT_META_CODES.has(code);
+}
+
+/** Telefone com tamanho possível para E.164 (10 a 15 dígitos): fora disso nem chama a Meta. */
+export function hasPlausiblePhoneLength(phone: string | null | undefined): boolean {
+  const digits = String(phone ?? "").replace(/\D/g, "");
+  return digits.length >= 10 && digits.length <= 15;
+}

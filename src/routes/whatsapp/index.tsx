@@ -28,6 +28,7 @@ import Typography from "@mui/material/Typography";
 import { listWaCampaigns, type WaCampaignListRow } from "@/lib/wa-campaigns.functions";
 import { approveCampaign, rejectCampaign } from "@/lib/whatsapp-meta.functions";
 import { WHATSAPP_ATTRIBUTION_WINDOW_DAYS } from "@/lib/whatsapp-attribution";
+import { CampaignDraftsPanel } from "@/components/whatsapp/CampaignDraftsPanel";
 
 const LinkTypography = createLink(Typography);
 const LinkIconButton = createLink(IconButton);
@@ -426,6 +427,8 @@ function CampaignsPage() {
           Nova campanha
         </Button>
       </Stack>
+
+      <CampaignDraftsPanel />
 
       {isLoading ? (
         <Typography variant="body2" color="text.secondary">

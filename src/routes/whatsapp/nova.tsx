@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, createLink, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ChevronLeft, Send, Users, AlertTriangle, Clock } from "lucide-react";
+import { ChevronLeft, Send, Users, AlertTriangle, Clock, Save } from "lucide-react";
 import { toast } from "sonner";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -16,7 +16,9 @@ import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { previewWhatsappAudience } from "@/lib/whatsapp-audience-preview.functions";
-import { createAndSendCampaign, listMetaTemplates } from "@/lib/whatsapp-meta.functions";
+import { createAndSendCampaign, getWhatsappMetaStatus, listMetaTemplates } from "@/lib/whatsapp-meta.functions";
+import { estimateSendCost, formatBRL } from "@/lib/whatsapp-cost-estimate";
+import { deleteCampaignDraft, getCampaignDraft, saveCampaignDraft } from "@/lib/wa-campaign-drafts.functions";
 import { getSegmentOptions } from "@/lib/crm-segmentation.functions";
 import { getStaticLists } from "@/lib/crm-static-lists.functions";
 import { extractTemplateBodyTokens } from "@/lib/whatsapp-template-body-tokens";
@@ -33,6 +35,9 @@ export const Route = createFileRoute("/whatsapp/nova")({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
+  }),
+  validateSearch: (search: Record<string, unknown>): { rascunho?: string | undefined } => ({
+    rascunho: typeof search["rascunho"] === "string" && search["rascunho"] ? search["rascunho"] : undefined,
   }),
   component: NovaCampanha,
 });
@@ -62,6 +67,11 @@ function NovaCampanha() {
   const navigate = useNavigate();
   const runCreate = useServerFn(createAndSendCampaign);
   const runPreview = useServerFn(previewWhatsappAudience);
+  const runSaveDraft = useServerFn(saveCampaignDraft);
+  const runDeleteDraft = useServerFn(deleteCampaignDraft);
+  const { rascunho: rascunhoParam } = Route.useSearch();
+  const [draftId, setDraftId] = useState<string | null>(rascunhoParam ?? null);
+  const [savingDraft, setSavingDraft] = useState(false);
 
   const [nome, setNome] = useState("");
   const [audience, setAudience] = useState("sem_recompra");
@@ -78,6 +88,31 @@ function NovaCampanha() {
   const { data: segments } = useQuery({ queryKey: ["crm-segments"], queryFn: () => getSegmentOptions() });
   const { data: staticLists } = useQuery({ queryKey: ["crm-static-lists"], queryFn: () => getStaticLists() });
   const { data: templatesResult } = useQuery({ queryKey: ["whatsapp-templates"], queryFn: () => listMetaTemplates() });
+
+  const { data: loadedDraft, isFetching: loadingDraft } = useQuery({
+    queryKey: ["wa-campaign-draft", rascunhoParam],
+    queryFn: () => getCampaignDraft({ data: { id: rascunhoParam! } }),
+    enabled: Boolean(rascunhoParam),
+    staleTime: Infinity,
+  });
+  const [draftApplied, setDraftApplied] = useState(false);
+  useEffect(() => {
+    if (!loadedDraft || draftApplied) return;
+    const f = loadedDraft.form;
+    setNome(loadedDraft.name === "Rascunho sem nome" ? "" : loadedDraft.name);
+    setAudience(f.audience);
+    setTemplateName(f.templateName);
+    setParams(f.params);
+    setCoupon(f.coupon);
+    setTag(f.tag);
+    setRequireApproval(f.requireApproval);
+    setScheduleOn(f.scheduleOn);
+    setScheduledAt(f.scheduledAt);
+    setDraftId(loadedDraft.id);
+    setDraftApplied(true);
+  }, [loadedDraft, draftApplied]);
+
+  const { data: metaStatus } = useQuery({ queryKey: ["whatsapp-meta-status"], queryFn: () => getWhatsappMetaStatus() });
 
   const approved: TemplateOption[] = ((templatesResult?.success ? templatesResult.templates : []) as TemplateOption[]).filter(
     (t) => t.status === "APPROVED",
@@ -106,6 +141,9 @@ function NovaCampanha() {
 
   const sample = (preview?.recipientSamples ?? [])[0] as { name?: string } | undefined;
   const destinatarios = preview?.destinatarios ?? 0;
+  const sendCost = template
+    ? estimateSendCost(template.category, destinatarios, { marketing: metaStatus?.costMarketing, utility: metaStatus?.costUtility })
+    : null;
   const semTelefone = Math.max(0, (preview?.clientes ?? 0) - (preview?.comTelefone ?? 0));
 
   const renderedBody = useMemo(() => {
@@ -128,6 +166,25 @@ function NovaCampanha() {
         : scheduleOn && (!scheduledAt || new Date(scheduledAt).getTime() <= Date.now())
           ? "Escolha uma data e hora futura."
           : null;
+
+  const saveDraft = async () => {
+    setSavingDraft(true);
+    try {
+      const res = await runSaveDraft({
+        data: { id: draftId ?? undefined, name: nome.trim(), form: { audience, templateName, params, coupon, tag, requireApproval, scheduleOn, scheduledAt } },
+      });
+      if (!res.success) {
+        toast.error(res.error);
+        return;
+      }
+      setDraftId(res.id);
+      toast.success("Rascunho salvo. Você pode editar e enviar depois em Campanhas.");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Não foi possível salvar o rascunho.");
+    } finally {
+      setSavingDraft(false);
+    }
+  };
 
   const submit = async () => {
     if (blocker || !selection || !template) return;
@@ -153,6 +210,8 @@ function NovaCampanha() {
         toast.error(res.error ?? "Não foi possível criar a campanha.");
         return;
       }
+      // o rascunho serviu de base: some da lista de rascunhos assim que a campanha é criada
+      if (draftId) await runDeleteDraft({ data: { id: draftId } }).catch(() => undefined);
       toast.success(requireApproval ? "Campanha criada e aguardando aprovação." : "Campanha criada e enfileirada.");
       if (res?.campaignId) navigate({ to: "/whatsapp/$campaignId", params: { campaignId: res.campaignId } });
       else navigate({ to: "/whatsapp" });
@@ -169,6 +228,9 @@ function NovaCampanha() {
         <LinkIconButton to="/whatsapp">
           <ChevronLeft size={20} />
         </LinkIconButton>
+        {draftId && (
+          <Chip size="small" color="warning" variant="outlined" label={loadingDraft && !draftApplied ? "Abrindo rascunho…" : "Editando rascunho"} />
+        )}
       </Stack>
 
       <Box sx={{ display: "grid", gap: 2.5, gridTemplateColumns: { xs: "1fr", lg: "1.2fr 1fr" } }}>
@@ -315,10 +377,29 @@ function NovaCampanha() {
           <Typography variant="body2">
             <Box component="span" sx={{ fontWeight: 700 }}>{destinatarios.toLocaleString("pt-BR")}</Box> destinatários
           </Typography>
+          {template && (
+            <Tooltip
+              title={
+                sendCost
+                  ? `${destinatarios.toLocaleString("pt-BR")} × ${formatBRL(sendCost.perMessage, 4)} (${sendCost.type === "utility" ? "utilidade" : "marketing"}). Estimativa: a Meta cobra só o que é entregue.`
+                  : "Cadastre o custo por mensagem em Configurações → WhatsApp para ver a estimativa."
+              }
+            >
+              <Typography variant="body2" sx={{ color: sendCost ? "text.primary" : "text.secondary" }}>
+                Custo estimado{" "}
+                <Box component="span" sx={{ fontWeight: 700 }}>
+                  {sendCost ? formatBRL(sendCost.total) : "—"}
+                </Box>
+              </Typography>
+            </Tooltip>
+          )}
           <Typography variant="caption" sx={{ mr: "auto", color: blocker ? "warning.main" : "text.secondary" }}>
             {blocker ?? (scheduleOn ? "Pronto para agendar." : "Pronto para enviar.")}
           </Typography>
-          <Button variant="contained" startIcon={<Send size={16} />} disabled={Boolean(blocker) || busy} onClick={submit}>
+          <Button variant="outlined" startIcon={<Save size={16} />} disabled={busy || savingDraft} onClick={saveDraft}>
+            {savingDraft ? "Salvando…" : draftId ? "Atualizar rascunho" : "Salvar rascunho"}
+          </Button>
+          <Button variant="contained" startIcon={<Send size={16} />} disabled={Boolean(blocker) || busy || savingDraft} onClick={submit}>
             {requireApproval ? "Enviar para aprovação" : scheduleOn ? "Agendar" : "Enviar agora"}
           </Button>
         </Stack>

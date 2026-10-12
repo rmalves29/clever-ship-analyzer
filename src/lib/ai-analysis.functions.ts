@@ -61,7 +61,7 @@ const aiAnalysisSchema = z.object({
   panelStatus: aiPanelStatusSchema,
 });
 
-function buildPrompt(metrics: Awaited<ReturnType<typeof computeShopifyDashboardData>>) {
+function buildPrompt(metrics: Awaited<ReturnType<typeof computeShopifyDashboardData>>, surveyIntelligence = "") {
   return `Você é um analista de CRM para e-commerce. Analise os dados reais abaixo (extraídos agora da Shopify) e devolva um diagnóstico estratégico.
 
 REGRA DOS DADOS: todos os números abaixo consideram APENAS pedidos pagos (PAID/PARTIALLY_PAID) e não cancelados. Reembolsados, expirados, cancelados e pendentes já foram excluídos. Não relativize os valores nem sugira que incluem vendas canceladas.
@@ -87,7 +87,10 @@ DADOS DO PERÍODO:
 - Taxa de recompra por estado (mín. ${metrics.minSample} clientes por estado): ${JSON.stringify(metrics.regioes)}
 - Envios por dia da semana: ${JSON.stringify(metrics.enviosPorDia)}
 
-METAS DO SEMÁFORO (pra você classificar o "tone" de cada insight):
+${surveyIntelligence ? `${surveyIntelligence}
+Se houver pontos relevantes acima, inclua 1 insight (tone "info" ou "regular"/"critico" conforme a gravidade) que os cite, ligando a causa dita pelas clientes aos números de recompra/envio acima.
+
+` : ""}METAS DO SEMÁFORO (pra você classificar o "tone" de cada insight):
 - Taxa de recompra: tone "meta" se >= ${GOALS.taxaRecompra.meta}%, "regular" se >= ${GOALS.taxaRecompra.regular}%, senão "critico".
 - Tempo médio de envio (menor é melhor): tone "meta" se <= ${GOALS.tempoMedioEnvio.meta} dias, "regular" se <= ${GOALS.tempoMedioEnvio.regular} dias, senão "critico".
 - Ticket médio: tone "meta" se >= R$${GOALS.ticketMedio.meta}, "regular" se >= R$${GOALS.ticketMedio.regular}, senão "critico".
@@ -193,7 +196,9 @@ export const generateAiAnalysis = createServerFn({ method: "POST" })
     }
 
     const metrics = await computeShopifyDashboardData({ period, range });
-    const prompt = buildPrompt(metrics);
+    // Inteligência guardada da análise das pesquisas (vazia se nunca rodou): a análise geral passa a considerar a voz da cliente.
+    const { loadSurveyIntelligenceForDashboard } = await import("./survey-analysis.server");
+    const prompt = buildPrompt(metrics, await loadSurveyIntelligenceForDashboard());
 
     let analysis: z.infer<typeof aiAnalysisSchema>;
     try {

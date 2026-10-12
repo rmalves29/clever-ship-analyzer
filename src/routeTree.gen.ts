@@ -36,6 +36,7 @@ import { Route as PerformanceMetaAdsRouteImport } from './routes/performance/met
 import { Route as PesquisaSlugRouteImport } from './routes/pesquisa/$slug'
 import { Route as PesquisasIndexRouteImport } from './routes/pesquisas/index'
 import { Route as PesquisasSurveyIdRouteImport } from './routes/pesquisas/$surveyId'
+import { Route as PesquisasAnaliseRouteImport } from './routes/pesquisas/analise'
 import { Route as WhatsappIndexRouteImport } from './routes/whatsapp/index'
 import { Route as WhatsappCampaignIdRouteImport } from './routes/whatsapp/$campaignId'
 import { Route as WhatsappAutomacoesRouteImport } from './routes/whatsapp/automacoes'
@@ -181,6 +182,11 @@ const PesquisasSurveyIdRoute = PesquisasSurveyIdRouteImport.update({
   path: '/pesquisas/$surveyId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PesquisasAnaliseRoute = PesquisasAnaliseRouteImport.update({
+  id: '/pesquisas/analise',
+  path: '/pesquisas/analise',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WhatsappIndexRoute = WhatsappIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -252,6 +258,7 @@ export interface FileRoutesByFullPath {
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/pesquisa/$slug': typeof PesquisaSlugRoute
   '/pesquisas/$surveyId': typeof PesquisasSurveyIdRoute
+  '/pesquisas/analise': typeof PesquisasAnaliseRoute
   '/whatsapp/$campaignId': typeof WhatsappCampaignIdRoute
   '/whatsapp/automacoes': typeof WhatsappAutomacoesRoute
   '/whatsapp/conversas': typeof WhatsappConversasRoute
@@ -289,6 +296,7 @@ export interface FileRoutesByTo {
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/pesquisa/$slug': typeof PesquisaSlugRoute
   '/pesquisas/$surveyId': typeof PesquisasSurveyIdRoute
+  '/pesquisas/analise': typeof PesquisasAnaliseRoute
   '/whatsapp/$campaignId': typeof WhatsappCampaignIdRoute
   '/whatsapp/automacoes': typeof WhatsappAutomacoesRoute
   '/whatsapp/conversas': typeof WhatsappConversasRoute
@@ -328,6 +336,7 @@ export interface FileRoutesById {
   '/performance/meta-ads': typeof PerformanceMetaAdsRoute
   '/pesquisa/$slug': typeof PesquisaSlugRoute
   '/pesquisas/$surveyId': typeof PesquisasSurveyIdRoute
+  '/pesquisas/analise': typeof PesquisasAnaliseRoute
   '/whatsapp/$campaignId': typeof WhatsappCampaignIdRoute
   '/whatsapp/automacoes': typeof WhatsappAutomacoesRoute
   '/whatsapp/conversas': typeof WhatsappConversasRoute
@@ -368,6 +377,7 @@ export interface FileRouteTypes {
     | '/performance/meta-ads'
     | '/pesquisa/$slug'
     | '/pesquisas/$surveyId'
+    | '/pesquisas/analise'
     | '/whatsapp/$campaignId'
     | '/whatsapp/automacoes'
     | '/whatsapp/conversas'
@@ -405,6 +415,7 @@ export interface FileRouteTypes {
     | '/performance/meta-ads'
     | '/pesquisa/$slug'
     | '/pesquisas/$surveyId'
+    | '/pesquisas/analise'
     | '/whatsapp/$campaignId'
     | '/whatsapp/automacoes'
     | '/whatsapp/conversas'
@@ -443,6 +454,7 @@ export interface FileRouteTypes {
     | '/performance/meta-ads'
     | '/pesquisa/$slug'
     | '/pesquisas/$surveyId'
+    | '/pesquisas/analise'
     | '/whatsapp/$campaignId'
     | '/whatsapp/automacoes'
     | '/whatsapp/conversas'
@@ -482,6 +494,7 @@ export interface RootRouteChildren {
   PerformanceMetaAdsRoute: typeof PerformanceMetaAdsRoute
   PesquisaSlugRoute: typeof PesquisaSlugRoute
   PesquisasSurveyIdRoute: typeof PesquisasSurveyIdRoute
+  PesquisasAnaliseRoute: typeof PesquisasAnaliseRoute
   CrmIndexRoute: typeof CrmIndexRoute
   FlowIndexRoute: typeof FlowIndexRoute
   LandingPagesIndexRoute: typeof LandingPagesIndexRoute
@@ -681,6 +694,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PesquisasSurveyIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pesquisas/analise': {
+      id: '/pesquisas/analise'
+      path: '/pesquisas/analise'
+      fullPath: '/pesquisas/analise'
+      preLoaderRoute: typeof PesquisasAnaliseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/whatsapp/': {
       id: '/whatsapp/'
       path: '/'
@@ -795,6 +815,7 @@ const rootRouteChildren: RootRouteChildren = {
   PerformanceMetaAdsRoute: PerformanceMetaAdsRoute,
   PesquisaSlugRoute: PesquisaSlugRoute,
   PesquisasSurveyIdRoute: PesquisasSurveyIdRoute,
+  PesquisasAnaliseRoute: PesquisasAnaliseRoute,
   CrmIndexRoute: CrmIndexRoute,
   FlowIndexRoute: FlowIndexRoute,
   LandingPagesIndexRoute: LandingPagesIndexRoute,

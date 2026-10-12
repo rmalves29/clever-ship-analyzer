@@ -2,7 +2,7 @@ import { createFileRoute, createLink, useNavigate } from "@tanstack/react-router
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Copy, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -108,6 +108,9 @@ function PesquisasPage() {
   return (
     <Box sx={{ p: { xs: 2, md: 4 } }}>
       <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center", mb: 3 }}>
+        <Button variant="outlined" startIcon={<Sparkles size={16} />} onClick={() => navigate({ to: "/pesquisas/analise" })}>
+          Analisar pesquisas
+        </Button>
         <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => createMut.mutate()} disabled={createMut.isPending}>
           Nova pesquisa
         </Button>

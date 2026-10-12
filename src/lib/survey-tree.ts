@@ -20,6 +20,8 @@ export type SurveyBranch = {
   /** Destino ao escolher esta resposta: id de uma pergunta, FIM, ou vazio = seguir a ordem. */
   next?: string | null;
   tags?: string[];
+  /** Ação interna da equipe quando a resposta é escolhida (ex.: "Avisar a expedição"). Só descrição; não envia nada sozinha. */
+  action?: string;
 };
 
 export type TreeQuestion = {
@@ -35,6 +37,8 @@ export type TreeQuestion = {
   branches?: Record<string, SurveyBranch>;
   /** Etiquetas gravadas para qualquer resposta desta pergunta. */
   tags?: string[];
+  /** Ação interna da equipe ao passar por esta pergunta (ex.: "Abrir atendimento com prioridade alta"). */
+  action?: string;
 };
 
 export type TreeAnswers = Record<string, string | string[] | undefined>;
@@ -155,6 +159,8 @@ export type TreeEdge = {
   to: string;
   label: string;
   tags: string[];
+  /** Ação interna da equipe ligada a esta resposta (texto livre), se houver. */
+  action?: string;
   /** Destino definido de propósito (true) ou apenas "seguir a ordem" (false). */
   explicit: boolean;
 };
@@ -185,6 +191,7 @@ export function buildEdges(questions: readonly TreeQuestion[]): TreeEdge[] {
           to: own ? (b!.next as string) : fallback.to,
           label: opt,
           tags: b?.tags ?? [],
+          ...(b?.action ? { action: b.action } : {}),
           explicit: own || fallback.explicit,
         });
       });
@@ -248,4 +255,32 @@ export function pruneDanglingRefs<T extends TreeQuestion>(questions: readonly T[
       : undefined;
     return { ...q, ...(ok(q.next) ? {} : { next: null }), ...(branches ? { branches } : {}) };
   });
+}
+
+// ---------------------------------------------------------------------------------------------- textos com variáveis
+
+/** Variáveis aceitas nos textos da pesquisa: {nome}, {pedido}, {interesse}. */
+export type SurveyVars = { nome?: string | null | undefined; pedido?: string | null | undefined; interesse?: string | null | undefined };
+
+/**
+ * Troca {nome}/{pedido}/{interesse} pelos valores conhecidos. Variável sem valor some junto com a pontuação que a prendia
+ * ("Oi, {nome}!" vira "Oi!"), para o texto nunca sair com chaves nem com "Oi, !".
+ */
+export function fillPlaceholders(text: string, vars: SurveyVars): string {
+  let out = text;
+  for (const key of ["nome", "pedido", "interesse"] as const) {
+    const value = (vars[key] ?? "").toString().trim();
+    out = out.replace(new RegExp(`\{${key}\}`, "g"), value);
+  }
+  return out
+    .replace(/,\s+([!?.,:;])/g, "$1")
+    .replace(/#\s*(?=[\s.,!?]|$)/g, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([!?.,:;])/g, "$1")
+    .trim();
+}
+
+/** Trechos entre colchetes ("[mimo aprovado]", "[link da coleção]"): decisões da loja ainda não preenchidas. */
+export function findPendingPlaceholders(text: string): string[] {
+  return [...text.matchAll(/\[([^\]]{2,80})\]/g)].map((m) => m[1] as string);
 }

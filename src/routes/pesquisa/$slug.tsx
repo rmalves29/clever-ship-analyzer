@@ -18,10 +18,10 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { getPublicSurvey, submitSurveyResponse, type SurveyQuestion } from "@/lib/surveys.functions";
-import { FIM, isBranching, nextQuestionId } from "@/lib/survey-tree";
+import { FIM, fillPlaceholders, isBranching, nextQuestionId } from "@/lib/survey-tree";
 
 export const Route = createFileRoute("/pesquisa/$slug")({
-  validateSearch: (search: Record<string, unknown>) => z.object({ origem: z.string().optional() }).parse(search),
+  validateSearch: (search: Record<string, unknown>) => z.object({ origem: z.string().optional(), nome: z.string().max(80).optional(), pedido: z.string().max(40).optional() }).parse(search),
   head: () => ({
     meta: [{ title: "Pesquisa" }],
   }),
@@ -123,7 +123,8 @@ function hasAnswer(v: AnswerValue | undefined): boolean {
 
 function PublicSurveyPage() {
   const { slug } = Route.useParams();
-  const { origem } = Route.useSearch();
+  const { origem, nome, pedido } = Route.useSearch();
+  const fill = (t: string) => fillPlaceholders(t, { nome: nome?.split(" ")[0], pedido });
   const runGetSurvey = useServerFn(getPublicSurvey);
   const runSubmit = useServerFn(submitSurveyResponse);
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
@@ -162,7 +163,7 @@ function PublicSurveyPage() {
         ) : submitted ? (
           <Stack spacing={1.5} sx={{ alignItems: "center", textAlign: "center", py: 4 }}>
             <CheckCircle2 size={40} color="var(--mui-palette-success-main, #28C76F)" />
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>{survey.thank_you_message}</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>{fill(survey.thank_you_message)}</Typography>
           </Stack>
         ) : (
           <Stack spacing={3}>
@@ -193,12 +194,12 @@ function PublicSurveyPage() {
                   <Stack spacing={2.5}>
                     {current.type === "mensagem" ? (
                       <Box sx={{ bgcolor: "action.hover", borderRadius: "4px 16px 16px 16px", px: 2, py: 1.5, whiteSpace: "pre-wrap" }}>
-                        <Typography variant="body1">{current.label}</Typography>
+                        <Typography variant="body1">{fill(current.label)}</Typography>
                       </Box>
                     ) : (
                       <Box>
                         <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-                          {current.label}{current.required && <Typography component="span" color="error"> *</Typography>}
+                          {fill(current.label)}{current.required && <Typography component="span" color="error"> *</Typography>}
                         </Typography>
                         <QuestionField
                           key={current.id}

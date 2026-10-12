@@ -28,6 +28,7 @@ export type Survey = {
 const branchSchema = z.object({
   next: z.string().nullable().optional(),
   tags: z.array(z.string().min(1).max(60)).max(20).optional(),
+  action: z.string().max(300).optional(),
 });
 
 const questionSchema = z.object({
@@ -40,6 +41,7 @@ const questionSchema = z.object({
   next: z.string().nullable().optional(),
   branches: z.record(z.string(), branchSchema).optional(),
   tags: z.array(z.string().min(1).max(60)).max(20).optional(),
+  action: z.string().max(300).optional(),
 });
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -252,4 +254,71 @@ export const submitSurveyResponse = createServerFn({ method: "POST" })
     });
     if (error) throw error;
     return { success: true };
+  });
+
+// --- Importação de árvores de pesquisa (JSON do material de pesquisas) ---
+
+export type ImportTreeResult = {
+  code: string;
+  title: string;
+  slug: string;
+  action: "criada" | "atualizada" | "ignorada" | "prévia";
+  reason?: string;
+  questions: number;
+  warnings: { code: string; node?: string | undefined; detail: string }[];
+};
+
+/**
+ * Lê o JSON de árvores e cria/atualiza as pesquisas (uma por árvore, pelo link). `apply: false` só mostra a prévia.
+ * Pesquisa que já tem respostas NÃO é sobrescrita (trocar perguntas bagunçaria as respostas antigas): vira "ignorada".
+ */
+export const importSurveyTrees = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) => z.object({ json: z.string().min(2).max(2_000_000), apply: z.boolean() }).parse(data))
+  .handler(async ({ data }): Promise<{ success: true; results: ImportTreeResult[] } | { success: false; error: string }> => {
+    const { convertTree, parseTreesJson } = await import("./survey-tree-import");
+    let trees;
+    try {
+      trees = parseTreesJson(data.json);
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : "Arquivo inválido." };
+    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as unknown as { from: (t: string) => any };
+    const results: ImportTreeResult[] = [];
+
+    for (const tree of trees) {
+      const converted = convertTree(tree);
+      const base = { code: converted.code, title: converted.title, slug: converted.slug, questions: converted.questions.length, warnings: converted.warnings };
+      const { data: existing, error: findError } = await db.from("surveys").select("id, title").eq("slug", converted.slug).maybeSingle();
+      if (findError) return { success: false, error: findError.message };
+
+      if (!data.apply) {
+        results.push({ ...base, action: "prévia", reason: existing ? "já existe: as perguntas serão trocadas pela árvore" : "será criada (pausada)" });
+        continue;
+      }
+
+      const parsed = z.array(questionSchema).min(1).safeParse(converted.questions);
+      if (!parsed.success) {
+        results.push({ ...base, action: "ignorada", reason: `perguntas inválidas: ${parsed.error.issues[0]?.message ?? "formato"}` });
+        continue;
+      }
+      const payload = { questions: parsed.data, description: converted.description, thank_you_message: converted.thankYou, updated_at: new Date().toISOString() };
+
+      if (existing) {
+        const { count } = await db.from("survey_responses").select("id", { count: "exact", head: true }).eq("survey_id", existing.id);
+        if ((count ?? 0) > 0) {
+          results.push({ ...base, action: "ignorada", reason: `já tem ${count} respostas; para não bagunçá-las, a árvore não foi aplicada` });
+          continue;
+        }
+        const { error } = await db.from("surveys").update(payload).eq("id", existing.id);
+        if (error) return { success: false, error: error.message };
+        results.push({ ...base, action: "atualizada" });
+      } else {
+        const { error } = await db.from("surveys").insert({ ...payload, slug: converted.slug, title: converted.title, is_active: false });
+        if (error) return { success: false, error: error.message };
+        results.push({ ...base, action: "criada" });
+      }
+    }
+    return { success: true, results };
   });

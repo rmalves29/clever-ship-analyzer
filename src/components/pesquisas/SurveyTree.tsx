@@ -189,6 +189,12 @@ export function SurveyTree({ questions, thankYou, onOpenQuestion }: Props) {
             ))}
           </Box>
         )}
+        {e.action && (
+          <Typography variant="caption" sx={{ color: "warning.main", display: "flex", gap: 0.5 }}>
+            <span aria-hidden="true">⚑</span>
+            {e.action}
+          </Typography>
+        )}
       </Box>
     );
   };
@@ -233,6 +239,12 @@ export function SurveyTree({ questions, thankYou, onOpenQuestion }: Props) {
           <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
             {edges.map((e) => renderEdge(e, e.label))}
           </Box>
+        )}
+        {q.action && (
+          <Typography variant="caption" sx={{ color: "warning.main", display: "flex", gap: 0.5 }}>
+            <span aria-hidden="true">⚑</span>
+            {q.action}
+          </Typography>
         )}
         {(q.tags?.length ?? 0) > 0 && (
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.4 }}>

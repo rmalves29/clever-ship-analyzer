@@ -84,6 +84,13 @@ export function RoutingEditor({ question: q, index, questions, onChange }: Props
               <Box sx={{ flex: 1, minWidth: 200 }}>
                 <TagsField label="Etiquetas desta resposta" tags={q.branches?.[key]?.tags ?? []} onCommit={(tags) => setBranch(key, { tags })} />
               </Box>
+              <TextField
+                size="small"
+                label="Ação interna (opcional)"
+                value={q.branches?.[key]?.action ?? ""}
+                onChange={(e) => setBranch(key, { action: e.target.value })}
+                sx={{ minWidth: 220, flex: 1 }}
+              />
             </Stack>
           ))}
           <Typography variant="caption" color="text.secondary">
@@ -117,6 +124,13 @@ export function RoutingEditor({ question: q, index, questions, onChange }: Props
       )}
 
       <TagsField label="Etiquetas gravadas em qualquer resposta desta pergunta" tags={q.tags ?? []} onCommit={(tags) => onChange({ tags })} />
+      <TextField
+        size="small"
+        label="Ação interna da equipe nesta pergunta (opcional)"
+        value={q.action ?? ""}
+        onChange={(e) => onChange({ action: e.target.value })}
+        fullWidth
+      />
     </Box>
   );
 }

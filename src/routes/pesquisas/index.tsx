@@ -17,6 +17,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
+import { ImportTreesButton } from "@/components/pesquisas/ImportTreesDialog";
 import { listSurveys, saveSurvey, toggleSurvey, deleteSurvey } from "@/lib/surveys.functions";
 
 export const Route = createFileRoute("/pesquisas/")({
@@ -108,6 +109,7 @@ function PesquisasPage() {
   return (
     <Box sx={{ p: { xs: 2, md: 4 } }}>
       <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center", mb: 3 }}>
+        <ImportTreesButton />
         <Button variant="outlined" startIcon={<Sparkles size={16} />} onClick={() => navigate({ to: "/pesquisas/analise" })}>
           Analisar pesquisas
         </Button>

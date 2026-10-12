@@ -34,6 +34,7 @@ import {
 } from "@/lib/surveys.functions";
 import { RoutingEditor } from "@/components/pesquisas/RoutingEditor";
 import { SurveyTree } from "@/components/pesquisas/SurveyTree";
+import { SurveyWhatsappPanel } from "@/components/pesquisas/SurveyWhatsappPanel";
 import { TagDictionary } from "@/components/pesquisas/TagDictionary";
 import { buildTreeLayout, optionKeys, pruneDanglingRefs, routesByOption } from "@/lib/survey-tree";
 import { SURVEY_TAGS_KEY } from "@/lib/surveys.functions";
@@ -175,7 +176,7 @@ function SurveyEditorPage() {
   const runResponses = useServerFn(listSurveyResponses);
   const runExport = useServerFn(exportSurveyResponsesCsv);
 
-  const [tab, setTab] = useState<"arvore" | "perguntas" | "respostas">("arvore");
+  const [tab, setTab] = useState<"arvore" | "perguntas" | "whatsapp" | "respostas">("arvore");
   const navigate = useNavigate();
   const runDelete = useServerFn(deleteSurvey);
   const [deleting, setDeleting] = useState(false);
@@ -392,6 +393,7 @@ function SurveyEditorPage() {
         <Tabs value={tab} onChange={(_, v) => setTab(v)}>
           <Tab value="arvore" label="Árvore" />
           <Tab value="perguntas" label={`Perguntas (${questions.length})`} />
+          <Tab value="whatsapp" label="WhatsApp" />
           <Tab value="respostas" label={`Respostas (${responses?.length ?? "—"})`} />
         </Tabs>
       </Box>
@@ -552,6 +554,8 @@ function SurveyEditorPage() {
           </Button>
         </Stack>
       )}
+
+      {tab === "whatsapp" && <SurveyWhatsappPanel surveyId={surveyId} />}
 
       {tab === "respostas" && (
         <Stack spacing={3}>

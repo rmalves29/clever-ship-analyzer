@@ -68,6 +68,13 @@ describe("importação de árvores", () => {
     expect(buildTagDictionary(out.questions).some((r) => r.tag === "pesquisa_recusou_p9")).toBe(true);
   });
 
+  it("etapa que a regra manda esperar a equipe vira waitForTeam", () => {
+    const t: ImportTree = { ...tree, regras: ["P9-H é enviada só depois que a equipe marca o atendimento como resolvido."] };
+    const c = convertTree(t);
+    expect(c.questions.find((q) => q.id === "P9-H")!.waitForTeam).toBe(true);
+    expect(c.questions.find((q) => q.id === "P9-F")!.waitForTeam).toBeUndefined();
+  });
+
   it("aceita um objeto só ou uma lista e recusa arquivo sem árvore", () => {
     expect(parseTreesJson(JSON.stringify(tree))).toHaveLength(1);
     expect(parseTreesJson(JSON.stringify([tree, tree]))).toHaveLength(2);

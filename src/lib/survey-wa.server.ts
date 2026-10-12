@@ -204,7 +204,9 @@ async function applyTagEffects(phone: string, customerId: string | null, tags: s
   }
   if (id) {
     const { data } = await db.from("shopify_customers").select("tags_custom").eq("id", id).maybeSingle();
-    const merged = [...new Set([...((data?.tags_custom as string[] | null) ?? []), ...tags])];
+    // problema resolvido: a cliente sai do atendimento aberto (volta a receber as réguas de venda)
+    const resolved = tags.includes("problema_resolvido");
+    const merged = [...new Set([...((data?.tags_custom as string[] | null) ?? []), ...tags])].filter((t) => !(resolved && t === TAG_EFFECTS.humanHandoff));
     await db.from("shopify_customers").update({ tags_custom: merged }).eq("id", id);
   }
   if (tags.includes(TAG_EFFECTS.optOut)) {

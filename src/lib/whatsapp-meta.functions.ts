@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
 import { SEGMENT_TYPES } from "./crm-mock";
+import { AUTOMATION_EVENT_IDS } from "./automation-events";
 export { getSegmentsList } from "./crm-segmentation.functions";
 
 const segmentTypeSchema = z.string();
@@ -458,6 +459,14 @@ const decisionStepSchema = z.object({
 
 const automationStepSchema = z.discriminatedUnion("type", [sendStepSchema, decisionStepSchema]);
 
+const eventTriggerSchema = z.object({
+  event: z.enum(AUTOMATION_EVENT_IDS),
+  lookbackHours: z.number().int().min(1).max(720),
+  filters: z
+    .array(z.object({ id: z.string().max(40), field: z.string().max(40), operator: z.string().max(30), value: z.string().max(120) }))
+    .max(12),
+});
+
 const automationSchema = z.object({
   id: z.string().uuid().optional(),
   nome: z.string().min(1),
@@ -471,6 +480,8 @@ const automationSchema = z.object({
   revalidateSegmentBeforeSend: z.boolean().optional(),
   recoveryLandingPageId: z.string().uuid().optional(),
   apenasContatosNovos: z.boolean().default(false),
+  /** Gatilho por evento de pedido/carrinho (substitui a leitura do segmento como gatilho principal). */
+  eventTrigger: eventTriggerSchema.nullable().optional(),
 });
 
 /** Cria ou atualiza uma automação (régua) — usada tanto na página do WhatsApp quanto no CRM. */

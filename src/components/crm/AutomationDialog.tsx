@@ -41,6 +41,16 @@ import { normalizeWhatsappAudienceSelection } from "@/lib/whatsapp-audience-sele
 import { extractTemplateBodyTokens, isNamedParameterToken } from "@/lib/whatsapp-template-body-tokens";
 import { DYNAMIC_VARS } from "@/lib/whatsapp-dynamic-vars";
 import { renderStepPreview } from "@/lib/automation-step-options";
+import {
+  AUTOMATION_EVENT_BY_ID,
+  DEFAULT_EVENT_LOOKBACK_HOURS,
+  describeEventTrigger,
+  isQuickFilterComplete,
+  type AutomationEventId,
+  type EventTrigger,
+  type QuickFilter,
+} from "@/lib/automation-events";
+import { AutomationEventTriggerPanel } from "./AutomationEventTriggerPanel";
 
 export const SEGMENT_LABEL: Record<string, string> = {
   ticket_alto: "Ticket alto",
@@ -116,6 +126,8 @@ export type AutomationSeed = {
   revalidateSegmentBeforeSend?: boolean | undefined;
   recoveryLandingPageId?: string | undefined;
   apenasContatosNovos?: boolean | undefined;
+  /** Gatilho por evento de pedido/carrinho; ausente = gatilho por segmento. */
+  eventTrigger?: EventTrigger | null | undefined;
 };
 
 function newId() {
@@ -367,6 +379,9 @@ export function AutomationDialog({
   const [ativo, setAtivo] = useState(true);
   const [revalidateSegmentBeforeSend, setRevalidateSegmentBeforeSend] = useState(false);
   const [apenasContatosNovos, setApenasContatosNovos] = useState(true);
+  const [eventId, setEventId] = useState<AutomationEventId | "">("");
+  const [lookbackHours, setLookbackHours] = useState(DEFAULT_EVENT_LOOKBACK_HOURS);
+  const [quickFilters, setQuickFilters] = useState<QuickFilter[]>([]);
   const [busy, setBusy] = useState(false);
   const [manualPositions, setManualPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(TRIGGER_ID);
@@ -391,6 +406,9 @@ export function AutomationDialog({
     // não varrer de uma vez o histórico inteiro do segmento assim que ativada. Editando uma já
     // existente, respeita o que já estava salvo.
     setApenasContatosNovos(seed?.apenasContatosNovos ?? !seed?.id);
+    setEventId(seed?.eventTrigger?.event ?? "");
+    setLookbackHours(seed?.eventTrigger?.lookbackHours ?? DEFAULT_EVENT_LOOKBACK_HOURS);
+    setQuickFilters(seed?.eventTrigger?.filters ?? []);
     setManualPositions({});
     setSelectedNodeId(TRIGGER_ID);
     setAddPanelOpen(false);
@@ -438,9 +456,11 @@ export function AutomationDialog({
     retry: 1,
   });
 
-  const segmentLabel = segmentId
-    ? (customSegments.find((s) => s.id === segmentId)?.nome ?? "Segmento customizado")
-    : (SEGMENT_LABEL[segmentType] ?? segmentType ?? "Escolha um gatilho");
+  const segmentLabel = eventId
+    ? describeEventTrigger({ event: eventId, lookbackHours, filters: quickFilters })
+    : segmentId
+      ? (customSegments.find((s) => s.id === segmentId)?.nome ?? "Segmento customizado")
+      : (SEGMENT_LABEL[segmentType] ?? segmentType ?? "Escolha um gatilho");
 
   const updateStep = (id: string, patch: Partial<AutomationStepSeed>) => {
     setSteps((prev) => prev.map((s) => (s.id === id ? ({ ...s, ...patch } as AutomationStepSeed) : s)));
@@ -672,8 +692,12 @@ export function AutomationDialog({
   const graphKey = useMemo(() => edges.map((e) => e.id).join(",") + "|" + nodes.map((n) => n.id).join(","), [edges, nodes]);
 
   const save = async () => {
-    if (!segmentId) {
-      toast.error("Escolha um segmento de Contatos → Segmentos como gatilho.");
+    if (!eventId && !segmentId) {
+      toast.error("Escolha um evento ou um segmento de Contatos → Segmentos como gatilho.");
+      return;
+    }
+    if (eventId && quickFilters.some((f) => !isQuickFilterComplete(f))) {
+      toast.error("Complete ou remova os filtros do cliente que estão em branco.");
       return;
     }
     const rootStep = steps.find((s) => s.id === rootStepId);
@@ -695,8 +719,15 @@ export function AutomationDialog({
           id: seed?.id,
           nome: nome.trim() || "Automação",
           descricao: descricao.trim() || undefined,
-          segmentType: "custom",
-          segmentId,
+          segmentType: eventId ? "evento" : "custom",
+          ...(segmentId ? { segmentId } : {}),
+          eventTrigger: eventId
+            ? {
+                event: eventId,
+                lookbackHours,
+                filters: quickFilters.filter(isQuickFilterComplete).map((f) => ({ id: f.id, field: f.field, operator: f.operator, value: f.value })),
+              }
+            : null,
           steps: orderedSteps.map((s) => {
             if (s.type !== "send") {
               return {
@@ -767,9 +798,10 @@ export function AutomationDialog({
   const reachable = reachableStepIds(steps, rootStepId);
   const missingTemplate = steps.some((s) => reachable.has(s.id) && s.type === "send" && !s.templateName);
   const rootNotSend = !rootStepForValidation || rootStepForValidation.type !== "send";
-  const canInstall = Boolean(segmentId) && !missingTemplate && !rootNotSend;
-  const installBlockedReason = !segmentId
-    ? "Escolha um segmento de Contatos → Segmentos como gatilho antes de instalar."
+  const hasTrigger = Boolean(eventId) || Boolean(segmentId);
+  const canInstall = hasTrigger && !missingTemplate && !rootNotSend;
+  const installBlockedReason = !hasTrigger
+    ? "Escolha um evento ou um segmento de Contatos → Segmentos como gatilho antes de instalar."
     : rootNotSend
       ? "O gatilho precisa apontar pra uma etapa de Enviar WhatsApp antes de instalar."
       : missingTemplate
@@ -964,6 +996,24 @@ export function AutomationDialog({
                     <Label className="text-xs">Descrição</Label>
                     <Textarea rows={2} value={descricao} onChange={(e) => setDescricao(e.target.value)} />
                   </div>
+                  <AutomationEventTriggerPanel
+                    open={open}
+                    eventId={eventId}
+                    lookbackHours={lookbackHours}
+                    filters={quickFilters}
+                    segmentId={segmentId}
+                    customSegments={customSegments}
+                    disabled={isLifecycleAutomation}
+                    onEventId={(id) => {
+                      setEventId(id);
+                      // Ao trocar de segmento para evento (ou vice-versa) o segmento antigo deixa de valer como gatilho.
+                      if (id && !eventId) setSegmentId(undefined);
+                    }}
+                    onLookbackHours={setLookbackHours}
+                    onFilters={setQuickFilters}
+                    onSegmentId={setSegmentId}
+                  />
+                  {!eventId && (
                   <div className="space-y-1.5">
                     <Label className="text-xs">Gatilho: segmento (público que entra na automação)</Label>
                     <Select value={segmentId ?? ""} onValueChange={(v) => setSegmentId(v)}>
@@ -991,6 +1041,7 @@ export function AutomationDialog({
                           : `${triggerAudience?.destinatarios ?? 0} contato(s) vão receber esta automação agora`}
                     </p>
                   </div>
+                  )}
                   <div className="flex items-center justify-between rounded-lg border border-border p-3">
                     <div>
                       <p className="text-sm font-medium">Revalidar segmento antes do envio</p>

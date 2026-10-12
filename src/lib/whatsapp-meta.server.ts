@@ -1398,6 +1398,7 @@ export type AutomationInput = {
   revalidateSegmentBeforeSend?: boolean | undefined;
   recoveryLandingPageId?: string | undefined;
   apenasContatosNovos?: boolean | undefined;
+  eventTrigger?: { event: string; lookbackHours: number; filters: Array<{ id: string; field: string; operator: string; value: string }> } | null | undefined;
 };
 
 export async function upsertAutomation(input: AutomationInput) {
@@ -1405,7 +1406,7 @@ export async function upsertAutomation(input: AutomationInput) {
   const settings = await loadSettings();
 
   let existingTriggerConfig: Record<string, unknown> = {};
-  if (input.id && (input.revalidateSegmentBeforeSend !== undefined || input.recoveryLandingPageId !== undefined)) {
+  if (input.id && (input.revalidateSegmentBeforeSend !== undefined || input.recoveryLandingPageId !== undefined || input.eventTrigger !== undefined)) {
     const { data: existing } = await (supabaseAdmin.from("whatsapp_automations") as any)
       .select("trigger_config")
       .eq("id", input.id)
@@ -1461,20 +1462,32 @@ export async function upsertAutomation(input: AutomationInput) {
         },
   );
 
+  const { AUTOMATION_EVENT_BY_ID, eventTriggerToConfig, parseEventTrigger } = await import("./automation-events");
+  // Valida/normaliza o gatilho por evento antes de gravar (descarta filtros incompletos ou inválidos).
+  const eventTrigger = input.eventTrigger ? parseEventTrigger({
+    event: input.eventTrigger.event,
+    lookbackHours: input.eventTrigger.lookbackHours,
+    quickFilters: input.eventTrigger.filters,
+  }) : null;
+  const eventDef = eventTrigger ? AUTOMATION_EVENT_BY_ID.get(eventTrigger.event) : undefined;
+
   const row = {
     nome: input.nome,
     descricao: input.descricao?.trim() || null,
-    segment_type: input.segmentType,
+    segment_type: eventTrigger ? `evento:${eventTrigger.event}` : input.segmentType,
     segment_id: input.segmentId || null,
     steps,
     requer_aprovacao: input.requerAprovacao,
     ativo: input.ativo,
     apenas_contatos_novos: input.apenasContatosNovos ?? false,
     ...(!input.id || input.origem !== undefined ? { origem: input.origem ?? "crm" } : {}),
-    ...(input.revalidateSegmentBeforeSend !== undefined || input.recoveryLandingPageId !== undefined
+    // Um disparo por pedido/carrinho: sem isso o motor só deixaria cada cliente entrar uma única vez.
+    ...(eventDef ? { reentry_mode: eventDef.reentryMode } : {}),
+    ...(input.revalidateSegmentBeforeSend !== undefined || input.recoveryLandingPageId !== undefined || input.eventTrigger !== undefined
       ? {
           trigger_config: {
             ...existingTriggerConfig,
+            ...(input.eventTrigger !== undefined ? eventTriggerToConfig(eventTrigger) : {}),
             ...(input.revalidateSegmentBeforeSend !== undefined
               ? { revalidateSegmentBeforeSend: input.revalidateSegmentBeforeSend }
               : {}),

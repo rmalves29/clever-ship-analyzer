@@ -22,6 +22,7 @@ import {
   type AutomationSeed,
 } from "@/components/crm/AutomationDialog";
 import { ConversationalFlowsTab } from "@/components/whatsapp/ConversationalFlowsTab";
+import { AUTOMATION_EVENT_BY_ID, parseEventTrigger } from "@/lib/automation-events";
 import { AutomationPerformancePanel } from "@/components/whatsapp/AutomationPerformancePanel";
 import {
   deleteAutomation,
@@ -246,8 +247,10 @@ function AutomacoesPage() {
                     ? `Matriz RFM · ${String(a.triggerConfig?.rfmSegment ?? "")}`
                     : a.automationKind === "cashback"
                       ? "Cashback por pedido"
-                      : (SEGMENT_LABEL[a.segmentType as keyof typeof SEGMENT_LABEL] ??
-                        a.segmentType)}{" "}
+                      : parseEventTrigger(a.triggerConfig)
+                        ? `Evento · ${AUTOMATION_EVENT_BY_ID.get(parseEventTrigger(a.triggerConfig)!.event)?.label ?? ""}`
+                        : (SEGMENT_LABEL[a.segmentType as keyof typeof SEGMENT_LABEL] ??
+                          a.segmentType)}{" "}
                   · {a.steps?.length ?? 0} etapa(s)
                 </Typography>
               </Box>
@@ -291,6 +294,8 @@ function AutomacoesPage() {
                     requerAprovacao: a.requerAprovacao ?? true,
                     ativo: Boolean(a.ativo),
                     automationKind: a.automationKind,
+                    apenasContatosNovos: Boolean(a.apenasContatosNovos),
+                    eventTrigger: parseEventTrigger(a.triggerConfig),
                     revalidateSegmentBeforeSend: Boolean(a.triggerConfig?.revalidateSegmentBeforeSend),
                     recoveryLandingPageId:
                       typeof a.triggerConfig?.landingPageId === "string"
@@ -316,6 +321,8 @@ function AutomacoesPage() {
                       steps: a.steps ?? undefined,
                       requerAprovacao: a.requerAprovacao ?? true,
                       ativo: false,
+                      apenasContatosNovos: Boolean(a.apenasContatosNovos),
+                      eventTrigger: parseEventTrigger(a.triggerConfig),
                       revalidateSegmentBeforeSend: Boolean(a.triggerConfig?.revalidateSegmentBeforeSend),
                       recoveryLandingPageId:
                         typeof a.triggerConfig?.landingPageId === "string"

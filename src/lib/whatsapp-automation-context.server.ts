@@ -30,7 +30,14 @@ function shippingTitle(rawData: any): string | null {
 
 export async function captureAutomationEventContext(
   customerId: string,
-  options?: { orderId?: string; landingPageId?: string },
+  options?: {
+    orderId?: string;
+    landingPageId?: string;
+    /** Evento de carrinho abandonado: usa este checkout e não carrega nenhum pedido. */
+    checkoutId?: string;
+    /** Evento só do cliente (ex.: contato novo): não carrega pedido nem carrinho antigo. */
+    customerOnly?: boolean;
+  },
 ): Promise<{
   context: AutomationEventContext;
   contextKey: string;
@@ -38,6 +45,7 @@ export async function captureAutomationEventContext(
   const db = await admin();
   const capturedAt = new Date().toISOString();
 
+  const skipOrder = Boolean(options?.checkoutId || options?.customerOnly);
   let orderQuery = db
     .from("shopify_orders")
     .select("id, order_number, total_price, financial_status, fulfillment_status, raw_data, processed_at, created_at")
@@ -55,14 +63,14 @@ export async function captureAutomationEventContext(
     : Promise.resolve({ data: null });
 
   const [{ data: orderRow }, { data: checkoutRow }, { data: settingsRow }, { data: landingPageRow }] = await Promise.all([
-    orderQuery.limit(1).maybeSingle(),
-    db
-      .from("shopify_abandoned_checkouts")
-      .select("id, checkout_url, total_price, created_at")
-      .eq("customer_id", customerId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    skipOrder ? Promise.resolve({ data: null }) : orderQuery.limit(1).maybeSingle(),
+    options?.customerOnly
+      ? Promise.resolve({ data: null })
+      : (() => {
+          let q = db.from("shopify_abandoned_checkouts").select("id, checkout_url, total_price, created_at");
+          q = options?.checkoutId ? q.eq("id", options.checkoutId) : q.eq("customer_id", customerId).order("created_at", { ascending: false }).limit(1);
+          return q.maybeSingle();
+        })(),
     db.from("store_settings").select("storefront_domain").order("created_at", { ascending: true }).limit(1).maybeSingle(),
     landingPagePromise,
   ]);

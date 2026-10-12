@@ -6,6 +6,8 @@ import { decideAutomationReentry } from "./whatsapp-automation-reentry";
 import { resolveWaitInput } from "./automation-wait";
 import { startOfBrazilDay } from "./brazil-day";
 import { alignToSendTime, parseCampaignTag, parseSendTime, parseStepAudience, type StepAudience } from "./automation-step-options";
+import { parseEventTrigger, type EventTrigger } from "./automation-events";
+import type { EventTarget } from "./automation-events.server";
 import {
   parseCashbackSendSchedule,
   pickInitialCashbackStep,
@@ -600,7 +602,57 @@ async function cleanupLifecycleRuns(automation: any): Promise<number> {
   return 0;
 }
 
-async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Promise<number> {
+/** Tira dos alvos o pedido/carrinho (ou contato, no evento "novo contato") que já tem execução nesta automação. */
+async function dropAlreadyEnrolledTargets(automation: any, trigger: EventTrigger, targets: EventTarget[]): Promise<EventTarget[]> {
+  if (targets.length === 0) return targets;
+  const supabaseAdmin = await admin();
+  const byCustomer = trigger.event === "cliente_cadastrado";
+  const keyOf = (t: EventTarget) => (t.orderId ? `order:${t.orderId}` : t.checkoutId ? `checkout:${t.checkoutId}` : null);
+  const seen = new Set<string>();
+  const column = byCustomer ? "customer_id" : "context_key";
+  const values = [...new Set(targets.map((t) => (byCustomer ? t.customerId : keyOf(t))).filter((v): v is string => Boolean(v)))];
+  for (let start = 0; start < values.length; start += 200) {
+    const { data, error } = await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+      .select(column)
+      .eq("automation_id", automation.id)
+      .in(column, values.slice(start, start + 200));
+    if (error) throw new Error(`Erro ao consultar execuções já matriculadas: ${error.message}`);
+    for (const row of data ?? []) seen.add(String(row[column]));
+  }
+  return targets.filter((t) => {
+    const value = byCustomer ? t.customerId : keyOf(t);
+    return !value || !seen.has(value);
+  });
+}
+
+/**
+ * Gatilho por evento (pedido feito/enviado/entregue, carrinho abandonado…): acha os eventos recentes,
+ * aplica os filtros de cliente do gatilho (e o segmento salvo, se houver) e devolve quem tem telefone válido.
+ * Um cliente pode aparecer mais de uma vez (um item por pedido/carrinho).
+ */
+async function resolveEventRecipients(
+  automation: any,
+  trigger: EventTrigger,
+  resolveSegmentRecipients: (segmentType: string, ids: string[]) => Promise<unknown>,
+): Promise<Array<{ id: string; phone: string; eventTarget: EventTarget }>> {
+  const { findEventTargets, applyEventAudienceFilters } = await import("./automation-events.server");
+  const found = await findEventTargets(trigger.event, trigger.lookbackHours);
+  // Descarta antes dos filtros (que carregam a base inteira) o que já foi matriculado em ciclos anteriores.
+  const targets = await dropAlreadyEnrolledTargets(automation, trigger, found);
+  if (targets.length === 0) return [];
+  const segment = automation.segment_id ? { segmentType: "custom", segmentId: String(automation.segment_id) } : null;
+  const kept = await applyEventAudienceFilters(targets, trigger, segment);
+  if (kept.length === 0) return [];
+  const customerIds = [...new Set(kept.map((t) => t.customerId))];
+  const withPhone = (await resolveSegmentRecipients("custom", customerIds)) as Array<{ id: string; phone: string }>;
+  const phoneByCustomer = new Map(withPhone.map((r) => [String(r.id), r.phone]));
+  return kept.flatMap((target) => {
+    const phone = phoneByCustomer.get(target.customerId);
+    return phone ? [{ id: target.customerId, phone, eventTarget: target }] : [];
+  });
+}
+
+export async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Promise<number> {
   const kind = getAutomationKind(automation);
   if (kind === "rfm") return enrollRFMCustomers(automation, steps);
   if (kind === "cashback") return enrollCashbackCustomers(automation, steps);
@@ -617,17 +669,25 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
       import("./whatsapp-automation-context.server"),
     ]);
 
-  const ids: string[] = await resolveWhatsappSegmentCustomerIds(automation.segment_type, automation.segment_id || undefined);
-  if (ids.length === 0) return 0;
+  type EnrollRecipient = { id: string; phone: string; eventTarget?: EventTarget };
+  const eventTrigger = parseEventTrigger(automation.trigger_config);
+  let recipients: EnrollRecipient[];
+  if (eventTrigger) {
+    recipients = await resolveEventRecipients(automation, eventTrigger, resolveSegmentRecipients);
+    if (recipients.length === 0) return 0;
+  } else {
+    const ids: string[] = await resolveWhatsappSegmentCustomerIds(automation.segment_type, automation.segment_id || undefined);
+    if (ids.length === 0) return 0;
 
-  let recipients = (await resolveSegmentRecipients(automation.segment_type, ids)) as Array<{ id: string; phone: string }>;
-  if (recipients.length === 0) return 0;
+    recipients = (await resolveSegmentRecipients(automation.segment_type, ids)) as Array<{ id: string; phone: string }>;
+    if (recipients.length === 0) return 0;
+  }
 
   // "Só contatos novos": a régua ignora quem já era cliente antes dela existir — sem isso, ativar
   // uma automação nova varre o histórico inteiro do segmento de uma vez (ex.: toda a base "sem
   // compra" acumulada em meses) e cria um lote gigante de primeira leva, em vez de pegar só quem
   // passar a se qualificar dali pra frente.
-  if (automation.apenas_contatos_novos) {
+  if (automation.apenas_contatos_novos && !eventTrigger) {
     const recipientIds = recipients.map((r) => r.id);
     const createdAtByCustomer = new Map<string, string>();
     for (let start = 0; start < recipientIds.length; start += 200) {
@@ -657,7 +717,7 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
   // e o volume de chamadas em paralelo trava a automação inteira num timeout, não só um "Bad
   // Request" de URL grande demais (o mesmo motivo pelo qual essa consulta é paginada em lotes
   // de 200, como `enrollRFMCustomers`/`enrollCashbackCustomers` já fazem).
-  const recipientIds = recipients.map((recipient) => recipient.id);
+  const recipientIds = [...new Set(recipients.map((recipient) => recipient.id))];
   const existingRuns: any[] = [];
   for (let start = 0; start < recipientIds.length; start += 200) {
     const batch = recipientIds.slice(start, start + 200);
@@ -686,6 +746,12 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
     const previousRuns = runsByCustomer.get(recipient.id) ?? [];
     if (previousRuns.some((run) => ACTIVE_RUN_STATUSES.includes(String(run.status ?? "")))) return false;
     if (reentryMode === "once" && previousRuns.length > 0) return false;
+    // Evento já matriculado (mesmo pedido/carrinho): não paga o custo de capturar o contexto de novo a cada ciclo.
+    const target = recipient.eventTarget;
+    const eventKey = target?.orderId ? `order:${target.orderId}` : target?.checkoutId ? `checkout:${target.checkoutId}` : null;
+    if (eventKey && (reentryMode === "per_order" || reentryMode === "per_checkout")) {
+      if (previousRuns.some((run) => run.enrollment_key === eventKey || run.context_key === eventKey)) return false;
+    }
     return true;
   });
   if (candidates.length === 0) return 0;
@@ -705,6 +771,9 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
             typeof automation.trigger_config?.landingPageId === "string"
               ? automation.trigger_config.landingPageId
               : undefined,
+          ...(recipient.eventTarget?.orderId ? { orderId: recipient.eventTarget.orderId } : {}),
+          ...(recipient.eventTarget?.checkoutId ? { checkoutId: recipient.eventTarget.checkoutId } : {}),
+          ...(recipient.eventTarget && !recipient.eventTarget.orderId && !recipient.eventTarget.checkoutId ? { customerOnly: true } : {}),
         })),
       })),
     );
@@ -968,12 +1037,22 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
 
   if (automation.trigger_config?.revalidateSegmentBeforeSend === true) {
     const { resolveWhatsappSegmentCustomerIds } = await import("./whatsapp-segment-resolver.server");
-    const currentCustomerIds = new Set<string>(
-      await resolveWhatsappSegmentCustomerIds(
-        automation.segment_type,
-        automation.segment_id || undefined,
-      ),
-    );
+    const eventTriggerNow = parseEventTrigger(automation.trigger_config);
+    let currentCustomerIds: Set<string>;
+    if (eventTriggerNow) {
+      // Gatilho por evento: o evento já aconteceu — revalida só os filtros de cliente do gatilho.
+      const { applyEventAudienceFilters } = await import("./automation-events.server");
+      const asTargets = runs.map((run) => ({ customerId: String(run.customer_id), eventAt: new Date().toISOString() }));
+      const kept = await applyEventAudienceFilters(asTargets, eventTriggerNow, automation.segment_id ? { segmentType: "custom", segmentId: automation.segment_id } : null);
+      currentCustomerIds = new Set(kept.map((t) => t.customerId));
+    } else {
+      currentCustomerIds = new Set<string>(
+        await resolveWhatsappSegmentCustomerIds(
+          automation.segment_type,
+          automation.segment_id || undefined,
+        ),
+      );
+    }
     const staleRuns = runs.filter((run) => !currentCustomerIds.has(String(run.customer_id)));
     if (staleRuns.length > 0) {
       await markRunsExited(

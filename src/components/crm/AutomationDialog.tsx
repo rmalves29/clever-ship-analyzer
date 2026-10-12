@@ -381,6 +381,7 @@ export function AutomationDialog({
   const [apenasContatosNovos, setApenasContatosNovos] = useState(true);
   const [eventId, setEventId] = useState<AutomationEventId | "">("");
   const [lookbackHours, setLookbackHours] = useState(DEFAULT_EVENT_LOOKBACK_HOURS);
+  const [afterHours, setAfterHours] = useState(0);
   const [quickFilters, setQuickFilters] = useState<QuickFilter[]>([]);
   const [busy, setBusy] = useState(false);
   const [manualPositions, setManualPositions] = useState<Record<string, { x: number; y: number }>>({});
@@ -408,6 +409,7 @@ export function AutomationDialog({
     setApenasContatosNovos(seed?.apenasContatosNovos ?? !seed?.id);
     setEventId(seed?.eventTrigger?.event ?? "");
     setLookbackHours(seed?.eventTrigger?.lookbackHours ?? DEFAULT_EVENT_LOOKBACK_HOURS);
+    setAfterHours(seed?.eventTrigger?.afterHours ?? 0);
     setQuickFilters(seed?.eventTrigger?.filters ?? []);
     setManualPositions({});
     setSelectedNodeId(TRIGGER_ID);
@@ -457,7 +459,7 @@ export function AutomationDialog({
   });
 
   const segmentLabel = eventId
-    ? describeEventTrigger({ event: eventId, lookbackHours, filters: quickFilters })
+    ? describeEventTrigger({ event: eventId, lookbackHours, afterHours, filters: quickFilters })
     : segmentId
       ? (customSegments.find((s) => s.id === segmentId)?.nome ?? "Segmento customizado")
       : (SEGMENT_LABEL[segmentType] ?? segmentType ?? "Escolha um gatilho");
@@ -725,6 +727,7 @@ export function AutomationDialog({
             ? {
                 event: eventId,
                 lookbackHours,
+                afterHours,
                 filters: quickFilters.filter(isQuickFilterComplete).map((f) => ({ id: f.id, field: f.field, operator: f.operator, value: f.value })),
               }
             : null,
@@ -1000,6 +1003,7 @@ export function AutomationDialog({
                     open={open}
                     eventId={eventId}
                     lookbackHours={lookbackHours}
+                    afterHours={afterHours}
                     filters={quickFilters}
                     segmentId={segmentId}
                     customSegments={customSegments}
@@ -1010,6 +1014,7 @@ export function AutomationDialog({
                       if (id && !eventId) setSegmentId(undefined);
                     }}
                     onLookbackHours={setLookbackHours}
+                    onAfterHours={setAfterHours}
                     onFilters={setQuickFilters}
                     onSegmentId={setSegmentId}
                   />

@@ -35,6 +35,7 @@ export const getAutomationFilterOptions = createServerFn({ method: "GET" })
 const previewSchema = z.object({
   event: z.enum(AUTOMATION_EVENT_IDS),
   lookbackHours: z.number().int().min(1).max(720),
+  afterHours: z.number().int().min(0).max(1440).default(0),
   filters: z
     .array(z.object({ id: z.string().max(40), field: z.string().max(40), operator: z.string().max(30), value: z.string().max(120) }))
     .max(12),
@@ -50,10 +51,15 @@ export const previewEventTrigger = createServerFn({ method: "POST" })
     const { findEventTargets, applyEventAudienceFilters } = await import("./automation-events.server");
     const { resolveSegmentRecipients } = await import("./whatsapp-meta.server");
 
-    const trigger = parseEventTrigger({ event: data.event, lookbackHours: data.lookbackHours, quickFilters: data.filters });
+    const trigger = parseEventTrigger({
+      event: data.event,
+      lookbackHours: data.lookbackHours,
+      afterHours: data.afterHours,
+      quickFilters: data.filters,
+    });
     if (!trigger) return { eventos: 0, eventosFiltrados: 0, clientes: 0, comTelefone: 0 };
 
-    const targets = await findEventTargets(trigger.event, trigger.lookbackHours);
+    const targets = await findEventTargets(trigger.event, trigger.lookbackHours, trigger.afterHours);
     const kept = await applyEventAudienceFilters(
       targets,
       trigger,

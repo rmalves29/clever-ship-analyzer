@@ -69,13 +69,15 @@ describe("eventos de automação", () => {
     expect(trigger?.filters).toHaveLength(1);
     const config = eventTriggerToConfig(trigger);
     expect(parseEventTrigger(config)).toEqual(trigger);
+    expect(parseEventTrigger({ event: "pedido_entregue", afterHours: 72 })?.afterHours).toBe(72);
+    expect(parseEventTrigger({ event: "pedido_entregue", afterHours: -5 })?.afterHours).toBe(0);
   });
 
   it("automação por segmento (sem evento) não vira gatilho de evento", () => {
     expect(parseEventTrigger({})).toBeNull();
     expect(parseEventTrigger({ event: "nao_existe" })).toBeNull();
     expect(parseEventTrigger(null)).toBeNull();
-    expect(eventTriggerToConfig(null)).toEqual({ event: null, lookbackHours: null, quickFilters: null });
+    expect(eventTriggerToConfig(null)).toEqual({ event: null, lookbackHours: null, afterHours: null, quickFilters: null });
   });
 
   it("limita a janela de eventos", () => {
@@ -85,6 +87,10 @@ describe("eventos de automação", () => {
     expect(clampLookbackHours(6)).toBe(6);
     const now = new Date("2026-10-12T12:00:00Z");
     expect(eventWindow(now, 24).from.toISOString()).toBe("2026-10-11T12:00:00.000Z");
+    // 72h depois do evento: janela de 24h que terminou há 3 dias.
+    const late = eventWindow(now, 24, 72);
+    expect(late.to.toISOString()).toBe("2026-10-09T12:00:00.000Z");
+    expect(late.from.toISOString()).toBe("2026-10-08T12:00:00.000Z");
   });
 
   it("filtro incompleto é ignorado e sem filtros não restringe", () => {
@@ -133,9 +139,11 @@ describe("eventos de automação", () => {
     const text = describeEventTrigger({
       event: "pedido_entregue",
       lookbackHours: 24,
+      afterHours: 240,
       filters: [f({ field: "ja_comprou", operator: "eq" }), f({ id: "y", field: "tag_cliente", operator: "eq", value: "vip" })],
     });
     expect(text).toContain("Pedido entregue");
+    expect(text).toContain("10 dias depois");
     expect(text).toContain("Já comprou? sim");
     expect(text).toContain("Tag do cliente tem a tag vip");
   });

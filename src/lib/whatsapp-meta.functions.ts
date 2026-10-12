@@ -462,6 +462,7 @@ const automationStepSchema = z.discriminatedUnion("type", [sendStepSchema, decis
 const eventTriggerSchema = z.object({
   event: z.enum(AUTOMATION_EVENT_IDS),
   lookbackHours: z.number().int().min(1).max(720),
+  afterHours: z.number().int().min(0).max(1440).default(0),
   filters: z
     .array(z.object({ id: z.string().max(40), field: z.string().max(40), operator: z.string().max(30), value: z.string().max(120) }))
     .max(12),

@@ -1398,7 +1398,7 @@ export type AutomationInput = {
   revalidateSegmentBeforeSend?: boolean | undefined;
   recoveryLandingPageId?: string | undefined;
   apenasContatosNovos?: boolean | undefined;
-  eventTrigger?: { event: string; lookbackHours: number; filters: Array<{ id: string; field: string; operator: string; value: string }> } | null | undefined;
+  eventTrigger?: { event: string; lookbackHours: number; afterHours?: number | undefined; filters: Array<{ id: string; field: string; operator: string; value: string }> } | null | undefined;
 };
 
 export async function upsertAutomation(input: AutomationInput) {
@@ -1467,6 +1467,7 @@ export async function upsertAutomation(input: AutomationInput) {
   const eventTrigger = input.eventTrigger ? parseEventTrigger({
     event: input.eventTrigger.event,
     lookbackHours: input.eventTrigger.lookbackHours,
+    afterHours: input.eventTrigger.afterHours,
     quickFilters: input.eventTrigger.filters,
   }) : null;
   const eventDef = eventTrigger ? AUTOMATION_EVENT_BY_ID.get(eventTrigger.event) : undefined;

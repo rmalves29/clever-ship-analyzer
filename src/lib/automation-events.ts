@@ -49,6 +49,7 @@ export const AUTOMATION_EVENT_BY_ID: ReadonlyMap<string, AutomationEventDef> = n
 
 export const DEFAULT_EVENT_LOOKBACK_HOURS = 24;
 export const MAX_EVENT_LOOKBACK_HOURS = 24 * 30;
+export const MAX_EVENT_AFTER_HOURS = 24 * 60;
 
 export type QuickFilterOperator = "eq" | "neq" | "gte" | "lte" | "last_days" | "older_than_days" | "in" | "not_in" | "contains";
 
@@ -63,6 +64,8 @@ export type EventTrigger = {
   event: AutomationEventId;
   /** Pega eventos ocorridos nas últimas N horas (quem já passou disso não entra). */
   lookbackHours: number;
+  /** Só dispara N horas depois do evento — o estado (filtros, "ainda sem envio"…) é conferido nesse momento. */
+  afterHours: number;
   filters: QuickFilter[];
 };
 
@@ -218,6 +221,12 @@ export function clampLookbackHours(raw: unknown): number {
   return Math.min(n, MAX_EVENT_LOOKBACK_HOURS);
 }
 
+export function clampAfterHours(raw: unknown): number {
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(n, MAX_EVENT_AFTER_HOURS);
+}
+
 function parseQuickFilter(raw: unknown, index: number): QuickFilter | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
@@ -246,26 +255,44 @@ export function parseEventTrigger(config: unknown): EventTrigger | null {
         return parsed ? [parsed] : [];
       })
     : [];
-  return { event: event as AutomationEventId, lookbackHours: clampLookbackHours(c["lookbackHours"]), filters };
+  return {
+    event: event as AutomationEventId,
+    lookbackHours: clampLookbackHours(c["lookbackHours"]),
+    afterHours: clampAfterHours(c["afterHours"]),
+    filters,
+  };
 }
 
 /** Campos a gravar em `trigger_config` (mesclados ao que já existir lá). */
 export function eventTriggerToConfig(trigger: EventTrigger | null): Record<string, unknown> {
-  if (!trigger) return { event: null, lookbackHours: null, quickFilters: null };
+  if (!trigger) return { event: null, lookbackHours: null, afterHours: null, quickFilters: null };
   return {
     event: trigger.event,
     lookbackHours: clampLookbackHours(trigger.lookbackHours),
+    afterHours: clampAfterHours(trigger.afterHours),
     quickFilters: trigger.filters.filter(isQuickFilterComplete).map((f) => ({ id: f.id, field: f.field, operator: f.operator, value: f.value })),
   };
 }
 
-/** Janela de eventos que entram agora: [now - lookback, now]. */
-export function eventWindow(now: Date, lookbackHours: number): { from: Date; to: Date } {
-  return { from: new Date(now.getTime() - clampLookbackHours(lookbackHours) * 3_600_000), to: now };
+/**
+ * Janela de eventos que entram agora: [now - after - lookback, now - after].
+ * Com `afterHours = 0` é simplesmente "as últimas N horas".
+ */
+export function eventWindow(now: Date, lookbackHours: number, afterHours = 0): { from: Date; to: Date } {
+  const to = new Date(now.getTime() - clampAfterHours(afterHours) * 3_600_000);
+  return { from: new Date(to.getTime() - clampLookbackHours(lookbackHours) * 3_600_000), to };
+}
+
+export function describeAfterHours(hours: number): string {
+  const h = clampAfterHours(hours);
+  if (h === 0) return "";
+  if (h % 24 === 0) return `${h / 24} ${h === 24 ? "dia" : "dias"} depois`;
+  return `${h}h depois`;
 }
 
 export function describeEventTrigger(trigger: EventTrigger): string {
   const def = AUTOMATION_EVENT_BY_ID.get(trigger.event);
   const filters = trigger.filters.filter(isQuickFilterComplete).map(describeQuickFilter);
-  return `${def?.label ?? trigger.event}${filters.length ? ` · ${filters.join(" · ")}` : ""}`;
+  const after = describeAfterHours(trigger.afterHours);
+  return `${def?.label ?? trigger.event}${after ? ` · ${after}` : ""}${filters.length ? ` · ${filters.join(" · ")}` : ""}`;
 }

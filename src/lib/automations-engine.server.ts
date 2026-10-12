@@ -636,7 +636,7 @@ async function resolveEventRecipients(
   resolveSegmentRecipients: (segmentType: string, ids: string[]) => Promise<unknown>,
 ): Promise<Array<{ id: string; phone: string; eventTarget: EventTarget }>> {
   const { findEventTargets, applyEventAudienceFilters } = await import("./automation-events.server");
-  const found = await findEventTargets(trigger.event, trigger.lookbackHours);
+  const found = await findEventTargets(trigger.event, trigger.lookbackHours, trigger.afterHours);
   // Descarta antes dos filtros (que carregam a base inteira) o que já foi matriculado em ciclos anteriores.
   const targets = await dropAlreadyEnrolledTargets(automation, trigger, found);
   if (targets.length === 0) return [];

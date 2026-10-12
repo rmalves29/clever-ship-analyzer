@@ -199,8 +199,8 @@ async function productionTargets(from: Date, to: Date): Promise<EventTarget[]> {
 }
 
 /** Alvos do evento dentro da janela, sem aplicar os filtros de cliente. */
-export async function findEventTargets(event: AutomationEventId, lookbackHours: number, now = new Date()): Promise<EventTarget[]> {
-  const { from, to } = eventWindow(now, lookbackHours);
+export async function findEventTargets(event: AutomationEventId, lookbackHours: number, afterHours = 0, now = new Date()): Promise<EventTarget[]> {
+  const { from, to } = eventWindow(now, lookbackHours, afterHours);
   switch (event) {
     case "pedido_criado":
       return (await ordersCreatedBetween(from, to)).filter((o) => !o.cancelled_at).flatMap((o) => orderTarget(o, o.created_at) ?? []);

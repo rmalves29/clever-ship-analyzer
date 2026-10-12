@@ -29,12 +29,14 @@ type Props = {
   open: boolean;
   eventId: AutomationEventId | "";
   lookbackHours: number;
+  afterHours: number;
   filters: QuickFilter[];
   segmentId: string | undefined;
   customSegments: { id: string; nome: string }[];
   disabled?: boolean;
   onEventId: (id: AutomationEventId | "") => void;
   onLookbackHours: (hours: number) => void;
+  onAfterHours: (hours: number) => void;
   onFilters: (filters: QuickFilter[]) => void;
   onSegmentId: (id: string | undefined) => void;
 };
@@ -47,12 +49,14 @@ export function AutomationEventTriggerPanel({
   open,
   eventId,
   lookbackHours,
+  afterHours,
   filters,
   segmentId,
   customSegments,
   disabled,
   onEventId,
   onLookbackHours,
+  onAfterHours,
   onFilters,
   onSegmentId,
 }: Props) {
@@ -68,12 +72,13 @@ export function AutomationEventTriggerPanel({
 
   const completeFilters = useMemo(() => filters.filter(isQuickFilterComplete), [filters]);
   const { data: preview, isFetching: loadingPreview } = useQuery({
-    queryKey: ["automation-event-preview", eventId, lookbackHours, JSON.stringify(completeFilters), segmentId ?? null],
+    queryKey: ["automation-event-preview", eventId, lookbackHours, afterHours, JSON.stringify(completeFilters), segmentId ?? null],
     queryFn: () =>
       runPreview({
         data: {
           event: eventId as AutomationEventId,
           lookbackHours,
+          afterHours,
           filters: completeFilters.map((f) => ({ id: f.id, field: f.field, operator: f.operator, value: f.value })),
           ...(segmentId ? { segmentId } : {}),
         },
@@ -129,6 +134,21 @@ export function AutomationEventTriggerPanel({
       {eventId && (
         <>
           <div className="space-y-1.5">
+            <Label className="text-xs">Disparar só depois de (horas do evento)</Label>
+            <Input
+              type="number"
+              min={0}
+              max={1440}
+              value={afterHours}
+              onChange={(e) => onAfterHours(Math.max(0, Math.min(1440, Math.round(Number(e.target.value) || 0))))}
+            />
+            <p className="text-xs text-muted-foreground">
+              0 = assim que acontece. Ex.: 72 em "Pedido em produção" avisa só quem continua sem envio depois de 3 dias; 240 em
+              "Pedido entregue" convida a pesquisa 10 dias depois. Os filtros são conferidos nesse momento.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
             <Label className="text-xs">Pegar eventos das últimas (horas)</Label>
             <Input
               type="number"
@@ -138,8 +158,8 @@ export function AutomationEventTriggerPanel({
               onChange={(e) => onLookbackHours(Math.max(1, Math.min(720, Math.round(Number(e.target.value) || 24))))}
             />
             <p className="text-xs text-muted-foreground">
-              Quem já passou dessa janela não entra. Cada pedido/carrinho dispara uma única vez. Para enviar um tempo depois do evento
-              (ex.: 15 dias após a entrega), coloque a espera na primeira etapa.
+              Quem já passou dessa janela não entra. Cada pedido/carrinho dispara uma única vez. A janela conta a partir do momento
+              definido acima.
             </p>
           </div>
 
@@ -303,7 +323,7 @@ export function AutomationEventTriggerPanel({
             ) : preview ? (
               <div className="space-y-0.5">
                 <p>
-                  <strong>{preview.eventos}</strong> {preview.eventos === 1 ? "evento" : "eventos"} nas últimas {lookbackHours}h
+                  <strong>{preview.eventos}</strong> {preview.eventos === 1 ? "evento" : "eventos"} na janela de {lookbackHours}h
                   {completeFilters.length > 0 || segmentId ? (
                     <>
                       {" "}

@@ -39,6 +39,8 @@ export type TreeQuestion = {
   tags?: string[];
   /** Ação interna da equipe ao passar por esta pergunta (ex.: "Abrir atendimento com prioridade alta"). */
   action?: string;
+  /** No WhatsApp, a pesquisa PARA antes desta etapa até a equipe liberar (ex.: "conseguimos resolver?" só depois do atendimento). */
+  waitForTeam?: boolean;
 };
 
 export type TreeAnswers = Record<string, string | string[] | undefined>;

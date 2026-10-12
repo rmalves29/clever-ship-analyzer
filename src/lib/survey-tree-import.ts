@@ -122,6 +122,13 @@ export function convertTree(tree: ImportTree): ConvertedTree {
 
   if (questions.length === 0) warnings.push({ code: "sem_inicio", detail: "árvore sem nós" });
 
+  // Regra escrita no material: "P2-R é enviada só depois que a equipe marca o atendimento como resolvido" -> a etapa espera a equipe.
+  for (const rule of tree.regras ?? []) {
+    const m = /^(\S+)\s+(?:é|e)\s+enviada\s+só\s+depois\s+que\s+a\s+equipe/i.exec(rule.trim());
+    const target = m ? questions.find((q) => q.id === m[1]) : undefined;
+    if (target) target.waitForTeam = true;
+  }
+
   const finalNode = tree.nos.find((n) => n.tipo === "fim" && n.tags?.some((t) => t.startsWith("respondeu_")));
   const description = [
     tree.objetivo ? `Objetivo: ${tree.objetivo}` : "",

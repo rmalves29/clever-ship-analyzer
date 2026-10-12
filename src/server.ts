@@ -100,7 +100,14 @@ async function handleWhatsappWebhook(request: Request): Promise<Response> {
           await recordInboundMessage(m, contactName).catch((error) =>
             console.error("Falha ao gravar mensagem recebida na caixa de entrada:", error),
           );
-          await matchIncomingMessage(m).catch((error) => console.error("Falha ao casar mensagem recebida com fluxo:", error));
+          // Pesquisa por WhatsApp tem prioridade: se a mensagem é resposta de uma pesquisa em andamento (ou clique no convite),
+          // os fluxos por palavra-chave não respondem por cima.
+          const { handleSurveyInbound } = await import("./lib/survey-wa.server");
+          const handledBySurvey = await handleSurveyInbound(m).catch((error) => {
+            console.error("Falha ao processar resposta de pesquisa por WhatsApp:", error);
+            return false;
+          });
+          if (!handledBySurvey) await matchIncomingMessage(m).catch((error) => console.error("Falha ao casar mensagem recebida com fluxo:", error));
         }
       }
 

@@ -42,6 +42,7 @@ const questionSchema = z.object({
   branches: z.record(z.string(), branchSchema).optional(),
   tags: z.array(z.string().min(1).max(60)).max(20).optional(),
   action: z.string().max(300).optional(),
+  waitForTeam: z.boolean().optional(),
 });
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

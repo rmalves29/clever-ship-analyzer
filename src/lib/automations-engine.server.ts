@@ -5,6 +5,7 @@ import { automationDeliveryAction } from "./whatsapp-automation-delivery-state";
 import { decideAutomationReentry } from "./whatsapp-automation-reentry";
 import { resolveWaitInput } from "./automation-wait";
 import { startOfBrazilDay } from "./brazil-day";
+import { alignToSendTime, parseCampaignTag, parseSendTime, parseStepAudience, type StepAudience } from "./automation-step-options";
 import {
   parseCashbackSendSchedule,
   pickInitialCashbackStep,
@@ -25,6 +26,14 @@ export type SendStep = {
   bodyParamTokens: string[];
   couponCode: string | null;
   schedule?: CashbackSendSchedule;
+  /** Horário do dia (Brasília, "HH:MM") em que a etapa envia, depois da espera. */
+  sendTime?: string;
+  /** Filtro de público desta etapa: só recebe quem também está neste segmento/lista. */
+  audience?: StepAudience;
+  /** Tag da campanha criada por esta etapa (rastreio nos relatórios). */
+  campaignTag?: string;
+  /** Esta etapa só envia depois de alguém aprovar o lote. */
+  requireApproval?: boolean;
   nextStepId: string | null;
 };
 
@@ -72,6 +81,10 @@ type RawStep = {
   bodyParamTokens?: unknown;
   couponCode?: unknown;
   schedule?: unknown;
+  sendTime?: unknown;
+  audience?: unknown;
+  campaignTag?: unknown;
+  requireApproval?: unknown;
   nextStepId?: unknown;
   condition?: unknown;
   yesStepId?: unknown;
@@ -150,6 +163,10 @@ export function parseSteps(raw: unknown): AutomationStep[] {
         bodyParamTokens: Array.isArray(s.bodyParamTokens) ? (s.bodyParamTokens as string[]) : [],
         couponCode: (s.couponCode ?? null) as string | null,
         ...(schedule ? { schedule } : {}),
+        ...(parseSendTime(s.sendTime) ? { sendTime: parseSendTime(s.sendTime) as string } : {}),
+        ...(parseStepAudience(s.audience) ? { audience: parseStepAudience(s.audience) as StepAudience } : {}),
+        ...(parseCampaignTag(s.campaignTag) ? { campaignTag: parseCampaignTag(s.campaignTag) as string } : {}),
+        ...(s.requireApproval === true ? { requireApproval: true } : {}),
         nextStepId: s.nextStepId ? String(s.nextStepId) : null,
       };
     })
@@ -766,7 +783,7 @@ async function enrollNewCustomers(automation: any, steps: AutomationStep[]): Pro
     return eligibleRecipients.length;
   }
 
-  const nextRunAt = new Date(Date.now() + firstStep.waitMinutes * 60_000).toISOString();
+  const nextRunAt = alignToSendTime(new Date(Date.now() + firstStep.waitMinutes * 60_000), firstStep.sendTime).toISOString();
   const rows = eligibleRecipients.map((r) => ({
     automation_id: automation.id,
     customer_id: r.id,
@@ -811,7 +828,7 @@ async function advanceRuns(runs: any[], steps: AutomationStep[], campaignId: str
     const patch = next
       ? {
           current_step_id: next.id,
-          next_run_at: (scheduledAt ?? new Date(Date.now() + next.waitMinutes * 60_000)).toISOString(),
+          next_run_at: (scheduledAt ?? alignToSendTime(new Date(Date.now() + next.waitMinutes * 60_000), next.sendTime)).toISOString(),
           status: "active",
           campaign_id: campaignId ?? r.campaign_id,
           last_error: null,
@@ -1014,6 +1031,65 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
     }
     if (eligibleRuns.length === 0) continue;
 
+    // Filtro de público da etapa: quem não está no segmento/lista escolhido sai da automação sem receber esta mensagem.
+    if (step.audience) {
+      const { resolveWhatsappSegmentCustomerIds } = await import("./whatsapp-segment-resolver.server");
+      const allowed = new Set<string>(await resolveWhatsappSegmentCustomerIds(step.audience.segmentType, step.audience.segmentId));
+      const outside = eligibleRuns.filter((run) => !allowed.has(String(run.customer_id)));
+      if (outside.length > 0) {
+        await markRunsExited(
+          outside.map((run) => String(run.id)),
+          "Cliente fora do filtro de público da etapa.",
+        );
+        const outsideIds = new Set(outside.map((run) => String(run.id)));
+        eligibleRuns = eligibleRuns.filter((run) => !outsideIds.has(String(run.id)));
+      }
+      if (eligibleRuns.length === 0) continue;
+    }
+
+    // Aprovação da etapa: o lote espera alguém aprovar (mesmo caminho da aprovação da 1ª etapa).
+    if (step.requireApproval) {
+      const { findPendingApprovalCampaignId: findPending, createCampaignRow: createRow } = await import("./whatsapp-meta.server");
+      for (let start = 0; start < eligibleRuns.length; start += 200) {
+        const batch = eligibleRuns.slice(start, start + 200);
+        const existing = await findPending(automation.id, stepId);
+        let approvalCampaignId: string;
+        if (existing) {
+          approvalCampaignId = existing.id;
+          await (supabaseAdmin.from("whatsapp_campaigns") as any)
+            .update({ total_destinatarios: existing.totalDestinatarios + batch.length, ...(existing.enviadas === 0 ? { status: "aguardando_aprovacao" } : {}) })
+            .eq("id", approvalCampaignId);
+        } else {
+          const created = await createRow(
+            {
+              nome: automation.nome,
+              segmentType: automation.segment_type,
+              segmentId: automation.segment_id || undefined,
+              messageType: step.messageType,
+              templateName: step.templateName,
+              templateLanguage: step.templateLanguage,
+              bodyParams: step.bodyParams,
+              bodyParamTokens: step.bodyParamTokens,
+              couponCode: step.couponCode ?? undefined,
+              origem: "automacao",
+              automationId: automation.id,
+              automationStepId: stepId,
+              ...(step.campaignTag ? { campaignTag: step.campaignTag } : {}),
+              totalDestinatariosOverride: batch.length,
+            },
+            "aguardando_aprovacao",
+          );
+          if (!created.success) continue;
+          approvalCampaignId = created.campaignId;
+        }
+        await (supabaseAdmin.from("whatsapp_automation_runs") as any)
+          .update({ status: "pending_approval", next_run_at: null, campaign_id: approvalCampaignId, updated_at: new Date().toISOString() })
+          .in("id", batch.map((run) => String(run.id)));
+        processed += batch.length;
+      }
+      continue;
+    }
+
     // Lotes de no máximo 200 destinatários por disparo — mesmo motivo do markRunsWaitingSend:
     // um atraso acumulado grande não pode virar uma única campanha/chamada com milhares de
     // clientes de uma vez.
@@ -1040,6 +1116,7 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
             origem: "automacao",
             automationId: automation.id,
             automationStepId: stepId,
+            ...(step.campaignTag ? { campaignTag: step.campaignTag } : {}),
             totalDestinatariosOverride: customerIds.length,
           },
           "enviando",

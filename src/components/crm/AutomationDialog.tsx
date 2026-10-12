@@ -40,6 +40,7 @@ import { previewWhatsappAudience } from "@/lib/whatsapp-audience-preview.functio
 import { normalizeWhatsappAudienceSelection } from "@/lib/whatsapp-audience-selection";
 import { extractTemplateBodyTokens, isNamedParameterToken } from "@/lib/whatsapp-template-body-tokens";
 import { DYNAMIC_VARS } from "@/lib/whatsapp-dynamic-vars";
+import { renderStepPreview } from "@/lib/automation-step-options";
 
 export const SEGMENT_LABEL: Record<string, string> = {
   ticket_alto: "Ticket alto",
@@ -69,6 +70,12 @@ export type SendStepSeed = {
   bodyParams: string[];
   bodyParamTokens?: string[] | undefined;
   couponCode?: string | undefined;
+  /** Horário do dia (Brasília, HH:MM) em que a etapa envia, depois da espera. */
+  sendTime?: string | undefined;
+  /** Filtro de público da etapa: só recebe quem também está neste segmento/lista. */
+  audience?: { segmentType: string; segmentId?: string | undefined } | undefined;
+  campaignTag?: string | undefined;
+  requireApproval?: boolean | undefined;
   nextStepId: string | null;
 };
 
@@ -134,6 +141,11 @@ function newDecisionStep(condition: DecisionCondition): DecisionStepSeed {
 
 /** Tokens de variável do BODY do template — posicionais ({{1}}, {{2}}) ou nomeados
  *  ({{primeiro_nome}}), na ordem em que aparecem no texto. */
+/** Texto do corpo (BODY) de um modelo aprovado, para a prévia. */
+function template_body(t: { components?: { type: string; text?: string }[] } | undefined): string {
+  return t?.components?.find((c) => c.type === "BODY")?.text ?? "";
+}
+
 function templateBodyTokens(components: { type: string; text?: string }[] | undefined): string[] {
   const body = components?.find((c) => c.type === "BODY");
   return extractTemplateBodyTokens(body?.text);
@@ -708,6 +720,10 @@ export function AutomationDialog({
               bodyParams: s.bodyParams,
               bodyParamTokens: tmpl ? templateBodyTokens(tmpl.components) : (s.bodyParamTokens ?? []),
               couponCode: s.couponCode?.trim() || undefined,
+              ...(s.sendTime ? { sendTime: s.sendTime } : {}),
+              ...(s.audience ? { audience: s.audience } : {}),
+              ...(s.campaignTag?.trim() ? { campaignTag: s.campaignTag.trim() } : {}),
+              ...(s.requireApproval ? { requireApproval: true } : {}),
               nextStepId: s.nextStepId,
             };
           }),
@@ -1033,6 +1049,7 @@ export function AutomationDialog({
                   step={selectedStep}
                   isRoot={selectedStep.id === rootStepId}
                   approved={approved}
+                  customSegments={customSegments}
                   onChange={(patch) => updateStep(selectedStep.id, patch)}
                   onDelete={() => removeStepById(selectedStep.id)}
                 />
@@ -1058,15 +1075,19 @@ function SendStepPanel({
   step,
   isRoot,
   approved,
+  customSegments,
   onChange,
   onDelete,
 }: {
   step: SendStepSeed;
   isRoot: boolean;
   approved: { name: string; language: string; category?: string; components?: { type: string; text?: string }[] }[];
+  customSegments: { id: string; nome: string }[];
   onChange: (patch: Partial<SendStepSeed>) => void;
   onDelete: () => void;
 }) {
+  const audienceValue = step.audience ? (step.audience.segmentId ? `custom:${step.audience.segmentId}` : `base:${step.audience.segmentType}`) : "none";
+  const bodyText = template_body(approved.find((t) => t.name === step.templateName));
   const template = approved.find((t) => t.name === step.templateName);
   const tokens = templateBodyTokens(template?.components);
   const wait = resolveWaitInput(step);
@@ -1222,6 +1243,70 @@ function SendStepPanel({
           </div>
         </div>
       )}
+
+      {bodyText && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">Prévia da mensagem</Label>
+          <div className="rounded-xl bg-emerald-100 text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-50 px-3 py-2 text-sm whitespace-pre-wrap">
+            {renderStepPreview(bodyText, tokens, step.bodyParams)}
+          </div>
+          <p className="text-[10px] text-muted-foreground">Com dados de exemplo (cada cliente recebe os dados dele).</p>
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">Enviar às (opcional)</Label>
+        <Input type="time" value={step.sendTime ?? ""} onChange={(e) => onChange({ sendTime: e.target.value || undefined })} />
+        <p className="text-[11px] text-muted-foreground">
+          Depois da espera acima, a mensagem sai no próximo horário escolhido (horário de Brasília). Vazio = sai assim que a espera acabar.
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">Filtro de público desta etapa</Label>
+        <Select
+          value={audienceValue}
+          onValueChange={(v) => {
+            if (v === "none") onChange({ audience: undefined });
+            else if (v.startsWith("base:")) onChange({ audience: { segmentType: v.slice(5) } });
+            else onChange({ audience: { segmentType: "custom", segmentId: v.slice(7) } });
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Sem filtro" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Sem filtro (todos que chegarem nesta etapa)</SelectItem>
+            {SEGMENT_TYPES.map((s) => (
+              <SelectItem key={s} value={`base:${s}`}>
+                {SEGMENT_LABEL[s] ?? s}
+              </SelectItem>
+            ))}
+            {customSegments.map((s) => (
+              <SelectItem key={s.id} value={`custom:${s.id}`}>
+                {s.nome}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-[11px] text-muted-foreground">
+          Mesmos públicos da criação de campanha. Só recebe esta mensagem quem também está no público escolhido; os demais saem da automação.
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">Tag da campanha (opcional)</Label>
+        <Input value={step.campaignTag ?? ""} maxLength={60} placeholder="ex.: pesquisa-pos-compra" onChange={(e) => onChange({ campaignTag: e.target.value || undefined })} />
+        <p className="text-[11px] text-muted-foreground">Identifica os envios desta etapa nos relatórios de campanha.</p>
+      </div>
+
+      <div className="flex items-center justify-between rounded-lg border border-border p-3">
+        <div>
+          <p className="text-sm font-medium">Exigir aprovação desta etapa</p>
+          <p className="text-xs text-muted-foreground">O lote fica na fila de aprovação até alguém aprovar; só então sai.</p>
+        </div>
+        <Switch checked={Boolean(step.requireApproval)} onCheckedChange={(v) => onChange({ requireApproval: v || undefined })} />
+      </div>
 
       <div className="space-y-1.5 rounded-lg border border-dashed border-border p-2">
         <Label className="text-xs">Testar esta mensagem</Label>

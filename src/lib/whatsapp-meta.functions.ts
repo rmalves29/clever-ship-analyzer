@@ -439,6 +439,12 @@ const sendStepSchema = z.object({
   bodyParams: z.array(z.string()).max(10).default([]),
   bodyParamTokens: z.array(z.string()).max(10).optional(),
   couponCode: z.string().optional(),
+  /** Horário do dia (Brasília) em que a etapa envia, depois da espera. */
+  sendTime: z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/).optional(),
+  /** Filtro de público da etapa (segmento ou lista). */
+  audience: z.object({ segmentType: z.string().min(1), segmentId: z.string().uuid().optional() }).optional(),
+  campaignTag: z.string().max(60).optional(),
+  requireApproval: z.boolean().optional(),
   nextStepId: z.string().nullable().default(null),
 });
 

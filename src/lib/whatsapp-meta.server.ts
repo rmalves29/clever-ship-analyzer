@@ -1371,6 +1371,10 @@ export type AutomationStepInput =
       bodyParams: string[];
       bodyParamTokens?: string[] | undefined;
       couponCode?: string | undefined;
+      sendTime?: string | undefined;
+      audience?: { segmentType: string; segmentId?: string | undefined } | undefined;
+      campaignTag?: string | undefined;
+      requireApproval?: boolean | undefined;
       nextStepId: string | null;
     }
   | {
@@ -1442,6 +1446,10 @@ export async function upsertAutomation(input: AutomationInput) {
           bodyParams: s.bodyParams,
           bodyParamTokens: s.bodyParamTokens ?? [],
           couponCode: s.couponCode?.trim() || null,
+          ...(s.sendTime ? { sendTime: s.sendTime } : {}),
+          ...(s.audience ? { audience: s.audience } : {}),
+          ...(s.campaignTag?.trim() ? { campaignTag: s.campaignTag.trim() } : {}),
+          ...(s.requireApproval ? { requireApproval: true } : {}),
           nextStepId: s.nextStepId,
         }
       : {

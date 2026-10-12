@@ -23,6 +23,7 @@ const KIND_LABEL: Record<NodeKind, string> = {
 };
 
 function kindOf(q: TreeQuestion): NodeKind {
+  if (q.nodeKind) return q.nodeKind; // tipo do desenho original (botões, lista, texto, ação, fim)
   if (q.type === "mensagem") return "acao";
   if (q.type === "texto_curto" || q.type === "texto_longo") return "texto";
   if (q.type === "sim_nao") return "botoes";
@@ -137,7 +138,12 @@ export function SurveyTree({ questions, thankYou, onOpenQuestion }: Props) {
     el?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest", inline: "center" });
   };
 
-  const label = (id: string) => (id === FIM ? "Fim" : `#${position.get(id) ?? "?"}`);
+  // Etapas importadas mostram o código do desenho original (P1-1E); as pesquisas antigas, o número (#2).
+  const refOf = (id: string) => {
+    const q = byId.get(id);
+    return q?.nodeKind ? q.id : `#${position.get(id) ?? "?"}`;
+  };
+  const label = (id: string) => (id === FIM ? "Fim" : refOf(id));
 
   const renderEdge = (e: TreeEdge, display: string) => {
     const k = `${e.from}|${e.key}`;
@@ -228,12 +234,17 @@ export function SurveyTree({ questions, thankYou, onOpenQuestion }: Props) {
             variant="caption"
             sx={{ fontFamily: "monospace", color: "text.secondary", background: "none", border: 0, p: 0, cursor: onOpenQuestion ? "pointer" : "default", textDecoration: onOpenQuestion ? "underline dotted" : "none" }}
           >
-            Pergunta #{position.get(id)}
+            {q.nodeKind ? refOf(id) : `Pergunta ${refOf(id)}`}
           </Typography>
           <Typography variant="overline" sx={{ color: c, lineHeight: 1 }}>
-            {KIND_LABEL[kind]} · {typeText(q)}
+            {q.nodeKind ? KIND_LABEL[kind] : `${KIND_LABEL[kind]} · ${typeText(q)}`}
           </Typography>
         </Box>
+        {q.title && (
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+            {q.title}
+          </Typography>
+        )}
         <Bubble>{q.label}</Bubble>
         {perOption && edges.length > 0 && (
           <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>

@@ -64,7 +64,10 @@ describe("importação de árvores", () => {
     expect(collectTags(out.questions, answers).sort()).toEqual(["atendimento_aberto", "motivo_peca", "respondeu_aberta", "respondeu_p9"]);
     const refuse = { "P9-0": "Agora não" };
     expect(resolvePath(out.questions, refuse).map((q) => q.id)).toEqual(["P9-0", "P9-FR"]);
-    expect(buildTreeLayout(out.questions).hasEnd).toBe(true);
+    const layout = buildTreeLayout(out.questions);
+    expect(layout.hasEnd).toBe(false); // as etapas "fim" são terminais: aparecem como cartões, sem seta para um fim extra
+    expect(layout.columns.flat()).toEqual(expect.arrayContaining(["P9-F", "P9-FR"]));
+    expect(layout.unreachable).toEqual([]);
     expect(buildTagDictionary(out.questions).some((r) => r.tag === "pesquisa_recusou_p9")).toBe(true);
   });
 

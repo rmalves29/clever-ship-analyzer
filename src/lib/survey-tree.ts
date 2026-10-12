@@ -41,6 +41,10 @@ export type TreeQuestion = {
   action?: string;
   /** No WhatsApp, a pesquisa PARA antes desta etapa até a equipe liberar (ex.: "conseguimos resolver?" só depois do atendimento). */
   waitForTeam?: boolean;
+  /** Nome da etapa no desenho original (ex.: "Convite", "Atendimento humano"). */
+  title?: string;
+  /** Tipo da etapa no desenho original; o "fim" é terminal (não tem seta para lugar nenhum). */
+  nodeKind?: "botoes" | "lista" | "texto" | "acao" | "fim";
 };
 
 export type TreeAnswers = Record<string, string | string[] | undefined>;
@@ -179,6 +183,7 @@ export type TreeLayout = {
 export function buildEdges(questions: readonly TreeQuestion[]): TreeEdge[] {
   const edges: TreeEdge[] = [];
   questions.forEach((q, index) => {
+    if (q.nodeKind === "fim") return; // etapa final: termina aqui, sem seta
     const fallback = (() => {
       const valid = typeof q.next === "string" && q.next !== "" && (q.next === FIM || questions.some((x) => x.id === q.next));
       return valid ? { to: q.next as string, explicit: true } : { to: defaultNextId(questions, index), explicit: false };

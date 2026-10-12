@@ -74,7 +74,7 @@ export function convertTree(tree: ImportTree): ConvertedTree {
   };
 
   const questions: TreeQuestion[] = tree.nos.map((n) => {
-    const base = { id: n.id, label: n.msg.trim(), required: false } as const;
+    const base = { id: n.id, label: n.msg.trim(), required: false, ...(n.titulo?.trim() ? { title: n.titulo.trim() } : {}), nodeKind: n.tipo } as const;
     const tags = cleanTags(n.tags);
     const pending = findPendingPlaceholders(n.msg);
     if (pending.length > 0) warnings.push({ code: "pendente_loja", node: n.id, detail: `texto depende de decisão da loja: ${pending.map((p) => `[${p}]`).join(" ")}` });

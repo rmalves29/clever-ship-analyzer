@@ -43,6 +43,8 @@ const questionSchema = z.object({
   tags: z.array(z.string().min(1).max(60)).max(20).optional(),
   action: z.string().max(300).optional(),
   waitForTeam: z.boolean().optional(),
+  title: z.string().max(120).optional(),
+  nodeKind: z.enum(["botoes", "lista", "texto", "acao", "fim"]).optional(),
 });
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

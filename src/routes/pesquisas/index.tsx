@@ -1,14 +1,12 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { createFileRoute, createLink, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Copy, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
-import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
@@ -18,34 +16,21 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { SurveyTree } from "@/components/pesquisas/SurveyTree";
-import { buildTagDictionary, buildTreeLayout } from "@/lib/survey-tree";
-import { listSurveys, saveSurvey, toggleSurvey, deleteSurvey, type Survey } from "@/lib/surveys.functions";
+import { listSurveys, saveSurvey, toggleSurvey, deleteSurvey } from "@/lib/surveys.functions";
 
 export const Route = createFileRoute("/pesquisas/")({
   head: () => ({
     meta: [
       { title: "Pesquisas | CRM Insights" },
-      { name: "description", content: "Cada pesquisa como uma árvore de perguntas e respostas, com o caminho de cada resposta e as etiquetas que ela grava." },
+      { name: "description", content: "Crie pesquisas com landing page própria (link ou NFC), desenhe o caminho das respostas e veja as respostas tabuladas." },
     ],
   }),
   component: PesquisasPage,
 });
 
-type SurveyRow = Survey & { responseCount: number };
-
-const LEGEND: { label: string; color: "info" | "success" | "secondary" | "warning" | "text" }[] = [
-  { label: "Botões", color: "info" },
-  { label: "Lista", color: "success" },
-  { label: "Texto livre", color: "secondary" },
-  { label: "Mensagem", color: "warning" },
-];
-
-function legendColor(c: (typeof LEGEND)[number]["color"]): string {
-  return c === "text" ? "text.disabled" : `${c}.main`;
-}
+const LinkTypography = createLink(Typography);
+const LinkIconButton = createLink(IconButton);
 
 function PesquisasPage() {
   const navigate = useNavigate();
@@ -54,45 +39,25 @@ function PesquisasPage() {
   const runSave = useServerFn(saveSurvey);
   const runToggle = useServerFn(toggleSurvey);
   const runDelete = useServerFn(deleteSurvey);
-  const [busy, setBusy] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(() => {
-    try {
-      return window.localStorage.getItem("pesquisas-aba");
-    } catch {
-      return null;
-    }
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const { data: surveys, isLoading, refetch } = useQuery({
+    queryKey: ["surveys"],
+    queryFn: () => runList(),
   });
-  const [tagQuery, setTagQuery] = useState("");
-
-  const { data, isLoading, refetch } = useQuery({ queryKey: ["surveys"], queryFn: () => runList() });
-  const surveys = (data ?? []) as SurveyRow[];
-  const selected = useMemo(() => surveys.find((s) => s.id === selectedId) ?? surveys[0] ?? null, [surveys, selectedId]);
-
-  useEffect(() => {
-    if (!selected) return;
-    try {
-      window.localStorage.setItem("pesquisas-aba", selected.id);
-    } catch {
-      /* sem armazenamento: tudo bem */
-    }
-  }, [selected]);
-
-  const layout = useMemo(() => (selected ? buildTreeLayout(selected.questions) : null), [selected]);
-  const dictionary = useMemo(() => (selected ? buildTagDictionary(selected.questions) : []), [selected]);
-  const filteredDictionary = useMemo(() => {
-    const q = tagQuery.trim().toLowerCase();
-    return q ? dictionary.filter((r) => `${r.tag} ${r.when}`.toLowerCase().includes(q)) : dictionary;
-  }, [dictionary, tagQuery]);
 
   const createMut = useMutation({
     mutationFn: async () => {
+      const base = "nova-pesquisa";
       const suffix = Math.random().toString(36).slice(2, 6);
       return runSave({
         data: {
-          slug: `nova-pesquisa-${suffix}`,
+          slug: `${base}-${suffix}`,
           title: "Nova pesquisa",
           description: "",
-          questions: [{ id: crypto.randomUUID(), type: "texto_curto", label: "Qual seu nome?", required: false }],
+          questions: [
+            { id: crypto.randomUUID(), type: "texto_curto", label: "Qual seu nome?", required: false },
+          ],
           is_active: false,
           thank_you_message: "Obrigado por participar da pesquisa!",
         },
@@ -106,77 +71,43 @@ function PesquisasPage() {
   });
 
   const copyLink = (slug: string) => {
-    navigator.clipboard.writeText(`${window.location.origin}/pesquisa/${slug}`);
+    const url = `${window.location.origin}/pesquisa/${slug}`;
+    navigator.clipboard.writeText(url);
     toast.success("Link copiado.");
   };
 
-  const handleToggle = async (s: SurveyRow, next: boolean) => {
-    setBusy(true);
+  const handleToggle = async (id: string, next: boolean) => {
+    setBusyId(id);
     try {
-      await runToggle({ data: { id: s.id, is_active: next } });
-      await refetch();
+      await runToggle({ data: { id, is_active: next } });
+      refetch();
     } catch (e: any) {
       toast.error(e?.message ?? "Falha ao atualizar.");
     } finally {
-      setBusy(false);
+      setBusyId(null);
     }
   };
 
-  const handleDelete = async (s: SurveyRow) => {
-    if (!window.confirm(`Excluir a pesquisa "${s.title}"? As respostas também serão apagadas.`)) return;
-    setBusy(true);
+  const handleDelete = async (id: string, title: string) => {
+    if (!window.confirm(`Excluir a pesquisa "${title}"? As respostas também serão apagadas.`)) return;
+    setBusyId(id);
     try {
-      await runDelete({ data: { id: s.id } });
+      await runDelete({ data: { id } });
       toast.success("Pesquisa excluída.");
-      setSelectedId(null);
-      await refetch();
+      refetch();
     } catch (e: any) {
       toast.error(e?.message ?? "Falha ao excluir.");
     } finally {
-      setBusy(false);
+      setBusyId(null);
     }
   };
 
-  const edit = (s: SurveyRow) => navigate({ to: "/pesquisas/$surveyId", params: { surveyId: s.id } });
+  // Clique na linha abre a pesquisa (árvore, perguntas e respostas); botões e switch da linha não disparam isso.
+  const open = (id: string) => navigate({ to: "/pesquisas/$surveyId", params: { surveyId: id } });
 
   return (
-    <Box sx={{ p: { xs: 2, md: 4 }, display: "flex", flexDirection: "column", gap: 2.5 }}>
-      <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
-        <Stack direction="row" role="tablist" aria-label="Pesquisas" sx={{ flexWrap: "wrap", gap: 1 }}>
-          {surveys.map((s, i) => {
-            const active = selected?.id === s.id;
-            return (
-              <Box
-                key={s.id}
-                component="button"
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setSelectedId(s.id)}
-                sx={{
-                  font: "inherit",
-                  fontSize: 14,
-                  fontWeight: 500,
-                  display: "flex",
-                  gap: 1,
-                  alignItems: "center",
-                  cursor: "pointer",
-                  px: 1.75,
-                  py: 1,
-                  borderRadius: 999,
-                  border: "1px solid",
-                  borderColor: active ? "text.primary" : "divider",
-                  bgcolor: active ? "text.primary" : "transparent",
-                  color: active ? "background.paper" : "text.primary",
-                  "&:focus-visible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: 2 },
-                }}
-              >
-                <Box component="span" sx={{ fontFamily: "monospace", fontSize: 12, opacity: 0.75 }}>P{i + 1}</Box>
-                {s.title}
-              </Box>
-            );
-          })}
-        </Stack>
+    <Box sx={{ p: { xs: 2, md: 4 } }}>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center", mb: 3 }}>
         <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => createMut.mutate()} disabled={createMut.isPending}>
           Nova pesquisa
         </Button>
@@ -184,120 +115,69 @@ function PesquisasPage() {
 
       {isLoading ? (
         <Typography variant="body2" color="text.secondary">Carregando...</Typography>
-      ) : !selected || !layout ? (
+      ) : !surveys || surveys.length === 0 ? (
         <Box sx={{ border: "1px dashed", borderColor: "divider", borderRadius: 3, p: 6, textAlign: "center" }}>
           <Typography sx={{ fontWeight: 600 }}>Nenhuma pesquisa criada ainda.</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Crie a primeira e desenhe o caminho das respostas; depois gere o link (ou etiqueta NFC) para coletar.
-          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Crie a primeira e gere o link (ou etiqueta NFC) para começar a coletar respostas.</Typography>
           <Button variant="contained" startIcon={<Plus size={16} />} sx={{ mt: 2 }} onClick={() => createMut.mutate()} disabled={createMut.isPending}>
             Nova pesquisa
           </Button>
         </Box>
       ) : (
-        <>
-          <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-between", gap: 1.5 }}>
-            <Box sx={{ minWidth: 0 }}>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>{selected.title}</Typography>
-              {selected.description ? (
-                <Typography variant="body2" color="text.secondary" sx={{ maxWidth: "68ch" }}>{selected.description}</Typography>
-              ) : null}
-            </Box>
-            <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
-              <FormControlLabel
-                labelPlacement="start"
-                control={<Switch checked={selected.is_active} disabled={busy} onChange={(e) => handleToggle(selected, e.target.checked)} />}
-                label={<Typography variant="body2" color="text.secondary">{selected.is_active ? "Ativa" : "Pausada"}</Typography>}
-              />
-              <Button variant="outlined" startIcon={<Pencil size={14} />} onClick={() => edit(selected)}>Editar</Button>
-              <IconButton size="small" title="Copiar link" onClick={() => copyLink(selected.slug)}><Copy size={16} /></IconButton>
-              <IconButton size="small" title="Abrir pesquisa" component="a" href={`/pesquisa/${selected.slug}`} target="_blank"><ExternalLink size={16} /></IconButton>
-              <IconButton size="small" color="error" title="Excluir" disabled={busy} onClick={() => handleDelete(selected)}><Trash2 size={16} /></IconButton>
-            </Stack>
-          </Stack>
-
-          <Box
-            component="dl"
-            sx={{
-              m: 0,
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, minmax(0, 1fr))" },
-              gap: "1px",
-              bgcolor: "divider",
-              border: "1px solid",
-              borderColor: "divider",
-              borderRadius: 2.5,
-              overflow: "hidden",
-            }}
-          >
-            {[
-              ["Link", `/pesquisa/${selected.slug}`],
-              ["Perguntas", String(selected.questions.length)],
-              ["Respostas", String(selected.responseCount)],
-              ["Etiquetas gravadas", String(new Set(dictionary.map((r) => r.tag)).size)],
-            ].map(([k, v]) => (
-              <Box key={k} sx={{ bgcolor: "background.paper", px: 1.75, py: 1.5, minWidth: 0 }}>
-                <Typography component="dt" variant="overline" sx={{ color: "text.secondary", lineHeight: 1, display: "block", mb: 0.75 }}>{k}</Typography>
-                <Typography component="dd" variant="body2" sx={{ m: 0, overflowWrap: "anywhere", fontFamily: k === "Link" ? "monospace" : undefined }}>{v}</Typography>
-              </Box>
-            ))}
-          </Box>
-
-          <Stack direction="row" sx={{ flexWrap: "wrap", gap: 2, color: "text.secondary", fontSize: 13 }}>
-            {LEGEND.map((l) => (
-              <Box key={l.label} sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                <Box sx={{ width: 10, height: 10, borderRadius: 0.75, bgcolor: legendColor(l.color) }} />
-                {l.label}
-              </Box>
-            ))}
-            <Box component="span">Passe o mouse numa resposta para ver o caminho dela.</Box>
-          </Stack>
-
-          {layout.unreachable.length > 0 && (
-            <Alert severity="warning">
-              {layout.unreachable.length === 1 ? "1 pergunta não é alcançada" : `${layout.unreachable.length} perguntas não são alcançadas`} por nenhuma resposta
-              (ficam de fora da árvore). Ajuste os destinos no editor.
-            </Alert>
-          )}
-
-          <SurveyTree questions={selected.questions} thankYou={selected.thank_you_message} onOpenQuestion={() => edit(selected)} />
-
-          <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.25, display: "flex", flexDirection: "column", gap: 1.5 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Dicionário de etiquetas</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Cada resposta pode gravar etiquetas na resposta da pesquisa; aqui está onde cada uma nasce.
-            </Typography>
-            <TextField size="small" type="search" placeholder="Buscar etiqueta ou resposta" value={tagQuery} onChange={(e) => setTagQuery(e.target.value)} slotProps={{ htmlInput: { "aria-label": "Buscar etiqueta" } }} />
-            <TableContainer sx={{ maxHeight: 360, border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
-              <Table size="small" stickyHeader>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Etiqueta</TableCell>
-                    <TableCell>Gravada quando</TableCell>
-                    <TableCell>Pergunta</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredDictionary.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} align="center" sx={{ color: "text.secondary", py: 3 }}>
-                        {dictionary.length === 0 ? "Esta pesquisa ainda não grava etiquetas. Defina-as no editor, em cada resposta." : "Nenhuma etiqueta com esse termo."}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredDictionary.map((r, i) => (
-                      <TableRow key={`${r.tag}-${r.questionId}-${i}`}>
-                        <TableCell><Chip size="small" variant="outlined" label={r.tag} sx={{ fontFamily: "monospace" }} /></TableCell>
-                        <TableCell>{r.when}</TableCell>
-                        <TableCell sx={{ fontFamily: "monospace", color: "text.secondary" }}>#{r.position}</TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Box>
-        </>
+        <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Pesquisa</TableCell>
+                <TableCell>Link</TableCell>
+                <TableCell align="center">Perguntas</TableCell>
+                <TableCell align="center">Respostas</TableCell>
+                <TableCell align="center">Ativa</TableCell>
+                <TableCell align="right">Ações</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {surveys.map((s: any) => (
+                <TableRow key={s.id} hover onClick={() => open(s.id)} sx={{ cursor: "pointer" }}>
+                  <TableCell>
+                    <LinkTypography
+                      to="/pesquisas/$surveyId"
+                      params={{ surveyId: s.id }}
+                      onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                      sx={{ fontWeight: 600, textDecoration: "none", color: "text.primary", "&:hover": { textDecoration: "underline" } }}
+                    >
+                      {s.title}
+                    </LinkTypography>
+                  </TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+                      <Typography variant="caption" sx={{ fontFamily: "monospace", color: "text.secondary" }}>/pesquisa/{s.slug}</Typography>
+                      <IconButton size="small" onClick={() => copyLink(s.slug)} title="Copiar link"><Copy size={14} /></IconButton>
+                      <IconButton size="small" component="a" href={`/pesquisa/${s.slug}`} target="_blank" title="Abrir pesquisa"><ExternalLink size={14} /></IconButton>
+                    </Stack>
+                  </TableCell>
+                  <TableCell align="center">{s.questions?.length ?? 0}</TableCell>
+                  <TableCell align="center">
+                    <Chip size="small" variant="outlined" label={s.responseCount} />
+                  </TableCell>
+                  <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                    <Switch checked={s.is_active} disabled={busyId === s.id} onChange={(e) => handleToggle(s.id, e.target.checked)} />
+                  </TableCell>
+                  <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                    <Stack direction="row" spacing={0.5} sx={{ justifyContent: "flex-end" }}>
+                      <LinkIconButton size="small" to="/pesquisas/$surveyId" params={{ surveyId: s.id }} title="Editar">
+                        <Pencil size={16} />
+                      </LinkIconButton>
+                      <IconButton size="small" color="error" disabled={busyId === s.id} onClick={() => handleDelete(s.id, s.title)} title="Excluir">
+                        <Trash2 size={16} />
+                      </IconButton>
+                    </Stack>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
     </Box>
   );

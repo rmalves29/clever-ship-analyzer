@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute, createLink } from "@tanstack/react-router";
+import { createFileRoute, createLink, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, Copy, Download, ExternalLink, GripVertical, Plus, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
@@ -25,13 +26,16 @@ import Typography from "@mui/material/Typography";
 import {
   getSurvey,
   saveSurvey,
+  deleteSurvey,
   listSurveyResponses,
   exportSurveyResponsesCsv,
   type SurveyQuestion,
   type SurveyQuestionType,
 } from "@/lib/surveys.functions";
 import { RoutingEditor } from "@/components/pesquisas/RoutingEditor";
-import { optionKeys, pruneDanglingRefs, routesByOption } from "@/lib/survey-tree";
+import { SurveyTree } from "@/components/pesquisas/SurveyTree";
+import { TagDictionary } from "@/components/pesquisas/TagDictionary";
+import { buildTreeLayout, optionKeys, pruneDanglingRefs, routesByOption } from "@/lib/survey-tree";
 import { SURVEY_TAGS_KEY } from "@/lib/surveys.functions";
 
 export const Route = createFileRoute("/pesquisas/$surveyId")({
@@ -171,7 +175,10 @@ function SurveyEditorPage() {
   const runResponses = useServerFn(listSurveyResponses);
   const runExport = useServerFn(exportSurveyResponsesCsv);
 
-  const [tab, setTab] = useState<"perguntas" | "respostas">("perguntas");
+  const [tab, setTab] = useState<"arvore" | "perguntas" | "respostas">("arvore");
+  const navigate = useNavigate();
+  const runDelete = useServerFn(deleteSurvey);
+  const [deleting, setDeleting] = useState(false);
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
@@ -225,6 +232,27 @@ function SurveyEditorPage() {
       [next[index], next[target]] = [next[target]!, next[index]!];
       return next;
     });
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm(`Excluir a pesquisa "${title}"? As respostas também serão apagadas.`)) return;
+    setDeleting(true);
+    try {
+      await runDelete({ data: { id: surveyId } });
+      toast.success("Pesquisa excluída.");
+      navigate({ to: "/pesquisas" });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha ao excluir.");
+      setDeleting(false);
+    }
+  };
+
+  const treeLayout = useMemo(() => buildTreeLayout(questions), [questions]);
+
+  /** Clique numa pergunta da árvore: abre a aba Perguntas já na pergunta clicada. */
+  const goToQuestion = (id: string) => {
+    setTab("perguntas");
+    setTimeout(() => document.getElementById(`pergunta-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 80);
   };
 
   const copyLink = () => {
@@ -332,6 +360,9 @@ function SurveyEditorPage() {
           <Button variant="contained" startIcon={<Save size={16} />} onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
             Salvar
           </Button>
+          <IconButton color="error" title="Excluir pesquisa" onClick={handleDelete} disabled={deleting}>
+            <Trash2 size={18} />
+          </IconButton>
         </Stack>
       </Stack>
 
@@ -359,10 +390,28 @@ function SurveyEditorPage() {
 
       <Box sx={{ borderBottom: "1px solid", borderColor: "divider", mb: 3 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+          <Tab value="arvore" label="Árvore" />
           <Tab value="perguntas" label={`Perguntas (${questions.length})`} />
           <Tab value="respostas" label={`Respostas (${responses?.length ?? "—"})`} />
         </Tabs>
       </Box>
+
+      {tab === "arvore" && (
+        <Stack spacing={2.5}>
+          <Typography variant="body2" color="text.secondary">
+            O caminho de cada resposta e as etiquetas que ela grava. Passe o mouse numa resposta para destacar o caminho; clique no
+            número da pergunta para editá-la. Qualquer mudança nas perguntas aparece aqui na hora (lembre de salvar).
+          </Typography>
+          {treeLayout.unreachable.length > 0 && (
+            <Alert severity="warning">
+              {treeLayout.unreachable.length === 1 ? "1 pergunta não é alcançada" : `${treeLayout.unreachable.length} perguntas não são alcançadas`} por
+              nenhuma resposta e ficam de fora da árvore. Ajuste os destinos na aba Perguntas.
+            </Alert>
+          )}
+          <SurveyTree questions={questions} thankYou={thankYouMessage} onOpenQuestion={goToQuestion} />
+          <TagDictionary questions={questions} />
+        </Stack>
+      )}
 
       {tab === "perguntas" && (
         <Stack spacing={3}>
@@ -387,7 +436,7 @@ function SurveyEditorPage() {
 
           <Stack spacing={1.5}>
             {questions.map((q, index) => (
-              <Box key={q.id} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
+              <Box key={q.id} id={`pergunta-${q.id}`} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2 }}>
                 <Stack direction="row" spacing={1.5} sx={{ alignItems: "flex-start" }}>
                   <Stack sx={{ alignItems: "center", color: "text.secondary", pt: 1 }}>
                     <GripVertical size={16} />

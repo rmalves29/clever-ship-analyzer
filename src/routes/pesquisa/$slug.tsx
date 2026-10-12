@@ -167,12 +167,13 @@ function PublicSurveyPage() {
           </Stack>
         ) : (
           <Stack spacing={3}>
-            <Box>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>{survey.title}</Typography>
-              {survey.description && (
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{survey.description}</Typography>
-              )}
-            </Box>
+            {/* O título é o nome interno da pesquisa (ex.: "P1 · Pós-compra") — não aparece para a cliente.
+                Nas pesquisas em árvore a descrição também é nota interna (objetivo, quando, pendências). */}
+            {survey.description && !isBranching(survey.questions) && (
+              <Box>
+                <Typography variant="body2" color="text.secondary">{survey.description}</Typography>
+              </Box>
+            )}
 
             {isBranching(survey.questions) ? (
               (() => {

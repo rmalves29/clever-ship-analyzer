@@ -1018,6 +1018,40 @@ async function excludeAutomationBlockedRuns(runs: any[], automation: any): Promi
   return runs.filter((run) => !blocked.has(String(run.customer_id)));
 }
 
+/** Tira das execuções de carrinho abandonado quem já fez um pedido válido depois da abertura do carrinho. */
+async function excludeRunsWithPurchaseAfterCheckout(runs: any[]): Promise<any[]> {
+  const supabaseAdmin = await admin();
+  const VALID = ["PAID", "PARTIALLY_PAID", "PARTIALLY_REFUNDED"];
+  const customerIds = [...new Set(runs.map((r) => String(r.customer_id)))];
+  const since = runs.reduce((min: string, r) => {
+    const at = String(r.event_context?.checkout?.createdAt ?? r.enrolled_at ?? "");
+    return at && (!min || at < min) ? at : min;
+  }, "");
+  if (!since) return runs;
+  const latest = new Map<string, number>();
+  for (let start = 0; start < customerIds.length; start += 200) {
+    const { data, error } = await (supabaseAdmin.from("shopify_orders") as any)
+      .select("customer_id, created_at, financial_status, cancelled_at")
+      .in("customer_id", customerIds.slice(start, start + 200))
+      .gte("created_at", since);
+    // Falha fechada: sem conseguir conferir, não cobra neste ciclo.
+    if (error) throw new Error(`Erro ao conferir compras após o carrinho: ${error.message}`);
+    for (const o of data ?? []) {
+      if (o.cancelled_at || !VALID.includes(String(o.financial_status ?? ""))) continue;
+      const at = new Date(o.created_at).getTime();
+      if (at > (latest.get(String(o.customer_id)) ?? 0)) latest.set(String(o.customer_id), at);
+    }
+  }
+  const bought = runs.filter((r) => {
+    const cartAt = new Date(String(r.event_context?.checkout?.createdAt ?? r.enrolled_at ?? 0)).getTime();
+    return (latest.get(String(r.customer_id)) ?? 0) > cartAt;
+  });
+  if (bought.length === 0) return runs;
+  await markRunsExited(bought.map((r) => String(r.id)), "Cliente comprou depois de abrir o carrinho.");
+  const gone = new Set(bought.map((r) => String(r.id)));
+  return runs.filter((r) => !gone.has(String(r.id)));
+}
+
 async function processDueRuns(automation: any, steps: AutomationStep[]): Promise<number> {
   const supabaseAdmin = await admin();
   const { dispatchCampaign, createCampaignRow, findAutomationStepCampaignId, syncCampaignMessageConfig } = await import("./whatsapp-meta.server");
@@ -1034,6 +1068,12 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
 
   runs = await excludeAutomationBlockedRuns(runs, automation);
   if (runs.length === 0) return 0;
+
+  // Carrinho abandonado: se a cliente comprou depois de abrir o carrinho, não cobra mais.
+  if (parseEventTrigger(automation.trigger_config)?.event === "carrinho_abandonado") {
+    runs = await excludeRunsWithPurchaseAfterCheckout(runs);
+    if (runs.length === 0) return 0;
+  }
 
   if (automation.trigger_config?.revalidateSegmentBeforeSend === true) {
     const { resolveWhatsappSegmentCustomerIds } = await import("./whatsapp-segment-resolver.server");

@@ -154,16 +154,40 @@ export const getConversationRunMetrics = createServerFn({ method: "GET" })
   return result;
 });
 
-/** Templates usados em campanhas recentes — pra escolher no gatilho "clique em botão" (só templates
- *  que já foram de fato enviados têm botões conhecidos, diferente da lista completa da Meta). */
+/** Templates que podem disparar o fluxo ao clicar num botão: todos os modelos aprovados da Meta que têm botão de
+ *  resposta rápida, mais qualquer nome já usado em campanha (inclui o "texto livre" dos fluxos conversacionais). */
 export const getRecentlyUsedTemplateNames = createServerFn({ method: "GET" })
   .middleware([requireAppAuth]).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data } = await supabaseAdmin
-    .from("whatsapp_campaigns")
-    .select("template_name")
-    .order("created_at", { ascending: false })
-    .limit(50);
-  const names = Array.from(new Set(((data ?? []) as { template_name: string }[]).map((c) => c.template_name)));
-  return names;
+  const names = new Set<string>();
+
+  try {
+    const { listMetaTemplates } = await import("./whatsapp-meta.server");
+    const result = await listMetaTemplates();
+    if (result.success) {
+      for (const t of result.templates) {
+        if (t.status !== "APPROVED") continue;
+        const buttons = (t.components.find((c) => c.type === "BUTTONS") as { buttons?: Array<{ type?: string }> } | undefined)?.buttons ?? [];
+        if (buttons.some((b) => b.type === "QUICK_REPLY")) names.add(t.name);
+      }
+    }
+  } catch (error) {
+    console.error("Falha ao listar modelos da Meta para o gatilho de botão:", error);
+  }
+
+  // Nomes já usados em campanhas (distintos): varre em páginas porque o volume de campanhas é grande.
+  const seen = new Set<string>();
+  for (let page = 0; page < 20; page++) {
+    const { data } = await supabaseAdmin
+      .from("whatsapp_campaigns")
+      .select("template_name")
+      .order("created_at", { ascending: false })
+      .range(page * 1000, page * 1000 + 999);
+    const rows = (data ?? []) as { template_name: string | null }[];
+    for (const row of rows) if (row.template_name) seen.add(row.template_name);
+    if (rows.length < 1000) break;
+  }
+  for (const name of seen) names.add(name);
+
+  return Array.from(names).sort((a, b) => a.localeCompare(b, "pt-BR"));
 });

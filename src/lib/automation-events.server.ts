@@ -87,8 +87,9 @@ async function fulfillmentTargets(
   from: Date,
   to: Date,
   statuses: readonly string[] | null,
-  excludeStatuses: readonly string[] = ["CANCELED"],
+  options: { excludeStatuses?: readonly string[]; requireTracking?: boolean } = {},
 ): Promise<EventTarget[]> {
+  const excludeStatuses = options.excludeStatuses ?? ["CANCELED"];
   const db = await admin();
   const rows = await pageAll<FulfillmentRow>(
     (a, b) => {
@@ -99,6 +100,7 @@ async function fulfillmentTargets(
         .lte(column, to.toISOString())
         .not("order_id", "is", null);
       if (statuses) q = q.in("display_status", [...statuses]);
+      if (options.requireTracking) q = q.not("tracking_number", "is", null).neq("tracking_number", "");
       return q.order(column, { ascending: true }).range(a, b);
     },
     "envios do evento",
@@ -227,7 +229,8 @@ export async function findEventTargets(event: AutomationEventId, lookbackHours: 
     case "pedido_producao":
       return productionTargets(from, to);
     case "pedido_enviado":
-      return fulfillmentTargets("created_at", from, to, null);
+      // Só avisa quando o código de rastreio já existe — a mensagem é justamente sobre ele.
+      return fulfillmentTargets("created_at", from, to, null, { requireTracking: true });
     case "pedido_saiu_entrega":
       return fulfillmentTargets("updated_at", from, to, ["OUT_FOR_DELIVERY"]);
     case "pedido_entregue":

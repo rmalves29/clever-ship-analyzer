@@ -18,6 +18,7 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { getPublicSurvey, submitSurveyResponse, type SurveyQuestion } from "@/lib/surveys.functions";
+import { FIM, isBranching, nextQuestionId } from "@/lib/survey-tree";
 
 export const Route = createFileRoute("/pesquisa/$slug")({
   validateSearch: (search: Record<string, unknown>) => z.object({ origem: z.string().optional() }).parse(search),
@@ -112,8 +113,12 @@ function QuestionField({
         </ToggleButtonGroup>
       );
     default:
-      return null;
+      return null; // "mensagem": só texto
   }
+}
+
+function hasAnswer(v: AnswerValue | undefined): boolean {
+  return Array.isArray(v) ? v.length > 0 : typeof v === "string" && v.trim() !== "";
 }
 
 function PublicSurveyPage() {
@@ -123,6 +128,9 @@ function PublicSurveyPage() {
   const runSubmit = useServerFn(submitSurveyResponse);
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [submitted, setSubmitted] = useState(false);
+  // Pesquisa em árvore: uma pergunta por vez; o caminho depende das respostas.
+  const [stepId, setStepId] = useState<string | null>(null);
+  const [history, setHistory] = useState<string[]>([]);
 
   const { data: survey, isLoading } = useQuery({
     queryKey: ["public-survey", slug],
@@ -165,24 +173,84 @@ function PublicSurveyPage() {
               )}
             </Box>
 
-            <Stack spacing={2.5}>
-              {survey.questions.map((q) => (
-                <Box key={q.id}>
-                  <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-                    {q.label}{q.required && <Typography component="span" color="error"> *</Typography>}
-                  </Typography>
-                  <QuestionField
-                    question={q}
-                    value={answers[q.id]}
-                    onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))}
-                  />
-                </Box>
-              ))}
-            </Stack>
+            {isBranching(survey.questions) ? (
+              (() => {
+                const questions = survey.questions;
+                const current = questions.find((x) => x.id === stepId) ?? questions[0]!;
+                const value = answers[current.id];
+                const nextId = nextQuestionId(questions, current, value);
+                const isLast = nextId === FIM;
+                const blocked = current.type !== "mensagem" && current.required && !hasAnswer(value);
+                const advance = () => {
+                  if (isLast) {
+                    submitMut.mutate();
+                    return;
+                  }
+                  setHistory((h) => [...h, current.id]);
+                  setStepId(nextId);
+                };
+                return (
+                  <Stack spacing={2.5}>
+                    {current.type === "mensagem" ? (
+                      <Box sx={{ bgcolor: "action.hover", borderRadius: "4px 16px 16px 16px", px: 2, py: 1.5, whiteSpace: "pre-wrap" }}>
+                        <Typography variant="body1">{current.label}</Typography>
+                      </Box>
+                    ) : (
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+                          {current.label}{current.required && <Typography component="span" color="error"> *</Typography>}
+                        </Typography>
+                        <QuestionField
+                          key={current.id}
+                          question={current}
+                          value={value}
+                          onChange={(v) => setAnswers((prev) => ({ ...prev, [current.id]: v }))}
+                        />
+                      </Box>
+                    )}
+                    <Stack direction="row" spacing={1.5}>
+                      {history.length > 0 && (
+                        <Button
+                          variant="outlined"
+                          size="large"
+                          onClick={() => {
+                            const prev = history[history.length - 1]!;
+                            setHistory((h) => h.slice(0, -1));
+                            setStepId(prev);
+                          }}
+                        >
+                          Voltar
+                        </Button>
+                      )}
+                      <Button variant="contained" size="large" fullWidth onClick={advance} disabled={blocked || submitMut.isPending}>
+                        {submitMut.isPending ? "Enviando..." : isLast ? "Enviar resposta" : "Continuar"}
+                      </Button>
+                    </Stack>
+                  </Stack>
+                );
+              })()
+            ) : (
+              <>
+                <Stack spacing={2.5}>
+                  {survey.questions.map((q) => (
+                    <Box key={q.id}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+                        {q.label}{q.required && <Typography component="span" color="error"> *</Typography>}
+                      </Typography>
+                      <QuestionField
+                        question={q}
+                        value={answers[q.id]}
+                        onChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))}
+                      />
+                    </Box>
+                  ))}
+                </Stack>
 
-            <Button variant="contained" size="large" fullWidth onClick={() => submitMut.mutate()} disabled={submitMut.isPending}>
-              {submitMut.isPending ? "Enviando..." : "Enviar resposta"}
-            </Button>
+                <Button variant="contained" size="large" fullWidth onClick={() => submitMut.mutate()} disabled={submitMut.isPending}>
+                  {submitMut.isPending ? "Enviando..." : "Enviar resposta"}
+                </Button>
+              </>
+            )}
           </Stack>
         )}
       </Box>

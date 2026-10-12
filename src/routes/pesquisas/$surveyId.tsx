@@ -30,6 +30,9 @@ import {
   type SurveyQuestion,
   type SurveyQuestionType,
 } from "@/lib/surveys.functions";
+import { RoutingEditor } from "@/components/pesquisas/RoutingEditor";
+import { optionKeys, pruneDanglingRefs, routesByOption } from "@/lib/survey-tree";
+import { SURVEY_TAGS_KEY } from "@/lib/surveys.functions";
 
 export const Route = createFileRoute("/pesquisas/$surveyId")({
   head: () => ({
@@ -47,6 +50,7 @@ const QUESTION_TYPE_LABEL: Record<SurveyQuestionType, string> = {
   escolha_unica: "Escolha única",
   nota: "Nota (1 a 5)",
   sim_nao: "Sim / Não",
+  mensagem: "Mensagem (só texto, sem resposta)",
 };
 
 const HAS_OPTIONS: SurveyQuestionType[] = ["multipla_escolha", "escolha_unica"];
@@ -210,7 +214,7 @@ function SurveyEditorPage() {
   });
 
   const addQuestion = () => setQuestions((prev) => [...prev, newQuestion()]);
-  const removeQuestion = (id: string) => setQuestions((prev) => prev.filter((q) => q.id !== id));
+  const removeQuestion = (id: string) => setQuestions((prev) => pruneDanglingRefs(prev.filter((q) => q.id !== id)));
   const updateQuestion = (id: string, patch: Partial<SurveyQuestion>) =>
     setQuestions((prev) => prev.map((q) => (q.id === id ? { ...q, ...patch } : q)));
   const moveQuestion = (index: number, dir: -1 | 1) => {
@@ -245,6 +249,8 @@ function SurveyEditorPage() {
       setExporting(false);
     }
   };
+
+  const answerQuestions = useMemo(() => questions.filter((q) => q.type !== "mensagem"), [questions]);
 
   const closedQuestionCharts = useMemo(() => {
     if (!responses) return [];
@@ -390,7 +396,7 @@ function SurveyEditorPage() {
                   <Stack spacing={1.5} sx={{ flex: 1 }}>
                     <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap" }}>
                       <TextField
-                        label="Pergunta"
+                        label={q.type === "mensagem" ? "Texto da mensagem" : "Pergunta"}
                         value={q.label}
                         onChange={(e) => updateQuestion(q.id, { label: e.target.value })}
                         sx={{ flex: 1, minWidth: 220 }}
@@ -403,6 +409,7 @@ function SurveyEditorPage() {
                           const type = e.target.value as SurveyQuestionType;
                           const patch: Partial<SurveyQuestion> = { type };
                           if (HAS_OPTIONS.includes(type)) patch.options = q.options?.length ? q.options : ["Opção 1", "Opção 2"];
+                          if (type === "mensagem") patch.required = false;
                           updateQuestion(q.id, patch);
                         }}
                         sx={{ minWidth: 180 }}
@@ -411,10 +418,12 @@ function SurveyEditorPage() {
                           <MenuItem key={value} value={value}>{label}</MenuItem>
                         ))}
                       </TextField>
-                      <FormControlLabel
-                        control={<Switch checked={q.required} onChange={(e) => updateQuestion(q.id, { required: e.target.checked })} />}
-                        label="Obrigatória"
-                      />
+                      {q.type !== "mensagem" && (
+                        <FormControlLabel
+                          control={<Switch checked={q.required} onChange={(e) => updateQuestion(q.id, { required: e.target.checked })} />}
+                          label="Obrigatória"
+                        />
+                      )}
                     </Stack>
 
                     {HAS_OPTIONS.includes(q.type) && (
@@ -427,14 +436,24 @@ function SurveyEditorPage() {
                               value={opt}
                               onChange={(e) => {
                                 const next = [...(q.options ?? [])];
+                                const oldLabel = next[optIndex] ?? "";
                                 next[optIndex] = e.target.value;
-                                updateQuestion(q.id, { options: next });
+                                const patch: Partial<SurveyQuestion> = { options: next };
+                                if (q.branches && oldLabel in q.branches && oldLabel !== e.target.value) {
+                                  const { [oldLabel]: moved, ...others } = q.branches;
+                                  patch.branches = { ...others, [e.target.value]: moved! };
+                                }
+                                updateQuestion(q.id, patch);
                               }}
                               fullWidth
                             />
                             <IconButton
                               size="small"
-                              onClick={() => updateQuestion(q.id, { options: (q.options ?? []).filter((_, i) => i !== optIndex) })}
+                              onClick={() => {
+                                const removed = (q.options ?? [])[optIndex] ?? "";
+                                const { [removed]: _gone, ...keep } = q.branches ?? {};
+                                updateQuestion(q.id, { options: (q.options ?? []).filter((_, i) => i !== optIndex), branches: keep });
+                              }}
                             >
                               <X size={14} />
                             </IconButton>
@@ -461,6 +480,13 @@ function SurveyEditorPage() {
                         />
                       </Stack>
                     )}
+
+                    <RoutingEditor
+                      question={q}
+                      index={index}
+                      questions={questions}
+                      onChange={(patch) => updateQuestion(q.id, patch)}
+                    />
                   </Stack>
                   <Stack spacing={0.5}>
                     <IconButton size="small" disabled={index === 0} onClick={() => moveQuestion(index, -1)}>▲</IconButton>
@@ -506,15 +532,16 @@ function SurveyEditorPage() {
                 <TableRow>
                   <TableCell>Data</TableCell>
                   <TableCell>Origem</TableCell>
-                  {questions.map((q) => (
+                  {answerQuestions.map((q) => (
                     <TableCell key={q.id}>{q.label}</TableCell>
                   ))}
+                  <TableCell>Etiquetas</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {(!responses || responses.length === 0) && (
                   <TableRow>
-                    <TableCell colSpan={questions.length + 2} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                    <TableCell colSpan={answerQuestions.length + 3} align="center" sx={{ py: 4, color: "text.secondary" }}>
                       Nenhuma resposta ainda.
                     </TableCell>
                   </TableRow>
@@ -523,10 +550,15 @@ function SurveyEditorPage() {
                   <TableRow key={r.id}>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>{new Date(r.created_at).toLocaleString("pt-BR")}</TableCell>
                     <TableCell>{r.source ? <Chip size="small" variant="outlined" label={r.source} /> : "—"}</TableCell>
-                    {questions.map((q) => {
+                    {answerQuestions.map((q) => {
                       const v = r.answers[q.id];
                       return <TableCell key={q.id}>{Array.isArray(v) ? v.join(", ") : String(v ?? "—")}</TableCell>;
                     })}
+                    <TableCell>
+                      {(Array.isArray(r.answers[SURVEY_TAGS_KEY]) ? (r.answers[SURVEY_TAGS_KEY] as string[]) : []).map((t) => (
+                        <Chip key={t} size="small" variant="outlined" label={t} sx={{ mr: 0.5, mb: 0.25, fontFamily: "monospace" }} />
+                      ))}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

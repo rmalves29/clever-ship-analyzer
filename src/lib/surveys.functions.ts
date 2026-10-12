@@ -2,23 +2,16 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAppAuth } from "./app-auth";
 
-export type SurveyQuestionType =
-  | "texto_curto"
-  | "texto_longo"
-  | "multipla_escolha"
-  | "escolha_unica"
-  | "nota"
-  | "sim_nao";
+import { collectTags, isBranching, missingRequired, resolvePath, type SurveyNodeType, type TreeQuestion } from "./survey-tree";
 
-export type SurveyQuestion = {
-  id: string;
-  type: SurveyQuestionType;
-  label: string;
-  required: boolean;
-  options?: string[];
-  /** Embaralha a ordem das opções a cada carregamento da pesquisa (reduz viés de posição). */
-  shuffleOptions?: boolean;
-};
+/** Tipos de pergunta (inclui "mensagem": só mostra um texto e segue). */
+export type SurveyQuestionType = SurveyNodeType;
+
+/** Pergunta = nó da árvore: tem destino por resposta (`branches`), destino padrão (`next`) e etiquetas (`tags`). */
+export type SurveyQuestion = TreeQuestion;
+
+/** Chave reservada em `survey_responses.answers` com as etiquetas gravadas pelo caminho da resposta. */
+export const SURVEY_TAGS_KEY = "__tags";
 
 export type Survey = {
   id: string;
@@ -32,13 +25,21 @@ export type Survey = {
   updated_at: string;
 };
 
+const branchSchema = z.object({
+  next: z.string().nullable().optional(),
+  tags: z.array(z.string().min(1).max(60)).max(20).optional(),
+});
+
 const questionSchema = z.object({
   id: z.string().min(1),
-  type: z.enum(["texto_curto", "texto_longo", "multipla_escolha", "escolha_unica", "nota", "sim_nao"]),
+  type: z.enum(["texto_curto", "texto_longo", "multipla_escolha", "escolha_unica", "nota", "sim_nao", "mensagem"]),
   label: z.string().min(1),
   required: z.boolean(),
   options: z.array(z.string().min(1)).optional(),
   shuffleOptions: z.boolean().optional(),
+  next: z.string().nullable().optional(),
+  branches: z.record(z.string(), branchSchema).optional(),
+  tags: z.array(z.string().min(1).max(60)).max(20).optional(),
 });
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -167,10 +168,10 @@ export const exportSurveyResponsesCsv = createServerFn({ method: "GET" })
     if (surveyError) throw surveyError;
     if (rowsError) throw rowsError;
     const s = survey as Survey | null;
-    const questions = s?.questions ?? [];
+    const questions = (s?.questions ?? []).filter((q) => q.type !== "mensagem");
 
     const escapeCsv = (value: string) => `"${value.replace(/"/g, '""')}"`;
-    const header = ["Data", "Origem", ...questions.map((q) => q.label)].map(escapeCsv).join(",");
+    const header = ["Data", "Origem", ...questions.map((q) => q.label), "Etiquetas"].map(escapeCsv).join(",");
     const lines = ((rows ?? []) as { answers: Record<string, unknown>; source: string | null; created_at: string }[]).map((r) => {
       const cells = [
         new Date(r.created_at).toLocaleString("pt-BR"),
@@ -179,6 +180,7 @@ export const exportSurveyResponsesCsv = createServerFn({ method: "GET" })
           const v = r.answers[q.id];
           return Array.isArray(v) ? v.join("; ") : String(v ?? "");
         }),
+        (Array.isArray(r.answers[SURVEY_TAGS_KEY]) ? (r.answers[SURVEY_TAGS_KEY] as string[]) : []).join("; "),
       ];
       return cells.map(escapeCsv).join(",");
     });
@@ -224,17 +226,28 @@ export const submitSurveyResponse = createServerFn({ method: "POST" })
     const s = survey as Pick<Survey, "id" | "is_active" | "questions"> | null;
     if (!s || !s.is_active) return { success: false, error: "Pesquisa não encontrada ou encerrada." };
 
-    for (const q of s.questions) {
-      if (q.required) {
-        const v = data.answers[q.id];
-        const empty = v === undefined || v === null || (Array.isArray(v) ? v.length === 0 : v.trim() === "");
-        if (empty) return { success: false, error: `A pergunta "${q.label}" é obrigatória.` };
+    let answersToStore: Record<string, string | string[]> = data.answers;
+    if (isBranching(s.questions)) {
+      // Árvore: só valem as perguntas do caminho percorrido (respostas de ramos não escolhidos são descartadas).
+      const missing = missingRequired(s.questions, data.answers);
+      if (missing[0]) return { success: false, error: `A pergunta "${missing[0].label}" é obrigatória.` };
+      const onPath = new Set(resolvePath(s.questions, data.answers).map((q) => q.id));
+      answersToStore = Object.fromEntries(Object.entries(data.answers).filter(([id]) => onPath.has(id)));
+      const tags = collectTags(s.questions, data.answers);
+      if (tags.length > 0) answersToStore[SURVEY_TAGS_KEY] = tags;
+    } else {
+      for (const q of s.questions) {
+        if (q.required) {
+          const v = data.answers[q.id];
+          const empty = v === undefined || v === null || (Array.isArray(v) ? v.length === 0 : v.trim() === "");
+          if (empty) return { success: false, error: `A pergunta "${q.label}" é obrigatória.` };
+        }
       }
     }
 
     const { error } = await (supabaseAdmin.from("survey_responses") as any).insert({
       survey_id: s.id,
-      answers: data.answers,
+      answers: answersToStore,
       source: data.source ?? null,
     });
     if (error) throw error;

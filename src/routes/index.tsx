@@ -7,6 +7,7 @@ import { Store, Settings, RefreshCw } from "lucide-react";
 import { KpiCard } from "@/components/crm/KpiCard";
 import { PeriodFilter } from "@/components/crm/PeriodFilter";
 import { ExecutiveSummary } from "@/components/crm/ExecutiveSummary";
+import { RevenueEquationCard } from "@/components/crm/RevenueEquationCard";
 import { AnalysisGrid } from "@/components/crm/AnalysisGrid";
 import { SuggestedActions } from "@/components/crm/SuggestedActions";
 import Box from "@mui/material/Box";
@@ -373,6 +374,10 @@ function Index() {
             </Typography>
           </Box>
         )}
+
+        <Box sx={{ mt: 3 }}>
+          <RevenueEquationCard />
+        </Box>
 
         <Box sx={{ mt: 3 }}>
           <ExecutiveSummary insights={data.insights} />

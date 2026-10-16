@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 import { SEGMENT_TYPES } from "@/lib/crm-mock";
 import { getSegmentOptions } from "@/lib/crm-segmentation.functions";
 import { SEGMENT_LABEL } from "@/components/crm/AutomationDialog";
-import { saveConversationalFlow, getRecentlyUsedTemplateNames } from "@/lib/conversational-flows.functions";
+import { saveConversationalFlow, getRecentlyUsedTemplateNames, getTemplatesWithButtons } from "@/lib/conversational-flows.functions";
 
 type DecisionCondition =
   | { kind: "novo_pedido" }
@@ -75,6 +75,7 @@ export type ConversationalFlowSeed = {
   ativo?: boolean | undefined;
   triggerType?: "button_click" | "keyword" | "unanswered_timeout" | undefined;
   triggerTemplateName?: string | undefined;
+  triggerButtonSteps?: Record<string, string> | undefined;
   triggerValues?: string[] | undefined;
   triggerTimeoutMinutes?: number | undefined;
   steps?: ConvStepSeed[] | undefined;
@@ -122,7 +123,7 @@ function conditionLabel(c: DecisionCondition): string {
 const COL_W = 296;
 const ROW_H = 150;
 
-function layoutSteps(steps: ConvStepSeed[], rootStepId: string | null): Record<string, { x: number; y: number }> {
+function layoutSteps(steps: ConvStepSeed[], rootIds: (string | null)[], extraTop = 0): Record<string, { x: number; y: number }> {
   const byId = new Map(steps.map((s) => [s.id, s]));
   const positions: Record<string, { x: number; y: number }> = {};
   const nextColAtDepth: number[] = [];
@@ -131,7 +132,7 @@ function layoutSteps(steps: ConvStepSeed[], rootStepId: string | null): Record<s
     if (!id || positions[id] || !byId.has(id)) return;
     const col = nextColAtDepth[depth] ?? 0;
     nextColAtDepth[depth] = col + 1;
-    positions[id] = { x: col * COL_W, y: depth * ROW_H };
+    positions[id] = { x: col * COL_W, y: depth * ROW_H + extraTop };
     const step = byId.get(id)!;
     if (step.type === "send") place(step.nextStepId, depth + 1);
     else if (step.type === "menu") {
@@ -142,7 +143,7 @@ function layoutSteps(steps: ConvStepSeed[], rootStepId: string | null): Record<s
     }
   }
 
-  place(rootStepId, 1);
+  for (const rootId of rootIds) place(rootId, 1);
   let orphanCol = 0;
   for (const s of steps) {
     if (!positions[s.id]) {
@@ -153,17 +154,60 @@ function layoutSteps(steps: ConvStepSeed[], rootStepId: string | null): Record<s
   return positions;
 }
 
+type TriggerTemplatePreview = { name: string; body: string; buttons: { text: string; index: number; clickable: boolean; connected: boolean }[] };
+
 function TriggerNode({ data, selected }: NodeProps) {
-  const d = data as unknown as { label: string };
+  const d = data as unknown as { label: string; template?: TriggerTemplatePreview };
+  const template = d.template;
+  const clickable = template?.buttons.filter((b) => b.clickable) ?? [];
   return (
     <div className={cn("w-64 rounded-xl border-2 bg-background px-4 py-3 shadow-sm cursor-pointer transition-colors", selected ? "border-primary" : "border-border")}>
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
         <Rocket className="size-3" /> Gatilho do fluxo
       </p>
-      <p className="text-sm font-medium mt-1">{d.label}</p>
-      <Handle type="source" position={Position.Bottom} id="out" className="!bg-primary !size-2.5" />
+      {template ? (
+        <>
+          <p className="text-[11px] text-muted-foreground mt-1 truncate">Modelo {template.name}</p>
+          <p className="text-xs mt-1 line-clamp-2 whitespace-pre-wrap">{template.body}</p>
+          <div className="mt-2 flex gap-1">
+            {template.buttons.map((b) => (
+              <span
+                key={`${b.index}-${b.text}`}
+                className={cn(
+                  "flex-1 truncate rounded-md border px-1.5 py-1 text-center text-[10px] font-semibold",
+                  !b.clickable ? "border-dashed text-muted-foreground opacity-60" : b.connected ? "border-primary bg-primary/5 text-primary" : "border-border",
+                )}
+                title={b.clickable ? b.text : `${b.text} (link, não dispara fluxo)`}
+              >
+                {b.text}
+              </span>
+            ))}
+          </div>
+          {clickable.map((b, i) => (
+            <Handle
+              key={b.index}
+              type="source"
+              position={Position.Bottom}
+              id={`btn${b.index}`}
+              style={{ left: `${((i + 1) / (clickable.length + 1)) * 100}%` }}
+              className="!bg-primary !size-2.5"
+            />
+          ))}
+        </>
+      ) : (
+        <>
+          <p className="text-sm font-medium mt-1">{d.label}</p>
+          <Handle type="source" position={Position.Bottom} id="out" className="!bg-primary !size-2.5" />
+        </>
+      )}
     </div>
   );
+}
+
+function stepShortLabel(step: ConvStepSeed): string {
+  if (step.type === "send") return step.text.trim() ? step.text.trim().slice(0, 28) : "Enviar WhatsApp";
+  if (step.type === "menu") return "Menu";
+  return "Decisão";
 }
 
 function SendNode({ data, selected }: NodeProps) {
@@ -256,6 +300,7 @@ export function ConversationalFlowDialog({
 }) {
   const runSave = useServerFn(saveConversationalFlow);
   const runGetTemplateNames = useServerFn(getRecentlyUsedTemplateNames);
+  const runGetTemplatesWithButtons = useServerFn(getTemplatesWithButtons);
 
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
@@ -263,6 +308,8 @@ export function ConversationalFlowDialog({
   const [triggerType, setTriggerType] = useState<"button_click" | "keyword" | "unanswered_timeout">("keyword");
   const [triggerTemplateName, setTriggerTemplateName] = useState<string | undefined>(undefined);
   const [triggerValuesText, setTriggerValuesText] = useState("");
+  const [triggerButtons, setTriggerButtons] = useState<string[]>([]);
+  const [buttonRoots, setButtonRoots] = useState<Record<string, string>>({});
   const [triggerTimeoutMinutes, setTriggerTimeoutMinutes] = useState<number>(15);
   const [steps, setSteps] = useState<ConvStepSeed[]>([newSendStep()]);
   const [rootStepId, setRootStepId] = useState<string>("");
@@ -279,10 +326,15 @@ export function ConversationalFlowDialog({
     setTriggerType(seed?.triggerType ?? "keyword");
     setTriggerTemplateName(seed?.triggerTemplateName);
     setTriggerValuesText((seed?.triggerValues ?? []).join(", "));
+    setTriggerButtons(seed?.triggerType === "button_click" ? (seed.triggerValues ?? []) : []);
     setTriggerTimeoutMinutes(seed?.triggerTimeoutMinutes ?? 15);
     const initialSteps = seed?.steps?.length ? seed.steps : [newSendStep()];
     setSteps(initialSteps);
     setRootStepId(initialSteps[0]!.id);
+    setButtonRoots(
+      seed?.triggerButtonSteps ??
+        (seed?.triggerType === "button_click" ? Object.fromEntries((seed.triggerValues ?? []).map((v) => [v, initialSteps[0]!.id])) : {}),
+    );
     setManualPositions({});
     setSelectedNodeId(TRIGGER_ID);
     setAddPanelOpen(false);
@@ -294,6 +346,13 @@ export function ConversationalFlowDialog({
     enabled: open,
   });
 
+  const { data: templatesWithButtons } = useQuery({
+    queryKey: ["conv-flow-templates-with-buttons"],
+    queryFn: () => runGetTemplatesWithButtons(),
+    enabled: open,
+  });
+  const selectedTemplate = (templatesWithButtons ?? []).find((t) => t.name === triggerTemplateName);
+
   const { data: segmentsResult } = useQuery({
     queryKey: ["crm-segments-list"],
     queryFn: () => getSegmentOptions(),
@@ -304,13 +363,30 @@ export function ConversationalFlowDialog({
   const triggerLabel =
     triggerType === "button_click"
       ? triggerTemplateName
-        ? `Clique em botão de "${triggerTemplateName}"`
+        ? triggerButtons.length
+          ? `Botão ${triggerButtons.map((b) => `"${b}"`).join(", ")} de ${triggerTemplateName}`
+          : `Clique em botão de "${triggerTemplateName}"`
         : "Clique em botão (escolha o template)"
       : triggerType === "unanswered_timeout"
         ? `Sem resposta em ${triggerTimeoutMinutes}min`
         : triggerValuesText
           ? `Palavra-chave: ${triggerValuesText}`
           : "Palavra-chave (escolha o gatilho)";
+
+  // Gatilho de botão com o modelo conhecido: cada botão de resposta rápida vira uma saída do nó
+  // do gatilho e pode seguir um caminho diferente (como no ManyChat).
+  const perButton = triggerType === "button_click" && Boolean(selectedTemplate);
+  const buttonRootsActive: Record<string, string> = useMemo(() => {
+    if (!perButton || !selectedTemplate) return {};
+    const out: Record<string, string> = {};
+    for (const b of selectedTemplate.buttons) {
+      const target = buttonRoots[b.text];
+      if (b.type === "QUICK_REPLY" && target && steps.some((s) => s.id === target)) out[b.text] = target;
+    }
+    return out;
+  }, [perButton, selectedTemplate, buttonRoots, steps]);
+  const mappedTargets = useMemo(() => Array.from(new Set(Object.values(buttonRootsActive))), [buttonRootsActive]);
+  const startStepId = perButton ? (mappedTargets[0] ?? null) : rootStepId;
 
   const updateStep = (id: string, patch: Partial<ConvStepSeed>) => {
     setSteps((prev) => prev.map((s) => (s.id === id ? ({ ...s, ...patch } as ConvStepSeed) : s)));
@@ -319,6 +395,7 @@ export function ConversationalFlowDialog({
   const removeStepById = useCallback(
     (id: string) => {
       if (id === TRIGGER_ID) return;
+      setButtonRoots((prev) => Object.fromEntries(Object.entries(prev).filter(([, target]) => target !== id)));
       setSteps((prev) => {
         const rest = prev.filter((s) => s.id !== id);
         const cleaned = rest.map((s) =>
@@ -379,6 +456,13 @@ export function ConversationalFlowDialog({
           toast.error("O gatilho precisa apontar pra uma etapa de Enviar WhatsApp ou Menu.");
           return;
         }
+        if (perButton) {
+          const index = conn.sourceHandle?.startsWith("btn") ? Number(conn.sourceHandle.slice(3)) : -1;
+          const button = selectedTemplate?.buttons[index];
+          if (!button || button.type !== "QUICK_REPLY") return;
+          setButtonRoots((prev) => ({ ...prev, [button.text]: conn.target! }));
+          return;
+        }
         setRootStepId(conn.target);
         return;
       }
@@ -400,7 +484,7 @@ export function ConversationalFlowDialog({
         }),
       );
     },
-    [steps],
+    [steps, perButton, selectedTemplate],
   );
 
   const onNodesChangeHandler = useCallback((changes: NodeChange[]) => {
@@ -419,6 +503,17 @@ export function ConversationalFlowDialog({
   const onNodesDelete = useCallback((deleted: Node[]) => { for (const n of deleted) removeStepById(n.id); }, [removeStepById]);
 
   const onEdgesDelete = useCallback((deleted: Edge[]) => {
+    const triggerButtonEdges = deleted.filter((e) => e.source === TRIGGER_ID && e.sourceHandle?.startsWith("btn"));
+    if (triggerButtonEdges.length) {
+      setButtonRoots((prev) => {
+        const next = { ...prev };
+        for (const edge of triggerButtonEdges) {
+          const button = selectedTemplate?.buttons[Number(edge.sourceHandle!.slice(3))];
+          if (button) delete next[button.text];
+        }
+        return next;
+      });
+    }
     setSteps((prev) =>
       prev.map((s) => {
         const match = deleted.find((e) => e.source === s.id);
@@ -435,21 +530,39 @@ export function ConversationalFlowDialog({
         return s;
       }),
     );
-  }, []);
+  }, [selectedTemplate]);
 
-  const layout = useMemo(() => layoutSteps(steps, rootStepId), [steps, rootStepId]);
+  const layoutRoots = perButton ? (mappedTargets.length ? mappedTargets : [rootStepId]) : [rootStepId];
+  const layout = useMemo(
+    () => layoutSteps(steps, layoutRoots, perButton ? 56 : 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [steps, rootStepId, perButton, mappedTargets.join("|")],
+  );
 
   const nodes: Node[] = useMemo(() => {
-    const triggerPos = manualPositions[TRIGGER_ID] ?? { x: layout[rootStepId]?.x ?? 0, y: 0 };
+    const triggerPos = manualPositions[TRIGGER_ID] ?? { x: layout[startStepId ?? ""]?.x ?? 0, y: 0 };
+    const templatePreview: TriggerTemplatePreview | undefined =
+      perButton && selectedTemplate
+        ? {
+            name: selectedTemplate.name,
+            body: selectedTemplate.body,
+            buttons: selectedTemplate.buttons.map((b, index) => ({
+              text: b.text,
+              index,
+              clickable: b.type === "QUICK_REPLY",
+              connected: Boolean(buttonRootsActive[b.text]),
+            })),
+          }
+        : undefined;
     const triggerNode: Node = {
       id: TRIGGER_ID,
       type: "trigger",
       position: triggerPos,
-      data: { label: triggerLabel },
+      data: { label: triggerLabel, ...(templatePreview ? { template: templatePreview } : {}) },
       selected: selectedNodeId === TRIGGER_ID,
       deletable: false,
       width: 256,
-      height: 84,
+      height: templatePreview ? 140 : 84,
     };
     const stepNodes: Node[] = steps.map((s) => ({
       id: s.id,
@@ -461,11 +574,18 @@ export function ConversationalFlowDialog({
       height: s.type === "decision" || s.type === "menu" ? 118 : 100,
     }));
     return [triggerNode, ...stepNodes];
-  }, [layout, steps, manualPositions, selectedNodeId, rootStepId, triggerLabel]);
+  }, [layout, steps, manualPositions, selectedNodeId, startStepId, triggerLabel, perButton, selectedTemplate, buttonRootsActive]);
 
   const edges: Edge[] = useMemo(() => {
     const list: Edge[] = [];
-    if (rootStepId) {
+    if (perButton && selectedTemplate) {
+      selectedTemplate.buttons.forEach((b, index) => {
+        const target = buttonRootsActive[b.text];
+        if (target) {
+          list.push({ id: `trigger-btn${index}`, type: "smoothstep", source: TRIGGER_ID, sourceHandle: `btn${index}`, target, targetHandle: "in", label: b.text, style: { strokeWidth: 2 } });
+        }
+      });
+    } else if (rootStepId) {
       list.push({ id: `trigger-${rootStepId}`, type: "smoothstep", source: TRIGGER_ID, sourceHandle: "out", target: rootStepId, targetHandle: "in", deletable: false, style: { strokeWidth: 2 } });
     }
     for (const s of steps) {
@@ -481,7 +601,7 @@ export function ConversationalFlowDialog({
       }
     }
     return list;
-  }, [steps, rootStepId]);
+  }, [steps, rootStepId, perButton, selectedTemplate, buttonRootsActive]);
 
   const graphKey = useMemo(() => edges.map((e) => e.id).join(",") + "|" + nodes.map((n) => n.id).join(","), [edges, nodes]);
 
@@ -494,14 +614,21 @@ export function ConversationalFlowDialog({
       toast.error("Preencha o rótulo de todas as opções do menu.");
       return;
     }
-    const rootStep = steps.find((s) => s.id === rootStepId);
+    const rootStep = steps.find((s) => s.id === startStepId);
     if (!rootStep || (rootStep.type !== "send" && rootStep.type !== "menu")) {
       toast.error("O gatilho precisa apontar pra uma etapa de Enviar WhatsApp ou Menu.");
       return;
     }
-    const triggerValues = triggerValuesText.split(",").map((v) => v.trim()).filter(Boolean);
+    const triggerValues =
+      triggerType === "button_click" ? (perButton ? Object.keys(buttonRootsActive) : triggerButtons) : triggerValuesText.split(",").map((v) => v.trim()).filter(Boolean);
     if (triggerType !== "unanswered_timeout" && triggerValues.length === 0) {
-      toast.error(triggerType === "button_click" ? "Informe o texto de pelo menos um botão." : "Informe pelo menos uma palavra-chave.");
+      toast.error(
+        triggerType === "button_click"
+          ? perButton
+            ? "Ligue pelo menos um botão do modelo a uma etapa (arraste do ponto do botão até o card)."
+            : "Informe o texto de pelo menos um botão."
+          : "Informe pelo menos uma palavra-chave.",
+      );
       return;
     }
     if (triggerType === "button_click" && !triggerTemplateName) {
@@ -513,7 +640,7 @@ export function ConversationalFlowDialog({
       return;
     }
 
-    const orderedSteps = [rootStep, ...steps.filter((s) => s.id !== rootStepId)];
+    const orderedSteps = [rootStep, ...steps.filter((s) => s.id !== startStepId)];
     setBusy(true);
     try {
       const res = await runSave({
@@ -525,6 +652,7 @@ export function ConversationalFlowDialog({
           triggerType,
           triggerTemplateName: triggerType === "button_click" ? triggerTemplateName : undefined,
           triggerValues,
+          ...(perButton ? { triggerButtonSteps: buttonRootsActive } : {}),
           triggerTimeoutMinutes: triggerType === "unanswered_timeout" ? triggerTimeoutMinutes : undefined,
           steps: orderedSteps.map((s) =>
             s.type === "send"
@@ -698,25 +826,89 @@ export function ConversationalFlowDialog({
                   )}
 
                   {triggerType === "button_click" && (
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Template enviado (cujo botão dispara o fluxo)</Label>
-                      <Select value={triggerTemplateName ?? ""} onValueChange={setTriggerTemplateName}>
-                        <SelectTrigger><SelectValue placeholder="Escolha um template já usado numa campanha" /></SelectTrigger>
-                        <SelectContent>
-                          {(templateNames ?? []).map((t: string) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Modelo de mensagem (cujo botão dispara o fluxo)</Label>
+                        <Select
+                          value={triggerTemplateName ?? ""}
+                          onValueChange={(v) => {
+                            setTriggerTemplateName(v);
+                            setTriggerButtons([]);
+                            setButtonRoots({});
+                          }}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Escolha o modelo" /></SelectTrigger>
+                          <SelectContent>
+                            {(templatesWithButtons ?? []).map((t) => <SelectItem key={t.name} value={t.name}>{t.name}</SelectItem>)}
+                            {triggerTemplateName && !selectedTemplate && <SelectItem value={triggerTemplateName}>{triggerTemplateName}</SelectItem>}
+                            {(templateNames ?? [])
+                              .filter((n: string) => n !== triggerTemplateName && !(templatesWithButtons ?? []).some((t) => t.name === n))
+                              .map((n: string) => <SelectItem key={n} value={n}>{n} (sem dados dos botões)</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {selectedTemplate ? (
+                        <div className="space-y-2">
+                          <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-1.5">
+                            {selectedTemplate.header && <p className="text-xs font-semibold">{selectedTemplate.header}</p>}
+                            <p className="text-xs whitespace-pre-wrap">{selectedTemplate.body}</p>
+                            {selectedTemplate.footer && <p className="text-[10px] text-muted-foreground">{selectedTemplate.footer}</p>}
+                          </div>
+                          <Label className="text-xs">Botões da mensagem</Label>
+                          <div className="space-y-1.5">
+                            {selectedTemplate.buttons.map((b) => {
+                              const clickable = b.type === "QUICK_REPLY";
+                              const targetStep = steps.find((st) => st.id === buttonRootsActive[b.text]);
+                              return (
+                                <div
+                                  key={`${b.type}-${b.text}`}
+                                  className={cn(
+                                    "flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs",
+                                    targetStep ? "border-primary bg-primary/5" : "border-border",
+                                    !clickable && "opacity-60",
+                                  )}
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <MousePointerClick className="size-3.5 shrink-0" />
+                                    <span className="font-medium">{b.text}</span>
+                                  </span>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {!clickable ? (b.type === "URL" ? "link, não dispara" : "não dispara") : targetStep ? `segue para: ${stepShortLabel(targetStep)}` : "sem etapa ligada"}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">
+                            No desenho ao lado, arraste do ponto de cada botão até a etapa que ele deve iniciar. Cada botão pode seguir um caminho diferente. Botões de link não geram evento no WhatsApp e não iniciam fluxo.
+                          </p>
+                        </div>
+                      ) : (
+                        triggerTemplateName && (
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Texto do(s) botão(ões) que disparam (separado por vírgula)</Label>
+                            <Textarea
+                              rows={2}
+                              value={triggerButtons.join(", ")}
+                              onChange={(e) => setTriggerButtons(e.target.value.split(",").map((v) => v.trim()).filter(Boolean))}
+                              placeholder="ex: Quero saber mais, Sim"
+                            />
+                            <p className="text-[10px] text-muted-foreground">Não encontrei os botões deste modelo na Meta. Digite o texto exatamente como aparece no botão.</p>
+                          </div>
+                        )
+                      )}
+                    </>
                   )}
 
-                  {triggerType !== "unanswered_timeout" && (
+                  {triggerType === "keyword" && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs">{triggerType === "button_click" ? "Texto do(s) botão(ões) que disparam (separado por vírgula)" : "Palavra(s)-chave — dispara se a mensagem contiver qualquer uma (separado por vírgula)"}</Label>
+                      <Label className="text-xs">Palavra(s)-chave — dispara se a mensagem contiver qualquer uma (separado por vírgula)</Label>
                       <Textarea
                         rows={2}
                         value={triggerValuesText}
                         onChange={(e) => setTriggerValuesText(e.target.value)}
-                        placeholder={triggerType === "button_click" ? "ex: Quero saber mais, Sim" : "ex: oi, olá, ajuda"}
+                        placeholder="ex: oi, olá, ajuda"
                       />
                     </div>
                   )}

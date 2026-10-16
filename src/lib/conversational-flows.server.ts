@@ -489,7 +489,11 @@ export async function matchIncomingMessage(message: IncomingMessage): Promise<vo
   if (!matched) return;
 
   const steps = parseConvSteps(matched.steps);
-  const firstStep = steps[0];
+  // Gatilho de botão com um caminho por botão (trigger_button_steps: texto do botão -> id da etapa
+  // inicial). Fluxos antigos não têm o mapa e continuam começando na primeira etapa.
+  const buttonSteps = (matched.trigger_button_steps ?? null) as Record<string, string> | null;
+  const mappedStepId = matched.trigger_type === "button_click" && buttonText ? buttonSteps?.[buttonText] : undefined;
+  const firstStep = (mappedStepId ? steps.find((s) => s.id === mappedStepId) : undefined) ?? steps[0];
   if (!firstStep || (firstStep.type !== "send" && firstStep.type !== "menu")) return;
 
   const { data: existingActive } = await supabaseAdmin

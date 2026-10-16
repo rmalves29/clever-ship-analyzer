@@ -24,6 +24,7 @@ type FlowRow = {
   trigger_template_name: string | null;
   trigger_timeout_minutes: number | null;
   trigger_values: string[];
+  trigger_button_steps?: Record<string, string> | null;
   steps: unknown[];
   total_execucoes: number;
 };
@@ -95,6 +96,7 @@ export function ConversationalFlowsTab() {
       triggerType: flow.trigger_type,
       triggerTemplateName: flow.trigger_template_name ?? undefined,
       triggerValues: flow.trigger_values,
+      triggerButtonSteps: flow.trigger_button_steps ?? undefined,
       triggerTimeoutMinutes: flow.trigger_timeout_minutes ?? undefined,
       steps: flow.steps as ConversationalFlowSeed["steps"],
     });
@@ -110,6 +112,7 @@ export function ConversationalFlowsTab() {
       triggerType: flow.trigger_type,
       triggerTemplateName: flow.trigger_template_name ?? undefined,
       triggerValues: flow.trigger_values,
+      triggerButtonSteps: flow.trigger_button_steps ?? undefined,
       triggerTimeoutMinutes: flow.trigger_timeout_minutes ?? undefined,
       steps: flow.steps as ConversationalFlowSeed["steps"],
     });

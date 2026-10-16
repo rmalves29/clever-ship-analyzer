@@ -52,6 +52,7 @@ const flowSchema = z.object({
   ativo: z.boolean().default(true),
   triggerType: z.enum(["button_click", "keyword", "unanswered_timeout"]),
   triggerTemplateName: z.string().optional(),
+  triggerButtonSteps: z.record(z.string(), z.string()).optional(),
   triggerValues: z.array(z.string().min(1)).optional().default([]),
   triggerTimeoutMinutes: z.number().int().min(1).max(1440).optional(),
   steps: z.array(convStepSchema).min(1),
@@ -82,6 +83,15 @@ export const saveConversationalFlow = createServerFn({ method: "POST" })
     if ((data.triggerType === "button_click" || data.triggerType === "keyword") && data.triggerValues.length === 0) {
       return { success: false as const, error: "Informe pelo menos um valor de gatilho (palavra-chave ou texto do botão)." };
     }
+    const buttonSteps = data.triggerType === "button_click" ? data.triggerButtonSteps : undefined;
+    if (buttonSteps) {
+      const byId = new Map(data.steps.map((s) => [s.id, s]));
+      const bad = Object.entries(buttonSteps).find(([, id]) => {
+        const target = byId.get(id);
+        return !target || (target.type !== "send" && target.type !== "menu");
+      });
+      if (bad) return { success: false as const, error: `O botão "${bad[0]}" precisa apontar pra uma etapa de Enviar WhatsApp ou Menu.` };
+    }
     if (data.triggerType === "unanswered_timeout" && !data.triggerTimeoutMinutes) {
       return { success: false as const, error: "Informe depois de quantos minutos sem resposta o bot deve entrar." };
     }
@@ -93,6 +103,7 @@ export const saveConversationalFlow = createServerFn({ method: "POST" })
       trigger_type: data.triggerType,
       trigger_template_name: data.triggerType === "button_click" ? data.triggerTemplateName : null,
       trigger_values: data.triggerValues,
+      trigger_button_steps: buttonSteps && Object.keys(buttonSteps).length ? buttonSteps : null,
       trigger_timeout_minutes: data.triggerType === "unanswered_timeout" ? data.triggerTimeoutMinutes : null,
       steps: data.steps,
       updated_at: new Date().toISOString(),
@@ -190,4 +201,40 @@ export const getRecentlyUsedTemplateNames = createServerFn({ method: "GET" })
   for (const name of seen) names.add(name);
 
   return Array.from(names).sort((a, b) => a.localeCompare(b, "pt-BR"));
+});
+
+export type TemplateButtonOption = { type: "QUICK_REPLY" | "URL" | "PHONE_NUMBER" | "OTHER"; text: string; url?: string };
+export type TemplateWithButtons = { name: string; category: string; language: string; header: string | null; body: string; footer: string | null; buttons: TemplateButtonOption[] };
+
+/** Modelos aprovados da Meta que têm botão de resposta rápida, já com o texto da mensagem e a
+ *  lista de botões — alimenta o seletor do gatilho "Clique em botão" do fluxo conversacional. */
+export const getTemplatesWithButtons = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth]).handler(async (): Promise<TemplateWithButtons[]> => {
+  const { listMetaTemplates } = await import("./whatsapp-meta.server");
+  const result = await listMetaTemplates();
+  if (!result.success) return [];
+  const out: TemplateWithButtons[] = [];
+  for (const t of result.templates) {
+    if (t.status !== "APPROVED") continue;
+    const comps = t.components as Array<{ type: string; text?: string; format?: string; buttons?: Array<{ type?: string; text?: string; url?: string }> }>;
+    const buttons: TemplateButtonOption[] = (comps.find((c) => c.type === "BUTTONS")?.buttons ?? [])
+      .filter((b) => b.text)
+      .map((b) => ({
+        type: b.type === "QUICK_REPLY" ? "QUICK_REPLY" : b.type === "URL" ? "URL" : b.type === "PHONE_NUMBER" ? "PHONE_NUMBER" : "OTHER",
+        text: String(b.text),
+        ...(b.url ? { url: b.url } : {}),
+      }));
+    if (!buttons.some((b) => b.type === "QUICK_REPLY")) continue;
+    const header = comps.find((c) => c.type === "HEADER" && c.format === "TEXT")?.text ?? null;
+    out.push({
+      name: t.name,
+      category: t.category,
+      language: t.language,
+      header,
+      body: comps.find((c) => c.type === "BODY")?.text ?? "",
+      footer: comps.find((c) => c.type === "FOOTER")?.text ?? null,
+      buttons,
+    });
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 });

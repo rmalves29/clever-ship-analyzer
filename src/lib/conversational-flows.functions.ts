@@ -20,6 +20,7 @@ const convSendStepSchema = z.object({
   buttonUrl: z.string().url().nullable().optional(),
   mediaType: z.enum(["image", "audio", "video"]).nullable().optional(),
   mediaUrl: z.string().url().nullable().optional(),
+  buttonNextStepId: z.string().nullable().optional(),
   nextStepId: z.string().nullable().default(null),
 });
 
@@ -86,7 +87,10 @@ export const saveConversationalFlow = createServerFn({ method: "POST" })
     if (emptySend) return { success: false as const, error: "Cada etapa de envio precisa de texto ou de uma mídia." };
     const stepIds = new Set(data.steps.map((s) => s.id));
     const badRef = data.steps.find((s) => {
-      if (s.type === "send" || s.type === "tag") return s.nextStepId !== null && !stepIds.has(s.nextStepId);
+      if (s.type === "send") {
+        return (s.nextStepId !== null && !stepIds.has(s.nextStepId)) || Boolean(s.buttonNextStepId && !stepIds.has(s.buttonNextStepId));
+      }
+      if (s.type === "tag") return s.nextStepId !== null && !stepIds.has(s.nextStepId);
       if (s.type === "menu") return s.options.some((o) => o.nextStepId !== null && !stepIds.has(o.nextStepId));
       return (s.yesStepId !== null && !stepIds.has(s.yesStepId)) || (s.noStepId !== null && !stepIds.has(s.noStepId));
     });

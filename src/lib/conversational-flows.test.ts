@@ -118,3 +118,14 @@ describe("parseConvSteps — etapa de tag e mídia", () => {
     if (send?.type === "send") expect(send.mediaUrl).toBeNull();
   });
 });
+
+describe("parseConvSteps — caminho do botão de link", () => {
+  it("guarda o caminho do botão só quando há texto e link do botão", () => {
+    const withButton = parseConvSteps([{ id: "s1", type: "send", text: "Oi", buttonText: "VER", buttonUrl: "https://x.test", buttonNextStepId: "s2", nextStepId: null }]);
+    const noUrl = parseConvSteps([{ id: "s1", type: "send", text: "Oi", buttonText: "VER", buttonUrl: null, buttonNextStepId: "s2", nextStepId: null }]);
+    const a = withButton[0];
+    const b = noUrl[0];
+    if (a?.type === "send") expect(a.buttonNextStepId).toBe("s2");
+    if (b?.type === "send") expect(b.buttonNextStepId).toBeNull();
+  });
+});

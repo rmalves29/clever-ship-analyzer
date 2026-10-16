@@ -54,6 +54,7 @@ export type ConvSendStepSeed = {
   buttonUrl: string | null;
   mediaType?: "image" | "audio" | "video" | null;
   mediaUrl?: string | null;
+  buttonNextStepId?: string | null;
   nextStepId: string | null;
 };
 
@@ -148,7 +149,10 @@ function layoutSteps(steps: ConvStepSeed[], rootIds: (string | null)[], extraTop
     nextColAtDepth[depth] = col + 1;
     positions[id] = { x: col * COL_W, y: depth * ROW_H + extraTop };
     const step = byId.get(id)!;
-    if (step.type === "send" || step.type === "tag") place(step.nextStepId, depth + 1);
+    if (step.type === "send") {
+      place(step.nextStepId, depth + 1);
+      place(step.buttonNextStepId ?? null, depth + 1);
+    } else if (step.type === "tag") place(step.nextStepId, depth + 1);
     else if (step.type === "menu") {
       for (const option of step.options) place(option.nextStepId, depth + 1);
     } else {
@@ -238,7 +242,20 @@ function SendNode({ data, selected }: NodeProps) {
         {d.step.mediaUrl && (d.step.mediaType === "audio" ? <Mic className="size-3" /> : d.step.mediaType === "video" ? <VideoIcon className="size-3" /> : <ImageIcon className="size-3" />)}
         {d.step.waitMinutes === 0 ? "Envia na hora" : `Espera ${d.step.waitMinutes} min antes`}
       </p>
-      <Handle type="source" position={Position.Bottom} id="out" className="!bg-primary !size-2.5" />
+      {d.step.buttonText && d.step.buttonUrl ? (
+        <>
+          <div className="mt-2 flex gap-1">
+            <span className="flex-1 truncate rounded-md border border-border px-1.5 py-1 text-center text-[10px] font-semibold text-muted-foreground">Próximo passo</span>
+            <span className="flex-1 truncate rounded-md border border-primary/40 bg-primary/5 px-1.5 py-1 text-center text-[10px] font-semibold text-primary" title={d.step.buttonText}>
+              {d.step.buttonText}
+            </span>
+          </div>
+          <Handle type="source" position={Position.Bottom} id="out" style={{ left: "27%" }} className="!bg-primary !size-2.5" />
+          <Handle type="source" position={Position.Bottom} id="btn" style={{ left: "73%" }} className="!bg-primary !size-2.5" />
+        </>
+      ) : (
+        <Handle type="source" position={Position.Bottom} id="out" className="!bg-primary !size-2.5" />
+      )}
     </div>
   );
 }
@@ -483,7 +500,9 @@ export function ConversationalFlowDialog({
       setSteps((prev) => {
         const rest = prev.filter((s) => s.id !== id);
         const cleaned = rest.map((s) =>
-          s.type === "send" || s.type === "tag"
+          s.type === "send"
+            ? { ...s, nextStepId: s.nextStepId === id ? null : s.nextStepId, buttonNextStepId: s.buttonNextStepId === id ? null : (s.buttonNextStepId ?? null) }
+            : s.type === "tag"
             ? { ...s, nextStepId: s.nextStepId === id ? null : s.nextStepId }
             : s.type === "menu"
               ? { ...s, options: s.options.map((o) => (o.nextStepId === id ? { ...o, nextStepId: null } : o)) }
@@ -554,6 +573,7 @@ export function ConversationalFlowDialog({
       setSteps((prev) =>
         prev.map((s) => {
           if (s.id !== conn.source) return s;
+          if (s.type === "send" && conn.sourceHandle === "btn") return { ...s, buttonNextStepId: conn.target };
           if (s.type === "send" || s.type === "tag") return { ...s, nextStepId: conn.target };
           if (s.type === "menu") {
             const optIndex = conn.sourceHandle?.startsWith("opt") ? Number(conn.sourceHandle.slice(3)) : -1;
@@ -608,6 +628,7 @@ export function ConversationalFlowDialog({
       prev.map((s) => {
         const match = deleted.find((e) => e.source === s.id);
         if (!match) return s;
+        if (s.type === "send" && match.sourceHandle === "btn") return { ...s, buttonNextStepId: null };
         if ((s.type === "send" || s.type === "tag") && match.sourceHandle === "out") return { ...s, nextStepId: null };
         if (s.type === "menu" && match.sourceHandle?.startsWith("opt")) {
           const optIndex = Number(match.sourceHandle.slice(3));
@@ -661,7 +682,7 @@ export function ConversationalFlowDialog({
       data: { step: s },
       selected: selectedNodeId === s.id,
       width: 256,
-      height: s.type === "decision" || s.type === "menu" ? 118 : s.type === "tag" ? 90 : 100,
+      height: s.type === "decision" || s.type === "menu" ? 118 : s.type === "tag" ? 90 : s.type === "send" && s.buttonText && s.buttonUrl ? 128 : 100,
     }));
     const all = [triggerNode, ...stepNodes];
     nodesRef.current = all;
@@ -683,6 +704,9 @@ export function ConversationalFlowDialog({
     for (const s of steps) {
       if (s.type === "send" || s.type === "tag") {
         if (s.nextStepId) list.push({ id: `${s.id}-next`, source: s.id, sourceHandle: "out", target: s.nextStepId, targetHandle: "in" });
+        if (s.type === "send" && s.buttonNextStepId && s.buttonText && s.buttonUrl) {
+          list.push({ id: `${s.id}-btn`, source: s.id, sourceHandle: "btn", target: s.buttonNextStepId, targetHandle: "in", label: s.buttonText });
+        }
       } else if (s.type === "menu") {
         s.options.forEach((o, i) => {
           if (o.nextStepId) list.push({ id: `${s.id}-opt${i}`, source: s.id, sourceHandle: `opt${i}`, target: o.nextStepId, targetHandle: "in", label: o.label });
@@ -756,7 +780,7 @@ export function ConversationalFlowDialog({
           triggerTimeoutMinutes: triggerType === "unanswered_timeout" ? triggerTimeoutMinutes : undefined,
           steps: orderedSteps.map((s) =>
             s.type === "send"
-              ? { id: s.id, type: "send" as const, waitMinutes: s.waitMinutes, text: s.text, buttonText: s.buttonText || undefined, buttonUrl: s.buttonUrl || undefined, mediaType: s.mediaUrl ? s.mediaType ?? null : null, mediaUrl: s.mediaUrl || null, nextStepId: s.nextStepId }
+              ? { id: s.id, type: "send" as const, waitMinutes: s.waitMinutes, text: s.text, buttonText: s.buttonText || undefined, buttonUrl: s.buttonUrl || undefined, mediaType: s.mediaUrl ? s.mediaType ?? null : null, mediaUrl: s.mediaUrl || null, buttonNextStepId: s.buttonText && s.buttonUrl ? s.buttonNextStepId ?? null : null, nextStepId: s.nextStepId }
               : s.type === "tag"
                 ? { id: s.id, type: "tag" as const, tags: s.tags, nextStepId: s.nextStepId }
               : s.type === "menu"
@@ -1237,8 +1261,22 @@ function ConvSendStepPanel({ step, onChange, onDelete }: { step: ConvSendStepSee
 
       <div className="space-y-1.5">
         <Label className="text-xs">Botão (opcional)</Label>
-        <Input value={step.buttonText ?? ""} onChange={(e) => onChange({ buttonText: e.target.value || null })} placeholder="Texto do botão (ex: Ver oferta)" maxLength={20} />
-        <Input value={step.buttonUrl ?? ""} onChange={(e) => onChange({ buttonUrl: e.target.value || null })} placeholder="https://..." />
+        <Input
+          value={step.buttonText ?? ""}
+          onChange={(e) => onChange({ buttonText: e.target.value || null, ...(e.target.value ? {} : { buttonNextStepId: null }) })}
+          placeholder="Texto do botão (ex: Ver oferta)"
+          maxLength={20}
+        />
+        <Input
+          value={step.buttonUrl ?? ""}
+          onChange={(e) => onChange({ buttonUrl: e.target.value || null, ...(e.target.value ? {} : { buttonNextStepId: null }) })}
+          placeholder="https://..."
+        />
+        {step.buttonText && step.buttonUrl && (
+          <p className="text-[10px] text-muted-foreground">
+            No desenho, o cartão ganha uma saída para o botão: ligue ela à etapa que deve seguir quando a cliente tocar em "{step.buttonText}". Para registrar o toque, o link passa antes pelo CRM e abre o endereço normal em seguida. Se você não ligar o botão, ele abre o link direto, como antes.
+          </p>
+        )}
       </div>
 
       <p className="text-xs text-muted-foreground">Arraste uma conexão a partir do ponto embaixo do card pra ligar com a próxima etapa.</p>

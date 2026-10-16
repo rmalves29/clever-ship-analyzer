@@ -21,6 +21,9 @@ export type ConvSendStep = {
    *  texto como legenda; áudio não tem legenda, então o texto vai numa mensagem logo depois. */
   mediaType?: ConvMediaType | null;
   mediaUrl?: string | null;
+  /** Caminho que continua quando a cliente toca no botão de link: o link enviado passa pelo CRM
+   *  (/fc/<run>/<etapa>), que registra o clique, abre uma execução nova nessa etapa e redireciona. */
+  buttonNextStepId?: string | null;
   nextStepId: string | null;
 };
 
@@ -55,6 +58,7 @@ type RawStep = {
   buttonText?: unknown;
   mediaType?: unknown;
   mediaUrl?: unknown;
+  buttonNextStepId?: unknown;
   buttonUrl?: unknown;
   nextStepId?: unknown;
   options?: unknown;
@@ -140,6 +144,7 @@ export function parseConvSteps(raw: unknown): ConvStep[] {
         buttonUrl: s.buttonUrl ? String(s.buttonUrl) : null,
         mediaType: mediaUrl ? mediaType : null,
         mediaUrl,
+        buttonNextStepId: s.buttonText && s.buttonUrl && s.buttonNextStepId ? String(s.buttonNextStepId) : null,
         nextStepId: s.nextStepId ? String(s.nextStepId) : null,
       };
     })
@@ -202,7 +207,11 @@ async function resolveNextConvStep(
 /** Envia a etapa via Graph API — sem template, sem aprovação: só é chamado depois que o próprio
  *  cliente mandou mensagem, então estamos na janela de 24h. Três formatos possíveis: menu (até 3
  *  botões de resposta rápida), texto + botão de link (cta_url), ou texto livre. */
-async function sendConversationMessage(step: ConvSendStep | ConvMenuStep, phone: string): Promise<{ ok: boolean; waMessageId?: string; error?: string }> {
+function publicAppUrl(): string {
+  return (process.env["PUBLIC_APP_URL"] || "https://crm.maniadmulher.com").replace(/\/+$/, "");
+}
+
+async function sendConversationMessage(step: ConvSendStep | ConvMenuStep, phone: string, runId?: string): Promise<{ ok: boolean; waMessageId?: string; error?: string }> {
   const { loadSettings } = await import("./whatsapp-meta.server");
   const settings = await loadSettings();
   if (!settings.accessToken || !settings.phoneNumberId) {
@@ -237,6 +246,8 @@ async function sendConversationMessage(step: ConvSendStep | ConvMenuStep, phone:
   }
 
   const hasButton = Boolean(step.buttonText && step.buttonUrl);
+  // Botão com caminho próprio: o link passa pelo CRM pra registrar o clique e seguir o fluxo.
+  const buttonLink = step.buttonNextStepId && runId ? `${publicAppUrl()}/fc/${runId}/${encodeURIComponent(step.id)}` : step.buttonUrl;
   const ctaBody = (header?: unknown) => ({
     messaging_product: "whatsapp",
     to: phone,
@@ -245,7 +256,7 @@ async function sendConversationMessage(step: ConvSendStep | ConvMenuStep, phone:
       type: "cta_url",
       ...(header ? { header } : {}),
       body: { text: step.text.trim() ? step.text : step.buttonText },
-      action: { name: "cta_url", parameters: { display_text: step.buttonText, url: step.buttonUrl } },
+      action: { name: "cta_url", parameters: { display_text: step.buttonText, url: buttonLink } },
     },
   });
   const textBody = () =>
@@ -372,7 +383,7 @@ async function dispatchRunStep(
   steps: ConvStep[],
 ) {
   const supabaseAdmin = await admin();
-  const result = await sendConversationMessage(step, run.phone);
+  const result = await sendConversationMessage(step, run.phone, run.id);
   if (!result.ok) {
     await supabaseAdmin
       .from("whatsapp_conversation_runs")
@@ -427,6 +438,64 @@ async function dispatchRunStep(
     .from("whatsapp_conversation_runs")
     .update(patch as never)
     .eq("id", run.id);
+}
+
+/** Clique no botão de link de uma etapa de envio (via /fc/<run>/<etapa>): abre a execução do caminho
+ *  do botão e devolve o endereço de destino pra redirecionar. Devolve null quando o link não é válido.
+ *  Nunca deve impedir o redirecionamento: qualquer falha no fluxo é só registrada. */
+export async function handleFlowButtonClick(runId: string, stepId: string): Promise<string | null> {
+  const supabaseAdmin = await admin();
+  const { data: run } = await supabaseAdmin
+    .from("whatsapp_conversation_runs")
+    .select("id, flow_id, customer_id, phone, started_at")
+    .eq("id", runId)
+    .maybeSingle();
+  if (!run) return null;
+  const { data: flow } = await supabaseAdmin.from("whatsapp_conversational_flows").select("steps").eq("id", (run as { flow_id: string }).flow_id).maybeSingle();
+  if (!flow) return null;
+  const steps = parseConvSteps((flow as { steps: unknown }).steps);
+  const step = steps.find((s) => s.id === stepId);
+  if (!step || step.type !== "send" || !step.buttonUrl) return null;
+  const destination = step.buttonUrl;
+  if (!step.buttonNextStepId) return destination;
+
+  try {
+    const typedRun = run as { id: string; flow_id: string; customer_id: string | null; phone: string; started_at: string };
+    const sourceClick = `${typedRun.id}:${step.id}`;
+    const { data: already } = await supabaseAdmin.from("whatsapp_conversation_runs").select("id").eq("source_click" as never, sourceClick).maybeSingle();
+    if (already) return destination;
+
+    const startedAt = new Date().toISOString();
+    const first = await resolveNextConvStep(steps, step.buttonNextStepId, {
+      customer_id: typedRun.customer_id ?? "",
+      enrolled_at: typedRun.started_at,
+      phone: typedRun.phone,
+    });
+    if (!first) return destination;
+
+    const { data: newRun, error } = await supabaseAdmin
+      .from("whatsapp_conversation_runs")
+      .insert({
+        flow_id: typedRun.flow_id,
+        customer_id: typedRun.customer_id,
+        phone: typedRun.phone,
+        status: "active",
+        current_step_id: first.id,
+        next_run_at: new Date(Date.now() + first.waitMinutes * 60_000).toISOString(),
+        started_at: startedAt,
+        source_click: sourceClick,
+      } as never)
+      .select("id, flow_id, customer_id, phone, current_step_id, started_at")
+      .single();
+    if (error || !newRun) {
+      if (error && error.code !== "23505") console.error("[conversational-flows] Falha ao abrir o caminho do botão:", error.message);
+      return destination;
+    }
+    if (first.waitMinutes === 0) await dispatchRunStep(newRun as any, first, steps);
+  } catch (error) {
+    console.error("[conversational-flows] Falha ao seguir o caminho do botão de link:", error);
+  }
+  return destination;
 }
 
 /** Chamado pelo tick de 15 em 15 min (mesmo cron das Automações): processa runs cuja espera venceu. */

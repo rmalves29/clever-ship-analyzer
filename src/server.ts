@@ -31,6 +31,7 @@ const DAILY_EVENTS_ANALYSIS_PATH = "/api/events/daily-analysis";
 const UAZAPI_WEBHOOK_PATH = "/api/uazapi-webhook";
 const ENVIO_REDIRECT_PREFIX = "/fluxo/";
 const TRACKED_LINK_PREFIX = "/r/";
+const FLOW_BUTTON_CLICK_PREFIX = "/fc/";
 const ENVIO_PROCESS_SCHEDULED_PATH = "/api/envio/process-scheduled";
 const ENVIO_RETURN_DISPATCH_PATH = "/api/envio/return-dispatch";
 const ENVIO_CLEANUP_EVENTS_PATH = "/api/envio/cleanup-events";
@@ -255,6 +256,24 @@ async function handleEnvioRedirect(request: Request, ctx: unknown): Promise<Resp
     return await handleEnvioCampaignRedirect(slug, request, waitUntil);
   } catch (error) {
     console.error("Falha ao processar redirect de campanha do Fluxo de Envio:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}
+
+// Botão de link de uma etapa de fluxo conversacional com caminho próprio: /fc/<run>/<etapa>.
+// Registra o clique, abre o caminho do botão e redireciona pro endereço de destino.
+async function handleFlowButtonClick(request: Request): Promise<Response> {
+  const parts = new URL(request.url).pathname.slice(FLOW_BUTTON_CLICK_PREFIX.length).split("/");
+  const runId = parts[0] ?? "";
+  const stepId = decodeURIComponent(parts[1] ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(runId) || !stepId) return new Response("Not Found", { status: 404 });
+  try {
+    const { handleFlowButtonClick: follow } = await import("./lib/conversational-flows.server");
+    const destination = await follow(runId, stepId);
+    if (!destination || !/^https?:\/\//i.test(destination)) return new Response("Not Found", { status: 404 });
+    return new Response(null, { status: 302, headers: { Location: destination, "Cache-Control": "no-store" } });
+  } catch (error) {
+    console.error("Falha ao processar clique de botão do fluxo conversacional:", error);
     return new Response("Internal Server Error", { status: 500 });
   }
 }
@@ -671,6 +690,9 @@ export default {
     }
     if (pathname.startsWith(TRACKED_LINK_PREFIX)) {
       return handleTrackedLink(request);
+    }
+    if (pathname.startsWith(FLOW_BUTTON_CLICK_PREFIX)) {
+      return handleFlowButtonClick(request);
     }
     if (pathname === ENVIO_PROCESS_SCHEDULED_PATH) {
       return handleEnvioProcessScheduled(request);

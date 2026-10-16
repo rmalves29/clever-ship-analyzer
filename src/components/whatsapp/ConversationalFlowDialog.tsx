@@ -1,16 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Plus, Trash2, GitBranch, MessageCircle, Settings, Rocket, MousePointerClick, Type, Menu as MenuIcon, Clock } from "lucide-react";
+import { Plus, Trash2, GitBranch, MessageCircle, Settings, Rocket, MousePointerClick, Type, Menu as MenuIcon, Clock, Image as ImageIcon, Mic, Video as VideoIcon, Loader2 } from "lucide-react";
 import {
   ReactFlow,
   ReactFlowProvider,
   Background,
   Controls,
+  BaseEdge,
+  EdgeLabelRenderer,
+  getBezierPath,
   Handle,
+  MarkerType,
   Position,
   useReactFlow,
+  type EdgeProps,
   type Node,
   type Edge,
   type Connection,
@@ -29,7 +34,7 @@ import { cn } from "@/lib/utils";
 import { SEGMENT_TYPES } from "@/lib/crm-mock";
 import { getSegmentOptions } from "@/lib/crm-segmentation.functions";
 import { SEGMENT_LABEL } from "@/components/crm/AutomationDialog";
-import { saveConversationalFlow, getRecentlyUsedTemplateNames, getTemplatesWithButtons } from "@/lib/conversational-flows.functions";
+import { saveConversationalFlow, getRecentlyUsedTemplateNames, getTemplatesWithButtons, createConversationMediaUpload } from "@/lib/conversational-flows.functions";
 
 type DecisionCondition =
   | { kind: "novo_pedido" }
@@ -46,6 +51,8 @@ export type ConvSendStepSeed = {
   text: string;
   buttonText: string | null;
   buttonUrl: string | null;
+  mediaType?: "image" | "audio" | "video" | null;
+  mediaUrl?: string | null;
   nextStepId: string | null;
 };
 
@@ -218,8 +225,9 @@ function SendNode({ data, selected }: NodeProps) {
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
         <MessageCircle className="size-3" /> Enviar WhatsApp
       </p>
-      <p className="text-sm font-medium mt-1 truncate">{d.step.text || "Escreva a mensagem"}</p>
-      <p className="text-xs text-muted-foreground mt-0.5">
+      <p className="text-sm font-medium mt-1 truncate">{d.step.text || (d.step.mediaUrl ? "Só mídia" : "Escreva a mensagem")}</p>
+      <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
+        {d.step.mediaUrl && (d.step.mediaType === "audio" ? <Mic className="size-3" /> : d.step.mediaType === "video" ? <VideoIcon className="size-3" /> : <ImageIcon className="size-3" />)}
         {d.step.waitMinutes === 0 ? "Envia na hora" : `Espera ${d.step.waitMinutes} min antes`}
       </p>
       <Handle type="source" position={Position.Bottom} id="out" className="!bg-primary !size-2.5" />
@@ -273,7 +281,49 @@ function MenuNode({ data, selected }: NodeProps) {
   );
 }
 
+/** Linha curva com seta. Ao clicar nela aparece a lixeira: remove só a linha (a etapa fica onde
+ *  está) e dá pra puxar uma ligação nova do ponto de saída até outra etapa, como no ManyChat. */
+function DeletableEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, label, selected, deletable, style, markerEnd }: EdgeProps) {
+  const { deleteElements } = useReactFlow();
+  const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+  const baseStroke = (style?.stroke as string | undefined) ?? "#94a3b8";
+  return (
+    <>
+      <BaseEdge
+        id={id}
+        path={path}
+        {...(markerEnd ? { markerEnd } : {})}
+        interactionWidth={28}
+        style={{ ...style, stroke: selected ? "var(--primary)" : baseStroke, strokeWidth: selected ? 2.5 : (style?.strokeWidth ?? 1.75) }}
+      />
+      <EdgeLabelRenderer>
+        <div
+          style={{ position: "absolute", transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, pointerEvents: "all" }}
+          className="nodrag nopan flex items-center gap-1"
+        >
+          {label ? <span className="rounded-md border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium">{label}</span> : null}
+          {selected && deletable !== false && (
+            <button
+              type="button"
+              title="Remover só a linha"
+              aria-label="Remover só a linha"
+              onClick={(e) => {
+                e.stopPropagation();
+                void deleteElements({ edges: [{ id }] });
+              }}
+              className="flex size-7 items-center justify-center rounded-full border border-border bg-background text-critical shadow-sm hover:bg-critical/10"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          )}
+        </div>
+      </EdgeLabelRenderer>
+    </>
+  );
+}
+
 const nodeTypes = { trigger: TriggerNode, send: SendNode, decision: DecisionNode, menu: MenuNode };
+const edgeTypes = { deletable: DeletableEdge };
 const TRIGGER_ID = "__trigger__";
 
 function CanvasSync({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) {
@@ -310,6 +360,9 @@ export function ConversationalFlowDialog({
   const [triggerValuesText, setTriggerValuesText] = useState("");
   const [triggerButtons, setTriggerButtons] = useState<string[]>([]);
   const [buttonRoots, setButtonRoots] = useState<Record<string, string>>({});
+  const nodesRef = useRef<Node[]>([]);
+  // O canvas é controlado (sem onEdgesChange), então a seleção da linha é guardada aqui.
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [triggerTimeoutMinutes, setTriggerTimeoutMinutes] = useState<number>(15);
   const [steps, setSteps] = useState<ConvStepSeed[]>([newSendStep()]);
   const [rootStepId, setRootStepId] = useState<string>("");
@@ -337,6 +390,7 @@ export function ConversationalFlowDialog({
     );
     setManualPositions({});
     setSelectedNodeId(TRIGGER_ID);
+    setSelectedEdgeId(null);
     setAddPanelOpen(false);
   }, [seed, open]);
 
@@ -503,6 +557,12 @@ export function ConversationalFlowDialog({
   const onNodesDelete = useCallback((deleted: Node[]) => { for (const n of deleted) removeStepById(n.id); }, [removeStepById]);
 
   const onEdgesDelete = useCallback((deleted: Edge[]) => {
+    setSelectedEdgeId(null);
+    setManualPositions((prev) => {
+      const next = { ...prev };
+      for (const n of nodesRef.current) if (!next[n.id]) next[n.id] = n.position;
+      return next;
+    });
     const triggerButtonEdges = deleted.filter((e) => e.source === TRIGGER_ID && e.sourceHandle?.startsWith("btn"));
     if (triggerButtonEdges.length) {
       setButtonRoots((prev) => {
@@ -573,7 +633,9 @@ export function ConversationalFlowDialog({
       width: 256,
       height: s.type === "decision" || s.type === "menu" ? 118 : 100,
     }));
-    return [triggerNode, ...stepNodes];
+    const all = [triggerNode, ...stepNodes];
+    nodesRef.current = all;
+    return all;
   }, [layout, steps, manualPositions, selectedNodeId, startStepId, triggerLabel, perButton, selectedTemplate, buttonRootsActive]);
 
   const edges: Edge[] = useMemo(() => {
@@ -582,11 +644,11 @@ export function ConversationalFlowDialog({
       selectedTemplate.buttons.forEach((b, index) => {
         const target = buttonRootsActive[b.text];
         if (target) {
-          list.push({ id: `trigger-btn${index}`, type: "smoothstep", source: TRIGGER_ID, sourceHandle: `btn${index}`, target, targetHandle: "in", label: b.text, style: { strokeWidth: 2 } });
+          list.push({ id: `trigger-btn${index}`, type: "deletable", source: TRIGGER_ID, sourceHandle: `btn${index}`, target, targetHandle: "in", label: b.text, style: { strokeWidth: 2 } });
         }
       });
     } else if (rootStepId) {
-      list.push({ id: `trigger-${rootStepId}`, type: "smoothstep", source: TRIGGER_ID, sourceHandle: "out", target: rootStepId, targetHandle: "in", deletable: false, style: { strokeWidth: 2 } });
+      list.push({ id: `trigger-${rootStepId}`, type: "deletable", source: TRIGGER_ID, sourceHandle: "out", target: rootStepId, targetHandle: "in", deletable: false, style: { strokeWidth: 2 } });
     }
     for (const s of steps) {
       if (s.type === "send") {
@@ -600,14 +662,14 @@ export function ConversationalFlowDialog({
         if (s.noStepId) list.push({ id: `${s.id}-no`, source: s.id, sourceHandle: "no", target: s.noStepId, targetHandle: "in", label: "Não", style: { stroke: "var(--critical)" } });
       }
     }
-    return list;
-  }, [steps, rootStepId, perButton, selectedTemplate, buttonRootsActive]);
+    return list.map((e) => (e.id === selectedEdgeId ? { ...e, selected: true } : e));
+  }, [steps, rootStepId, perButton, selectedTemplate, buttonRootsActive, selectedEdgeId]);
 
   const graphKey = useMemo(() => edges.map((e) => e.id).join(",") + "|" + nodes.map((n) => n.id).join(","), [edges, nodes]);
 
   const save = async () => {
-    if (steps.some((s) => (s.type === "send" || s.type === "menu") && !s.text.trim())) {
-      toast.error("Escreva a mensagem de cada etapa de envio/menu.");
+    if (steps.some((s) => (s.type === "send" || s.type === "menu") && !s.text.trim() && !(s.type === "send" && s.mediaUrl))) {
+      toast.error("Escreva a mensagem de cada etapa de envio/menu (ou anexe uma mídia).");
       return;
     }
     if (steps.some((s) => s.type === "menu" && s.options.some((o) => !o.label.trim()))) {
@@ -656,7 +718,7 @@ export function ConversationalFlowDialog({
           triggerTimeoutMinutes: triggerType === "unanswered_timeout" ? triggerTimeoutMinutes : undefined,
           steps: orderedSteps.map((s) =>
             s.type === "send"
-              ? { id: s.id, type: "send" as const, waitMinutes: s.waitMinutes, text: s.text, buttonText: s.buttonText || undefined, buttonUrl: s.buttonUrl || undefined, nextStepId: s.nextStepId }
+              ? { id: s.id, type: "send" as const, waitMinutes: s.waitMinutes, text: s.text, buttonText: s.buttonText || undefined, buttonUrl: s.buttonUrl || undefined, mediaType: s.mediaUrl ? s.mediaType ?? null : null, mediaUrl: s.mediaUrl || null, nextStepId: s.nextStepId }
               : s.type === "menu"
                 ? { id: s.id, type: "menu" as const, waitMinutes: s.waitMinutes, text: s.text, options: s.options.map((o) => ({ id: o.id, label: o.label, nextStepId: o.nextStepId })) }
                 : { id: s.id, type: "decision" as const, condition: s.condition, yesStepId: s.yesStepId, noStepId: s.noStepId },
@@ -712,15 +774,17 @@ export function ConversationalFlowDialog({
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
                 onNodesChange={onNodesChangeHandler}
                 onConnect={onConnect}
                 onNodesDelete={onNodesDelete}
                 onEdgesDelete={onEdgesDelete}
-                onNodeClick={(_, node) => { setAddPanelOpen(false); setSelectedNodeId(node.id); }}
-                onPaneClick={() => { setSelectedNodeId(null); setAddPanelOpen(false); }}
+                onNodeClick={(_, node) => { setAddPanelOpen(false); setSelectedEdgeId(null); setSelectedNodeId(node.id); }}
+                onEdgeClick={(_, edge) => setSelectedEdgeId(edge.id)}
+                onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); setAddPanelOpen(false); }}
                 fitView
                 proOptions={{ hideAttribution: true }}
-                defaultEdgeOptions={{ type: "smoothstep" }}
+                defaultEdgeOptions={{ type: "deletable", markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 } }}
               >
                 <Background gap={20} />
                 <Controls showInteractive={false} />
@@ -942,6 +1006,92 @@ export function ConversationalFlowDialog({
   );
 }
 
+const MEDIA_ACCEPT: Record<"image" | "audio" | "video", string> = {
+  image: "image/jpeg,image/png",
+  audio: "audio/mpeg,audio/mp4,audio/aac,audio/amr,audio/ogg,.mp3,.m4a,.aac,.amr,.ogg",
+  video: "video/mp4,video/3gpp,.mp4,.3gp",
+};
+const MEDIA_LABEL = { image: "Imagem", audio: "Áudio", video: "Vídeo" } as const;
+
+/** Anexo de imagem, áudio ou vídeo escolhido no computador. O arquivo vai direto do navegador
+ *  para o armazenamento (endereço assinado) e a etapa guarda só o link público. */
+function ConvMediaField({ step, onChange }: { step: ConvSendStepSeed; onChange: (patch: Partial<ConvSendStepSeed>) => void }) {
+  const runCreateUpload = useServerFn(createConversationMediaUpload);
+  const [uploading, setUploading] = useState<"image" | "audio" | "video" | null>(null);
+  const inputs = { image: useRef<HTMLInputElement>(null), audio: useRef<HTMLInputElement>(null), video: useRef<HTMLInputElement>(null) };
+
+  const upload = async (mediaType: "image" | "audio" | "video", file: File) => {
+    setUploading(mediaType);
+    try {
+      const prepared = await runCreateUpload({ data: { mediaType, fileName: file.name, contentType: file.type, size: file.size } });
+      if (!prepared.success) {
+        toast.error(prepared.error);
+        return;
+      }
+      const form = new FormData();
+      form.append("cacheControl", "3600");
+      form.append("", new File([file], file.name, { type: prepared.contentType }));
+      const res = await fetch(prepared.signedUrl, { method: "PUT", body: form });
+      if (!res.ok) {
+        toast.error("Não consegui enviar o arquivo. Tente de novo.");
+        return;
+      }
+      onChange({ mediaType, mediaUrl: prepared.publicUrl });
+    } catch (err: any) {
+      toast.error("Erro ao enviar o arquivo: " + (err?.message ?? "falha desconhecida"));
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">Mídia (opcional)</Label>
+      {step.mediaUrl && step.mediaType ? (
+        <div className="space-y-2 rounded-lg border border-border p-2">
+          {step.mediaType === "image" && <img src={step.mediaUrl} alt="Imagem anexada" className="max-h-40 w-full rounded-md object-contain" />}
+          {step.mediaType === "video" && <video src={step.mediaUrl} controls className="max-h-40 w-full rounded-md" />}
+          {step.mediaType === "audio" && <audio src={step.mediaUrl} controls className="w-full" />}
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-muted-foreground">{MEDIA_LABEL[step.mediaType]} anexado</span>
+            <Button type="button" size="sm" variant="ghost" className="h-7 gap-1 text-critical" onClick={() => onChange({ mediaType: null, mediaUrl: null })}>
+              <Trash2 className="size-3.5" /> Remover
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-2">
+          {(["image", "audio", "video"] as const).map((type) => {
+            const Icon = type === "image" ? ImageIcon : type === "audio" ? Mic : VideoIcon;
+            return (
+              <div key={type}>
+                <input
+                  ref={inputs[type]}
+                  type="file"
+                  accept={MEDIA_ACCEPT[type]}
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) void upload(type, file);
+                  }}
+                />
+                <Button type="button" variant="outline" size="sm" className="h-auto w-full flex-col gap-1 py-2 text-xs" disabled={uploading !== null} onClick={() => inputs[type].current?.click()}>
+                  {uploading === type ? <Loader2 className="size-4 animate-spin" /> : <Icon className="size-4" />}
+                  {MEDIA_LABEL[type]}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <p className="text-[10px] text-muted-foreground">
+        Imagem JPG/PNG até 5 MB; áudio (MP3, M4A, OGG...) e vídeo (MP4) até 16 MB. Imagem e vídeo levam o texto da mensagem como legenda; o áudio vai primeiro e o texto logo depois.
+      </p>
+    </div>
+  );
+}
+
 function ConvSendStepPanel({ step, onChange, onDelete }: { step: ConvSendStepSeed; onChange: (patch: Partial<ConvSendStepSeed>) => void; onDelete: () => void }) {
   return (
     <>
@@ -959,6 +1109,8 @@ function ConvSendStepPanel({ step, onChange, onDelete }: { step: ConvSendStepSee
         <Label className="text-xs">Mensagem</Label>
         <Textarea value={step.text} onChange={(e) => onChange({ text: e.target.value })} rows={5} maxLength={4096} placeholder="Oi! Como posso te ajudar?" />
       </div>
+
+      <ConvMediaField step={step} onChange={onChange} />
 
       <div className="space-y-1.5">
         <Label className="text-xs">Botão (opcional)</Label>

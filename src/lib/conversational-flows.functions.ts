@@ -15,9 +15,11 @@ const convSendStepSchema = z.object({
   id: z.string().min(1),
   type: z.literal("send"),
   waitMinutes: z.number().int().min(0).max(43_200),
-  text: z.string().min(1).max(4096),
+  text: z.string().max(4096),
   buttonText: z.string().max(20).nullable().optional(),
   buttonUrl: z.string().url().nullable().optional(),
+  mediaType: z.enum(["image", "audio", "video"]).nullable().optional(),
+  mediaUrl: z.string().url().nullable().optional(),
   nextStepId: z.string().nullable().default(null),
 });
 
@@ -70,6 +72,8 @@ export const saveConversationalFlow = createServerFn({ method: "POST" })
     if (!firstStep || (firstStep.type !== "send" && firstStep.type !== "menu")) {
       return { success: false as const, error: "A primeira etapa precisa ser um envio ou um menu (não pode começar direto numa decisão)." };
     }
+    const emptySend = data.steps.find((s) => s.type === "send" && !s.text.trim() && !(s.mediaType && s.mediaUrl));
+    if (emptySend) return { success: false as const, error: "Cada etapa de envio precisa de texto ou de uma mídia." };
     const stepIds = new Set(data.steps.map((s) => s.id));
     const badRef = data.steps.find((s) => {
       if (s.type === "send") return s.nextStepId !== null && !stepIds.has(s.nextStepId);
@@ -238,3 +242,51 @@ export const getTemplatesWithButtons = createServerFn({ method: "GET" })
   }
   return out.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 });
+
+const MEDIA_RULES = {
+  image: { mimes: ["image/jpeg", "image/png"], maxBytes: 5 * 1024 * 1024, label: "Imagem (JPG ou PNG, até 5 MB)" },
+  audio: { mimes: ["audio/aac", "audio/mp4", "audio/mpeg", "audio/amr", "audio/ogg"], maxBytes: 16 * 1024 * 1024, label: "Áudio (MP3, M4A, AAC, AMR ou OGG, até 16 MB)" },
+  video: { mimes: ["video/mp4", "video/3gpp"], maxBytes: 16 * 1024 * 1024, label: "Vídeo (MP4 ou 3GP, até 16 MB)" },
+} as const;
+
+/** Alguns navegadores informam tipos "alternativos" pro mesmo arquivo (mp3, m4a, ogg com codec). */
+function normalizeMime(raw: string): string {
+  const base = raw.split(";")[0]!.trim().toLowerCase();
+  if (base === "audio/mp3" || base === "audio/x-mpeg" || base === "audio/mpeg3") return "audio/mpeg";
+  if (base === "audio/x-m4a" || base === "audio/m4a") return "audio/mp4";
+  if (base === "image/jpg") return "image/jpeg";
+  return base;
+}
+
+/** Gera um endereço de envio direto do navegador para o armazenamento (o arquivo não passa pelo
+ *  servidor, que tem limite de tamanho de requisição). Valida tipo e tamanho pelas regras do
+ *  WhatsApp antes de liberar. */
+export const createConversationMediaUpload = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) =>
+    z
+      .object({
+        mediaType: z.enum(["image", "audio", "video"]),
+        fileName: z.string().min(1).max(200),
+        contentType: z.string().max(100),
+        size: z.number().int().positive(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const rules = MEDIA_RULES[data.mediaType];
+    const contentType = normalizeMime(data.contentType);
+    if (!(rules.mimes as readonly string[]).includes(contentType)) {
+      return { success: false as const, error: `Formato não aceito pelo WhatsApp. ${rules.label}.` };
+    }
+    if (data.size > rules.maxBytes) {
+      return { success: false as const, error: `Arquivo grande demais. ${rules.label}.` };
+    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const safeName = data.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `conversation/${Date.now()}-${safeName}`;
+    const { data: signed, error } = await supabaseAdmin.storage.from("flow-uploads").createSignedUploadUrl(path);
+    if (error || !signed) return { success: false as const, error: error?.message ?? "Não consegui preparar o envio do arquivo." };
+    const { data: pub } = supabaseAdmin.storage.from("flow-uploads").getPublicUrl(path);
+    return { success: true as const, signedUrl: signed.signedUrl, publicUrl: pub.publicUrl, contentType };
+  });

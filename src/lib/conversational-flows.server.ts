@@ -8,6 +8,8 @@
 import { type DecisionCondition, type DecisionStep, evaluateDecision } from "./automations-engine.server";
 import { META_GRAPH_API_VERSION } from "./whatsapp-phone-registration";
 
+export type ConvMediaType = "image" | "audio" | "video";
+
 export type ConvSendStep = {
   id: string;
   type: "send";
@@ -15,6 +17,10 @@ export type ConvSendStep = {
   text: string;
   buttonText: string | null;
   buttonUrl: string | null;
+  /** Mídia anexada (arquivo enviado do computador, guardado num bucket público). Imagem/vídeo levam o
+   *  texto como legenda; áudio não tem legenda, então o texto vai numa mensagem logo depois. */
+  mediaType?: ConvMediaType | null;
+  mediaUrl?: string | null;
   nextStepId: string | null;
 };
 
@@ -38,6 +44,8 @@ type RawStep = {
   waitMinutes?: unknown;
   text?: unknown;
   buttonText?: unknown;
+  mediaType?: unknown;
+  mediaUrl?: unknown;
   buttonUrl?: unknown;
   nextStepId?: unknown;
   options?: unknown;
@@ -105,7 +113,9 @@ export function parseConvSteps(raw: unknown): ConvStep[] {
         return { id, type: "menu", waitMinutes: Number(s.waitMinutes ?? 0), text, options };
       }
       const text = String(s.text ?? "");
-      if (!text) return null;
+      const mediaType = s.mediaType === "image" || s.mediaType === "audio" || s.mediaType === "video" ? s.mediaType : null;
+      const mediaUrl = mediaType && s.mediaUrl ? String(s.mediaUrl) : null;
+      if (!text && !mediaUrl) return null;
       return {
         id,
         type: "send",
@@ -113,6 +123,8 @@ export function parseConvSteps(raw: unknown): ConvStep[] {
         text,
         buttonText: s.buttonText ? String(s.buttonText) : null,
         buttonUrl: s.buttonUrl ? String(s.buttonUrl) : null,
+        mediaType: mediaUrl ? mediaType : null,
+        mediaUrl,
         nextStepId: s.nextStepId ? String(s.nextStepId) : null,
       };
     })
@@ -153,42 +165,70 @@ async function sendConversationMessage(step: ConvSendStep | ConvMenuStep, phone:
     return { ok: false, error: "Configure o token de acesso e o Phone Number ID em Configurações." };
   }
 
-  const body =
-    step.type === "menu"
-      ? {
-          messaging_product: "whatsapp",
-          to: phone,
-          type: "interactive",
-          interactive: {
-            type: "button",
-            body: { text: step.text },
-            action: { buttons: step.options.slice(0, 3).map((o) => ({ type: "reply", reply: { id: o.id, title: o.label } })) },
-          },
-        }
-      : step.buttonText && step.buttonUrl
-        ? {
-            messaging_product: "whatsapp",
-            to: phone,
-            type: "interactive",
-            interactive: {
-              type: "cta_url",
-              body: { text: step.text },
-              action: { name: "cta_url", parameters: { display_text: step.buttonText, url: step.buttonUrl } },
-            },
-          }
-        : { messaging_product: "whatsapp", to: phone, type: "text", text: { body: step.text, preview_url: false } };
+  const post = async (body: unknown): Promise<{ ok: boolean; waMessageId?: string; error?: string }> => {
+    const res = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${settings.phoneNumberId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
+      body: JSON.stringify(body),
+    });
+    const json: any = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error("[sendConversationMessage] Error", { status: res.status, body: json });
+      return { ok: false, error: json?.error?.message ?? `Meta respondeu ${res.status}` };
+    }
+    return { ok: true, waMessageId: json?.messages?.[0]?.id };
+  };
 
-  const res = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${settings.phoneNumberId}/messages`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${settings.accessToken}` },
-    body: JSON.stringify(body),
-  });
-  const json: any = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    console.error("[sendConversationMessage] Error", { status: res.status, body: json });
-    return { ok: false, error: json?.error?.message ?? `Meta respondeu ${res.status}` };
+  if (step.type === "menu") {
+    return post({
+      messaging_product: "whatsapp",
+      to: phone,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: { text: step.text },
+        action: { buttons: step.options.slice(0, 3).map((o) => ({ type: "reply", reply: { id: o.id, title: o.label } })) },
+      },
+    });
   }
-  return { ok: true, waMessageId: json?.messages?.[0]?.id };
+
+  const hasButton = Boolean(step.buttonText && step.buttonUrl);
+  const ctaBody = (header?: unknown) => ({
+    messaging_product: "whatsapp",
+    to: phone,
+    type: "interactive",
+    interactive: {
+      type: "cta_url",
+      ...(header ? { header } : {}),
+      body: { text: step.text.trim() ? step.text : step.buttonText },
+      action: { name: "cta_url", parameters: { display_text: step.buttonText, url: step.buttonUrl } },
+    },
+  });
+  const textBody = () =>
+    hasButton ? ctaBody() : { messaging_product: "whatsapp", to: phone, type: "text", text: { body: step.text, preview_url: false } };
+
+  const mediaType = step.mediaType ?? null;
+  const mediaUrl = step.mediaUrl ?? null;
+  if (!mediaType || !mediaUrl) return post(textBody());
+
+  if (mediaType === "audio") {
+    const audio = await post({ messaging_product: "whatsapp", to: phone, type: "audio", audio: { link: mediaUrl } });
+    if (!audio.ok || !step.text.trim()) return audio;
+    // O áudio já foi entregue: se o texto de acompanhamento falhar, não reenvia o áudio — só registra.
+    const followUp = await post(textBody());
+    if (!followUp.ok) console.error("[sendConversationMessage] Texto após o áudio falhou:", followUp.error);
+    return followUp.ok ? followUp : audio;
+  }
+
+  if (hasButton) {
+    return post(ctaBody({ type: mediaType, [mediaType]: { link: mediaUrl } }));
+  }
+  return post({
+    messaging_product: "whatsapp",
+    to: phone,
+    type: mediaType,
+    [mediaType]: { link: mediaUrl, ...(step.text.trim() ? { caption: step.text } : {}) },
+  });
 }
 
 /** Acha (ou cria) a "campanha" que agrega métricas de entrega/leitura/venda dessa etapa do fluxo
@@ -304,7 +344,13 @@ async function dispatchRunStep(
   // Espelha na caixa de entrada (aba Conversas) — sem isso a mensagem do bot fica invisível ali,
   // e a resposta do cliente aparece "do nada", sem a mensagem original que ela está respondendo.
   const { recordOutboundQueueMessage } = await import("./whatsapp-inbox.server");
-  const mirroredBody = step.type === "menu" ? `${step.text}\n\n${step.options.map((o) => `• ${o.label}`).join("\n")}` : step.text;
+  const mediaLabel = step.type === "send" && step.mediaUrl && step.mediaType ? { image: "[Imagem]", audio: "[Áudio]", video: "[Vídeo]" }[step.mediaType] : null;
+  const mirroredBody =
+    step.type === "menu"
+      ? `${step.text}\n\n${step.options.map((o) => `• ${o.label}`).join("\n")}`
+      : mediaLabel
+        ? `${mediaLabel}${step.text ? `\n${step.text}` : ""}`
+        : step.text;
   await recordOutboundQueueMessage({ phone: run.phone, body: mirroredBody, waMessageId: result.waMessageId ?? null }).catch((error) =>
     console.error("Falha ao espelhar mensagem do fluxo conversacional na caixa de entrada:", error),
   );

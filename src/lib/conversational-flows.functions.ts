@@ -45,7 +45,14 @@ const convMenuStepSchema = z.object({
   options: z.array(convMenuOptionSchema).min(1).max(3),
 });
 
-const convStepSchema = z.discriminatedUnion("type", [convSendStepSchema, convMenuStepSchema, decisionStepSchema]);
+const convTagStepSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal("tag"),
+  tags: z.array(z.string().trim().min(1).max(60)).min(1).max(10),
+  nextStepId: z.string().nullable().default(null),
+});
+
+const convStepSchema = z.discriminatedUnion("type", [convSendStepSchema, convMenuStepSchema, convTagStepSchema, decisionStepSchema]);
 
 const flowSchema = z.object({
   id: z.string().uuid().optional(),
@@ -69,14 +76,17 @@ export const saveConversationalFlow = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const firstStep = data.steps[0];
-    if (!firstStep || (firstStep.type !== "send" && firstStep.type !== "menu")) {
-      return { success: false as const, error: "A primeira etapa precisa ser um envio ou um menu (não pode começar direto numa decisão)." };
+    if (!firstStep || (firstStep.type !== "send" && firstStep.type !== "menu" && firstStep.type !== "tag")) {
+      return { success: false as const, error: "A primeira etapa precisa ser um envio, um menu ou uma tag (não pode começar direto numa decisão)." };
+    }
+    if (firstStep.type === "tag" && data.triggerType === "unanswered_timeout") {
+      return { success: false as const, error: "No gatilho \"sem resposta\" a primeira etapa precisa ser um envio ou um menu." };
     }
     const emptySend = data.steps.find((s) => s.type === "send" && !s.text.trim() && !(s.mediaType && s.mediaUrl));
     if (emptySend) return { success: false as const, error: "Cada etapa de envio precisa de texto ou de uma mídia." };
     const stepIds = new Set(data.steps.map((s) => s.id));
     const badRef = data.steps.find((s) => {
-      if (s.type === "send") return s.nextStepId !== null && !stepIds.has(s.nextStepId);
+      if (s.type === "send" || s.type === "tag") return s.nextStepId !== null && !stepIds.has(s.nextStepId);
       if (s.type === "menu") return s.options.some((o) => o.nextStepId !== null && !stepIds.has(o.nextStepId));
       return (s.yesStepId !== null && !stepIds.has(s.yesStepId)) || (s.noStepId !== null && !stepIds.has(s.noStepId));
     });
@@ -92,9 +102,9 @@ export const saveConversationalFlow = createServerFn({ method: "POST" })
       const byId = new Map(data.steps.map((s) => [s.id, s]));
       const bad = Object.entries(buttonSteps).find(([, id]) => {
         const target = byId.get(id);
-        return !target || (target.type !== "send" && target.type !== "menu");
+        return !target || (target.type !== "send" && target.type !== "menu" && target.type !== "tag");
       });
-      if (bad) return { success: false as const, error: `O botão "${bad[0]}" precisa apontar pra uma etapa de Enviar WhatsApp ou Menu.` };
+      if (bad) return { success: false as const, error: `O botão "${bad[0]}" precisa apontar pra uma etapa de Enviar WhatsApp, Menu ou Tag.` };
     }
     if (data.triggerType === "unanswered_timeout" && !data.triggerTimeoutMinutes) {
       return { success: false as const, error: "Informe depois de quantos minutos sem resposta o bot deve entrar." };

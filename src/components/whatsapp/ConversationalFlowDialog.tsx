@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Plus, Trash2, GitBranch, MessageCircle, Settings, Rocket, MousePointerClick, Type, Menu as MenuIcon, Clock, Image as ImageIcon, Mic, Video as VideoIcon, Loader2 } from "lucide-react";
+import { Plus, Trash2, GitBranch, MessageCircle, Settings, Rocket, MousePointerClick, Type, Menu as MenuIcon, Clock, Image as ImageIcon, Mic, Video as VideoIcon, Loader2, Tag as TagIcon, X } from "lucide-react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { SEGMENT_TYPES } from "@/lib/crm-mock";
 import { getSegmentOptions } from "@/lib/crm-segmentation.functions";
 import { SEGMENT_LABEL } from "@/components/crm/AutomationDialog";
+import { getAutomationFilterOptions } from "@/lib/automation-events.functions";
 import { saveConversationalFlow, getRecentlyUsedTemplateNames, getTemplatesWithButtons, createConversationMediaUpload } from "@/lib/conversational-flows.functions";
 
 type DecisionCondition =
@@ -73,7 +74,9 @@ export type ConvMenuStepSeed = {
   options: ConvMenuOptionSeed[];
 };
 
-export type ConvStepSeed = ConvSendStepSeed | ConvMenuStepSeed | DecisionStepSeed;
+export type ConvTagStepSeed = { id: string; type: "tag"; tags: string[]; nextStepId: string | null };
+
+export type ConvStepSeed = ConvSendStepSeed | ConvMenuStepSeed | ConvTagStepSeed | DecisionStepSeed;
 
 export type ConversationalFlowSeed = {
   id?: string | undefined;
@@ -94,6 +97,10 @@ function newId() {
 
 function newSendStep(): ConvSendStepSeed {
   return { id: newId(), type: "send", waitMinutes: 0, text: "", buttonText: null, buttonUrl: null, nextStepId: null };
+}
+
+function newTagStep(): ConvTagStepSeed {
+  return { id: newId(), type: "tag", tags: [], nextStepId: null };
 }
 
 function newDecisionStep(condition: DecisionCondition): DecisionStepSeed {
@@ -141,7 +148,7 @@ function layoutSteps(steps: ConvStepSeed[], rootIds: (string | null)[], extraTop
     nextColAtDepth[depth] = col + 1;
     positions[id] = { x: col * COL_W, y: depth * ROW_H + extraTop };
     const step = byId.get(id)!;
-    if (step.type === "send") place(step.nextStepId, depth + 1);
+    if (step.type === "send" || step.type === "tag") place(step.nextStepId, depth + 1);
     else if (step.type === "menu") {
       for (const option of step.options) place(option.nextStepId, depth + 1);
     } else {
@@ -214,6 +221,7 @@ function TriggerNode({ data, selected }: NodeProps) {
 function stepShortLabel(step: ConvStepSeed): string {
   if (step.type === "send") return step.text.trim() ? step.text.trim().slice(0, 28) : "Enviar WhatsApp";
   if (step.type === "menu") return "Menu";
+  if (step.type === "tag") return step.tags.length ? `Tag: ${step.tags.join(", ").slice(0, 24)}` : "Adicionar tag";
   return "Decisão";
 }
 
@@ -230,6 +238,28 @@ function SendNode({ data, selected }: NodeProps) {
         {d.step.mediaUrl && (d.step.mediaType === "audio" ? <Mic className="size-3" /> : d.step.mediaType === "video" ? <VideoIcon className="size-3" /> : <ImageIcon className="size-3" />)}
         {d.step.waitMinutes === 0 ? "Envia na hora" : `Espera ${d.step.waitMinutes} min antes`}
       </p>
+      <Handle type="source" position={Position.Bottom} id="out" className="!bg-primary !size-2.5" />
+    </div>
+  );
+}
+
+function TagNode({ data, selected }: NodeProps) {
+  const d = data as unknown as { step: ConvTagStepSeed };
+  return (
+    <div className={cn("w-64 rounded-xl border-2 bg-background px-4 py-3 shadow-sm cursor-pointer transition-colors", selected ? "border-primary" : "border-border")}>
+      <Handle type="target" position={Position.Top} id="in" className="!bg-muted-foreground !size-2.5" />
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+        <TagIcon className="size-3" /> Adicionar tag
+      </p>
+      {d.step.tags.length ? (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {d.step.tags.map((t) => (
+            <span key={t} className="rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-[11px] font-medium text-primary">{t}</span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm font-medium mt-1 text-muted-foreground">Escolha a tag</p>
+      )}
       <Handle type="source" position={Position.Bottom} id="out" className="!bg-primary !size-2.5" />
     </div>
   );
@@ -322,7 +352,7 @@ function DeletableEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition,
   );
 }
 
-const nodeTypes = { trigger: TriggerNode, send: SendNode, decision: DecisionNode, menu: MenuNode };
+const nodeTypes = { trigger: TriggerNode, send: SendNode, tag: TagNode, decision: DecisionNode, menu: MenuNode };
 const edgeTypes = { deletable: DeletableEdge };
 const TRIGGER_ID = "__trigger__";
 
@@ -453,7 +483,7 @@ export function ConversationalFlowDialog({
       setSteps((prev) => {
         const rest = prev.filter((s) => s.id !== id);
         const cleaned = rest.map((s) =>
-          s.type === "send"
+          s.type === "send" || s.type === "tag"
             ? { ...s, nextStepId: s.nextStepId === id ? null : s.nextStepId }
             : s.type === "menu"
               ? { ...s, options: s.options.map((o) => (o.nextStepId === id ? { ...o, nextStepId: null } : o)) }
@@ -479,12 +509,12 @@ export function ConversationalFlowDialog({
     setSteps((prev) => {
       const preferred = selectedNodeId && selectedNodeId !== TRIGGER_ID ? prev.find((s) => s.id === selectedNodeId) : undefined;
       const hasOpenSlot = (s: ConvStepSeed) =>
-        s.type === "send" ? s.nextStepId === null : s.type === "menu" ? s.options.some((o) => o.nextStepId === null) : s.yesStepId === null || s.noStepId === null;
+        s.type === "send" || s.type === "tag" ? s.nextStepId === null : s.type === "menu" ? s.options.some((o) => o.nextStepId === null) : s.yesStepId === null || s.noStepId === null;
       const target = (preferred && hasOpenSlot(preferred) ? preferred : undefined) ?? prev.find(hasOpenSlot);
       if (!target) return [...prev, step];
       const updated = prev.map((s) => {
         if (s.id !== target.id) return s;
-        if (s.type === "send") return { ...s, nextStepId: step.id };
+        if (s.type === "send" || s.type === "tag") return { ...s, nextStepId: step.id };
         if (s.type === "menu") {
           const openIndex = s.options.findIndex((o) => o.nextStepId === null);
           if (openIndex === -1) return s;
@@ -506,8 +536,8 @@ export function ConversationalFlowDialog({
       if (!conn.target) return;
       if (conn.source === TRIGGER_ID) {
         const targetStep = steps.find((s) => s.id === conn.target);
-        if (targetStep?.type !== "send" && targetStep?.type !== "menu") {
-          toast.error("O gatilho precisa apontar pra uma etapa de Enviar WhatsApp ou Menu.");
+        if (targetStep?.type !== "send" && targetStep?.type !== "menu" && targetStep?.type !== "tag") {
+          toast.error("O gatilho precisa apontar pra uma etapa de Enviar WhatsApp, Menu ou Tag.");
           return;
         }
         if (perButton) {
@@ -524,7 +554,7 @@ export function ConversationalFlowDialog({
       setSteps((prev) =>
         prev.map((s) => {
           if (s.id !== conn.source) return s;
-          if (s.type === "send") return { ...s, nextStepId: conn.target };
+          if (s.type === "send" || s.type === "tag") return { ...s, nextStepId: conn.target };
           if (s.type === "menu") {
             const optIndex = conn.sourceHandle?.startsWith("opt") ? Number(conn.sourceHandle.slice(3)) : -1;
             if (optIndex < 0 || optIndex >= s.options.length) return s;
@@ -578,7 +608,7 @@ export function ConversationalFlowDialog({
       prev.map((s) => {
         const match = deleted.find((e) => e.source === s.id);
         if (!match) return s;
-        if (s.type === "send" && match.sourceHandle === "out") return { ...s, nextStepId: null };
+        if ((s.type === "send" || s.type === "tag") && match.sourceHandle === "out") return { ...s, nextStepId: null };
         if (s.type === "menu" && match.sourceHandle?.startsWith("opt")) {
           const optIndex = Number(match.sourceHandle.slice(3));
           const options = [...s.options];
@@ -631,7 +661,7 @@ export function ConversationalFlowDialog({
       data: { step: s },
       selected: selectedNodeId === s.id,
       width: 256,
-      height: s.type === "decision" || s.type === "menu" ? 118 : 100,
+      height: s.type === "decision" || s.type === "menu" ? 118 : s.type === "tag" ? 90 : 100,
     }));
     const all = [triggerNode, ...stepNodes];
     nodesRef.current = all;
@@ -651,7 +681,7 @@ export function ConversationalFlowDialog({
       list.push({ id: `trigger-${rootStepId}`, type: "deletable", source: TRIGGER_ID, sourceHandle: "out", target: rootStepId, targetHandle: "in", deletable: false, style: { strokeWidth: 2 } });
     }
     for (const s of steps) {
-      if (s.type === "send") {
+      if (s.type === "send" || s.type === "tag") {
         if (s.nextStepId) list.push({ id: `${s.id}-next`, source: s.id, sourceHandle: "out", target: s.nextStepId, targetHandle: "in" });
       } else if (s.type === "menu") {
         s.options.forEach((o, i) => {
@@ -677,8 +707,16 @@ export function ConversationalFlowDialog({
       return;
     }
     const rootStep = steps.find((s) => s.id === startStepId);
-    if (!rootStep || (rootStep.type !== "send" && rootStep.type !== "menu")) {
-      toast.error("O gatilho precisa apontar pra uma etapa de Enviar WhatsApp ou Menu.");
+    if (!rootStep || (rootStep.type !== "send" && rootStep.type !== "menu" && rootStep.type !== "tag")) {
+      toast.error("O gatilho precisa apontar pra uma etapa de Enviar WhatsApp, Menu ou Tag.");
+      return;
+    }
+    if (steps.some((s) => s.type === "tag" && s.tags.length === 0)) {
+      toast.error("Escolha pelo menos uma tag em cada etapa de tag.");
+      return;
+    }
+    if (triggerType === "unanswered_timeout" && rootStep.type === "tag") {
+      toast.error("No gatilho \"sem resposta\" a primeira etapa precisa ser um envio ou um menu.");
       return;
     }
     const triggerValues =
@@ -719,6 +757,8 @@ export function ConversationalFlowDialog({
           steps: orderedSteps.map((s) =>
             s.type === "send"
               ? { id: s.id, type: "send" as const, waitMinutes: s.waitMinutes, text: s.text, buttonText: s.buttonText || undefined, buttonUrl: s.buttonUrl || undefined, mediaType: s.mediaUrl ? s.mediaType ?? null : null, mediaUrl: s.mediaUrl || null, nextStepId: s.nextStepId }
+              : s.type === "tag"
+                ? { id: s.id, type: "tag" as const, tags: s.tags, nextStepId: s.nextStepId }
               : s.type === "menu"
                 ? { id: s.id, type: "menu" as const, waitMinutes: s.waitMinutes, text: s.text, options: s.options.map((o) => ({ id: o.id, label: o.label, nextStepId: o.nextStepId })) }
                 : { id: s.id, type: "decision" as const, condition: s.condition, yesStepId: s.yesStepId, noStepId: s.noStepId },
@@ -809,6 +849,10 @@ export function ConversationalFlowDialog({
                       <p className="text-sm font-medium flex items-center gap-1.5"><MessageCircle className="size-3.5" /> Enviar WhatsApp</p>
                       <p className="text-xs text-muted-foreground mt-0.5">Texto livre — sem precisar de template aprovado.</p>
                     </button>
+                    <button type="button" className="w-full text-left rounded-lg border border-border p-3 hover:border-primary hover:bg-muted/40 transition-colors" onClick={() => addStep(newTagStep())}>
+                      <p className="text-sm font-medium flex items-center gap-1.5"><TagIcon className="size-3.5" /> Adicionar tag</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Marca o contato com uma tag e segue o fluxo, sem mandar mensagem.</p>
+                    </button>
                     <button type="button" className="w-full text-left rounded-lg border border-border p-3 hover:border-primary hover:bg-muted/40 transition-colors" onClick={() => addStep(newMenuStep())}>
                       <p className="text-sm font-medium flex items-center gap-1.5"><MenuIcon className="size-3.5" /> Menu (até 3 opções)</p>
                       <p className="text-xs text-muted-foreground mt-0.5">Botões de resposta rápida — cada um leva a uma etapa diferente.</p>
@@ -823,7 +867,7 @@ export function ConversationalFlowDialog({
                       { cond: { kind: "segmento", segmentType: SEGMENT_TYPES[0]! } as DecisionCondition, label: "Cliente está em segmento?", sub: "Checa se o cliente pertence a um segmento." },
                       { cond: { kind: "valor_pedido", operator: "gt", value: 100 } as DecisionCondition, label: "Valor do pedido?", sub: "Compara o valor do pedido mais recente com um número." },
                       { cond: { kind: "localizacao", field: "city", value: "" } as DecisionCondition, label: "Cidade ou estado?", sub: "Filtra pela localização cadastrada do cliente." },
-                      { cond: { kind: "tag", value: "" } as DecisionCondition, label: "Tem uma tag?", sub: "Checa se o cliente tem uma tag específica na Shopify." },
+                      { cond: { kind: "tag", value: "" } as DecisionCondition, label: "Tem uma tag?", sub: "Checa se o cliente tem uma tag (da Shopify ou do sistema)." },
                     ].map((opt) => (
                       <button key={opt.label} type="button" className="w-full text-left rounded-lg border border-border p-3 hover:border-primary hover:bg-muted/40 transition-colors" onClick={() => addStep(newDecisionStep(opt.cond))}>
                         <p className="text-sm font-medium flex items-center gap-1.5"><GitBranch className="size-3.5" /> {opt.label}</p>
@@ -991,6 +1035,10 @@ export function ConversationalFlowDialog({
                 <ConvSendStepPanel step={selectedStep} onChange={(patch) => updateStep(selectedStep.id, patch)} onDelete={() => removeStepById(selectedStep.id)} />
               )}
 
+              {!addPanelOpen && selectedStep?.type === "tag" && (
+                <ConvTagStepPanel step={selectedStep} onChange={(patch) => updateStep(selectedStep.id, patch)} onDelete={() => removeStepById(selectedStep.id)} />
+              )}
+
               {!addPanelOpen && selectedStep?.type === "menu" && (
                 <ConvMenuStepPanel step={selectedStep} onChange={(patch) => updateStep(selectedStep.id, patch)} onDelete={() => removeStepById(selectedStep.id)} />
               )}
@@ -1089,6 +1137,81 @@ function ConvMediaField({ step, onChange }: { step: ConvSendStepSeed; onChange: 
         Imagem JPG/PNG até 5 MB; áudio (MP3, M4A, OGG...) e vídeo (MP4) até 16 MB. Imagem e vídeo levam o texto da mensagem como legenda; o áudio vai primeiro e o texto logo depois.
       </p>
     </div>
+  );
+}
+
+/** Etapa "Adicionar tag": marca o contato com tags do sistema (as mesmas de Segmentos e Contatos). */
+function ConvTagStepPanel({ step, onChange, onDelete }: { step: ConvTagStepSeed; onChange: (patch: Partial<ConvTagStepSeed>) => void; onDelete: () => void }) {
+  const [draft, setDraft] = useState("");
+  const loadOptions = useServerFn(getAutomationFilterOptions);
+  const { data: options } = useQuery({ queryKey: ["automation-filter-options"], queryFn: () => loadOptions(), staleTime: 5 * 60_000 });
+  const suggestions = (options?.customTags ?? []).filter((t) => !step.tags.some((x) => x.toLowerCase() === t.toLowerCase()));
+
+  const add = (raw: string) => {
+    const tag = raw.trim().slice(0, 60);
+    if (!tag || step.tags.some((t) => t.toLowerCase() === tag.toLowerCase()) || step.tags.length >= 10) {
+      setDraft("");
+      return;
+    }
+    onChange({ tags: [...step.tags, tag] });
+    setDraft("");
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold flex items-center gap-1.5"><TagIcon className="size-3.5" /> Adicionar tag</p>
+        <Button type="button" size="icon" variant="ghost" className="size-7 text-critical" onClick={onDelete}><Trash2 className="size-3.5" /></Button>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">Tags que o contato recebe</Label>
+        <div className="flex flex-wrap gap-1.5">
+          {step.tags.map((t) => (
+            <span key={t} className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-xs font-medium text-primary">
+              {t}
+              <button type="button" aria-label={`Remover ${t}`} onClick={() => onChange({ tags: step.tags.filter((x) => x !== t) })}>
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === ",") {
+              e.preventDefault();
+              add(draft);
+            }
+          }}
+          placeholder="Digite a tag e aperte Enter"
+          maxLength={60}
+        />
+        {draft.trim() && (
+          <Button type="button" size="sm" variant="outline" className="h-7" onClick={() => add(draft)}>
+            <Plus className="size-3.5 mr-1" /> Adicionar "{draft.trim()}"
+          </Button>
+        )}
+      </div>
+
+      {suggestions.length > 0 && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">Tags que já existem</Label>
+          <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
+            {suggestions.slice(0, 40).map((t) => (
+              <button key={t} type="button" onClick={() => add(t)} className="rounded-full border border-border px-2 py-0.5 text-xs hover:border-primary hover:bg-muted/40">
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        A tag vai para o cadastro do contato (campo "Tag personalizada") e já pode ser usada em Segmentos, Contatos e na decisão "Tem uma tag?". Se o contato já tem a tag, nada muda. Arraste uma conexão a partir do ponto embaixo do card pra ligar com a próxima etapa.
+      </p>
+    </>
   );
 }
 

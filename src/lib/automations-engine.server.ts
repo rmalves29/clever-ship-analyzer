@@ -241,8 +241,9 @@ export async function evaluateDecision(
   }
 
   if (condition.kind === "tag") {
-    const { data } = await supabaseAdmin.from("shopify_customers").select("tags").eq("id", run.customer_id).maybeSingle();
-    const tags = ((data as { tags: string[] | null } | null)?.tags ?? []).map((t) => t.toLowerCase());
+    const { data } = await supabaseAdmin.from("shopify_customers").select("tags, tags_custom").eq("id", run.customer_id).maybeSingle();
+    const row = data as { tags: string[] | null; tags_custom: string[] | null } | null;
+    const tags = [...(row?.tags ?? []), ...(row?.tags_custom ?? [])].map((t) => t.toLowerCase());
     return tags.includes(condition.value.trim().toLowerCase());
   }
 

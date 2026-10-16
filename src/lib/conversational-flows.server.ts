@@ -36,7 +36,16 @@ export type ConvMenuStep = {
   options: ConvMenuOption[];
 };
 
-export type ConvStep = ConvSendStep | ConvMenuStep | DecisionStep;
+/** Etapa de ação: marca o contato com tags personalizadas (shopify_customers.tags_custom — as mesmas
+ *  de Segmentos, Contatos e Decisões) e segue pra próxima etapa sem mandar mensagem. */
+export type ConvTagStep = {
+  id: string;
+  type: "tag";
+  tags: string[];
+  nextStepId: string | null;
+};
+
+export type ConvStep = ConvSendStep | ConvMenuStep | ConvTagStep | DecisionStep;
 
 type RawStep = {
   id?: unknown;
@@ -52,6 +61,7 @@ type RawStep = {
   condition?: unknown;
   yesStepId?: unknown;
   noStepId?: unknown;
+  tags?: unknown;
 };
 
 function parseCondition(raw: unknown): DecisionCondition {
@@ -93,6 +103,11 @@ export function parseConvSteps(raw: unknown): ConvStep[] {
           yesStepId: s.yesStepId ? String(s.yesStepId) : null,
           noStepId: s.noStepId ? String(s.noStepId) : null,
         };
+      }
+      if (s.type === "tag") {
+        const tags = (Array.isArray(s.tags) ? s.tags : []).map((t: unknown) => String(t).trim()).filter(Boolean);
+        if (tags.length === 0) return null;
+        return { id, type: "tag", tags, nextStepId: s.nextStepId ? String(s.nextStepId) : null };
       }
       if (s.type === "menu") {
         const text = String(s.text ?? "");
@@ -137,10 +152,34 @@ async function admin() {
 }
 
 /** Anda a partir de `startStepId` resolvendo decisões na hora, até cair num envio ou no fim do fluxo. */
+/** Marca o contato (pelo telefone, quando o id do cliente não veio) com tags personalizadas —
+ *  junta com as que já existem, sem repetir (ignora maiúsculas/minúsculas). */
+export async function applyConversationTags(phone: string, customerId: string | null, tags: string[]): Promise<void> {
+  const clean = [...new Set(tags.map((t) => t.trim()).filter(Boolean))];
+  if (clean.length === 0) return;
+  const supabaseAdmin = await admin();
+  let id = customerId || null;
+  if (!id) {
+    const { data } = await supabaseAdmin.from("shopify_customers").select("id").eq("phone", phone).maybeSingle();
+    id = (data as { id: string } | null)?.id ?? null;
+  }
+  if (!id) {
+    console.warn("[conversational-flows] Tag não aplicada: contato sem cadastro para o telefone", phone);
+    return;
+  }
+  const { data } = await supabaseAdmin.from("shopify_customers").select("tags_custom").eq("id", id).maybeSingle();
+  const current = ((data as { tags_custom: string[] | null } | null)?.tags_custom ?? []) as string[];
+  const known = new Set(current.map((t) => t.toLowerCase()));
+  const added = clean.filter((t) => !known.has(t.toLowerCase()));
+  if (added.length === 0) return;
+  const { error } = await supabaseAdmin.from("shopify_customers").update({ tags_custom: [...current, ...added] } as never).eq("id", id);
+  if (error) console.error("[conversational-flows] Falha ao gravar tags:", error.message);
+}
+
 async function resolveNextConvStep(
   steps: ConvStep[],
   startStepId: string | null,
-  run: { customer_id: string; enrolled_at: string },
+  run: { customer_id: string; enrolled_at: string; phone: string },
 ): Promise<ConvSendStep | ConvMenuStep | null> {
   let currentId = startStepId;
   let guard = 0;
@@ -149,6 +188,11 @@ async function resolveNextConvStep(
     const step = steps.find((s) => s.id === currentId);
     if (!step) return null;
     if (step.type === "send" || step.type === "menu") return step;
+    if (step.type === "tag") {
+      await applyConversationTags(run.phone, run.customer_id || null, step.tags);
+      currentId = step.nextStepId;
+      continue;
+    }
     const isYes = await evaluateDecision(step.condition, run);
     currentId = isYes ? step.yesStepId : step.noStepId;
   }
@@ -367,6 +411,7 @@ async function dispatchRunStep(
   const next = await resolveNextConvStep(steps, step.nextStepId, {
     customer_id: run.customer_id ?? "",
     enrolled_at: run.started_at,
+    phone: run.phone,
   });
 
   const patch = next
@@ -472,7 +517,7 @@ export async function matchIncomingMessage(message: IncomingMessage): Promise<vo
         const option = currentStep.options.find((o) => o.id === menuReplyId);
         if (!option) continue;
 
-        const nextStep = await resolveNextConvStep(steps, option.nextStepId, { customer_id: run.customer_id ?? "", enrolled_at: run.started_at });
+        const nextStep = await resolveNextConvStep(steps, option.nextStepId, { customer_id: run.customer_id ?? "", enrolled_at: run.started_at, phone: run.phone });
         if (nextStep) await dispatchRunStep(run, nextStep, steps);
         else {
           await supabaseAdmin
@@ -539,8 +584,8 @@ export async function matchIncomingMessage(message: IncomingMessage): Promise<vo
   // inicial). Fluxos antigos não têm o mapa e continuam começando na primeira etapa.
   const buttonSteps = (matched.trigger_button_steps ?? null) as Record<string, string> | null;
   const mappedStepId = matched.trigger_type === "button_click" && buttonText ? buttonSteps?.[buttonText] : undefined;
-  const firstStep = (mappedStepId ? steps.find((s) => s.id === mappedStepId) : undefined) ?? steps[0];
-  if (!firstStep || (firstStep.type !== "send" && firstStep.type !== "menu")) return;
+  const rootStep = (mappedStepId ? steps.find((s) => s.id === mappedStepId) : undefined) ?? steps[0];
+  if (!rootStep || (rootStep.type !== "send" && rootStep.type !== "menu" && rootStep.type !== "tag")) return;
 
   const { data: existingActive } = await supabaseAdmin
     .from("whatsapp_conversation_runs")
@@ -552,6 +597,19 @@ export async function matchIncomingMessage(message: IncomingMessage): Promise<vo
   if (existingActive) return;
 
   const startedAt = new Date().toISOString();
+  // O caminho pode começar numa etapa de tag: aplica as tags e segue até a 1ª mensagem. Se o caminho
+  // acaba sem mensagem (só marcou a tag), conta a execução e não abre um run.
+  const firstStep =
+    rootStep.type === "tag"
+      ? await resolveNextConvStep(steps, rootStep.id, { customer_id: customerId ?? "", enrolled_at: startedAt, phone })
+      : rootStep;
+  if (!firstStep) {
+    await supabaseAdmin
+      .from("whatsapp_conversational_flows")
+      .update({ last_run_at: startedAt, total_execucoes: (matched.total_execucoes ?? 0) + 1 } as never)
+      .eq("id", matched.id);
+    return;
+  }
   const { data: newRun } = await supabaseAdmin
     .from("whatsapp_conversation_runs")
     .insert({

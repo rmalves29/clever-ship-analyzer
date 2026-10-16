@@ -90,3 +90,31 @@ describe("parseConvSteps — etapa de menu (bot de atendimento por setor)", () =
     expect(steps.map((s) => s.type)).toEqual(["send", "menu"]);
   });
 });
+
+describe("parseConvSteps — etapa de tag e mídia", () => {
+  it("reconhece a etapa de tag, tira espaços e descarta tags vazias", () => {
+    const steps = parseConvSteps([{ id: "t1", type: "tag", tags: [" cancelou ", "", "vip"], nextStepId: "s2" }]);
+    expect(steps).toEqual([{ id: "t1", type: "tag", tags: ["cancelou", "vip"], nextStepId: "s2" }]);
+  });
+
+  it("descarta a etapa de tag sem nenhuma tag", () => {
+    expect(parseConvSteps([{ id: "t1", type: "tag", tags: ["  "], nextStepId: null }])).toHaveLength(0);
+  });
+
+  it("aceita etapa de envio só com mídia (sem texto) e guarda o tipo", () => {
+    const steps = parseConvSteps([{ id: "s1", type: "send", text: "", mediaType: "audio", mediaUrl: "https://x.test/a.mp3", nextStepId: null }]);
+    expect(steps).toHaveLength(1);
+    const send = steps[0];
+    if (send?.type === "send") {
+      expect(send.mediaType).toBe("audio");
+      expect(send.mediaUrl).toBe("https://x.test/a.mp3");
+    }
+  });
+
+  it("descarta etapa de envio sem texto e sem mídia, e ignora tipo de mídia inválido", () => {
+    expect(parseConvSteps([{ id: "s1", type: "send", text: "", nextStepId: null }])).toHaveLength(0);
+    const steps = parseConvSteps([{ id: "s2", type: "send", text: "Oi", mediaType: "gif", mediaUrl: "https://x.test/a.gif", nextStepId: null }]);
+    const send = steps[0];
+    if (send?.type === "send") expect(send.mediaUrl).toBeNull();
+  });
+});

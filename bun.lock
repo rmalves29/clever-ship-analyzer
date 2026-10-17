@@ -11,7 +11,7 @@
         "@hookform/resolvers": "^5.2.2",
         "@mui/icons-material": "^9.4.0",
         "@mui/material": "^9.4.0",
-        "@mui/x-charts": "^9.13.0",
+        "@mui/x-charts": "9.13.0",
         "@radix-ui/react-accordion": "^1.2.12",
         "@radix-ui/react-alert-dialog": "^1.1.15",
         "@radix-ui/react-aspect-ratio": "^1.1.8",
@@ -110,6 +110,12 @@
         "vitest": "^4.1.11",
       },
     },
+  },
+  "overrides": {
+    "@mui/x-charts": "9.13.0",
+    "@mui/x-charts-vendor": "9.13.0",
+    "@mui/x-internal-gestures": "9.13.0",
+    "@mui/x-internals": "9.13.0",
   },
   "packages": {
     "@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw=="],

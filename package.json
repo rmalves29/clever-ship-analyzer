@@ -18,7 +18,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@mui/icons-material": "^9.4.0",
     "@mui/material": "^9.4.0",
-    "@mui/x-charts": "^9.13.0",
+    "@mui/x-charts": "9.13.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.8",
@@ -115,5 +115,17 @@
     "typescript-eslint": "^8.56.1",
     "vite": "^8.2.0",
     "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "@mui/x-charts": "9.13.0",
+    "@mui/x-charts-vendor": "9.13.0",
+    "@mui/x-internals": "9.13.0",
+    "@mui/x-internal-gestures": "9.13.0"
+  },
+  "resolutions": {
+    "@mui/x-charts": "9.13.0",
+    "@mui/x-charts-vendor": "9.13.0",
+    "@mui/x-internals": "9.13.0",
+    "@mui/x-internal-gestures": "9.13.0"
   }
 }

@@ -442,7 +442,7 @@ function Configuracoes() {
               }
               subheader={
                 <>
-                  Conexão com o banco do live-launchpad-79 (OrderZaps) — é de lá que o Fluxo de Envio lê e escreve
+                  Conexão com o banco do live-launchpad-79 (Cartzy, antigo OrderZaps) — é de lá que o Fluxo de Envio lê e escreve
                   grupos e campanhas de verdade, escopado ao tenant Mania de Mulher. Chave service_role do projeto
                   Supabase <Box component="code" sx={{ borderRadius: 1, bgcolor: "action.hover", px: 0.5 }}>hxtbsieodbtzgcvvkeqx</Box>.
                 </>

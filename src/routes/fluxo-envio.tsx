@@ -7,12 +7,12 @@ import Typography from "@mui/material/Typography";
 import { ExternalLink, Send, Smartphone } from "lucide-react";
 import { ConexaoUazapi } from "@/components/fluxo-envio/ConexaoUazapi";
 
-// O Fluxo de Envio é o painel ORIGINAL do OrderZaps, aberto dentro do CRM: mesma tela, mesmo banco e
-// mesmas funções nos dois sistemas (nada é duplicado). Exige login no OrderZaps (sessão própria).
+// O Fluxo de Envio é o painel ORIGINAL do Cartzy (antigo OrderZaps), aberto dentro do CRM: mesma tela, mesmo banco e
+// mesmas funções nos dois sistemas (nada é duplicado). Exige login no Cartzy (sessão própria).
 // Antes (cópia local com componentes próprios) está no histórico do git: branch/commit anterior a esta troca.
-const ORDERZAPS_PAINEL_URL = (import.meta.env["VITE_ORDERZAPS_FLUXO_URL"] as string | undefined) || "https://app.orderzaps.com/fluxo-envio/painel";
+const CARTZY_PAINEL_URL = (import.meta.env["VITE_CARTZY_FLUXO_URL"] as string | undefined) || "https://app.cartzy.com.br/fluxo-envio/painel";
 
-// Links antigos usavam ?tab=grupos|campanhas|envios|automacoes|relatorios — tudo isso agora vive no painel do OrderZaps.
+// Links antigos usavam ?tab=grupos|campanhas|envios|automacoes|relatorios — tudo isso agora vive no painel do Cartzy.
 const VALID_TABS = ["painel", "conexao"] as const;
 
 export const Route = createFileRoute("/fluxo-envio")({
@@ -22,7 +22,7 @@ export const Route = createFileRoute("/fluxo-envio")({
   head: () => ({
     meta: [
       { title: "Fluxo de Envio | CRM Insights" },
-      { name: "description", content: "Painel de Fluxo de Envio do OrderZaps dentro do CRM: grupos, campanhas, envios, automações e relatórios." },
+      { name: "description", content: "Painel de Fluxo de Envio do Cartzy dentro do CRM: grupos, campanhas, envios, automações e relatórios." },
     ],
   }),
   component: FluxoEnvio,
@@ -42,7 +42,7 @@ function FluxoEnvio() {
             size="small"
             variant="outlined"
             component="a"
-            href={ORDERZAPS_PAINEL_URL}
+            href={CARTZY_PAINEL_URL}
             target="_blank"
             rel="noopener noreferrer"
             startIcon={<ExternalLink size={14} />}
@@ -62,11 +62,11 @@ function FluxoEnvio() {
       {current === "painel" && (
         <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
           <Typography variant="caption" color="text.secondary" sx={{ px: { xs: 2, md: 4 }, py: 0.75 }}>
-            Se o painel pedir login, entre com sua conta do OrderZaps — o navegador lembra da sessão. Se não aparecer nada, use "Abrir em nova aba".
+            Se o painel pedir login, entre com sua conta do Cartzy — o navegador lembra da sessão. Se não aparecer nada, use "Abrir em nova aba".
           </Typography>
           <iframe
-            title="Fluxo de Envio - OrderZaps"
-            src={ORDERZAPS_PAINEL_URL}
+            title="Fluxo de Envio - Cartzy"
+            src={CARTZY_PAINEL_URL}
             style={{ flex: 1, width: "100%", border: 0, minHeight: 480 }}
             allow="clipboard-read; clipboard-write; fullscreen"
           />

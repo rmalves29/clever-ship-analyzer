@@ -1,4 +1,4 @@
-// Server-side Supabase client para o projeto live-launchpad-79 (OrderZaps) — usado só pelo
+// Server-side Supabase client para o projeto live-launchpad-79 (Cartzy, antigo OrderZaps) — usado só pelo
 // módulo Fluxo de Envio, que passou a ler/escrever os mesmos grupos/campanhas de lá em vez de
 // manter sua própria cópia. Ver nota do vault "Fluxo de Envio vs SendFlow" pro histórico.
 //

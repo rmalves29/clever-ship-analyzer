@@ -1,7 +1,7 @@
 import { loadUazapiCreds, createGroup, applyGroupSettings, getGroupInfo } from "./envio-uazapi.server";
 import { canonicalWhatsappGroupJid } from "./envio-group-sync";
 
-/** Banco do live-launchpad-79 (OrderZaps) — dono real dos grupos/campanhas, escopado ao tenant
+/** Banco do live-launchpad-79 (Cartzy, antigo OrderZaps) — dono real dos grupos/campanhas, escopado ao tenant
  *  Mania de Mulher. Ver "Fluxo de Envio vs SendFlow" no vault pro histórico dessa migração. */
 async function admin() {
   const { getLiveLaunchpadAdmin } = await import("@/integrations/supabase/live-launchpad-client.server");

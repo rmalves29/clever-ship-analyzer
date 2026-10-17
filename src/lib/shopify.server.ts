@@ -238,8 +238,8 @@ export const ABANDONED_CHECKOUTS_QUERY = `
 
 
 export const CUSTOMERS_QUERY = `
-  query getCustomers($cursor: String) {
-    customers(first: 100, after: $cursor) {
+  query getCustomers($cursor: String, $query: String) {
+    customers(first: 100, after: $cursor, query: $query) {
       pageInfo { hasNextPage endCursor }
       edges {
         node {

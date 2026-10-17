@@ -182,6 +182,12 @@ export async function runShopifySync(fullSync: boolean) {
     .update({ sync_status: "syncing", last_sync_error: null })
     .eq("id", settings.id);
 
+  // A próxima sincronização incremental parte do INÍCIO desta (menos 5 min de folga), e não do fim:
+  // pedidos/clientes alterados enquanto ela rodava não podem ficar de fora.
+  const syncStartedAt = new Date().toISOString();
+  const overlapMs = 5 * 60_000;
+  const incrementalSince = !fullSync && settings.last_sync_at ? new Date(new Date(settings.last_sync_at).getTime()) : null;
+
   try {
     let cursor: string | null = null;
     let hasNextPage = true;
@@ -197,7 +203,10 @@ export async function runShopifySync(fullSync: boolean) {
     try {
       while (hasNextPage) {
         console.log(`Fetching customers page with cursor: ${cursor}`);
-        const result: any = await shopifyGraphQL(CUSTOMERS_QUERY, { cursor });
+        const result: any = await shopifyGraphQL(CUSTOMERS_QUERY, {
+          cursor,
+          query: incrementalSince ? `updated_at:>='${incrementalSince.toISOString()}'` : null,
+        });
 
         if (!result?.customers) {
           console.warn("No customers found in response:", JSON.stringify(result));
@@ -546,7 +555,7 @@ export async function runShopifySync(fullSync: boolean) {
       .from("store_settings")
       .update({
         sync_status: "connected",
-        last_sync_at: new Date().toISOString(),
+        last_sync_at: new Date(new Date(syncStartedAt).getTime() - overlapMs).toISOString(),
         last_sync_error: null,
         total_orders_imported: totalImported,
         last_imported_order_at: lastUpdatedAt ?? settings.last_imported_order_at,

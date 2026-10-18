@@ -4,25 +4,29 @@ import Button from "@mui/material/Button";
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
-import { ExternalLink, Send, Smartphone } from "lucide-react";
+import { Smartphone, Users, Megaphone, Send, Bot, BarChart3, ExternalLink } from "lucide-react";
 import { ConexaoUazapi } from "@/components/fluxo-envio/ConexaoUazapi";
+import { GroupsManager } from "@/components/fluxo-envio/GroupsManager";
+import { CampaignsManager } from "@/components/fluxo-envio/CampaignsManager";
+import { MessageComposer } from "@/components/fluxo-envio/MessageComposer";
+import { AutoMessagesManager } from "@/components/fluxo-envio/AutoMessagesManager";
+import { ReportsPanel } from "@/components/fluxo-envio/ReportsPanel";
 
-// O Fluxo de Envio é o painel ORIGINAL do Cartzy (antigo OrderZaps), aberto dentro do CRM: mesma tela, mesmo banco e
-// mesmas funções nos dois sistemas (nada é duplicado). Exige login no Cartzy (sessão própria).
-// Antes (cópia local com componentes próprios) está no histórico do git: branch/commit anterior a esta troca.
+// O Fluxo de Envio roda dentro do CRM (mesmas abas do painel do Cartzy, antigo OrderZaps) e lê/escreve no
+// mesmo banco. O painel original continua disponível pelo botão "Abrir no Cartzy" (exige login próprio).
 const CARTZY_PAINEL_URL = (import.meta.env["VITE_CARTZY_FLUXO_URL"] as string | undefined) || "https://app.cartzy.com.br/fluxo-envio/painel";
 
-// Links antigos usavam ?tab=grupos|campanhas|envios|automacoes|relatorios — tudo isso agora vive no painel do Cartzy.
-const VALID_TABS = ["painel", "conexao"] as const;
+// Links antigos usavam ?tab=painel (quadro do Cartzy embutido): caem na aba Grupos.
+const VALID_TABS = ["conexao", "grupos", "campanhas", "envios", "automacoes", "relatorios"] as const;
 
 export const Route = createFileRoute("/fluxo-envio")({
   validateSearch: (search: Record<string, unknown>) => ({
-    tab: search["tab"] === "conexao" ? "conexao" : "painel",
+    tab: (VALID_TABS as readonly string[]).includes(search["tab"] as string) ? (search["tab"] as string) : search["tab"] === "painel" ? "grupos" : "conexao",
   }),
   head: () => ({
     meta: [
       { title: "Fluxo de Envio | CRM Insights" },
-      { name: "description", content: "Painel de Fluxo de Envio do Cartzy dentro do CRM: grupos, campanhas, envios, automações e relatórios." },
+      { name: "description", content: "Grupos de WhatsApp, campanhas com link público, auto-clonagem e automações de retorno." },
     ],
   }),
   component: FluxoEnvio,
@@ -31,52 +35,41 @@ export const Route = createFileRoute("/fluxo-envio")({
 function FluxoEnvio() {
   const navigate = useNavigate();
   const { tab } = Route.useSearch();
-  const current = (VALID_TABS as readonly string[]).includes(tab) ? tab : "painel";
   const setTab = (value: string) => navigate({ to: "/fluxo-envio", search: { tab: value } });
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", minHeight: 520 }}>
-      <Box sx={{ px: { xs: 2, md: 4 }, pt: 3, display: "flex", alignItems: "flex-start", justifyContent: "flex-end", gap: 2, flexWrap: "wrap" }}>
-        {current === "painel" && (
-          <Button
-            size="small"
-            variant="outlined"
-            component="a"
-            href={CARTZY_PAINEL_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            startIcon={<ExternalLink size={14} />}
-          >
-            Abrir em nova aba
-          </Button>
-        )}
+    <Box sx={{ maxWidth: 1400, mx: "auto", px: { xs: 2, md: 4 }, py: 4 }}>
+      <Box sx={{ mb: 3, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>
+            Fluxo de Envio
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Grupos, campanhas e envio de mensagens no WhatsApp via UazAPI
+          </Typography>
+        </Box>
+        <Button size="small" variant="outlined" component="a" href={CARTZY_PAINEL_URL} target="_blank" rel="noopener noreferrer" startIcon={<ExternalLink size={14} />}>
+          Abrir no Cartzy
+        </Button>
       </Box>
 
-      <Box sx={{ px: { xs: 2, md: 4 }, borderBottom: 1, borderColor: "divider" }}>
-        <Tabs value={current} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
-          <Tab value="painel" icon={<Send size={16} />} iconPosition="start" label="Painel" sx={{ minHeight: 40, minWidth: "auto" }} />
-          <Tab value="conexao" icon={<Smartphone size={16} />} iconPosition="start" label="Conexão do CRM" sx={{ minHeight: 40, minWidth: "auto" }} />
+      <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
+          <Tab value="conexao" icon={<Smartphone size={16} />} iconPosition="start" label="Conexão" sx={{ minHeight: 40, minWidth: "auto" }} />
+          <Tab value="grupos" icon={<Users size={16} />} iconPosition="start" label="Grupos" sx={{ minHeight: 40, minWidth: "auto" }} />
+          <Tab value="campanhas" icon={<Megaphone size={16} />} iconPosition="start" label="Campanhas" sx={{ minHeight: 40, minWidth: "auto" }} />
+          <Tab value="envios" icon={<Send size={16} />} iconPosition="start" label="Envios" sx={{ minHeight: 40, minWidth: "auto" }} />
+          <Tab value="automacoes" icon={<Bot size={16} />} iconPosition="start" label="Automações" sx={{ minHeight: 40, minWidth: "auto" }} />
+          <Tab value="relatorios" icon={<BarChart3 size={16} />} iconPosition="start" label="Relatórios" sx={{ minHeight: 40, minWidth: "auto" }} />
         </Tabs>
       </Box>
 
-      {current === "painel" && (
-        <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-          <Typography variant="caption" color="text.secondary" sx={{ px: { xs: 2, md: 4 }, py: 0.75 }}>
-            Se o painel pedir login, entre com sua conta do Cartzy — o navegador lembra da sessão. Se não aparecer nada, use "Abrir em nova aba".
-          </Typography>
-          <iframe
-            title="Fluxo de Envio - Cartzy"
-            src={CARTZY_PAINEL_URL}
-            style={{ flex: 1, width: "100%", border: 0, minHeight: 480 }}
-            allow="clipboard-read; clipboard-write; fullscreen"
-          />
-        </Box>
-      )}
-      {current === "conexao" && (
-        <Box sx={{ px: { xs: 2, md: 4 }, py: 3, overflow: "auto" }}>
-          <ConexaoUazapi />
-        </Box>
-      )}
+      {tab === "conexao" && <ConexaoUazapi />}
+      {tab === "grupos" && <GroupsManager />}
+      {tab === "campanhas" && <CampaignsManager />}
+      {tab === "envios" && <MessageComposer />}
+      {tab === "automacoes" && <AutoMessagesManager />}
+      {tab === "relatorios" && <ReportsPanel />}
     </Box>
   );
 }

@@ -56,7 +56,7 @@ const returnAutomationSchema = z.object({
   delay_minutes: z.number().int().min(0),
   invite_message: z.string().min(1),
   reward_message: z.string().min(1),
-  coupon_code: z.string().min(1),
+  coupon_code: z.string(),
   validity_days: z.number().int().min(1),
   cooldown_hours: z.number().int().min(0),
   is_active: z.boolean(),
@@ -92,3 +92,10 @@ export const getEnvioReturnStats = createServerFn({ method: "GET" })
   const { getEnvioReturnStats: get } = await import("./envio-auto-messages.server");
   return get();
 });
+
+export const getEnvioAutomationOptions = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth])
+  .handler(async () => {
+    const { getEnvioAutomationOptions: get } = await import("./envio-auto-messages.server");
+    return get();
+  });

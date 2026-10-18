@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Plus, Copy, Trash2 } from "lucide-react";
+import { Plus, Copy, Trash2, Pencil, MousePointerClick, ArrowRightToLine, Percent, Users } from "lucide-react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
@@ -38,6 +38,7 @@ export function CampaignsManager() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: string; name: string; description: string } | null>(null);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["envio-campaigns"] });
 
@@ -48,6 +49,16 @@ export function CampaignsManager() {
       setCreateOpen(false);
       setName("");
       setDescription("");
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const editMut = useMutation({
+    mutationFn: (input: { id: string; name: string; description: string }) => update({ data: { id: input.id, name: input.name.trim(), description: input.description.trim() } }),
+    onSuccess: () => {
+      toast.success("Campanha atualizada.");
+      setEditing(null);
       invalidate();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -83,28 +94,61 @@ export function CampaignsManager() {
 
       <Grid container spacing={2}>
         {(campaigns ?? []).map((c) => {
-          const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://clever-ship-analyzer.lovable.app";
-          const url = `${baseUrl}/fluxo/${c.slug}`;
+          // O link que se divulga é o do Cartzy (o redirecionamento e a contagem de cliques são de lá).
+          const url = c.public_url ?? "";
+          const stats = c.stats;
           return (
             <Grid key={c.id} size={{ xs: 12, sm: 6, lg: 4 }}>
               <Card variant="outlined" sx={{ cursor: "pointer", height: "100%" }} onClick={() => setDetailId(c.id)}>
                 <CardContent>
                   <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
                     <Typography sx={{ fontWeight: 600 }}>{c.name}</Typography>
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm(`Apagar a campanha "${c.name}"?`)) deleteMut.mutate(c.id);
-                      }}
-                    >
-                      <Trash2 size={16} color="var(--mui-palette-error-main, #EA5455)" />
-                    </IconButton>
+                    <Stack direction="row" spacing={0.25}>
+                      <IconButton
+                        size="small"
+                        title="Editar nome e descrição"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditing({ id: c.id, name: c.name, description: c.description ?? "" });
+                        }}
+                      >
+                        <Pencil size={15} />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`Apagar a campanha "${c.name}"?`)) deleteMut.mutate(c.id);
+                        }}
+                      >
+                        <Trash2 size={16} color="var(--mui-palette-error-main, #EA5455)" />
+                      </IconButton>
+                    </Stack>
                   </Stack>
                   {c.description && (
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                       {c.description}
                     </Typography>
+                  )}
+                  {stats && (
+                    <Stack direction="row" spacing={2} sx={{ mt: 1.25, color: "text.secondary" }}>
+                      <Stack direction="row" spacing={0.5} title="Cliques no link" sx={{ alignItems: "center" }}>
+                        <MousePointerClick size={14} />
+                        <Typography variant="caption">{stats.clicks.toLocaleString("pt-BR")}</Typography>
+                      </Stack>
+                      <Stack direction="row" spacing={0.5} title="Entradas nos grupos" sx={{ alignItems: "center" }}>
+                        <ArrowRightToLine size={14} />
+                        <Typography variant="caption">{stats.entries.toLocaleString("pt-BR")}</Typography>
+                      </Stack>
+                      <Stack direction="row" spacing={0.5} title="% de entrada (entradas ÷ cliques)" sx={{ alignItems: "center" }}>
+                        <Percent size={14} />
+                        <Typography variant="caption">{stats.entryRate.toFixed(0)}</Typography>
+                      </Stack>
+                      <Stack direction="row" spacing={0.5} title="Grupos vinculados" sx={{ alignItems: "center" }}>
+                        <Users size={14} />
+                        <Typography variant="caption">{stats.groupCount}</Typography>
+                      </Stack>
+                    </Stack>
                   )}
                   <Stack direction="row" spacing={1} sx={{ mt: 1.5 }} onClick={(e) => e.stopPropagation()}>
                     <TextField size="small" fullWidth value={url} slotProps={{ input: { readOnly: true } }} sx={{ "& input": { fontSize: 12 } }} />
@@ -154,6 +198,33 @@ export function CampaignsManager() {
         <DialogActions>
           <Button variant="contained" onClick={() => createMut.mutate()} disabled={createMut.isPending || !name}>
             Criar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(editing)} onClose={() => setEditing(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>Editar campanha</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <TextField fullWidth size="small" label="Nome" value={editing?.name ?? ""} onChange={(e) => setEditing((prev) => (prev ? { ...prev, name: e.target.value } : prev))} />
+            <TextField
+              fullWidth
+              size="small"
+              label="Descrição"
+              multiline
+              rows={3}
+              value={editing?.description ?? ""}
+              onChange={(e) => setEditing((prev) => (prev ? { ...prev, description: e.target.value } : prev))}
+            />
+            <Typography variant="caption" color="text.secondary">
+              O link da campanha não muda ao editar o nome.
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditing(null)}>Cancelar</Button>
+          <Button variant="contained" disabled={editMut.isPending || !editing?.name.trim()} onClick={() => editing && editMut.mutate(editing)}>
+            Salvar
           </Button>
         </DialogActions>
       </Dialog>

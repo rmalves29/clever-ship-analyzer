@@ -21,6 +21,18 @@ export type GroupTemplate = {
   seed_numbers?: string[];
 };
 
+export type EnvioCampaignStats = {
+  clicks: number;
+  entries: number;
+  exits: number;
+  /** entradas ÷ cliques, em %. */
+  entryRate: number;
+  groupCount: number;
+  participants: number;
+  fullGroups: number;
+  availableGroups: number;
+};
+
 export type EnvioCampaign = {
   id: string;
   name: string;
@@ -36,6 +48,9 @@ export type EnvioCampaign = {
   created_at: string;
   updated_at: string;
   group_count?: number;
+  /** Link público que as pessoas usam (o do Cartzy: o redirecionamento e a contagem de cliques são de lá). */
+  public_url?: string;
+  stats?: EnvioCampaignStats;
 };
 
 export type EnvioCampaignAudience = {
@@ -54,6 +69,51 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+const PUBLIC_LINK_BASE = "https://app.cartzy.com.br/fluxo";
+
+let tenantSlugCache: string | null = null;
+async function tenantSlug(): Promise<string> {
+  if (tenantSlugCache) return tenantSlugCache;
+  const supabaseAdmin = await admin();
+  const { data } = await (supabaseAdmin.from("tenants" as any) as any).select("slug").eq("id", await tenantId()).maybeSingle();
+  tenantSlugCache = ((data as { slug?: string } | null)?.slug as string | undefined) || "app";
+  return tenantSlugCache;
+}
+
+/** Eventos de entrada/saída do tenant, paginados de 1000 em 1000 (o PostgREST corta em 1000 por consulta). */
+async function fetchTenantGroupEvents(): Promise<{ group_id: string | null; group_jid: string | null; event_type: string }[]> {
+  const supabaseAdmin = await admin();
+  const tenant = await tenantId();
+  const out: { group_id: string | null; group_jid: string | null; event_type: string }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await (supabaseAdmin.from("fe_group_events" as any) as any)
+      .select("group_id, group_jid, event_type")
+      .eq("tenant_id", tenant)
+      .order("created_at", { ascending: false })
+      .range(from, from + 999);
+    if (error) throw new Error(error.message);
+    const batch = (data ?? []) as any[];
+    out.push(...batch);
+    if (batch.length < 1000) break;
+  }
+  return out;
+}
+
+/** Mesma regra do original (summarizeFlowEvents): o evento conta pro grupo pelo id OU pelo JID. */
+function summarizeEvents(events: { group_id: string | null; group_jid: string | null; event_type: string }[], groups: { id: string; group_jid: string }[]) {
+  const ids = new Set(groups.map((g) => g.id));
+  const jids = new Set(groups.map((g) => g.group_jid).filter(Boolean));
+  let entries = 0;
+  let exits = 0;
+  for (const event of events) {
+    const matches = (event.group_id && ids.has(event.group_id)) || (event.group_jid && jids.has(event.group_jid));
+    if (!matches) continue;
+    if (event.event_type === "join") entries++;
+    if (event.event_type === "leave") exits++;
+  }
+  return { entries, exits };
+}
+
 export async function listEnvioCampaigns(): Promise<EnvioCampaign[]> {
   const supabaseAdmin = await admin();
   const tenant = await tenantId();
@@ -67,16 +127,73 @@ export async function listEnvioCampaigns(): Promise<EnvioCampaign[]> {
   if (campaigns.length === 0) return [];
 
   const { data: links, error: linksError } = await (supabaseAdmin.from("fe_campaign_groups" as any) as any)
-    .select("campaign_id")
+    .select("campaign_id, group_id")
     .in("campaign_id", campaigns.map((campaign) => campaign.id));
   if (linksError) throw new Error(linksError.message);
 
-  const counts = new Map<string, number>();
+  const groupIdsByCampaign = new Map<string, string[]>();
   for (const link of (links ?? []) as any[]) {
-    const campaignId = link.campaign_id as string;
-    counts.set(campaignId, (counts.get(campaignId) ?? 0) + 1);
+    const list = groupIdsByCampaign.get(link.campaign_id as string) ?? [];
+    list.push(link.group_id as string);
+    groupIdsByCampaign.set(link.campaign_id as string, list);
   }
-  return campaigns.map((campaign) => ({ ...campaign, group_count: counts.get(campaign.id) ?? 0 }));
+
+  const allGroupIds = [...new Set([...groupIdsByCampaign.values()].flat())];
+  const groupsById = new Map<string, any>();
+  for (let i = 0; i < allGroupIds.length; i += 200) {
+    const { data: groups } = await (supabaseAdmin.from("fe_groups" as any) as any)
+      .select("id, group_jid, participant_count, max_participants, is_entry_open, is_active")
+      .eq("tenant_id", tenant)
+      .in("id", allGroupIds.slice(i, i + 200));
+    for (const g of (groups ?? []) as any[]) groupsById.set(g.id as string, g);
+  }
+
+  const events = await fetchTenantGroupEvents();
+  const slug = await tenantSlug();
+
+  const clickCounts = await Promise.all(
+    campaigns.map(async (campaign) => {
+      const { count } = await (supabaseAdmin.from("fe_link_clicks" as any) as any)
+        .select("id", { count: "exact", head: true })
+        .eq("campaign_id", campaign.id);
+      return count ?? 0;
+    }),
+  );
+
+  return campaigns.map((campaign, index) => {
+    const linkedIds = groupIdsByCampaign.get(campaign.id) ?? [];
+    const linked = linkedIds.map((id) => groupsById.get(id)).filter(Boolean);
+    const { entries, exits } = summarizeEvents(events, linked);
+    const clicks = clickCounts[index] ?? 0;
+    const full = (g: any) => Boolean(g.max_participants) && (g.participant_count || 0) >= g.max_participants;
+    return {
+      ...campaign,
+      group_count: linkedIds.length,
+      public_url: `${PUBLIC_LINK_BASE}/${slug}/${campaign.slug}`,
+      stats: {
+        clicks,
+        entries,
+        exits,
+        entryRate: clicks > 0 ? (entries / clicks) * 100 : 0,
+        groupCount: linkedIds.length,
+        participants: linked.reduce((sum: number, g: any) => sum + (g.participant_count || 0), 0),
+        fullGroups: linked.filter(full).length,
+        availableGroups: linked.filter((g: any) => g.is_entry_open && g.is_active && !full(g)).length,
+      },
+    };
+  });
+}
+
+/** Garante que a campanha é do tenant da Mania de Mulher (o banco é compartilhado com outros clientes do Cartzy). */
+async function assertCampaignOfTenant(campaignId: string): Promise<EnvioCampaign> {
+  const supabaseAdmin = await admin();
+  const { data } = await ((supabaseAdmin.from("fe_campaigns" as any) as any) as any)
+    .select("*")
+    .eq("id", campaignId)
+    .eq("tenant_id", await tenantId())
+    .maybeSingle();
+  if (!data) throw new Error("Campanha não encontrada.");
+  return data as EnvioCampaign;
 }
 
 /** Resolve campanha e grupos no banco dono do Fluxo de Envio. O tenant é sempre validado no
@@ -151,7 +268,7 @@ export async function updateEnvioCampaign(
     description?: string | undefined;
     is_entry_open?: boolean | undefined;
     is_active?: boolean | undefined;
-    facebook_pixel_id?: string | undefined;
+    facebook_pixel_id?: string | null | undefined;
     auto_spawn_enabled?: boolean | undefined;
     spawn_margin?: number | undefined;
     group_template?: GroupTemplate | undefined;
@@ -159,9 +276,17 @@ export async function updateEnvioCampaign(
 ): Promise<EnvioCampaign> {
   const supabaseAdmin = await admin();
   const tenant = await tenantId();
+  const next: Record<string, unknown> = { ...patch };
+  if ("facebook_pixel_id" in patch) next["facebook_pixel_id"] = patch.facebook_pixel_id?.trim() || null;
+  if (patch.group_template) {
+    // Mescla com o molde atual: descrição, imagem e números-semente configurados no Cartzy não podem sumir
+    // quando só parte do molde é editada aqui.
+    const current = await assertCampaignOfTenant(id);
+    next["group_template"] = { ...(current.group_template ?? {}), ...patch.group_template };
+  }
   const { data, error } = await (supabaseAdmin
     .from("fe_campaigns" as any) as any)
-    .update({ ...patch, updated_at: new Date().toISOString() } as never)
+    .update({ ...next, updated_at: new Date().toISOString() } as never)
     .eq("id", id)
     .eq("tenant_id", tenant)
     .select("*")
@@ -181,6 +306,7 @@ export async function deleteEnvioCampaign(id: string): Promise<{ success: true }
 export type CampaignGroupLink = { group_id: string; weight_percent: number | null };
 
 export async function getCampaignGroupLinks(campaignId: string): Promise<(CampaignGroupLink & { id: string; sort_order: number })[]> {
+  await assertCampaignOfTenant(campaignId);
   const supabaseAdmin = await admin();
   const { data, error } = await (supabaseAdmin
     .from("fe_campaign_groups" as any) as any)
@@ -194,25 +320,36 @@ export async function getCampaignGroupLinks(campaignId: string): Promise<(Campai
 /** Substitui o conjunto de grupos vinculados por completo (delete-then-reinsert), preservando os
  *  pesos informados — mesmo padrão do CampaignDetailDialog original. */
 export async function setCampaignGroupLinks(campaignId: string, links: CampaignGroupLink[]): Promise<void> {
+  await assertCampaignOfTenant(campaignId);
   const supabaseAdmin = await admin();
-  await ((supabaseAdmin.from("fe_campaign_groups" as any) as any) as any).delete().eq("campaign_id", campaignId);
+  const { error: deleteError } = await ((supabaseAdmin.from("fe_campaign_groups" as any) as any) as any).delete().eq("campaign_id", campaignId);
+  if (deleteError) throw new Error(deleteError.message);
   if (links.length === 0) return;
-  await ((supabaseAdmin.from("fe_campaign_groups" as any) as any) as any).insert(
-    links.map((l, i) => ({ campaign_id: campaignId, group_id: l.group_id, weight_percent: l.weight_percent, sort_order: i })) as never,
+  const { error } = await ((supabaseAdmin.from("fe_campaign_groups" as any) as any) as any).insert(
+    links.map((l, i) => ({
+      campaign_id: campaignId,
+      group_id: l.group_id,
+      weight_percent: l.weight_percent == null ? null : Math.min(100, Math.max(0, l.weight_percent)),
+      sort_order: i,
+    })) as never,
   );
+  if (error) throw new Error(error.message);
 }
 
 export async function updateCampaignGroupWeight(campaignId: string, groupId: string, weightPercent: number | null): Promise<void> {
+  await assertCampaignOfTenant(campaignId);
   const supabaseAdmin = await admin();
-  await (supabaseAdmin
+  const { error } = await (supabaseAdmin
     .from("fe_campaign_groups" as any) as any)
-    .update({ weight_percent: weightPercent } as never)
+    .update({ weight_percent: weightPercent == null ? null : Math.min(100, Math.max(0, weightPercent)) } as never)
     .eq("campaign_id", campaignId)
     .eq("group_id", groupId);
+  if (error) throw new Error(error.message);
 }
 
+/** Link do redirecionamento do próprio CRM (/fluxo/<slug>). O link que se divulga é o do Cartzy (`public_url`). */
 export function campaignPublicUrl(slug: string): string {
-  return `${process.env["PUBLIC_APP_URL"] || "https://clever-ship-analyzer.lovable.app"}/fluxo/${slug}`;
+  return `${process.env["PUBLIC_APP_URL"] || "https://crm.maniadmulher.com"}/fluxo/${slug}`;
 }
 
 /** Porta de fe-spawn-group: cria um clone do grupo-molde da campanha. Debounce de 2min via
@@ -221,9 +358,7 @@ export function campaignPublicUrl(slug: string): string {
 export async function spawnGroupForCampaign(campaignId: string): Promise<{ skipped?: "debounce"; groupId?: string }> {
   const supabaseAdmin = await admin();
   const tenant = await tenantId();
-  const { data: campaign } = await ((supabaseAdmin.from("fe_campaigns" as any) as any) as any).select("*").eq("id", campaignId).maybeSingle();
-  const c = campaign as EnvioCampaign | null;
-  if (!c) throw new Error("Campanha não encontrada");
+  const c = await assertCampaignOfTenant(campaignId);
   if (!c.auto_spawn_enabled) throw new Error("Auto-clonagem desativada nessa campanha");
 
   if (c.last_spawn_at && Date.now() - new Date(c.last_spawn_at).getTime() < 2 * 60_000) {
@@ -249,7 +384,9 @@ export async function spawnGroupForCampaign(campaignId: string): Promise<{ skipp
   if (!inviteLink) {
     try {
       const info = await getGroupInfo(creds, groupJid, { getInviteLink: true });
-      const raw = info?.inviteLink ?? info?.invite_link;
+      // A UazAPI pode devolver o grupo aninhado em `group` (formato que o fe-spawn-group original lê).
+      const grp = info?.group ?? info;
+      const raw = grp?.inviteLink ?? grp?.invite_link ?? info?.inviteLink ?? info?.invite_link;
       if (raw) inviteLink = raw.startsWith("http") ? raw : `https://chat.whatsapp.com/${raw}`;
     } catch (error) {
       console.error("spawnGroupForCampaign: falha ao buscar invite link", error);

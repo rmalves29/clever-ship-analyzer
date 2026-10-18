@@ -34,7 +34,7 @@ export const updateEnvioCampaign = createServerFn({ method: "POST" })
         description: z.string().optional(),
         is_entry_open: z.boolean().optional(),
         is_active: z.boolean().optional(),
-        facebook_pixel_id: z.string().optional(),
+        facebook_pixel_id: z.string().nullable().optional(),
         auto_spawn_enabled: z.boolean().optional(),
         spawn_margin: z.number().int().optional(),
         group_template: groupTemplateSchema.optional(),
@@ -69,7 +69,7 @@ export const setCampaignGroupLinks = createServerFn({ method: "POST" })
     z
       .object({
         campaignId: z.string().uuid(),
-        links: z.array(z.object({ group_id: z.string().uuid(), weight_percent: z.number().nullable() })),
+        links: z.array(z.object({ group_id: z.string().uuid(), weight_percent: z.number().min(0).max(100).nullable() })),
       })
       .parse(data),
   )
@@ -82,7 +82,7 @@ export const setCampaignGroupLinks = createServerFn({ method: "POST" })
 export const updateCampaignGroupWeight = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) =>
-    z.object({ campaignId: z.string().uuid(), groupId: z.string().uuid(), weightPercent: z.number().nullable() }).parse(data),
+    z.object({ campaignId: z.string().uuid(), groupId: z.string().uuid(), weightPercent: z.number().min(0).max(100).nullable() }).parse(data),
   )
   .handler(async ({ data }) => {
     const { updateCampaignGroupWeight: update } = await import("./envio-campaigns.server");

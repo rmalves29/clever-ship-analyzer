@@ -196,10 +196,12 @@ export async function createGroup(
   for (const attempt of attempts) {
     try {
       const data = await uazapiFetch(creds, attempt.path, { method: "POST", body: attempt.body, timeoutMs: 30_000 });
-      const groupJid = data?.JID ?? data?.jid ?? data?.groupjid ?? data?.id;
+      // A UazAPI às vezes devolve o grupo aninhado em `group` (mesmo formato aceito pelo fe-spawn-group original).
+      const g = data?.group ?? data;
+      const groupJid = g?.JID ?? g?.jid ?? g?.groupjid ?? g?.id ?? data?.JID ?? data?.jid ?? data?.groupjid ?? data?.id;
       if (groupJid) {
         console.log(`createGroup: sucesso via ${attempt.path}`, attempt.body);
-        return { groupJid, inviteLink: data?.inviteLink ?? data?.invite_link };
+        return { groupJid, inviteLink: g?.inviteLink ?? g?.invite_link ?? data?.inviteLink ?? data?.invite_link };
       }
     } catch (error) {
       lastError = error;

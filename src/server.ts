@@ -249,9 +249,18 @@ type WaitUntilCtx = { waitUntil?: (promise: Promise<unknown>) => void };
 
 async function handleEnvioRedirect(request: Request, ctx: unknown): Promise<Response> {
   const url = new URL(request.url);
-  const slug = url.pathname.slice(ENVIO_REDIRECT_PREFIX.length);
+  // Aceita /fluxo/<slug> e o formato do Cartzy /fluxo/<loja>/<slug> (links já divulgados), com ou sem barra final.
+  const segments = url.pathname.slice(ENVIO_REDIRECT_PREFIX.length).split("/").filter(Boolean);
+  let slug = "";
+  try {
+    slug = decodeURIComponent(segments[segments.length - 1] ?? "");
+  } catch {
+    slug = "";
+  }
   if (!slug) return new Response("Not Found", { status: 404 });
-  const waitUntil = (ctx as WaitUntilCtx | null)?.waitUntil ?? ((p: Promise<unknown>) => void p.catch(() => {}));
+  // waitUntil precisa ser chamado a partir do ctx (sem o this vira "Illegal invocation" em alguns runtimes).
+  const rawCtx = ctx as WaitUntilCtx | null;
+  const waitUntil = rawCtx?.waitUntil ? rawCtx.waitUntil.bind(rawCtx) : (p: Promise<unknown>) => void p.catch(() => {});
   try {
     return await handleEnvioCampaignRedirect(slug, request, waitUntil);
   } catch (error) {

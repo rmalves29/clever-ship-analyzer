@@ -81,7 +81,14 @@ export async function handleTrackedLinkRedirect(queueItemId: string, request: Re
 export async function handleEnvioCampaignRedirect(slug: string, request: Request, waitUntil: WaitUntil): Promise<Response> {
   const liveLaunchpad = await liveLaunchpadAdmin();
 
-  const { data: campaign } = await (liveLaunchpad.from("fe_campaigns" as any) as any).select("*").eq("slug", slug).eq("is_active", true).maybeSingle();
+  // O banco do Cartzy é compartilhado com outros clientes: só serve campanha do tenant da Mania de Mulher.
+  const { MANIA_DE_MULHER_TENANT_ID } = await import("@/integrations/supabase/live-launchpad-client.server");
+  const { data: campaign } = await (liveLaunchpad.from("fe_campaigns" as any) as any)
+    .select("*")
+    .eq("tenant_id", MANIA_DE_MULHER_TENANT_ID)
+    .eq("slug", slug)
+    .eq("is_active", true)
+    .maybeSingle();
   if (!campaign) return htmlResponse(NOT_FOUND_HTML, 404);
   const c = campaign as any;
   if (!c.is_entry_open) return htmlResponse(CLOSED_HTML, 403);

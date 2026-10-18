@@ -6,7 +6,23 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
+// d3-shape declares `export default function Symbol(...)`, a module-level binding that shadows
+// the global `Symbol`. In some production bundles the bundler wired `Symbol.for(...)` calls from
+// other modules (react-is, @mui/x-internals) to that d3 function, crashing charts with
+// "W.for is not a function". Renaming the local function removes the collision entirely.
+const renameD3ShapeSymbol = {
+  name: "rename-d3-shape-symbol",
+  enforce: "pre" as const,
+  transform(code: string, id: string) {
+    if (!/[\\/]d3-shape[\\/]src[\\/]symbol\.js$/.test(id)) return null;
+    return { code: code.replace(/function Symbol\(/, "function d3ShapeSymbol("), map: null };
+  },
+};
+
 export default defineConfig({
+  vite: {
+    plugins: [renameD3ShapeSymbol],
+  },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this

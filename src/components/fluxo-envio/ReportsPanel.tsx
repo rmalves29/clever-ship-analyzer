@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { LineChart } from "@mui/x-charts/LineChart";
+import { BarChart } from "@mui/x-charts/BarChart";
+import { Gauge, gaugeClasses } from "@mui/x-charts/Gauge";
 import { Download } from "lucide-react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -52,10 +55,15 @@ export function ReportsPanel() {
 
   const exportCsv = () => {
     if (!data) return;
-    const lines = ["tipo,nome,cliques,entradas,saidas,net"];
-    for (const c of data.campaigns) lines.push(`campanha,${c.name},${c.clicks},${c.entries},${c.exits},${c.net}`);
-    for (const g of data.groups) lines.push(`grupo,${g.name},,${g.entries},${g.exits},${g.net}`);
-    const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    // Ponto e vírgula + BOM: o Excel em português abre direto, e nomes com vírgula/aspas não quebram as colunas.
+    const cell = (v: string | number | null | undefined) => {
+      const t = String(v ?? "");
+      return /[";\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+    };
+    const lines = [["tipo", "nome", "cliques", "entradas", "saidas", "liquido", "conversao_pct"].join(";")];
+    for (const c of data.campaigns) lines.push(["campanha", c.name, c.clicks, c.entries, c.exits, c.net, String(c.conversionPct).replace(".", ",")].map(cell).join(";"));
+    for (const g of data.groups) lines.push(["grupo", g.name, "", g.entries, g.exits, g.net, ""].map(cell).join(";"));
+    const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -104,6 +112,76 @@ export function ReportsPanel() {
           <StatCard label="Conversão" value={`${data.conversionPct}%`} />
         </Grid>
       </Grid>
+
+      <Grid container spacing={1.5}>
+        <Grid size={{ xs: 12, md: 8 }}>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+                Cliques, entradas e saídas por dia
+              </Typography>
+              {data.timeline.length === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 6, textAlign: "center" }}>
+                  Sem movimento no período.
+                </Typography>
+              ) : (
+                <LineChart
+                  dataset={data.timeline.map((t) => ({ ...t, label: `${t.date.slice(8, 10)}/${t.date.slice(5, 7)}` }))}
+                  xAxis={[{ dataKey: "label", scaleType: "point" }]}
+                  series={[
+                    { dataKey: "clicks", label: "Cliques", color: "#7367F0", showMark: false },
+                    { dataKey: "entries", label: "Entradas", color: "#28C76F", showMark: false },
+                    { dataKey: "exits", label: "Saídas", color: "#EA5455", showMark: false },
+                  ]}
+                  height={260}
+                  margin={{ left: 44, right: 16, top: 24, bottom: 32 }}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Card variant="outlined" sx={{ height: "100%" }}>
+            <CardContent sx={{ textAlign: "center" }}>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                Conversão (entradas ÷ cliques)
+              </Typography>
+              <Gauge
+                value={Math.min(100, data.conversionPct)}
+                height={170}
+                startAngle={-110}
+                endAngle={110}
+                text={() => `${data.conversionPct}%`}
+                sx={{ [`& .${gaugeClasses.valueText}`]: { fontSize: 28, fontWeight: 700 } }}
+              />
+              <Typography variant="caption" color="text.secondary">
+                Entradas incluem quem chegou por outros meios (convite direto, outro link), então pode passar de 100%. Saldo do período: {data.net > 0 ? "+" : ""}{data.net}.
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {data.groups.length > 0 && (
+        <Card variant="outlined">
+          <CardContent>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+              Grupos com mais entradas e saídas
+            </Typography>
+            <BarChart
+              dataset={data.groups.slice().sort((a, b) => b.entries + b.exits - (a.entries + a.exits)).slice(0, 8)}
+              yAxis={[{ dataKey: "name", scaleType: "band", width: 160 }]}
+              series={[
+                { dataKey: "entries", label: "Entradas", color: "#28C76F" },
+                { dataKey: "exits", label: "Saídas", color: "#EA5455" },
+              ]}
+              layout="horizontal"
+              height={Math.max(180, Math.min(8, data.groups.length) * 44 + 60)}
+              margin={{ left: 8, right: 16, top: 16, bottom: 24 }}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <Box>
         <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
@@ -215,18 +293,30 @@ export function ReportsPanel() {
           Eventos recentes
         </Typography>
         <Box sx={{ maxHeight: 288, overflowY: "auto", border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
-          {data.recentEvents.map((e: any, i: number) => (
+          {data.recentEvents.length === 0 && (
+            <Typography variant="body2" color="text.secondary" sx={{ p: 2, textAlign: "center" }}>
+              Nenhum evento no período.
+            </Typography>
+          )}
+          {data.recentEvents.map((e, i) => (
             <Stack
               key={i}
               direction="row"
+              spacing={1}
               sx={{ justifyContent: "space-between", alignItems: "center", p: 1, borderTop: i > 0 ? "1px solid" : "none", borderColor: "divider" }}
             >
-              <Typography variant="caption">{e.event_type === "join" ? "🟢 Entrou" : "🔴 Saiu"}</Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{ width: 76, flexShrink: 0 }}>
+                {e.event_type === "join" ? "🟢 Entrou" : "🔴 Saiu"}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ width: 120, flexShrink: 0 }}>
                 {e.phone ?? "desconhecido"}
               </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {new Date(e.created_at).toLocaleString("pt-BR")}
+              <Typography variant="caption" sx={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`${e.groupName} · ${e.campaignNames.join(", ")}`}>
+                {e.groupName}
+                {e.campaignNames.length > 0 && <span style={{ opacity: 0.6 }}> · {e.campaignNames.join(", ")}</span>}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+                {new Date(e.created_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
               </Typography>
             </Stack>
           ))}

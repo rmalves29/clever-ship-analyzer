@@ -339,13 +339,19 @@ export const getCRMStats = createServerFn({ method: "GET" })
     const now = Date.now();
     const thirtyDaysAgo = now - 30 * 86_400_000;
     const customers = contexts.filter((context) => context.metrics.validOrderCount > 0).length;
+    const ninetyDaysAgo = now - 90 * 86_400_000;
+    // Cliente ativo = comprou (pedido pago) nos últimos 90 dias.
+    const active = contexts.filter((context) => {
+      const last = context.metrics.lastOrderAt ? new Date(context.metrics.lastOrderAt).getTime() : 0;
+      return context.metrics.validOrderCount > 0 && Number.isFinite(last) && last >= ninetyDaysAgo;
+    }).length;
     const abandoned = contexts.filter((context) => context.abandonedCheckout).length;
     const leads = contexts.filter((context) => context.metrics.validOrderCount === 0 && !context.abandonedCheckout).length;
     const newContacts = contexts.filter((context) => {
       const created = context.customer.created_at ? new Date(context.customer.created_at).getTime() : 0;
       return Number.isFinite(created) && created >= thirtyDaysAgo && created <= now;
     }).length;
-    return { total: contexts.length, leads, customers, abandoned, newContacts };
+    return { total: contexts.length, leads, customers, active, abandoned, newContacts };
   });
 
 export const getCRMFilterOptions = createServerFn({ method: "GET" })

@@ -491,11 +491,12 @@ function CRMPage() {
 
           {tab === "contatos" && (
             <Stack spacing={4} sx={{ mt: 4 }}>
-              <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "repeat(4, 1fr)" } }}>
-                <StatCard label="Total de Contatos" value={new Intl.NumberFormat().format(stats?.total || 0)} hint="Todos os contatos da base." trend="+42%" />
-                <StatCard label="Checkouts Abandonados" value={new Intl.NumberFormat().format(stats?.abandoned || 0)} hint="Identificados por pedidos expirados" trend="+15%" />
-                <StatCard label="Clientes" value={new Intl.NumberFormat().format(stats?.customers || 0)} hint="Contatos com compras" trend="+32%" />
-                <StatCard label="Novos Contatos" value={new Intl.NumberFormat().format(stats?.newContacts || 0)} hint="Cadastrados nos últimos 30 dias." trend="+42%" />
+              <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "repeat(5, 1fr)" } }}>
+                <StatCard label="Total de Contatos" value={new Intl.NumberFormat().format(stats?.total || 0)} hint="Todos os contatos da base." />
+                <StatCard label="Clientes" value={new Intl.NumberFormat().format(stats?.customers || 0)} hint="Contatos com ao menos 1 compra paga." />
+                <StatCard label="Clientes ativos" value={new Intl.NumberFormat().format(stats?.active || 0)} hint="Compraram nos últimos 90 dias." />
+                <StatCard label="Checkouts abandonados" value={new Intl.NumberFormat().format(stats?.abandoned || 0)} hint="Abandonaram o checkout e não compraram depois." />
+                <StatCard label="Novos Contatos" value={new Intl.NumberFormat().format(stats?.newContacts || 0)} hint="Cadastrados nos últimos 30 dias." />
               </Box>
 
               <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, overflow: "hidden" }}>

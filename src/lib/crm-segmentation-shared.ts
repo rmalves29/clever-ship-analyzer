@@ -1,4 +1,4 @@
-import { isRevenueValidOrder, VALID_FINANCIAL_STATUSES } from "./crm-rfm-shared";
+import { brazilDayOf, isRevenueValidOrder, VALID_FINANCIAL_STATUSES } from "./crm-rfm-shared";
 
 export type CRMOrderForSegmentation = {
   id: string;
@@ -157,6 +157,9 @@ function parseRange(value: unknown): { min: number; max: number } | null {
 
 export function buildPurchaseMetricsIndex(orders: CRMOrderForSegmentation[]): Map<string, PurchaseMetrics> {
   const index = new Map<string, PurchaseMetrics>();
+  // validOrderCount = nº de COMPRAS: pedidos do mesmo cliente no mesmo dia (Brasília) contam uma vez
+  // (vendas de grupo/live vêm divididas em vários pedidos).
+  const purchaseDays = new Map<string, Set<number>>();
 
   for (const order of orders) {
     if (!order.customerId) continue;
@@ -177,7 +180,13 @@ export function buildPurchaseMetricsIndex(orders: CRMOrderForSegmentation[]): Ma
     if (isRevenueValidOrder(order)) {
       const date = new Date(order.processedAt);
       if (!Number.isNaN(date.getTime())) {
-        metrics.validOrderCount += 1;
+        const days = purchaseDays.get(order.customerId) ?? new Set<number>();
+        const day = brazilDayOf(date.getTime());
+        if (!days.has(day)) {
+          days.add(day);
+          metrics.validOrderCount += 1;
+        }
+        purchaseDays.set(order.customerId, days);
         metrics.totalSpent += Number(order.totalPrice || 0);
         metrics.validOrderIds.add(order.id);
         if (status) metrics.validFinancialStatuses.add(status);

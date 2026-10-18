@@ -128,11 +128,19 @@ export function buildCustomerAggregates(orders: OrderRow[]): CustomerAgg[] {
     if (!agg.province && o.province) agg.province = normalizeProvince(o.province);
     map.set(key, agg);
   }
-  return Array.from(map.values()).map((c) => ({
-    ...c,
-    dates: c.dates.sort((a, b) => a - b),
-    count: c.dates.length,
-  }));
+  // Uma COMPRA = pedidos do mesmo cliente no mesmo dia (Brasília): vendas de grupo/live vêm divididas em
+  // vários pedidos e cada fatia não pode contar como recompra. `dates` guarda um instante por dia de compra.
+  return Array.from(map.values()).map((c) => {
+    const sorted = c.dates.sort((a, b) => a - b);
+    const dates: number[] = [];
+    let lastDay: number | null = null;
+    for (const d of sorted) {
+      const day = brazilDayNumber(d);
+      if (day !== lastDay) dates.push(d);
+      lastDay = day;
+    }
+    return { ...c, dates, count: dates.length };
+  });
 }
 
 export const FREQUENCY_BUCKETS = [

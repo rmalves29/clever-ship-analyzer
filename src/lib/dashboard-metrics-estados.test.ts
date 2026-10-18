@@ -36,7 +36,7 @@ describe("normalizeProvince", () => {
 });
 
 describe("recompra por dias distintos", () => {
-  it("2 pedidos na mesma live contam como recompra por pedidos, mas não por dias", () => {
+  it("2 pedidos na mesma live contam como UMA compra (não é recompra)", () => {
     const customers = buildCustomerAggregates([
       order({ customer_id: "LIVE", processed_at: "2026-10-01T23:10:00Z" }),
       order({ customer_id: "LIVE", processed_at: "2026-10-01T23:40:00Z" }),
@@ -46,7 +46,7 @@ describe("recompra por dias distintos", () => {
     ]);
     const r = computeTaxaRecompra(customers);
     expect(r.baseClientes).toBe(3);
-    expect(r.recomprasCount).toBe(2);
+    expect(r.recomprasCount).toBe(1);
     expect(r.recomprasDiasDistintos).toBe(1);
     expect(r.taxaRecompraDiasDistintos).toBeCloseTo(33.33, 1);
   });

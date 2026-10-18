@@ -154,3 +154,13 @@ describe("histórico importado entra só na matriz RFM", () => {
     expect(o.every((x) => x.totalPrice === 0)).toBe(true);
   });
 });
+
+describe("compra = pedidos do mesmo dia", () => {
+  it("3 pedidos do mesmo cliente no mesmo dia dão frequência 1 e o valor soma", () => {
+    const at = "2026-08-01T15:00:00Z";
+    const mk = (id: string, v: number) => ({ customerId: "g1", totalPrice: v, processedAt: at, financialStatus: "PAID", cancelledAt: null, id });
+    const { customers } = computeRFM(["g1"], [mk("a", 57.33), mk("b", 57.33), mk("c", 57.34)], NOW);
+    expect(customers[0]!.frequency).toBe(1);
+    expect(customers[0]!.monetary).toBeCloseTo(172, 2);
+  });
+});

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCustomerContexts,
+  buildPurchaseMetricsIndex,
   matchesSegmentRules,
   type CRMCustomerForSegmentation,
   type CRMOrderForSegmentation,
@@ -296,5 +297,21 @@ describe("lógica dos grupos", () => {
 
   it("filtro desconhecido falha fechado em vez de incluir audiência errada", () => {
     expect(matchesSegmentRules(ctx("c1"), rule("campo_inexistente", "eq", "x"), NOW)).toBe(false);
+  });
+});
+
+describe("compra = pedidos do mesmo dia", () => {
+  it("pedidos do mesmo cliente no mesmo dia contam como uma compra; outro dia é nova compra", () => {
+    const mk = (id: string, processedAt: string, totalPrice: number): CRMOrderForSegmentation => ({ id, customerId: "c1", totalPrice, processedAt, financialStatus: "PAID" });
+    const index = buildPurchaseMetricsIndex([
+      mk("a", "2026-08-01T15:00:00Z", 57.33),
+      mk("b", "2026-08-01T15:00:00Z", 57.33),
+      mk("c", "2026-08-01T15:00:00Z", 57.34),
+      mk("d", "2026-08-10T15:00:00Z", 100),
+    ]);
+    const m = index.get("c1")!;
+    expect(m.validOrderCount).toBe(2);
+    expect(m.totalSpent).toBeCloseTo(272, 2);
+    expect(m.averageTicket).toBeCloseTo(136, 2);
   });
 });

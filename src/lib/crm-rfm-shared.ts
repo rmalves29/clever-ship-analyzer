@@ -108,13 +108,15 @@ export type ValidOrder = {
   processedAt: string;
   financialStatus?: string | null;
   cancelledAt?: string | null;
+  /** Pedido sintético do histórico importado: cada um é uma compra distinta, mesmo na mesma data. */
+  historical?: boolean;
 };
 
 export type CustomerMetrics = {
   customerId: string;
   /** Dias desde o último pedido VÁLIDO. `null` quando o cliente não tem pedido válido. */
   recency: number | null;
-  /** Total de pedidos VÁLIDOS. */
+  /** Total de COMPRAS válidas: pedidos do mesmo cliente no mesmo dia (Brasília) contam como uma só. */
   frequency: number;
   /** Receita acumulada em pedidos VÁLIDOS. */
   monetary: number;
@@ -143,6 +145,11 @@ export function isRevenueValidOrder(order: {
   return (VALID_FINANCIAL_STATUSES as readonly string[]).includes(status);
 }
 
+/** Número do dia no fuso de Brasília (UTC-3). Uma "compra" = todos os pedidos do cliente no mesmo dia. */
+export function brazilDayOf(ms: number): number {
+  return Math.floor((ms - 3 * 3_600_000) / 86_400_000);
+}
+
 function daysBetween(from: Date, to: Date): number {
   return Math.max(0, Math.floor((to.getTime() - from.getTime()) / 86_400_000));
 }
@@ -153,16 +160,17 @@ export function buildCustomerMetrics(
   orders: ValidOrder[],
   now: Date = new Date(),
 ): CustomerMetrics[] {
-  const byCustomer = new Map<string, { freq: number; money: number; last: Date | null; first: Date | null }>();
-  for (const id of customerIds) byCustomer.set(id, { freq: 0, money: 0, last: null, first: null });
+  const byCustomer = new Map<string, { days: Set<number>; extra: number; money: number; last: Date | null; first: Date | null }>();
+  for (const id of customerIds) byCustomer.set(id, { days: new Set<number>(), extra: 0, money: 0, last: null, first: null });
 
   for (const order of orders) {
     if (!order.customerId) continue;
     if (!isRevenueValidOrder(order)) continue;
     const date = new Date(order.processedAt);
     if (Number.isNaN(date.getTime())) continue;
-    const acc = byCustomer.get(order.customerId) ?? { freq: 0, money: 0, last: null, first: null };
-    acc.freq += 1;
+    const acc = byCustomer.get(order.customerId) ?? { days: new Set<number>(), extra: 0, money: 0, last: null, first: null };
+    if (order.historical) acc.extra += 1;
+    else acc.days.add(brazilDayOf(date.getTime()));
     acc.money += Number(order.totalPrice ?? 0);
     if (!acc.last || date > acc.last) acc.last = date;
     if (!acc.first || date < acc.first) acc.first = date;
@@ -172,7 +180,7 @@ export function buildCustomerMetrics(
   return Array.from(byCustomer.entries()).map(([customerId, acc]) => ({
     customerId,
     recency: acc.last ? daysBetween(acc.last, now) : null,
-    frequency: acc.freq,
+    frequency: acc.days.size + acc.extra,
     monetary: acc.money,
     lastOrderAt: acc.last ? acc.last.toISOString() : null,
     firstOrderAt: acc.first ? acc.first.toISOString() : null,
@@ -333,5 +341,6 @@ export function historicalOrders(h: HistoricalCustomer): ValidOrder[] {
     processedAt: h.lastPurchaseAt,
     financialStatus: "PAID",
     cancelledAt: null,
+    historical: true,
   }));
 }

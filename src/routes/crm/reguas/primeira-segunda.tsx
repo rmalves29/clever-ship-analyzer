@@ -53,6 +53,7 @@ export const Route = createFileRoute("/crm/reguas/primeira-segunda")({
 
 const PAGE_SIZE = 50;
 const brl = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n || 0);
+const brDate = (iso: string) => new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 const pct = (n: number | null) => n === null ? "—" : `${(n * 100).toFixed(1)}%`;
 
 type StageFilter = RepurchaseWindow | "Convertido";
@@ -208,8 +209,8 @@ function RepurchasePage() {
   const totalPages = Math.max(1, Math.ceil(totalCustomers / PAGE_SIZE));
   const actionableStage = stage && stage !== "Convertido" ? stage : null;
   const targetProgress = summary.targetConversionRate > 0 ? Math.min(100, (summary.matureConversionRate / summary.targetConversionRate) * 100) : 0;
-  const coverageFrom = data.dataCoverage.from ? new Date(data.dataCoverage.from).toLocaleDateString("pt-BR") : "—";
-  const coverageTo = data.dataCoverage.to ? new Date(data.dataCoverage.to).toLocaleDateString("pt-BR") : "—";
+  const coverageFrom = data.dataCoverage.from ? brDate(data.dataCoverage.from) : "—";
+  const coverageTo = data.dataCoverage.to ? brDate(data.dataCoverage.to) : "—";
 
   const selectStage = (value: StageFilter) => {
     setStage(value);
@@ -496,7 +497,7 @@ function RepurchasePage() {
                 customers.map((customer) => (
                   <TableRow key={customer.customerId}>
                     <TableCell sx={{ fontWeight: 500 }}>{customer.name}</TableCell>
-                    <TableCell>{new Date(customer.firstOrderAt).toLocaleDateString("pt-BR")}</TableCell>
+                    <TableCell>{brDate(customer.firstOrderAt)}</TableCell>
                     <TableCell>{customer.daysSinceFirstOrder}</TableCell>
                     <TableCell>{brl(customer.firstOrderRevenue)}</TableCell>
                     <TableCell sx={{ maxWidth: 320 }}>
@@ -510,7 +511,7 @@ function RepurchasePage() {
                     <TableCell>
                       {customer.secondOrderAt ? (
                         <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", whiteSpace: "nowrap" }}>
-                          {new Date(customer.secondOrderAt).toLocaleDateString("pt-BR")}
+                          {brDate(customer.secondOrderAt)}
                           <ArrowRight size={12} />
                           {brl(customer.secondOrderRevenue ?? 0)}
                         </Stack>

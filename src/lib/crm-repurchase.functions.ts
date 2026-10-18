@@ -53,6 +53,7 @@ async function loadAllOrders(): Promise<OrderRow[]> {
     const { data, error } = await supabaseAdmin
       .from("shopify_orders")
       .select("id,customer_id,total_price,processed_at,created_at,financial_status,cancelled_at,source_name,city,province")
+      .order("id", { ascending: true }) // sem ORDER BY a paginação pode repetir/pular pedidos entre as páginas
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
     if (error) throw new Error(`Erro ao carregar pedidos da régua: ${error.message}`);
     if (!data?.length) break;
@@ -69,6 +70,7 @@ async function loadAllCustomers(): Promise<CustomerRow[]> {
     const { data, error } = await supabaseAdmin
       .from("shopify_customers")
       .select("id,first_name,last_name,city,province")
+      .order("id", { ascending: true })
       .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
     if (error) throw new Error(`Erro ao carregar clientes da régua: ${error.message}`);
     if (!data?.length) break;
@@ -100,6 +102,10 @@ async function loadItemsForOrders(orderIds: string[]): Promise<Map<string, Order
   return map;
 }
 
+function firstPurchaseItems(data: { itemsByOrder: Map<string, OrderItemRow[]> }, row: RepurchaseCustomer): OrderItemRow[] {
+  return row.firstOrderIds.flatMap((id) => data.itemsByOrder.get(id) ?? []);
+}
+
 function productLabels(items: OrderItemRow[] | undefined): string[] {
   if (!items?.length) return [];
   return items.map((item) => {
@@ -126,7 +132,7 @@ async function loadRepurchaseData() {
   const customerMap = new Map(customers.map((customer) => [String(customer.id), customer]));
   const orderMap = new Map(orders.map((order) => [String(order.id), order]));
   const relevantOrderIds = journey.flatMap((row) =>
-    [row.firstOrderId, row.secondOrderId].filter((id): id is string => Boolean(id)),
+    [...row.firstOrderIds, ...row.secondOrderIds].filter((id): id is string => Boolean(id)),
   );
   const itemsByOrder = await loadItemsForOrders(relevantOrderIds);
 
@@ -186,7 +192,7 @@ function getDataCoverage(journey: RepurchaseCustomer[]) {
 function buildProductPerformance(journey: RepurchaseCustomer[], data: RepurchaseData) {
   const stats = new Map<string, { name: string; customers: number; converted: number; secondRevenue: number }>();
   for (const row of journey) {
-    const products = new Set(productLabels(data.itemsByOrder.get(row.firstOrderId)));
+    const products = new Set(productLabels(firstPurchaseItems(data, row)));
     for (const name of products) {
       const current = stats.get(name) ?? { name, customers: 0, converted: 0, secondRevenue: 0 };
       current.customers += 1;
@@ -229,7 +235,7 @@ function enrichCustomer(row: RepurchaseData["journey"][number], data: Repurchase
     name,
     city: customer?.city ?? firstOrder?.city ?? null,
     province: customer?.province ?? firstOrder?.province ?? null,
-    products: productLabels(data.itemsByOrder.get(row.firstOrderId)),
+    products: productLabels(firstPurchaseItems(data, row)),
     sourceName: row.firstOrderSourceName ?? firstOrder?.source_name ?? null,
   };
 }
@@ -240,7 +246,7 @@ function buildCampaignContext(stage: RepurchaseWindow, data: RepurchaseData) {
   const topProducts = new Map<string, number>();
 
   for (const row of rows) {
-    for (const product of productLabels(data.itemsByOrder.get(row.firstOrderId))) {
+    for (const product of productLabels(firstPurchaseItems(data, row))) {
       topProducts.set(product, (topProducts.get(product) ?? 0) + 1);
     }
   }

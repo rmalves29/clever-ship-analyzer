@@ -30,6 +30,8 @@ export type RepurchaseOrder = {
 export type RepurchaseCustomer = {
   customerId: string;
   firstOrderId: string;
+  /** Todos os pedidos da 1ª compra (mesmo cliente, mesmo dia). */
+  firstOrderIds: string[];
   firstOrderAt: string;
   firstOrderRevenue: number;
   firstOrderSourceName: string | null;
@@ -37,6 +39,7 @@ export type RepurchaseCustomer = {
   stage: RepurchaseWindow | "Convertido";
   converted: boolean;
   secondOrderId: string | null;
+  secondOrderIds: string[];
   secondOrderAt: string | null;
   secondOrderRevenue: number | null;
   secondOrderSourceName: string | null;
@@ -65,6 +68,10 @@ export type RepurchaseAttributionRecord = {
 
 const DAY = 86_400_000;
 const daysBetween = (a: Date, b: Date) => Math.max(0, Math.floor((b.getTime() - a.getTime()) / DAY));
+/** Número do dia no fuso de Brasília (UTC-3). */
+const brtDay = (ms: number) => Math.floor((ms - 3 * 3_600_000) / DAY);
+/** Mês (YYYY-MM) no fuso de Brasília. */
+export const brtMonth = (iso: string) => new Date(new Date(iso).getTime() - 3 * 3_600_000).toISOString().slice(0, 7);
 
 export function repurchaseWindow(days: number): RepurchaseWindow {
   if (days <= 7) return "0–7 dias";
@@ -103,27 +110,43 @@ export function buildRepurchaseJourney(orders: RepurchaseOrder[], now = new Date
 
   return [...byCustomer.entries()].map(([customerId, customerOrders]) => {
     const sorted = [...customerOrders].sort(
-      (a, b) => new Date(a.processedAt).getTime() - new Date(b.processedAt).getTime(),
+      (a, b) => new Date(a.processedAt).getTime() - new Date(b.processedAt).getTime() || a.id.localeCompare(b.id),
     );
-    const first = sorted[0]!;
-    const second = sorted[1] ?? null;
-    const firstDate = new Date(first.processedAt);
+
+    // Uma COMPRA = todos os pedidos do cliente no mesmo dia (Brasília). Em live e nas vendas de grupo uma única
+    // compra vira vários pedidos (ex.: R$ 172 em 3 pedidos de R$ 57,33), e cada fatia não pode contar como "2ª compra".
+    const purchases: { orders: RepurchaseOrder[]; day: number }[] = [];
+    for (const order of sorted) {
+      const day = brtDay(new Date(order.processedAt).getTime());
+      const last = purchases[purchases.length - 1];
+      if (last && last.day === day) last.orders.push(order);
+      else purchases.push({ orders: [order], day });
+    }
+    const purchaseTotal = (p: { orders: RepurchaseOrder[] }) => p.orders.reduce((sum, o) => sum + Number(o.totalPrice || 0), 0);
+
+    const first = purchases[0]!;
+    const second = purchases[1] ?? null;
+    const firstHead = first.orders[0]!;
+    const secondHead = second?.orders[0] ?? null;
+    const firstDate = new Date(firstHead.processedAt);
     const daysSinceFirstOrder = daysBetween(firstDate, now);
 
     return {
       customerId,
-      firstOrderId: first.id,
-      firstOrderAt: first.processedAt,
-      firstOrderRevenue: Number(first.totalPrice || 0),
-      firstOrderSourceName: first.sourceName ?? null,
+      firstOrderId: firstHead.id,
+      firstOrderIds: first.orders.map((o) => o.id),
+      firstOrderAt: firstHead.processedAt,
+      firstOrderRevenue: purchaseTotal(first),
+      firstOrderSourceName: firstHead.sourceName ?? null,
       daysSinceFirstOrder,
       stage: second ? "Convertido" : repurchaseWindow(daysSinceFirstOrder),
       converted: Boolean(second),
-      secondOrderId: second?.id ?? null,
-      secondOrderAt: second?.processedAt ?? null,
-      secondOrderRevenue: second ? Number(second.totalPrice || 0) : null,
-      secondOrderSourceName: second?.sourceName ?? null,
-      daysToSecondOrder: second ? daysBetween(firstDate, new Date(second.processedAt)) : null,
+      secondOrderId: secondHead?.id ?? null,
+      secondOrderIds: second ? second.orders.map((o) => o.id) : [],
+      secondOrderAt: secondHead?.processedAt ?? null,
+      secondOrderRevenue: second ? purchaseTotal(second) : null,
+      secondOrderSourceName: secondHead?.sourceName ?? null,
+      daysToSecondOrder: second ? Math.max(0, second.day - first.day) : null,
     };
   });
 }
@@ -195,7 +218,7 @@ export function buildRepurchaseCohorts(
 ) {
   const map = new Map<string, RepurchaseCustomer[]>();
   for (const row of journey) {
-    const month = row.firstOrderAt.slice(0, 7);
+    const month = brtMonth(row.firstOrderAt);
     const rows = map.get(month) ?? [];
     rows.push(row);
     map.set(month, rows);

@@ -105,6 +105,36 @@ describe("buildRepurchaseJourney", () => {
   });
 });
 
+describe("compra = pedidos do mesmo dia", () => {
+  it("vários pedidos no mesmo dia (live/grupo) contam como UMA compra, com valor somado", () => {
+    const rows = buildRepurchaseJourney([
+      order("g1", "c1", "2026-02-18T12:00:00Z", 57.33),
+      order("g2", "c1", "2026-02-18T12:00:00Z", 57.33),
+      order("g3", "c1", "2026-02-18T12:00:00Z", 57.34),
+    ], NOW);
+    expect(rows[0]).toMatchObject({ converted: false, firstOrderIds: ["g1", "g2", "g3"], secondOrderId: null });
+    expect(rows[0]?.firstOrderRevenue).toBeCloseTo(172, 2);
+  });
+
+  it("a 2ª compra é o próximo DIA com pedido, e os dias contam no calendário de Brasília", () => {
+    const rows = buildRepurchaseJourney([
+      order("a", "c1", "2026-08-01T12:00:00Z", 100),
+      order("b", "c1", "2026-08-01T15:00:00Z", 50), // mesmo dia: entra na 1ª compra
+      order("c", "c1", "2026-08-10T12:00:00Z", 80),
+      order("d", "c1", "2026-08-10T18:00:00Z", 20), // mesmo dia da 2ª
+    ], NOW);
+    expect(rows[0]).toMatchObject({ converted: true, firstOrderRevenue: 150, secondOrderRevenue: 100, secondOrderId: "c", daysToSecondOrder: 9 });
+  });
+
+  it("22h num dia e 8h no seguinte (Brasília) são dias diferentes", () => {
+    const rows = buildRepurchaseJourney([
+      order("a", "c1", "2026-08-02T01:00:00Z"), // 01/08 22h em Brasília
+      order("b", "c1", "2026-08-02T11:00:00Z"), // 02/08 08h em Brasília
+    ], NOW);
+    expect(rows[0]).toMatchObject({ converted: true, daysToSecondOrder: 1 });
+  });
+});
+
 describe("summarizeRepurchase", () => {
   it("calcula receita, ticket e taxa de conversão sem incluir pedidos inválidos", () => {
     const journey = buildRepurchaseJourney([

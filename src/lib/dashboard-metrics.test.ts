@@ -12,6 +12,7 @@ import {
   computeRegioesRecompra,
   computeRetencaoPorEstagio,
   computeTaxaRecompra,
+  computeTaxaRecompraPeriodo,
   computeTempoEntreCompras,
   computeTempoMedioEnvio,
   computeTicketRecorrencia,
@@ -184,5 +185,32 @@ describe("coorte e landing", () => {
       { page: "/products/x?utm=1", count: 2 },
       { page: "/", count: 1 },
     ]);
+  });
+});
+
+describe("taxa de recompra do período", () => {
+  const T = (d: number, h = 15) => Date.UTC(2026, 0, d, h);
+  const cust = (customerId: string, dates: number[]) => ({ customerId, dates, total: 0, count: dates.length, province: null });
+  const start = T(10, 3);
+  const end = T(20, 3);
+
+  it("conta quem já tinha comprado em outro dia, antes ou dentro do período", () => {
+    const customers = [
+      cust("antiga", [T(2), T(12)]), // comprou antes e voltou no período
+      cust("dois-dias", [T(11), T(15)]), // dois dias distintos dentro do período
+      cust("nova", [T(12)]), // só uma compra
+      cust("fora", [T(2), T(5)]), // sem compra no período: fora da base
+    ];
+    expect(computeTaxaRecompraPeriodo(customers, start, end)).toEqual({ base: 3, recompraram: 2, mesmoDia: 0, taxa: 66.67 });
+  });
+
+  it("pedidos no mesmo dia (live) não contam como recompra", () => {
+    const customers = [cust("live", [T(12, 22), T(12, 23)]), cust("outra", [T(13)])];
+    expect(computeTaxaRecompraPeriodo(customers, start, end)).toMatchObject({ base: 2, recompraram: 0, mesmoDia: 1, taxa: 0 });
+  });
+
+  it("ignora compras depois do fim do período", () => {
+    const customers = [cust("futura", [T(12), T(25)])];
+    expect(computeTaxaRecompraPeriodo(customers, start, end)).toMatchObject({ base: 1, recompraram: 0 });
   });
 });

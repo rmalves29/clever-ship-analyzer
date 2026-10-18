@@ -119,7 +119,10 @@ function Index() {
     if (!shopifyData) return base;
 
     const s = shopifyData;
-    const taxa = s.taxaRecompra ?? 0;
+    // Recompra do PERÍODO selecionado (a de histórico inteiro continua nos painéis de ciclo de vida).
+    const rp = s.recompraPeriodo ?? { base: 0, recompraram: 0, mesmoDia: 0, taxa: 0 };
+    const taxa = rp.taxa;
+    const baseRecompra = rp.base;
     const envioDias = (s.tempoMedioEnvioHoras ?? 0) / 24;
     const amostraEnvio = s.tempoMedioEnvioAmostra ?? 0;
     const baseClientes = s.totalClientesBase ?? 0;
@@ -148,13 +151,13 @@ function Index() {
         case "recompra":
           return {
             ...kpi,
-            value: baseClientes >= minSample ? `${taxa.toFixed(1)}%` : "—",
+            value: baseRecompra >= minSample ? `${taxa.toFixed(1)}%` : "—",
             hint:
-              baseClientes >= minSample
-                ? `${s.recomprasCount} de ${baseClientes} clientes recompraram · em dias diferentes: ${s.recomprasDiasDistintos ?? 0} (${(s.taxaRecompraDiasDistintos ?? 0).toFixed(1)}%)`
-                : `Base insuficiente (${baseClientes} clientes)`,
+              baseRecompra >= minSample
+                ? `${rp.recompraram} de ${baseRecompra} clientes do período já tinham comprado em outro dia${rp.mesmoDia > 0 ? ` · +${rp.mesmoDia} só repetiram no mesmo dia (não contam)` : ""}`
+                : `Base insuficiente (${baseRecompra} clientes no período)`,
             status:
-              baseClientes >= minSample
+              baseRecompra >= minSample
                 ? statusHigherIsBetter(taxa, GOALS.taxaRecompra.meta, GOALS.taxaRecompra.regular)
                 : undefined,
           };
@@ -178,7 +181,7 @@ function Index() {
     });
 
     const panelStatus = {
-      recompra: baseClientes >= minSample
+      recompra: baseRecompra >= minSample
         ? statusHigherIsBetter(taxa, GOALS.taxaRecompra.meta, GOALS.taxaRecompra.regular)
         : ("sem-dados" as const),
       clv: baseClientes >= minSample ? ("regular" as const) : ("sem-dados" as const),
@@ -198,12 +201,12 @@ function Index() {
       {
         title: "Recompra da base",
         text:
-          baseClientes >= minSample
-            ? `${s.recomprasCount} de ${baseClientes} clientes com pedido pago voltaram a comprar. Contando só quem voltou em outro dia (sem os pedidos fechados na mesma live): ${s.recomprasDiasDistintos ?? 0} clientes, ${(s.taxaRecompraDiasDistintos ?? 0).toFixed(2)}%.`
-            : "Base de clientes ainda pequena para uma leitura confiável de recompra.",
-        highlight: baseClientes >= minSample ? `${taxa.toFixed(2)}%` : undefined,
+          baseRecompra >= minSample
+            ? `${rp.recompraram} de ${baseRecompra} clientes que compraram no período já tinham comprado em outro dia (antes do período ou dentro dele). Pedidos fechados no mesmo dia, como numa live, não contam como recompra.`
+            : "Poucos clientes no período para uma leitura confiável de recompra.",
+        highlight: baseRecompra >= minSample ? `${taxa.toFixed(2)}%` : undefined,
         tone:
-          baseClientes >= minSample
+          baseRecompra >= minSample
             ? statusHigherIsBetter(taxa, GOALS.taxaRecompra.meta, GOALS.taxaRecompra.regular)
             : "info",
       },

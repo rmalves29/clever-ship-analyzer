@@ -294,6 +294,26 @@ export function computeTaxaRecompra(customers: CustomerAgg[]) {
   };
 }
 
+/**
+ * 14b — taxa de recompra DO PERÍODO: entre os clientes que compraram dentro do período, % que já tinha
+ * comprado em OUTRO dia (antes do período ou em outro dia dentro dele). `customers` deve trazer o histórico
+ * até o fim do período. Quem só fechou vários pedidos no mesmo dia (live) não conta como recompra.
+ */
+export function computeTaxaRecompraPeriodo(customers: CustomerAgg[], startMs: number, endMs: number) {
+  let base = 0;
+  let recompraram = 0;
+  let mesmoDia = 0;
+  for (const c of customers) {
+    const inPeriod = c.dates.filter((d) => d >= startMs && d <= endMs);
+    if (inPeriod.length === 0) continue;
+    base++;
+    const days = new Set(c.dates.filter((d) => d <= endMs).map(brazilDayNumber));
+    if (days.size >= 2) recompraram++;
+    else if (inPeriod.length >= 2) mesmoDia++;
+  }
+  return { base, recompraram, mesmoDia, taxa: base > 0 ? Number(((recompraram / base) * 100).toFixed(2)) : 0 };
+}
+
 /* -------------------------------------------------------------- envios */
 
 export type FulfillmentRow = {

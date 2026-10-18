@@ -20,6 +20,7 @@ import {
   computeRegioesRecompra,
   computeRetencaoPorEstagio,
   computeTaxaRecompra,
+  computeTaxaRecompraPeriodo,
   computeTempoEntreCompras,
   computeTempoMedioEnvio,
   computeTicketRecorrencia,
@@ -99,12 +100,14 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
           .lte("processed_at", endISO)
           .in("financial_status", validStatuses),
       ),
-      supabaseAdmin
-        .from("shopify_fulfillments")
-        .select("order_id, created_at, updated_at, tracking_number, shopify_orders!inner(processed_at, financial_status)")
-        .not("tracking_number", "is", null)
-        .gte("created_at", startISO)
-        .lte("created_at", endISO),
+      fetchAll(() =>
+        supabaseAdmin
+          .from("shopify_fulfillments")
+          .select("order_id, created_at, updated_at, tracking_number, shopify_orders!inner(processed_at, financial_status)")
+          .not("tracking_number", "is", null)
+          .gte("created_at", startISO)
+          .lte("created_at", endISO),
+      ),
       fetchAll(() =>
         supabaseAdmin
           .from("shopify_orders")
@@ -181,12 +184,19 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
     const pedidosEnviadosCount = shippedOrderIds.length;
 
     let shippedItems: { quantity: number | null; order_id: string | null }[] = [];
-    if (shippedOrderIds.length > 0) {
-      const { data: items } = await supabaseAdmin
-        .from("shopify_order_items")
-        .select("quantity, order_id")
-        .in("order_id", shippedOrderIds);
-      shippedItems = items ?? [];
+    // Em lotes e paginado: quase mil IDs numa só consulta estouram a URL e o resultado voltava vazio (0 produtos).
+    for (let i = 0; i < shippedOrderIds.length; i += 150) {
+      const chunk = shippedOrderIds.slice(i, i + 150);
+      for (let from = 0; ; from += 1000) {
+        const { data: page, error } = await supabaseAdmin
+          .from("shopify_order_items")
+          .select("quantity, order_id")
+          .in("order_id", chunk)
+          .range(from, from + 999);
+        if (error) throw new Error(`Falha ao ler itens dos pedidos enviados: ${error.message}`);
+        shippedItems.push(...(page ?? []));
+        if (!page || page.length < 1000) break;
+      }
     }
     const produtosEnviadosCount = shippedItems.reduce((acc, i) => acc + (i.quantity ?? 0), 0);
 
@@ -214,6 +224,8 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
     const tempoEntreCompras = computeTempoEntreCompras(gapsDias);
     const curvaRecompra = computeCurvaRecompra(gapsDias);
     const { taxaRecompra, recomprasCount, baseClientes, recomprasDiasDistintos, taxaRecompraDiasDistintos } = computeTaxaRecompra(customers);
+    // Taxa de recompra que acompanha o período escolhido (o bloco acima é o histórico inteiro).
+    const recompraPeriodo = computeTaxaRecompraPeriodo(customers, new Date(startISO).getTime(), new Date(endISO).getTime());
 
     // Envios por dia da semana (com base no created_at do fulfillment).
     const diasLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -276,6 +288,7 @@ export async function computeShopifyDashboardData({ period, range }: DashboardPe
       tempoMedioEnvioHoras,
       tempoMedioEnvioAmostra: countWithTime,
       taxaRecompra,
+      recompraPeriodo,
       recomprasDiasDistintos,
       taxaRecompraDiasDistintos,
       recomprasCount,

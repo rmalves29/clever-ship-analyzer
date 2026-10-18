@@ -14,6 +14,12 @@ export const syncEnvioGroupsFromWhatsapp = createServerFn({ method: "POST" })
   return sync();
 });
 
+export const refreshEnvioGroupLinks = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth]).handler(async () => {
+  const { refreshEnvioGroupLinks: refresh } = await import("./envio-groups.server");
+  return refresh();
+});
+
 export const addEnvioGroupManual = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) =>

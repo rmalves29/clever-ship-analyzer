@@ -1,4 +1,4 @@
-import { loadUazapiCreds, listGroupsRaw, getGroupInfo, getGroupInviteInfo } from "./envio-uazapi.server";
+import { loadUazapiCreds, listGroupsRaw, getGroupInfo, getGroupInviteInfo, getInstanceStatus, toGroupJid } from "./envio-uazapi.server";
 import {
   canonicalWhatsappGroupJid,
   currentWhatsappGroupSnapshot,
@@ -91,7 +91,20 @@ export type EnvioGroupSyncResult = {
   duplicate_records_updated: number;
   detail_failures: number;
   failed: number;
+  /** Ex.: número conectado não identificado (sem ele nenhum grupo é marcado como admin). */
+  warning?: string;
 };
+
+/** Sinais de "sou admin" que a própria listagem da UazAPI traz — mesmos do fe-list-groups original. */
+function adminHintFromListRow(row: any, connectedPhone: string | null): boolean {
+  if (!row) return false;
+  if (row.wa_isAdmin === true || row.iAmAdmin === true || row.isAdmin === true || row.imAdmin === true || row.owner_is_me === true) return true;
+  if (!connectedPhone) return false;
+  const owners = [row.OwnerPN, row.ownerPN, row.owner, row.Owner, row.OwnerJID]
+    .filter((v): v is string => typeof v === "string" && v.length > 0)
+    .map((v) => v.split("@")[0]!);
+  return owners.some((owner) => phonesMatch(owner, connectedPhone));
+}
 
 export async function syncEnvioGroupsFromWhatsapp(): Promise<EnvioGroupSyncResult> {
   const creds = await loadUazapiCreds();
@@ -104,7 +117,22 @@ export async function syncEnvioGroupsFromWhatsapp(): Promise<EnvioGroupSyncResul
   const tenant = await tenantId();
   const localSupabaseAdmin = await localAdmin();
   const { data: settingsRow } = await localSupabaseAdmin.from("store_settings" as any).select("uazapi_connected_phone").limit(1).maybeSingle();
-  const connectedPhone = (settingsRow as any)?.uazapi_connected_phone as string | null;
+  let connectedPhone = ((settingsRow as any)?.uazapi_connected_phone as string | null) || null;
+  let warning: string | undefined;
+  if (!connectedPhone) {
+    // O telefone só era preenchido quando alguém abria a aba Conexão: busca na instância (como o original).
+    try {
+      const status = await getInstanceStatus(creds);
+      const owner = (status.owner ?? "").split("@")[0]?.replace(/\D/g, "") ?? "";
+      if (owner) {
+        connectedPhone = owner;
+        await localSupabaseAdmin.from("store_settings" as any).update({ uazapi_connected_phone: owner } as never).not("id", "is", null);
+      }
+    } catch (error) {
+      console.error("syncEnvioGroupsFromWhatsapp: não consegui ler o número conectado", error);
+    }
+    if (!connectedPhone) warning = "Número conectado não identificado — nenhum grupo foi marcado como admin.";
+  }
 
   const { data: existingData, error: existingError } = await (supabaseAdmin
     .from("fe_groups" as any) as any)
@@ -124,7 +152,7 @@ export async function syncEnvioGroupsFromWhatsapp(): Promise<EnvioGroupSyncResul
     const groupJid = whatsappGroupSourceJid(g);
     if (!groupJid) return null;
     let snapshot = currentWhatsappGroupSnapshot(g, null);
-    let isAdmin = false;
+    let isAdmin = adminHintFromListRow(g, connectedPhone);
     let detailFailed = false;
 
     try {
@@ -136,7 +164,7 @@ export async function syncEnvioGroupsFromWhatsapp(): Promise<EnvioGroupSyncResul
         const me = snapshot.participants.find((participant) =>
           phonesMatch(whatsappParticipantPhone(participant), connectedPhone),
         );
-        isAdmin = Boolean(me && whatsappParticipantIsAdmin(me));
+        isAdmin = isAdmin || Boolean(me && whatsappParticipantIsAdmin(me));
       }
 
       const wasAlreadyAdmin = (existingByJid.get(groupJid) ?? []).some((group) => group.is_admin);
@@ -198,7 +226,9 @@ export async function syncEnvioGroupsFromWhatsapp(): Promise<EnvioGroupSyncResul
         group_jid: existing?.group_jid ?? row.group_jid,
         group_name: row.group_name,
         participant_count: row.participant_count,
-        is_admin: connectedPhone ? row.is_admin : (existing?.is_admin ?? row.is_admin),
+        // Se a consulta de detalhes falhou, a decisão de admin não é confiável: mantém o que já estava salvo
+        // (antes uma falha momentânea tirava o grupo de "onde sou admin" e ele sumia da lista).
+        is_admin: row.detail_failed && existing ? existing.is_admin : connectedPhone ? row.is_admin : (existing?.is_admin ?? row.is_admin),
         // Preserva o invite_link já salvo se a busca fresca não trouxe um novo.
         invite_link: row.invite_link ?? existing?.invite_link ?? null,
         updated_at: new Date().toISOString(),
@@ -230,7 +260,52 @@ export async function syncEnvioGroupsFromWhatsapp(): Promise<EnvioGroupSyncResul
     duplicate_records_updated: duplicateRecordsUpdated,
     detail_failures: validGroups.filter((row) => row.detail_failed).length,
     failed,
+    ...(warning ? { warning } : {}),
   };
+}
+
+export type EnvioGroupLinkRefreshResult = { checked: number; updated: number; failed: number };
+
+/** Atualiza só o link de convite dos grupos onde somos admin (sem re-sincronizar nomes e participantes) —
+ *  mesmo comportamento do botão "Atualizar links" / fe-refresh-group-links do painel original. */
+export async function refreshEnvioGroupLinks(): Promise<EnvioGroupLinkRefreshResult> {
+  const creds = await loadUazapiCreds();
+  if (!creds) throw new Error("UazAPI não configurada");
+  const supabaseAdmin = await admin();
+  const tenant = await tenantId();
+  const { data, error } = await (supabaseAdmin.from("fe_groups" as any) as any)
+    .select("id, group_jid, invite_link")
+    .eq("tenant_id", tenant)
+    .eq("is_admin", true);
+  if (error) throw new Error(error.message);
+  const groups = (data ?? []) as Array<{ id: string; group_jid: string; invite_link: string | null }>;
+
+  let updated = 0;
+  let failed = 0;
+  await parallelLimit(groups, 10, async (group) => {
+    try {
+      const info = await getGroupInfo(creds, toGroupJid(group.group_jid), { getInviteLink: true, force: true });
+      const grp = info?.group ?? info;
+      const raw: string | undefined = grp?.inviteLink ?? grp?.invite_link ?? info?.inviteLink ?? info?.invite_link;
+      if (!raw) {
+        failed++;
+        return;
+      }
+      const link = raw.startsWith("http") ? raw : `https://chat.whatsapp.com/${raw}`;
+      if (link !== group.invite_link) {
+        const { error: updateError } = await (supabaseAdmin.from("fe_groups" as any) as any)
+          .update({ invite_link: link, updated_at: new Date().toISOString() } as never)
+          .eq("id", group.id)
+          .eq("tenant_id", tenant);
+        if (updateError) failed++;
+        else updated++;
+      }
+    } catch (e) {
+      failed++;
+      console.error(`refreshEnvioGroupLinks: falha em ${group.group_jid}`, e);
+    }
+  });
+  return { checked: groups.length, updated, failed };
 }
 
 export async function addEnvioGroupManual(input: { groupJid: string; groupName: string; inviteLink?: string | undefined }): Promise<EnvioGroup> {
@@ -259,9 +334,11 @@ export async function updateEnvioGroup(
 ): Promise<EnvioGroup> {
   const supabaseAdmin = await admin();
   const tenant = await tenantId();
+  const next: Record<string, unknown> = { ...patch };
+  if (patch.invite_link !== undefined) next["invite_link"] = patch.invite_link.trim() || null;
   const { data, error } = await (supabaseAdmin
     .from("fe_groups" as any) as any)
-    .update({ ...patch, updated_at: new Date().toISOString() } as never)
+    .update({ ...next, updated_at: new Date().toISOString() } as never)
     .eq("id", id)
     .eq("tenant_id", tenant)
     .select("*")

@@ -198,18 +198,20 @@ export const ABANDONED_CHECKOUTS_QUERY = `
       edges {
         node {
           id
-          email
           createdAt
           updatedAt
+          completedAt
           abandonedCheckoutUrl
           totalPriceSet { presentmentMoney { amount } }
-          phone
           shippingAddress {
             phone
+            firstName
+            lastName
             city
             province
             country
           }
+          billingAddress { phone }
           customer {
             id
             email
@@ -225,9 +227,11 @@ export const ABANDONED_CHECKOUTS_QUERY = `
             addresses(first: 5) { phone }
           }
           lineItems(first: 5) {
-            title
-            quantity
-            variant { title price }
+            nodes {
+              title
+              quantity
+              variant { title price }
+            }
           }
         }
       }
@@ -535,6 +539,33 @@ export type CashbackDiscountInput = {
   customerGid: string;
 };
 
+/** Busca um cupom de valor fixo pelo código (para reconhecer um cashback já criado). */
+export async function findShopifyCashbackDiscountByCode(code: string): Promise<{ id: string; title: string; amount: number } | null> {
+  try {
+    const data = await shopifyGraphQL(
+      `query($code: String!) {
+        codeDiscountNodeByCode(code: $code) {
+          id
+          codeDiscount {
+            ... on DiscountCodeBasic {
+              title
+              customerGets { value { ... on DiscountAmount { amount { amount } } } }
+            }
+          }
+        }
+      }`,
+      { code },
+    );
+    const node = data?.codeDiscountNodeByCode;
+    const discount = node?.codeDiscount;
+    const amount = Number(discount?.customerGets?.value?.amount?.amount);
+    if (!node?.id || !discount?.title || !Number.isFinite(amount)) return null;
+    return { id: node.id, title: String(discount.title), amount };
+  } catch {
+    return null;
+  }
+}
+
 /** Cria o cupom de cashback na Shopify: valor fixo, restrito ao cliente do pedido,
  *  com subtotal mínimo, uso único e uma vez por cliente. Nunca lança — devolve
  *  {success:false} para o caller registrar o erro sem derrubar a sincronização. */
@@ -562,7 +593,22 @@ export async function createShopifyCashbackDiscount(
     const result = data?.discountCodeBasicCreate;
     const userErrors = result?.userErrors ?? [];
     if (userErrors.length > 0) {
-      return { success: false, error: userErrors.map((e: any) => e.message).join("; ") };
+      const message = userErrors.map((e: any) => e.message).join("; ");
+      // O código é determinístico por pedido: "já existe" quase sempre é o MESMO cupom criado numa tentativa
+      // anterior cujo ID não foi gravado. Se título e valor batem, adota em vez de ficar falhando para sempre.
+      if (/must be unique/i.test(message)) {
+        const existing = await findShopifyCashbackDiscountByCode(input.code);
+        if (existing && existing.title === input.title && Math.abs(existing.amount - input.amount) < 0.005) {
+          return { success: true, discountId: existing.id };
+        }
+        return {
+          success: false,
+          error: existing
+            ? `Já existe na Shopify um cupom com o código ${input.code}, mas com título/valor diferente (${existing.title}, R$ ${existing.amount.toFixed(2)}).`
+            : message,
+        };
+      }
+      return { success: false, error: message };
     }
     const discountId = result?.codeDiscountNode?.id;
     if (!discountId) return { success: false, error: "Shopify não retornou o ID do cupom criado." };

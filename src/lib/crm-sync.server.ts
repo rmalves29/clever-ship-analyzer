@@ -161,6 +161,94 @@ async function backfillTrackedCouponOrders(
   return totalUpdated;
 }
 
+/** Importa os checkouts abandonados da Shopify (um evento por abandono) e marca o cliente com as tags de carrinho.
+ *  Em 2025-01 o checkout não tem `email`/`phone` próprios: e-mail vem do cliente; telefone, do endereço ou do cliente. */
+export async function syncAbandonedCheckouts(
+  supabaseAdmin: any,
+  shopifyGraphQL: (query: string, variables?: Record<string, unknown>) => Promise<any>,
+  query: string,
+): Promise<{ imported: number; error: string | null }> {
+  let cursor: string | null = null;
+  let hasNextPage = true;
+  let imported = 0;
+
+  while (hasNextPage) {
+    try {
+      const result: any = await shopifyGraphQL(query, { cursor });
+      const connection = result?.abandonedCheckouts;
+      if (!connection) return { imported, error: "resposta sem o campo abandonedCheckouts" };
+
+      // Uma consulta por página: o que já está salvo e não mudou na Shopify não precisa ser reprocessado
+      // (sem isso cada sincronização refazia ~3 consultas por checkout, mais de 10 minutos).
+      const pageIds = connection.edges.map((e: any) => e.node.id);
+      const { data: known } = await supabaseAdmin.from("shopify_abandoned_checkouts").select("id, updated_at").in("id", pageIds);
+      const knownUpdatedAt = new Map<string, number>((known ?? []).map((r: any) => [String(r.id), new Date(r.updated_at).getTime()]));
+
+      for (const edge of connection.edges) {
+        const checkout = edge.node;
+        const savedAt = knownUpdatedAt.get(String(checkout.id));
+        if (savedAt !== undefined && savedAt >= new Date(checkout.updatedAt).getTime()) continue;
+        const customer = checkout.customer;
+        const email = customer?.email?.toLowerCase();
+        if (!email && !customer?.id) continue; // checkout anônimo: não dá para ligar a um cliente
+
+        const rawCustomerId = email ? `email:${email}` : `id:${String(customer.id).split("/").pop()}`;
+        const customerPhone = normalizePhone(
+          checkout.shippingAddress?.phone ??
+            checkout.billingAddress?.phone ??
+            customer?.phone ??
+            customer?.defaultAddress?.phone ??
+            customer?.addresses?.find((a: any) => a.phone)?.phone,
+        );
+        const customerId = await resolveCustomerRowId(supabaseAdmin, rawCustomerId, customerPhone);
+
+        const { data: existing } = await supabaseAdmin
+          .from("shopify_customers")
+          .select("tags, first_name, last_name, phone, city, province, country")
+          .eq("id", customerId)
+          .maybeSingle();
+
+        const newTags = Array.from(new Set([...(existing?.tags || []), "Carrinho Abandonado", "Checkout", "CAR24"]));
+
+        await supabaseAdmin.from("shopify_customers").upsert({
+          id: customerId,
+          email: email || null,
+          first_name: checkout.shippingAddress?.firstName || customer?.firstName || existing?.first_name || null,
+          last_name: checkout.shippingAddress?.lastName || customer?.lastName || existing?.last_name || null,
+          phone: customerPhone ?? existing?.phone ?? null,
+          city: checkout.shippingAddress?.city || customer?.defaultAddress?.city || existing?.city || null,
+          province: checkout.shippingAddress?.province || customer?.defaultAddress?.province || existing?.province || null,
+          country: checkout.shippingAddress?.country || customer?.defaultAddress?.country || existing?.country || null,
+          tags: newTags,
+          updated_at: new Date().toISOString(),
+        });
+
+        await supabaseAdmin.from("shopify_abandoned_checkouts").upsert({
+          id: checkout.id,
+          customer_id: customerId,
+          email: email || null,
+          phone: customerPhone,
+          total_price: parseFloat(checkout.totalPriceSet?.presentmentMoney?.amount ?? "0"),
+          checkout_url: checkout.abandonedCheckoutUrl || null,
+          created_at: checkout.createdAt,
+          updated_at: checkout.updatedAt,
+          raw_data: checkout,
+        });
+        imported++;
+      }
+
+      hasNextPage = connection.pageInfo.hasNextPage;
+      cursor = connection.pageInfo.endCursor;
+      if (imported > 5000) break;
+    } catch (err: any) {
+      // Ex.: escopo read_checkouts ausente ou consulta inválida. Nunca engolir em silêncio.
+      console.error("Abandoned checkout sync failed:", err);
+      return { imported, error: String(err?.message ?? err).slice(0, 300) };
+    }
+  }
+  return { imported, error: null };
+}
+
 /** Puxa clientes, pedidos e checkouts abandonados da Shopify pra dentro do CRM.
  *  Chamado tanto pelo botão "Sincronizar Shopify" (crm-sync.functions.ts) quanto
  *  pelo tick periódico (src/server.ts) — é o único lugar com essa lógica. */
@@ -456,95 +544,8 @@ export async function runShopifySync(fullSync: boolean) {
 
 
 
-    // 3. Sync Abandoned Checkouts
-    cursor = null;
-    hasNextPage = true;
-    let totalAbandoned = 0;
-
-    console.log("Starting checkouts sync (TAG: CAR24)...");
-    while (hasNextPage) {
-      try {
-        const result: any = await shopifyGraphQL(ABANDONED_CHECKOUTS_QUERY, { cursor });
-        if (!result?.abandonedCheckouts) {
-          console.warn("No abandoned checkouts field in result:", result);
-          break;
-        }
-
-        const abandonedConnection = result.abandonedCheckouts;
-        console.log(`Processing ${abandonedConnection.edges.length} abandoned checkouts`);
-
-        for (const edge of abandonedConnection.edges) {
-          const checkout = edge.node;
-
-          // Checkouts abandonados podem não ter um objeto customer associado (usuário não logado/novo)
-          // Mas a Shopify ainda guarda o email e telefone no próprio checkout.
-          const checkoutEmail = checkout.email?.toLowerCase();
-          const customer = checkout.customer;
-          const email = checkoutEmail || customer?.email?.toLowerCase();
-
-          if (email || customer?.id) {
-            const rawCustomerId = email ? `email:${email}` : `id:${customer.id.split('/').pop()}`;
-
-            const customerPhone = normalizePhone(
-              checkout.phone ??
-              checkout.shippingAddress?.phone ??
-              customer?.phone ??
-              customer?.defaultAddress?.phone ??
-              customer?.addresses?.find((a: any) => a.phone)?.phone
-            );
-            const customerId = await resolveCustomerRowId(supabaseAdmin, rawCustomerId, customerPhone);
-
-            // Get existing tags to avoid overwriting
-            const { data: existing } = await supabaseAdmin
-              .from("shopify_customers")
-              .select("tags, first_name, last_name, city, province, country")
-              .eq("id", customerId)
-              .maybeSingle();
-
-            const currentTags = existing?.tags || [];
-            const newTags = Array.from(new Set([...currentTags, "Carrinho Abandonado", "Checkout", "CAR24"]));
-
-            // 1. Update/Upsert customer info and tag as abandoned
-            await supabaseAdmin.from("shopify_customers").upsert({
-              id: customerId,
-              email: email || null,
-              first_name: checkout.shippingAddress?.firstName || customer?.firstName || existing?.first_name || null,
-              last_name: checkout.shippingAddress?.lastName || customer?.lastName || existing?.last_name || null,
-              phone: customerPhone,
-              city: checkout.shippingAddress?.city || customer?.defaultAddress?.city || existing?.city || null,
-              province: checkout.shippingAddress?.province || customer?.defaultAddress?.province || existing?.province || null,
-              country: checkout.shippingAddress?.country || customer?.defaultAddress?.country || existing?.country || null,
-              tags: newTags,
-              updated_at: new Date().toISOString(),
-            });
-
-            // 2. Insert individual abandoned checkout event for historical tracking
-            // This allows identifying EACH abandonment as a separate event
-            await supabaseAdmin.from("shopify_abandoned_checkouts").upsert({
-              id: checkout.id,
-              customer_id: customerId,
-              email: email || null,
-              phone: customerPhone,
-              total_price: parseFloat(checkout.totalPriceSet?.presentmentMoney?.amount ?? "0"),
-              checkout_url: checkout.abandonedCheckoutUrl || null,
-              created_at: checkout.createdAt,
-              updated_at: checkout.updatedAt,
-              raw_data: checkout,
-            });
-
-            totalAbandoned++;
-          }
-        }
-
-        hasNextPage = abandonedConnection.pageInfo.hasNextPage;
-        cursor = abandonedConnection.pageInfo.endCursor;
-        if (totalAbandoned > 5000) break; // Increased safety limit
-      } catch (abandonedErr: any) {
-        console.error("Abandoned checkout sync page failed:", abandonedErr);
-        // If abandoned checkouts fail (e.g. scope missing), we don't want to crash the whole sync
-        break;
-      }
-    }
+    // 3. Sync Abandoned Checkouts (falha aqui não derruba a sync, mas o erro fica visível em last_sync_error)
+    const abandoned = await syncAbandonedCheckouts(supabaseAdmin, shopifyGraphQL, ABANDONED_CHECKOUTS_QUERY);
 
     // O RFM só é considerado sincronizado depois que os dados da Shopify terminaram de entrar.
     // Se o recálculo falhar, a sincronização não é marcada como "connected"; o catch registra o erro.
@@ -556,7 +557,7 @@ export async function runShopifySync(fullSync: boolean) {
       .update({
         sync_status: "connected",
         last_sync_at: new Date(new Date(syncStartedAt).getTime() - overlapMs).toISOString(),
-        last_sync_error: null,
+        last_sync_error: abandoned.error ? `Checkouts abandonados: ${abandoned.error}` : null,
         total_orders_imported: totalImported,
         last_imported_order_at: lastUpdatedAt ?? settings.last_imported_order_at,
       })

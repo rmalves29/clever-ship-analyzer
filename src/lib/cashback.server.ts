@@ -370,7 +370,12 @@ export async function reprocessPendingCashback(limit = 50): Promise<{
         else stillFailing++;
         continue;
       }
-      if (row.shopify_discount_id) continue;
+      if (row.shopify_discount_id) {
+        // Já existe na Shopify: só o status ficou "failed" por engano.
+        await db.from("cashback_coupons").update({ status: "pending", last_error: null }).eq("id", row.id);
+        retried++;
+        continue;
+      }
       const result = await createOnShopify(row);
       if (result.success) {
         await db

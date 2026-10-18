@@ -11,3 +11,4 @@
 
 ## Creative matrix architecture
 - Instagram creative matrix renders only the staged agent; keep its campaign-phase vocabulary consistent across prompts, validation schemas and reports so every stage uses the same contract.
+- Keep the `rename-d3-shape-symbol` plugin in vite.config.ts: d3-shape's local `function Symbol` can hijack global `Symbol.for` in production bundles and blank chart pages.

@@ -31,10 +31,3 @@ export const disconnectEnvio = createServerFn({ method: "POST" })
   await disconnect();
   return { success: true as const };
 });
-
-export const reclaimEnvioWebhook = createServerFn({ method: "POST" })
-  .middleware([requireAppAuth]).handler(async () => {
-  const { reclaimEnvioWebhook: reclaim } = await import("./envio-connection.server");
-  await reclaim();
-  return { success: true as const };
-});

@@ -29,7 +29,7 @@ import {
 } from "@/lib/envio-fe-messages.functions";
 import { listRecentEnvioMessages, submitMessageFeedback, getRecentMessageFeedback } from "@/lib/envio-messages.functions";
 import { checkVideoNoteFile } from "@/lib/video-note-check";
-import { SequenceSteps, TypeIcon, TYPE_LABELS, ACCEPT, canViewOnce, VIEW_ONCE_HINT, uploadEnvioFile, cleanStepPoll, stepDelaySeconds, validateStep, type SeqStep, type StepType } from "./SequenceSteps";
+import { SequenceSteps, TypeIcon, TYPE_LABELS, ACCEPT, canViewOnce, VIEW_ONCE_HINT, VIEW_ONCE_UNAVAILABLE_HINT, uploadEnvioFile, cleanStepPoll, stepDelaySeconds, validateStep, type SeqStep, type StepType } from "./SequenceSteps";
 
 const STATUS_LABEL: Record<string, string> = { pending: "Agendada", sending: "Enviando", sent: "Enviada", failed: "Falhou" };
 const STATUS_COLOR: Record<string, ChipProps["color"]> = { pending: "warning", sending: "primary", sent: "success", failed: "error" };
@@ -418,19 +418,18 @@ export function MessageComposer() {
                 </Box>
               )}
 
-              {canViewOnce(contentType) && (
-                <FormControlLabel
-                  control={<Checkbox size="small" checked={viewOnce} onChange={(e) => setViewOnce(e.target.checked)} />}
-                  label={
-                    <Box>
-                      <Typography variant="body2">Visualização única</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {VIEW_ONCE_HINT}
-                      </Typography>
-                    </Box>
-                  }
-                />
-              )}
+              <FormControlLabel
+                disabled={!canViewOnce(contentType)}
+                control={<Checkbox size="small" checked={canViewOnce(contentType) && viewOnce} onChange={(e) => setViewOnce(e.target.checked)} />}
+                label={
+                  <Box>
+                    <Typography variant="body2">Visualização única</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {canViewOnce(contentType) ? VIEW_ONCE_HINT : VIEW_ONCE_UNAVAILABLE_HINT}
+                    </Typography>
+                  </Box>
+                }
+              />
 
               {!editingId && <SequenceSteps steps={extraSteps} onChange={setExtraSteps} />}
 

@@ -37,6 +37,8 @@ export const MAX_EXTRA_STEPS = 4;
 /** Tipos que aceitam visualização única no WhatsApp. */
 export const canViewOnce = (t: StepType) => t === "image" || t === "video" || t === "audio";
 
+export const VIEW_ONCE_UNAVAILABLE_HINT = "Indisponível para este tipo: o WhatsApp só permite visualização única em imagem, vídeo e áudio.";
+
 export const VIEW_ONCE_HINT = "A pessoa abre uma vez e a mídia some. Não fica salva na galeria e não dá para encaminhar.";
 
 export const newStep = (): SeqStep => ({
@@ -262,19 +264,18 @@ export function SequenceSteps({ steps, onChange }: { steps: SeqStep[]; onChange:
               </Box>
             )}
 
-            {canViewOnce(s.contentType) && (
-              <FormControlLabel
-                control={<Checkbox size="small" checked={s.viewOnce} onChange={(e) => patch(s.key, { viewOnce: e.target.checked })} />}
-                label={
-                  <Box>
-                    <Typography variant="body2">Visualização única</Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {VIEW_ONCE_HINT}
-                    </Typography>
-                  </Box>
-                }
-              />
-            )}
+            <FormControlLabel
+              disabled={!canViewOnce(s.contentType)}
+              control={<Checkbox size="small" checked={canViewOnce(s.contentType) && s.viewOnce} onChange={(e) => patch(s.key, { viewOnce: e.target.checked })} />}
+              label={
+                <Box>
+                  <Typography variant="body2">Visualização única</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {canViewOnce(s.contentType) ? VIEW_ONCE_HINT : VIEW_ONCE_UNAVAILABLE_HINT}
+                  </Typography>
+                </Box>
+              }
+            />
           </Stack>
         </Box>
       ))}

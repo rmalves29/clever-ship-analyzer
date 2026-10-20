@@ -26,11 +26,18 @@ export interface SeqStep {
   uploading: boolean;
   pollOptions: string[];
   pollMultiple: boolean;
+  /** Visualização única (só imagem, vídeo e áudio). */
+  viewOnce: boolean;
   delayValue: number;
   delayUnit: "seconds" | "minutes";
 }
 
 export const MAX_EXTRA_STEPS = 4;
+
+/** Tipos que aceitam visualização única no WhatsApp. */
+export const canViewOnce = (t: StepType) => t === "image" || t === "video" || t === "audio";
+
+export const VIEW_ONCE_HINT = "A pessoa abre uma vez e a mídia some. Não fica salva na galeria e não dá para encaminhar.";
 
 export const newStep = (): SeqStep => ({
   key: Math.random().toString(36).slice(2),
@@ -41,6 +48,7 @@ export const newStep = (): SeqStep => ({
   uploading: false,
   pollOptions: ["", ""],
   pollMultiple: false,
+  viewOnce: false,
   delayValue: 5,
   delayUnit: "seconds",
 });
@@ -167,7 +175,7 @@ export function SequenceSteps({ steps, onChange }: { steps: SeqStep[]; onChange:
 
             <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", rowGap: 0.75 }}>
               {(Object.keys(TYPE_LABELS) as StepType[]).map((t) => (
-                <Button key={t} size="small" variant={s.contentType === t ? "contained" : "outline"} startIcon={<TypeIcon type={t} size={14} />} onClick={() => patch(s.key, { contentType: t, mediaUrl: "", mediaName: "" })}>
+                <Button key={t} size="small" variant={s.contentType === t ? "contained" : "outline"} startIcon={<TypeIcon type={t} size={14} />} onClick={() => patch(s.key, { contentType: t, mediaUrl: "", mediaName: "", viewOnce: canViewOnce(t) ? s.viewOnce : false })}>
                   {TYPE_LABELS[t]}
                 </Button>
               ))}
@@ -252,6 +260,20 @@ export function SequenceSteps({ steps, onChange }: { steps: SeqStep[]; onChange:
                   </Button>
                 )}
               </Box>
+            )}
+
+            {canViewOnce(s.contentType) && (
+              <FormControlLabel
+                control={<Checkbox size="small" checked={s.viewOnce} onChange={(e) => patch(s.key, { viewOnce: e.target.checked })} />}
+                label={
+                  <Box>
+                    <Typography variant="body2">Visualização única</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {VIEW_ONCE_HINT}
+                    </Typography>
+                  </Box>
+                }
+              />
             )}
           </Stack>
         </Box>

@@ -21,6 +21,7 @@ export type FeMessage = {
   error_message: string | null;
   sequence_step: number;
   delay_seconds: number;
+  view_once?: boolean;
 };
 
 export type FeScheduledMessage = {
@@ -48,6 +49,7 @@ export type FeStepInput = {
   mediaUrl?: string | undefined;
   pollOptions?: string[] | undefined;
   pollMultiple?: boolean | undefined;
+  viewOnce?: boolean | undefined;
   delaySeconds: number;
 };
 
@@ -57,6 +59,7 @@ export type FeSendInput = {
   mediaUrl?: string | undefined;
   pollOptions?: string[] | undefined;
   pollMultiple?: boolean | undefined;
+  viewOnce?: boolean | undefined;
   groupIds?: string[] | undefined;
   campaignId?: string | undefined;
   /** ISO. Ausente = envio imediato. */
@@ -108,7 +111,12 @@ function cleanOptions(options?: string[]): string[] {
   return (options ?? []).map((o) => o.trim()).filter(Boolean);
 }
 
-function validateContent(label: string, input: { contentType: FeContentType; text?: string | undefined; mediaUrl?: string | undefined; pollOptions?: string[] | undefined }): void {
+/** Visualização única só existe no WhatsApp para imagem, vídeo e áudio. */
+const VIEW_ONCE_TYPES: readonly FeContentType[] = ["image", "video", "audio"];
+const wantsViewOnce = (type: FeContentType, flag: boolean | undefined) => Boolean(flag) && VIEW_ONCE_TYPES.includes(type);
+
+function validateContent(label: string, input: { contentType: FeContentType; text?: string | undefined; mediaUrl?: string | undefined; pollOptions?: string[] | undefined; viewOnce?: boolean | undefined }): void {
+  if (input.viewOnce && !VIEW_ONCE_TYPES.includes(input.contentType)) throw new Error(`${label}: visualização única vale só para imagem, vídeo e áudio.`);
   if (input.contentType === "text" && !input.text?.trim()) throw new Error(`${label}: escreva a mensagem.`);
   if (input.contentType === "poll") {
     const opts = cleanOptions(input.pollOptions);
@@ -142,7 +150,7 @@ export async function sendFeMessages(input: FeSendInput): Promise<{ messageCount
   const db: any = await admin();
   const tenant = await tenantId();
 
-  validateContent("Mensagem", { contentType: input.contentType, text: input.contentText, mediaUrl: input.mediaUrl, pollOptions: input.pollOptions });
+  validateContent("Mensagem", { contentType: input.contentType, text: input.contentText, mediaUrl: input.mediaUrl, pollOptions: input.pollOptions, viewOnce: input.viewOnce });
   const extraSteps = input.extraSteps ?? [];
   extraSteps.forEach((step, i) => validateContent(`Mensagem ${i + 2}`, step));
 
@@ -181,6 +189,7 @@ export async function sendFeMessages(input: FeSendInput): Promise<{ messageCount
     content_type: input.contentType,
     content_text: input.contentText || null,
     media_url: input.mediaUrl || null,
+    view_once: wantsViewOnce(input.contentType, input.viewOnce),
     poll_options: input.contentType === "poll" ? cleanOptions(input.pollOptions) : null,
     poll_selectable_count: input.contentType === "poll" ? pollCount(input.pollOptions, input.pollMultiple) : null,
     status: isScheduled ? "pending" : "sending",
@@ -211,6 +220,7 @@ export async function sendFeMessages(input: FeSendInput): Promise<{ messageCount
         content_type: step.contentType,
         content_text: step.text || null,
         media_url: step.mediaUrl || null,
+        view_once: wantsViewOnce(step.contentType, step.viewOnce),
         poll_options: step.contentType === "poll" ? cleanOptions(step.pollOptions) : null,
         poll_selectable_count: step.contentType === "poll" ? pollCount(step.pollOptions, step.pollMultiple) : null,
         status: "pending",
@@ -272,9 +282,10 @@ export async function updateFePendingMessage(input: {
   mediaUrl?: string | undefined;
   pollOptions?: string[] | undefined;
   pollMultiple?: boolean | undefined;
+  viewOnce?: boolean | undefined;
   scheduledAt?: string | null | undefined;
 }): Promise<{ updated: boolean }> {
-  validateContent("Mensagem", { contentType: input.contentType, text: input.contentText, mediaUrl: input.mediaUrl, pollOptions: input.pollOptions });
+  validateContent("Mensagem", { contentType: input.contentType, text: input.contentText, mediaUrl: input.mediaUrl, pollOptions: input.pollOptions, viewOnce: input.viewOnce });
   const db: any = await admin();
   const tenant = await tenantId();
   const { data, error } = await db
@@ -283,6 +294,7 @@ export async function updateFePendingMessage(input: {
       content_type: input.contentType,
       content_text: input.contentText || null,
       media_url: input.mediaUrl || null,
+      view_once: wantsViewOnce(input.contentType, input.viewOnce),
       poll_options: input.contentType === "poll" ? cleanOptions(input.pollOptions) : null,
       poll_selectable_count: input.contentType === "poll" ? (input.pollMultiple ? cleanOptions(input.pollOptions).length : 1) : null,
       scheduled_at: input.scheduledAt ? new Date(input.scheduledAt).toISOString() : null,

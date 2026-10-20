@@ -10,6 +10,7 @@ const stepSchema = z.object({
   mediaUrl: z.string().max(2000).optional(),
   pollOptions: z.array(z.string().max(100)).max(12).optional(),
   pollMultiple: z.boolean().optional(),
+  viewOnce: z.boolean().optional(),
   delaySeconds: z.number().int().min(0).max(86_400),
 });
 
@@ -30,6 +31,7 @@ export const sendEnvioMessages = createServerFn({ method: "POST" })
         mediaUrl: z.string().max(2000).optional(),
         pollOptions: z.array(z.string().max(100)).max(12).optional(),
         pollMultiple: z.boolean().optional(),
+        viewOnce: z.boolean().optional(),
         groupIds: z.array(z.string().uuid()).max(500).optional(),
         campaignId: z.string().uuid().optional(),
         scheduledAt: z.string().max(40).optional(),
@@ -61,6 +63,7 @@ export const updateEnvioPendingMessage = createServerFn({ method: "POST" })
         mediaUrl: z.string().max(2000).optional(),
         pollOptions: z.array(z.string().max(100)).max(12).optional(),
         pollMultiple: z.boolean().optional(),
+        viewOnce: z.boolean().optional(),
         scheduledAt: z.string().max(40).nullable().optional(),
       })
       .parse(data),

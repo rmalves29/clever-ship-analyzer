@@ -29,7 +29,7 @@ import {
 } from "@/lib/envio-fe-messages.functions";
 import { listRecentEnvioMessages, submitMessageFeedback, getRecentMessageFeedback } from "@/lib/envio-messages.functions";
 import { checkVideoNoteFile } from "@/lib/video-note-check";
-import { SequenceSteps, TypeIcon, TYPE_LABELS, ACCEPT, uploadEnvioFile, cleanStepPoll, stepDelaySeconds, validateStep, type SeqStep, type StepType } from "./SequenceSteps";
+import { SequenceSteps, TypeIcon, TYPE_LABELS, ACCEPT, canViewOnce, VIEW_ONCE_HINT, uploadEnvioFile, cleanStepPoll, stepDelaySeconds, validateStep, type SeqStep, type StepType } from "./SequenceSteps";
 
 const STATUS_LABEL: Record<string, string> = { pending: "Agendada", sending: "Enviando", sent: "Enviada", failed: "Falhou" };
 const STATUS_COLOR: Record<string, ChipProps["color"]> = { pending: "warning", sending: "primary", sent: "success", failed: "error" };
@@ -67,6 +67,7 @@ export function MessageComposer() {
   const [contentText, setContentText] = useState("");
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [pollMultiple, setPollMultiple] = useState(false);
+  const [viewOnce, setViewOnce] = useState(false);
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaName, setMediaName] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -146,6 +147,7 @@ export function MessageComposer() {
           contentText: contentText || undefined,
           mediaUrl: mediaUrl || undefined,
           ...(contentType === "poll" ? { pollOptions: cleanPoll(), pollMultiple } : {}),
+          ...(canViewOnce(contentType) && viewOnce ? { viewOnce: true } : {}),
           ...(targetType === "campaign" ? { campaignId: selectedCampaignId } : { groupIds: selectedGroupIds }),
           ...(scheduledIso ? { scheduledAt: scheduledIso } : {}),
           extraSteps: extraSteps.map((st) => ({
@@ -153,6 +155,7 @@ export function MessageComposer() {
             text: st.text || undefined,
             mediaUrl: st.mediaUrl || undefined,
             ...(st.contentType === "poll" ? { pollOptions: cleanStepPoll(st), pollMultiple: st.pollMultiple } : {}),
+            ...(canViewOnce(st.contentType) && st.viewOnce ? { viewOnce: true } : {}),
             delaySeconds: stepDelaySeconds(st),
           })),
         },
@@ -164,6 +167,7 @@ export function MessageComposer() {
       );
       setExtraSteps([]);
       setContentText("");
+      setViewOnce(false);
       resetPoll();
       clearMedia();
       setSelectedGroupIds([]);
@@ -214,6 +218,7 @@ export function MessageComposer() {
     setContentText(m.content_text ?? "");
     setMediaUrl(m.media_url ?? "");
     setMediaName(m.media_url ? "arquivo já anexado" : "");
+    setViewOnce(Boolean(m.view_once));
     if (m.content_type === "poll") {
       const opts = Array.isArray(m.poll_options) ? m.poll_options : [];
       setPollOptions(opts.length >= 2 ? opts : ["", ""]);
@@ -230,6 +235,7 @@ export function MessageComposer() {
   const stopEdit = () => {
     setEditingId(null);
     setContentText("");
+    setViewOnce(false);
     resetPoll();
     clearMedia();
   };
@@ -243,6 +249,7 @@ export function MessageComposer() {
           contentText: contentText || undefined,
           mediaUrl: mediaUrl || undefined,
           ...(contentType === "poll" ? { pollOptions: cleanPoll(), pollMultiple } : {}),
+          ...(canViewOnce(contentType) && viewOnce ? { viewOnce: true } : {}),
           scheduledAt: sendMode === "scheduled" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
         },
       }),
@@ -329,6 +336,7 @@ export function MessageComposer() {
                       startIcon={<TypeIcon type={t} size={14} />}
                       onClick={() => {
                         setContentType(t);
+                        if (!canViewOnce(t)) setViewOnce(false);
                         clearMedia();
                       }}
                     >
@@ -408,6 +416,20 @@ export function MessageComposer() {
                     </Button>
                   )}
                 </Box>
+              )}
+
+              {canViewOnce(contentType) && (
+                <FormControlLabel
+                  control={<Checkbox size="small" checked={viewOnce} onChange={(e) => setViewOnce(e.target.checked)} />}
+                  label={
+                    <Box>
+                      <Typography variant="body2">Visualização única</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {VIEW_ONCE_HINT}
+                      </Typography>
+                    </Box>
+                  }
+                />
               )}
 
               {!editingId && <SequenceSteps steps={extraSteps} onChange={setExtraSteps} />}
@@ -613,6 +635,7 @@ export function MessageComposer() {
                       <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 0.5 }}>
                         <TypeIcon type={m.content_type as StepType} />
                         <Chip size="small" color={STATUS_COLOR[m.status]} label={STATUS_LABEL[m.status] ?? m.status} />
+                        {m.view_once && <Chip size="small" variant="outlined" label="Visualização única" />}
                         <Typography variant="caption" color="text.secondary" sx={{ ml: "auto" }}>
                           {new Date(m.created_at).toLocaleString("pt-BR")}
                         </Typography>

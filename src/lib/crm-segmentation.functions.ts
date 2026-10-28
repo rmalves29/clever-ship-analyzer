@@ -570,6 +570,20 @@ export const deleteSegment = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Segmento em uso por automação não pode ser apagado (o banco recusa e o histórico de execuções se perderia):
+    // avisa quais automações usam, em vez de devolver o erro técnico de chave estrangeira.
+    const { data: usedBy, error: usedError } = await supabaseAdmin
+      .from("whatsapp_automations")
+      .select("nome, ativo")
+      .eq("segment_id", data.id);
+    if (usedError) throw new Error(`Não consegui verificar o uso do segmento: ${usedError.message}`);
+    if (usedBy && usedBy.length > 0) {
+      const lista = usedBy.map((a) => `"${a.nome}" (${a.ativo ? "ativa" : "inativa"})`).join(", ");
+      throw new Error(
+        `Este segmento é usado por ${usedBy.length === 1 ? "1 automação" : `${usedBy.length} automações`}: ${lista}. ` +
+          "Exclua a automação (ou troque o segmento dela) em Automações antes de excluir o segmento.",
+      );
+    }
     const { error } = await supabaseAdmin.from("crm_segments").delete().eq("id", data.id);
     if (error) throw error;
     return { success: true };

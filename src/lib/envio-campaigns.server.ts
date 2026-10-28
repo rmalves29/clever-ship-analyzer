@@ -81,13 +81,15 @@ async function tenantSlug(): Promise<string> {
 }
 
 /** Eventos de entrada/saída do tenant, paginados de 1000 em 1000 (o PostgREST corta em 1000 por consulta). */
-async function fetchTenantGroupEvents(): Promise<{ group_id: string | null; group_jid: string | null; event_type: string }[]> {
+type GroupEventRow = { group_id: string | null; group_jid: string | null; event_type: string; created_at: string };
+
+async function fetchTenantGroupEvents(): Promise<GroupEventRow[]> {
   const supabaseAdmin = await admin();
   const tenant = await tenantId();
-  const out: { group_id: string | null; group_jid: string | null; event_type: string }[] = [];
+  const out: GroupEventRow[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await (supabaseAdmin.from("fe_group_events" as any) as any)
-      .select("group_id, group_jid, event_type")
+      .select("group_id, group_jid, event_type, created_at")
       .eq("tenant_id", tenant)
       .order("created_at", { ascending: false })
       .range(from, from + 999);
@@ -100,7 +102,9 @@ async function fetchTenantGroupEvents(): Promise<{ group_id: string | null; grou
 }
 
 /** Mesma regra do original (summarizeFlowEvents): o evento conta pro grupo pelo id OU pelo JID. */
-function summarizeEvents(events: { group_id: string | null; group_jid: string | null; event_type: string }[], groups: { id: string; group_jid: string }[]) {
+function summarizeEvents(events: GroupEventRow[], groups: { id: string; group_jid: string }[], since?: string) {
+  // Campanha nova começa zerada: só contam entradas/saídas a partir da criação dela.
+  const sinceMs = since ? new Date(since).getTime() : Number.NEGATIVE_INFINITY;
   const ids = new Set(groups.map((g) => g.id));
   const jids = new Set(groups.map((g) => g.group_jid).filter(Boolean));
   let entries = 0;
@@ -108,6 +112,7 @@ function summarizeEvents(events: { group_id: string | null; group_jid: string | 
   for (const event of events) {
     const matches = (event.group_id && ids.has(event.group_id)) || (event.group_jid && jids.has(event.group_jid));
     if (!matches) continue;
+    if (new Date(event.created_at).getTime() < sinceMs) continue;
     if (event.event_type === "join") entries++;
     if (event.event_type === "leave") exits++;
   }
@@ -163,7 +168,7 @@ export async function listEnvioCampaigns(): Promise<EnvioCampaign[]> {
   return campaigns.map((campaign, index) => {
     const linkedIds = groupIdsByCampaign.get(campaign.id) ?? [];
     const linked = linkedIds.map((id) => groupsById.get(id)).filter(Boolean);
-    const { entries, exits } = summarizeEvents(events, linked);
+    const { entries, exits } = summarizeEvents(events, linked, (campaign as { created_at?: string }).created_at);
     const clicks = clickCounts[index] ?? 0;
     const full = (g: any) => Boolean(g.max_participants) && (g.participant_count || 0) >= g.max_participants;
     return {

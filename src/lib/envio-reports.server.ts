@@ -47,9 +47,9 @@ export async function getEnvioReports(period: EnvioReportsPeriod) {
   const tenant = await tenantId();
   const start = periodStart(period);
 
-  const { data: campaignData, error: campaignError } = await supabase.from("fe_campaigns").select("id, name").eq("tenant_id", tenant);
+  const { data: campaignData, error: campaignError } = await supabase.from("fe_campaigns").select("id, name, created_at").eq("tenant_id", tenant);
   if (campaignError) throw new Error(campaignError.message);
-  const campaigns = (campaignData ?? []) as { id: string; name: string }[];
+  const campaigns = (campaignData ?? []) as { id: string; name: string; created_at: string }[];
   const campaignIds = campaigns.map((c) => c.id);
 
   const groupsPromise = fetchAll<any>((from, to) =>
@@ -75,6 +75,7 @@ export async function getEnvioReports(period: EnvioReportsPeriod) {
   const [groups, links, clickRows, allEvents] = await Promise.all([groupsPromise, linksPromise, clicksPromise, eventsPromise]);
 
   const campaignName = new Map(campaigns.map((c) => [c.id, c.name]));
+  const campaignCreatedMs = new Map(campaigns.map((c) => [c.id, new Date(c.created_at).getTime()]));
   const groupById = new Map<string, any>(groups.map((g) => [g.id, g]));
   // Um mesmo grupo pode ter mais de uma linha (jid "...-group" e "...@g.us"): resolve pelos dois.
   const groupByJid = new Map<string, any>();
@@ -146,7 +147,12 @@ export async function getEnvioReports(period: EnvioReportsPeriod) {
   const exitsByCampaign = new Map<string, number>();
   for (const e of eventRows) {
     const map = e.event_type === "join" ? entriesByCampaign : exitsByCampaign;
-    for (const campaignId of campaignsOfGroup(e.group)) map.set(campaignId, (map.get(campaignId) ?? 0) + 1);
+    const eventMs = new Date(e.created_at).getTime();
+    // Campanha nova começa zerada: não conta entradas/saídas de antes da criação dela.
+    for (const campaignId of campaignsOfGroup(e.group)) {
+      if (eventMs < (campaignCreatedMs.get(campaignId) ?? 0)) continue;
+      map.set(campaignId, (map.get(campaignId) ?? 0) + 1);
+    }
   }
   const campaignRows = campaigns
     .map((c) => {

@@ -73,6 +73,7 @@ const STATUS_COLOR: Record<string, "success" | "warning" | "error" | "default"> 
 export function TemplatesTab() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [previewTemplate, setPreviewTemplate] = useState<TemplateRow | null>(null);
   const [statsTemplate, setStatsTemplate] = useState<TemplateRow | null>(null);
   const [editTemplate, setEditTemplate] = useState<TemplateRow | null>(null);
@@ -194,9 +195,17 @@ export function TemplatesTab() {
     }
   };
 
-  const templates = ((templatesResult?.success ? templatesResult.templates : []) as TemplateRow[]).filter((t) =>
+  const byName = ((templatesResult?.success ? templatesResult.templates : []) as TemplateRow[]).filter((t) =>
     t.name.toLowerCase().includes(search.toLowerCase()),
   );
+  // Contagem por categoria (respeita a busca por nome) e filtro Utility / Marketing.
+  const categoryCounts = byName.reduce<Record<string, number>>((acc, t) => {
+    const key = (t.category || "").toUpperCase();
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+  const categoryOptions = ["UTILITY", "MARKETING", ...Object.keys(categoryCounts).filter((c) => c && c !== "UTILITY" && c !== "MARKETING")];
+  const templates = categoryFilter === "ALL" ? byName : byName.filter((t) => (t.category || "").toUpperCase() === categoryFilter);
 
   const handleDuplicate = async (t: TemplateRow) => {
     try {
@@ -257,7 +266,24 @@ export function TemplatesTab() {
   return (
     <Box sx={{ mt: 2 }}>
       <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
-        <TextField placeholder="Buscar por nome..." value={search} onChange={(e) => setSearch(e.target.value)} size="small" sx={{ maxWidth: 320 }} />
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center", rowGap: 1 }}>
+          <TextField placeholder="Buscar por nome..." value={search} onChange={(e) => setSearch(e.target.value)} size="small" sx={{ width: 260 }} />
+          <Chip
+            label={`Todos (${byName.length})`}
+            color={categoryFilter === "ALL" ? "primary" : "default"}
+            variant={categoryFilter === "ALL" ? "filled" : "outlined"}
+            onClick={() => setCategoryFilter("ALL")}
+          />
+          {categoryOptions.map((c) => (
+            <Chip
+              key={c}
+              label={`${c === "UTILITY" ? "Utility" : c === "MARKETING" ? "Marketing" : c.charAt(0) + c.slice(1).toLowerCase()} (${categoryCounts[c] ?? 0})`}
+              color={categoryFilter === c ? "primary" : "default"}
+              variant={categoryFilter === c ? "filled" : "outlined"}
+              onClick={() => setCategoryFilter(c)}
+            />
+          ))}
+        </Stack>
         <Stack direction="row" spacing={1}>
           <Button size="small" variant="outlined" startIcon={<RefreshCw size={14} />} onClick={() => refetch()}>
             Atualizar

@@ -39,6 +39,7 @@ const AI_ROUTINES_TICK_PATH = "/api/ai-routines/tick";
 const AI_PLAYBOOK_TICK_PATH = "/api/ai-routines/playbook-tick";
 const WHATSAPP_QUEUE_TICK_PATH = "/api/whatsapp/queue-tick";
 const CRM_SYNC_TICK_PATH = "/api/crm/sync-tick";
+const WHATSAPP_LINK_FOLLOWUP_TICK_PATH = "/api/whatsapp/link-followup-tick";
 const POPUP_LOADER_JS_PATH = "/api/popup/loader.js";
 const POPUP_CONFIG_PATH = "/api/popup/config";
 const POPUP_VISIT_PATH = "/api/popup/visit";
@@ -426,6 +427,22 @@ async function handleCrmSyncTick(request: Request): Promise<Response> {
   }
 }
 
+// Envia o link do grupo da Black Friday a quem respondeu positivo ao "Convite Black" (a cada 20 min, só das 08:00 às 20:00;
+// fora do horário as respostas ficam acumuladas). Mesmo padrão de segredo dos outros ticks. `?dryRun=1` só conta, não envia.
+async function handleLinkFollowupTick(request: Request): Promise<Response> {
+  if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+  if (!(await checkAutomationSecret(request))) return new Response("Forbidden", { status: 401 });
+  try {
+    const { runLinkFollowup } = await import("./lib/whatsapp-link-followup.server");
+    const dryRun = new URL(request.url).searchParams.get("dryRun") === "1";
+    const result = await runLinkFollowup({ dryRun });
+    return new Response(JSON.stringify(result), { status: 200, headers: { "content-type": "application/json" } });
+  } catch (error) {
+    console.error("Falha no envio do link da Black Friday:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}
+
 // O pop-up roda no domínio da loja (Shopify), fora deste app — chamadas via fetch() cross-origin
 // exigem CORS, ao contrário de todo o resto das rotas cruas (webhooks são server-to-server).
 // `shopify_store_domain` é o domínio administrativo (*.myshopify.com, usado pra autenticar na
@@ -723,6 +740,9 @@ export default {
     }
     if (pathname === CRM_SYNC_TICK_PATH) {
       return handleCrmSyncTick(request);
+    }
+    if (pathname === WHATSAPP_LINK_FOLLOWUP_TICK_PATH) {
+      return handleLinkFollowupTick(request);
     }
     if (pathname === POPUP_LOADER_JS_PATH) {
       return handlePopupLoaderJs(request);

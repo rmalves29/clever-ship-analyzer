@@ -47,9 +47,9 @@ export async function getEnvioReports(period: EnvioReportsPeriod) {
   const tenant = await tenantId();
   const start = periodStart(period);
 
-  const { data: campaignData, error: campaignError } = await supabase.from("fe_campaigns").select("id, name, created_at").eq("tenant_id", tenant);
+  const { data: campaignData, error: campaignError } = await supabase.from("fe_campaigns").select("id, name, created_at, stats_since").eq("tenant_id", tenant);
   if (campaignError) throw new Error(campaignError.message);
-  const campaigns = (campaignData ?? []) as { id: string; name: string; created_at: string }[];
+  const campaigns = (campaignData ?? []) as { id: string; name: string; created_at: string; stats_since: string | null }[];
   const campaignIds = campaigns.map((c) => c.id);
 
   const groupsPromise = fetchAll<any>((from, to) =>
@@ -66,8 +66,8 @@ export async function getEnvioReports(period: EnvioReportsPeriod) {
     if (start) q = q.gte("clicked_at", start);
     return q.order("clicked_at").order("id").range(from, to);
   });
-  const eventsPromise = fetchAll<{ group_id: string | null; group_jid: string | null; event_type: string; created_at: string; phone: string | null }>((from, to) => {
-    let q = supabase.from("fe_group_events").select("group_id, group_jid, event_type, created_at, phone").eq("tenant_id", tenant);
+  const eventsPromise = fetchAll<{ group_id: string | null; group_jid: string | null; event_type: string; created_at: string; phone: string | null; campaign_id: string | null }>((from, to) => {
+    let q = supabase.from("fe_group_events").select("group_id, group_jid, event_type, created_at, phone, campaign_id").eq("tenant_id", tenant);
     if (start) q = q.gte("created_at", start);
     return q.order("created_at").order("id").range(from, to);
   });
@@ -75,7 +75,8 @@ export async function getEnvioReports(period: EnvioReportsPeriod) {
   const [groups, links, clickRows, allEvents] = await Promise.all([groupsPromise, linksPromise, clicksPromise, eventsPromise]);
 
   const campaignName = new Map(campaigns.map((c) => [c.id, c.name]));
-  const campaignCreatedMs = new Map(campaigns.map((c) => [c.id, new Date(c.created_at).getTime()]));
+  // Início da contagem de cada campanha: a data de zeramento (ou a criação, se nunca foi zerada).
+  const campaignStartMs = new Map(campaigns.map((c) => [c.id, Math.max(new Date(c.created_at).getTime(), c.stats_since ? new Date(c.stats_since).getTime() : 0)]));
   const groupById = new Map<string, any>(groups.map((g) => [g.id, g]));
   // Um mesmo grupo pode ter mais de uma linha (jid "...-group" e "...@g.us"): resolve pelos dois.
   const groupByJid = new Map<string, any>();
@@ -142,17 +143,18 @@ export async function getEnvioReports(period: EnvioReportsPeriod) {
   }
 
   const clicksByCampaign = new Map<string, number>();
-  for (const c of clickRows) clicksByCampaign.set(c.campaign_id, (clicksByCampaign.get(c.campaign_id) ?? 0) + 1);
+  for (const c of clickRows) {
+    if (new Date(c.clicked_at).getTime() < (campaignStartMs.get(c.campaign_id) ?? 0)) continue;
+    clicksByCampaign.set(c.campaign_id, (clicksByCampaign.get(c.campaign_id) ?? 0) + 1);
+  }
   const entriesByCampaign = new Map<string, number>();
   const exitsByCampaign = new Map<string, number>();
   for (const e of eventRows) {
+    // Entrada/saída atribuída à campanha pelo clique (campaign_id), contada só depois do início/zeramento dela.
+    if (!e.campaign_id) continue;
+    if (new Date(e.created_at).getTime() < (campaignStartMs.get(e.campaign_id) ?? 0)) continue;
     const map = e.event_type === "join" ? entriesByCampaign : exitsByCampaign;
-    const eventMs = new Date(e.created_at).getTime();
-    // Campanha nova começa zerada: não conta entradas/saídas de antes da criação dela.
-    for (const campaignId of campaignsOfGroup(e.group)) {
-      if (eventMs < (campaignCreatedMs.get(campaignId) ?? 0)) continue;
-      map.set(campaignId, (map.get(campaignId) ?? 0) + 1);
-    }
+    map.set(e.campaign_id, (map.get(e.campaign_id) ?? 0) + 1);
   }
   const campaignRows = campaigns
     .map((c) => {

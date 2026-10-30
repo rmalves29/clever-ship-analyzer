@@ -46,6 +46,8 @@ export type EnvioCampaign = {
   group_template: GroupTemplate | null;
   last_spawn_at: string | null;
   created_at: string;
+  /** Início da contagem de cliques/entradas/saídas (zerar números sem apagar histórico). Nulo = desde a criação. */
+  stats_since?: string | null;
   updated_at: string;
   group_count?: number;
   /** Link público que as pessoas usam (o do Cartzy: o redirecionamento e a contagem de cliques são de lá). */
@@ -81,7 +83,7 @@ async function tenantSlug(): Promise<string> {
 }
 
 /** Eventos de entrada/saída do tenant, paginados de 1000 em 1000 (o PostgREST corta em 1000 por consulta). */
-type GroupEventRow = { group_id: string | null; group_jid: string | null; event_type: string; created_at: string };
+type GroupEventRow = { group_id: string | null; group_jid: string | null; event_type: string; created_at: string; campaign_id: string | null };
 
 async function fetchTenantGroupEvents(): Promise<GroupEventRow[]> {
   const supabaseAdmin = await admin();
@@ -89,7 +91,7 @@ async function fetchTenantGroupEvents(): Promise<GroupEventRow[]> {
   const out: GroupEventRow[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await (supabaseAdmin.from("fe_group_events" as any) as any)
-      .select("group_id, group_jid, event_type, created_at")
+      .select("group_id, group_jid, event_type, created_at, campaign_id")
       .eq("tenant_id", tenant)
       .order("created_at", { ascending: false })
       .range(from, from + 999);
@@ -101,17 +103,14 @@ async function fetchTenantGroupEvents(): Promise<GroupEventRow[]> {
   return out;
 }
 
-/** Mesma regra do original (summarizeFlowEvents): o evento conta pro grupo pelo id OU pelo JID. */
-function summarizeEvents(events: GroupEventRow[], groups: { id: string; group_jid: string }[], since?: string) {
-  // Campanha nova começa zerada: só contam entradas/saídas a partir da criação dela.
+/** Entradas/saídas ATRIBUÍDAS à campanha (o Cartzy grava o campaign_id a partir do clique no link), contadas só a partir
+ *  de `since` (data de zeramento). Nunca pelo grupo: com grupos compartilhados a mesma entrada contava em várias campanhas. */
+function summarizeCampaignEvents(events: GroupEventRow[], campaignId: string, since?: string | null) {
   const sinceMs = since ? new Date(since).getTime() : Number.NEGATIVE_INFINITY;
-  const ids = new Set(groups.map((g) => g.id));
-  const jids = new Set(groups.map((g) => g.group_jid).filter(Boolean));
   let entries = 0;
   let exits = 0;
   for (const event of events) {
-    const matches = (event.group_id && ids.has(event.group_id)) || (event.group_jid && jids.has(event.group_jid));
-    if (!matches) continue;
+    if (event.campaign_id !== campaignId) continue;
     if (new Date(event.created_at).getTime() < sinceMs) continue;
     if (event.event_type === "join") entries++;
     if (event.event_type === "leave") exits++;
@@ -158,9 +157,11 @@ export async function listEnvioCampaigns(): Promise<EnvioCampaign[]> {
 
   const clickCounts = await Promise.all(
     campaigns.map(async (campaign) => {
-      const { count } = await (supabaseAdmin.from("fe_link_clicks" as any) as any)
+      let query = (supabaseAdmin.from("fe_link_clicks" as any) as any)
         .select("id", { count: "exact", head: true })
         .eq("campaign_id", campaign.id);
+      if (campaign.stats_since) query = query.gte("clicked_at", campaign.stats_since);
+      const { count } = await query;
       return count ?? 0;
     }),
   );
@@ -168,7 +169,7 @@ export async function listEnvioCampaigns(): Promise<EnvioCampaign[]> {
   return campaigns.map((campaign, index) => {
     const linkedIds = groupIdsByCampaign.get(campaign.id) ?? [];
     const linked = linkedIds.map((id) => groupsById.get(id)).filter(Boolean);
-    const { entries, exits } = summarizeEvents(events, linked, (campaign as { created_at?: string }).created_at);
+    const { entries, exits } = summarizeCampaignEvents(events, campaign.id, campaign.stats_since);
     const clicks = clickCounts[index] ?? 0;
     const full = (g: any) => Boolean(g.max_participants) && (g.participant_count || 0) >= g.max_participants;
     return {

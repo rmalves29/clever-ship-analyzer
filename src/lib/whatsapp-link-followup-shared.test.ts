@@ -15,6 +15,20 @@ describe("classifyReply", () => {
     "outra: %s",
     (text) => expect(classifyReply(text)).toBe("outra"),
   );
+  it("mensagem automática longa de outra empresa NÃO vira positiva", () => {
+    expect(classifyReply("Olá! 🌷 Que alegria receber sua mensagem. Obrigada pelo contato! Para agilizar o atendimento, por favor me envie seu nome e você pode aguardar.")).toBe("outra");
+    expect(classifyReply("Olá, tudo bem? Meu nome é Anna, sou psicóloga clínica e estou à sua disposição. Quero entender como posso ajudar.")).toBe("outra");
+  });
+  it("pedido de trocar o número vai para fora da lista", () => {
+    expect(classifyReply("Boa tarde. Sou o esposo da Dilcilene. Você pode mudar o Celular para o dela?")).toBe("negativa");
+  });
+  it("pedido de sair continua valendo mesmo em mensagem longa", () => {
+    expect(classifyReply("Agradeço, mas tenho pavor de grupos kkk então prefiro que não me adicione em nenhum, por favor")).toBe("negativa");
+  });
+  it("respostas humanas de tamanho normal continuam positivas", () => {
+    expect(classifyReply("Ola boa tarde. Sim quero participar do grupo sim")).toBe("positiva");
+    expect(classifyReply("Boa tarde, pode liberar sim por favor")).toBe("positiva");
+  });
   it("negativa ganha de positiva", () => {
     expect(classifyReply("sim, mas quero sair da lista")).toBe("negativa");
   });

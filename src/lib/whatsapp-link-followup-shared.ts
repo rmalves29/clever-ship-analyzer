@@ -31,18 +31,23 @@ export type ReplyClass = "negativa" | "positiva" | "ok" | "outra";
 
 const L = "[^a-zà-ú]";
 const NEGATIVE = new RegExp(
-  `(^|${L})(não|nao|cancelar|cancela|sair|parar|pare|remover|remova|sem interesse|n quero)(${L}|$)|tira dessa lista|me tira|descadastr|lista de transmiss|n[uú]mero foi alterado|n[uú]mero novo`,
+  `(^|${L})(não|nao|cancelar|cancela|sair|parar|pare|remover|remova|sem interesse|n quero)(${L}|$)|tira dessa lista|me tira|descadastr|lista de transmiss|n[uú]mero foi alterado|n[uú]mero novo|(mudar|trocar|alterar) (o|meu|seu|esse) (celular|n[uú]mero|telefone)`,
 );
 const POSITIVE = new RegExp(
   `(^|${L})(sim|confirmo|confirmado|confirmada|confirma|confirmar|pode|claro|quero|aceito|com certeza|bora|positivo)(${L}|$)|^s+i+m+[!. ]*$|^pode+[!. ]*$|me manda o acesso`,
 );
 const OK = /^(boa tarde|boa noite|bom dia)?[ ,]*(ok+|okay|blz|beleza)[!. ]*$|estou aguardando a black/;
 
+/** Resposta de cliente ao convite é curta. Texto longo costuma ser mensagem automática de outra empresa
+ *  ("agradecemos o contato... você pode...") e não pode virar "sim" só por conter uma palavra como "pode". */
+export const MAX_POSITIVE_LENGTH = 70;
+
 /** Classifica a ÚLTIMA resposta da pessoa. Negativa ganha de tudo (pedido de sair nunca é ignorado). */
 export function classifyReply(body: string | null | undefined): ReplyClass {
   const text = String(body ?? "").trim().toLowerCase();
   if (!text) return "outra";
   if (NEGATIVE.test(text)) return "negativa";
+  if (text.length > MAX_POSITIVE_LENGTH) return "outra";
   if (POSITIVE.test(text)) return "positiva";
   if (OK.test(text)) return "ok";
   return "outra";

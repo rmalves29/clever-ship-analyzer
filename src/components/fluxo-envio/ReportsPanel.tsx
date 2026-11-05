@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { LineChart } from "@mui/x-charts/LineChart";
@@ -10,6 +10,7 @@ import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Grid from "@mui/material/Grid";
+import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -17,6 +18,7 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { getEnvioReports } from "@/lib/envio-reports.functions";
 import type { EnvioReportsPeriod } from "@/lib/envio-reports.server";
@@ -50,6 +52,34 @@ export function ReportsPanel() {
   const getReports = useServerFn(getEnvioReports);
   const { data, isLoading } = useQuery({ queryKey: ["envio-reports", period], queryFn: () => getReports({ data: { period } }) });
 
+  const [campaignFilter, setCampaignFilter] = useState<string>("all");
+
+  // Gráfico filtrado por campanha + matriz dia × campanha (colunas = campanhas que tiveram movimento no período).
+  const daily = useMemo(() => {
+    const rows = data?.dailyByCampaign ?? [];
+    const columns = new Map<string, { id: string; name: string; entries: number; clicks: number }>();
+    const cells = new Map<string, { clicks: number; entries: number; exits: number }>();
+    for (const r of rows) {
+      const col = columns.get(r.campaignId) ?? { id: r.campaignId, name: r.campaignName, entries: 0, clicks: 0 };
+      col.entries += r.entries;
+      col.clicks += r.clicks;
+      columns.set(r.campaignId, col);
+      cells.set(`${r.date}|${r.campaignId}`, { clicks: r.clicks, entries: r.entries, exits: r.exits });
+    }
+    const cols = [...columns.values()].sort((a, b) => b.entries + b.clicks - (a.entries + a.clicks));
+    const dates = (data?.timeline ?? []).map((t) => t.date).slice().reverse();
+    return { cols, cells, dates };
+  }, [data]);
+
+  const chartData = useMemo(() => {
+    const timeline = data?.timeline ?? [];
+    if (campaignFilter === "all") return timeline;
+    return timeline.map((t) => {
+      const c = daily.cells.get(`${t.date}|${campaignFilter}`);
+      return { date: t.date, clicks: c?.clicks ?? 0, entries: c?.entries ?? 0, exits: c?.exits ?? 0 };
+    });
+  }, [data, daily, campaignFilter]);
+
   const getAiPerformance = useServerFn(getAiContentPerformanceFn);
   const { data: aiPosts } = useQuery({ queryKey: ["ai-content-performance"], queryFn: () => getAiPerformance() });
 
@@ -63,6 +93,9 @@ export function ReportsPanel() {
     const lines = [["tipo", "nome", "cliques", "entradas", "saidas", "liquido", "conversao_pct"].join(";")];
     for (const c of data.campaigns) lines.push(["campanha", c.name, c.clicks, c.entries, c.exits, c.net, String(c.conversionPct).replace(".", ",")].map(cell).join(";"));
     for (const g of data.groups) lines.push(["grupo", g.name, "", g.entries, g.exits, g.net, ""].map(cell).join(";"));
+    for (const d of data.dailyByCampaign) {
+      lines.push(["dia", `${d.date.slice(8, 10)}/${d.date.slice(5, 7)}/${d.date.slice(0, 4)} - ${d.campaignName}`, d.clicks, d.entries, d.exits, d.entries - d.exits, ""].map(cell).join(";"));
+    }
     const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -117,16 +150,26 @@ export function ReportsPanel() {
         <Grid size={{ xs: 12, md: 8 }}>
           <Card variant="outlined">
             <CardContent>
-              <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-                Cliques, entradas e saídas por dia
-              </Typography>
+              <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "center", mb: 1, flexWrap: "wrap" }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  Cliques, entradas e saídas por dia
+                </Typography>
+                <TextField select size="small" label="Campanha" value={campaignFilter} onChange={(e) => setCampaignFilter(e.target.value)} sx={{ minWidth: 200 }}>
+                  <MenuItem value="all">Todas</MenuItem>
+                  {daily.cols.map((c) => (
+                    <MenuItem key={c.id} value={c.id}>
+                      {c.name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Stack>
               {data.timeline.length === 0 ? (
                 <Typography variant="body2" color="text.secondary" sx={{ py: 6, textAlign: "center" }}>
                   Sem movimento no período.
                 </Typography>
               ) : (
                 <LineChart
-                  dataset={data.timeline.map((t) => ({ ...t, label: `${t.date.slice(8, 10)}/${t.date.slice(5, 7)}` }))}
+                  dataset={chartData.map((t) => ({ ...t, label: `${t.date.slice(8, 10)}/${t.date.slice(5, 7)}` }))}
                   xAxis={[{ dataKey: "label", scaleType: "point" }]}
                   series={[
                     { dataKey: "clicks", label: "Cliques", color: "#7367F0", showMark: false },
@@ -181,6 +224,73 @@ export function ReportsPanel() {
             />
           </CardContent>
         </Card>
+      )}
+
+      {daily.cols.length > 0 && (
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            Entradas por dia e campanha
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+            Cada célula: entradas (cliques embaixo). "Sem campanha" = entrou por convite direto ou outro link.
+          </Typography>
+          <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, overflowX: "auto", maxHeight: 420 }}>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Dia</TableCell>
+                  {daily.cols.map((c) => (
+                    <TableCell key={c.id} align="right" sx={{ minWidth: 110 }}>
+                      {c.name}
+                    </TableCell>
+                  ))}
+                  <TableCell align="right">Total</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {daily.dates.map((date) => {
+                  let totalEntries = 0;
+                  let totalClicks = 0;
+                  const cells = daily.cols.map((c) => {
+                    const v = daily.cells.get(`${date}|${c.id}`);
+                    totalEntries += v?.entries ?? 0;
+                    totalClicks += v?.clicks ?? 0;
+                    return (
+                      <TableCell key={c.id} align="right">
+                        {v && (v.entries > 0 || v.clicks > 0) ? (
+                          <>
+                            <Typography component="span" variant="body2" sx={{ fontWeight: 600 }}>
+                              {v.entries}
+                            </Typography>
+                            <Typography component="span" variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                              {v.clicks} cliques
+                            </Typography>
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                    );
+                  });
+                  return (
+                    <TableRow key={date}>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>{`${date.slice(8, 10)}/${date.slice(5, 7)}`}</TableCell>
+                      {cells}
+                      <TableCell align="right">
+                        <Typography component="span" variant="body2" sx={{ fontWeight: 700 }}>
+                          {totalEntries}
+                        </Typography>
+                        <Typography component="span" variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                          {totalClicks} cliques
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Box>
       )}
 
       <Box>

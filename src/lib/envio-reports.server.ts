@@ -173,6 +173,29 @@ export async function getEnvioReports(period: EnvioReportsPeriod) {
     })
     .sort((a, b) => b.clicks + b.entries - (a.clicks + a.entries));
 
+  // Dia × campanha. Entrada sem campaign_id (convite direto, outro link) vai para "Sem campanha".
+  const NONE = "__none__";
+  const dayCampaign = new Map<string, { date: string; campaignId: string; clicks: number; entries: number; exits: number }>();
+  const dcSlot = (date: string, campaignId: string) => {
+    const key = `${date}|${campaignId}`;
+    let slot = dayCampaign.get(key);
+    if (!slot) dayCampaign.set(key, (slot = { date, campaignId, clicks: 0, entries: 0, exits: 0 }));
+    return slot;
+  };
+  for (const c of clickRows) {
+    if (new Date(c.clicked_at).getTime() < (campaignStartMs.get(c.campaign_id) ?? 0)) continue;
+    dcSlot(dayKey(c.clicked_at), c.campaign_id).clicks++;
+  }
+  for (const e of eventRows) {
+    if (e.campaign_id && new Date(e.created_at).getTime() < (campaignStartMs.get(e.campaign_id) ?? 0)) continue;
+    const slot = dcSlot(dayKey(e.created_at), e.campaign_id ?? NONE);
+    if (e.event_type === "join") slot.entries++;
+    else slot.exits++;
+  }
+  const dailyByCampaign = [...dayCampaign.values()]
+    .map((d) => ({ ...d, campaignName: d.campaignId === NONE ? "Sem campanha" : (campaignName.get(d.campaignId) ?? "Campanha removida") }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
   const entriesByGroup = new Map<string, number>();
   const exitsByGroup = new Map<string, number>();
   for (const e of eventRows) {
@@ -200,5 +223,5 @@ export async function getEnvioReports(period: EnvioReportsPeriod) {
       campaignNames: campaignsOfGroup(e.group).map((id) => campaignName.get(id)).filter(Boolean) as string[],
     }));
 
-  return { totalClicks, totalEntries, totalExits, net, conversionPct, retentionPct, timeline, campaigns: campaignRows, groups: groupRows, recentEvents };
+  return { totalClicks, totalEntries, totalExits, net, conversionPct, retentionPct, timeline, dailyByCampaign, campaigns: campaignRows, groups: groupRows, recentEvents };
 }

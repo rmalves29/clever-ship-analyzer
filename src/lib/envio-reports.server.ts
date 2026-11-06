@@ -42,10 +42,14 @@ async function fetchAll<T>(build: (from: number, to: number) => PromiseLike<{ da
 
 type Slot = { clicks: number; entries: number; exits: number };
 
-export async function getEnvioReports(period: EnvioReportsPeriod) {
+/** Intervalo personalizado em datas de Brasília (YYYY-MM-DD), de 00:00 do primeiro dia até 23:59 do último. */
+export type EnvioReportsRange = { from: string; to: string };
+
+export async function getEnvioReports(period: EnvioReportsPeriod, range?: EnvioReportsRange | null) {
   const supabase = await db();
   const tenant = await tenantId();
-  const start = periodStart(period);
+  const start = range ? new Date(`${range.from}T00:00:00-03:00`).toISOString() : periodStart(period);
+  const end = range ? new Date(`${range.to}T23:59:59.999-03:00`).toISOString() : null;
 
   const { data: campaignData, error: campaignError } = await supabase.from("fe_campaigns").select("id, name, created_at, stats_since").eq("tenant_id", tenant);
   if (campaignError) throw new Error(campaignError.message);
@@ -64,11 +68,13 @@ export async function getEnvioReports(period: EnvioReportsPeriod) {
     if (!campaignIds.length) return Promise.resolve({ data: [], error: null });
     let q = supabase.from("fe_link_clicks").select("campaign_id, clicked_at").in("campaign_id", campaignIds);
     if (start) q = q.gte("clicked_at", start);
+    if (end) q = q.lte("clicked_at", end);
     return q.order("clicked_at").order("id").range(from, to);
   });
   const eventsPromise = fetchAll<{ group_id: string | null; group_jid: string | null; event_type: string; created_at: string; phone: string | null; campaign_id: string | null }>((from, to) => {
     let q = supabase.from("fe_group_events").select("group_id, group_jid, event_type, created_at, phone, campaign_id").eq("tenant_id", tenant);
     if (start) q = q.gte("created_at", start);
+    if (end) q = q.lte("created_at", end);
     return q.order("created_at").order("id").range(from, to);
   });
 
@@ -129,12 +135,13 @@ export async function getEnvioReports(period: EnvioReportsPeriod) {
   }
   // Linha do tempo contínua: dias sem movimento aparecem zerados em vez de sumirem do gráfico.
   const timeline: ({ date: string } & Slot)[] = [];
-  if (timelineMap.size > 0) {
+  if (timelineMap.size > 0 || range) {
     const keys = [...timelineMap.keys()].sort();
     const todayKey = dayKey(new Date().toISOString());
-    const lastKey = keys[keys.length - 1] as string;
-    const last = todayKey > lastKey ? todayKey : lastKey;
-    const first = new Date(`${keys[0] as string}T12:00:00Z`);
+    const lastKey = keys.length ? (keys[keys.length - 1] as string) : todayKey;
+    // Intervalo personalizado: mostra todos os dias escolhidos, mesmo os sem movimento.
+    const last = range ? range.to : todayKey > lastKey ? todayKey : lastKey;
+    const first = new Date(`${range ? range.from : (keys[0] as string)}T12:00:00Z`);
     const end = new Date(`${last}T12:00:00Z`);
     for (let d = first; d <= end; d = new Date(d.getTime() + 86_400_000)) {
       const k = d.toISOString().slice(0, 10);
@@ -175,6 +182,9 @@ export async function getEnvioReports(period: EnvioReportsPeriod) {
 
   // Dia × campanha. Entrada sem campaign_id (convite direto, outro link) vai para "Sem campanha".
   const NONE = "__none__";
+  // Cliques/entradas anteriores ao início (criação ou zeramento) da campanha não entram nos números dela,
+  // mas vão para esta coluna: assim a soma das colunas de cada dia sempre bate com o total do dia.
+  const BEFORE = "__before__";
   const dayCampaign = new Map<string, { date: string; campaignId: string; clicks: number; entries: number; exits: number }>();
   const dcSlot = (date: string, campaignId: string) => {
     const key = `${date}|${campaignId}`;
@@ -183,17 +193,17 @@ export async function getEnvioReports(period: EnvioReportsPeriod) {
     return slot;
   };
   for (const c of clickRows) {
-    if (new Date(c.clicked_at).getTime() < (campaignStartMs.get(c.campaign_id) ?? 0)) continue;
-    dcSlot(dayKey(c.clicked_at), c.campaign_id).clicks++;
+    const before = new Date(c.clicked_at).getTime() < (campaignStartMs.get(c.campaign_id) ?? 0);
+    dcSlot(dayKey(c.clicked_at), before ? BEFORE : c.campaign_id).clicks++;
   }
   for (const e of eventRows) {
-    if (e.campaign_id && new Date(e.created_at).getTime() < (campaignStartMs.get(e.campaign_id) ?? 0)) continue;
-    const slot = dcSlot(dayKey(e.created_at), e.campaign_id ?? NONE);
+    const before = !!e.campaign_id && new Date(e.created_at).getTime() < (campaignStartMs.get(e.campaign_id) ?? 0);
+    const slot = dcSlot(dayKey(e.created_at), before ? BEFORE : (e.campaign_id ?? NONE));
     if (e.event_type === "join") slot.entries++;
     else slot.exits++;
   }
   const dailyByCampaign = [...dayCampaign.values()]
-    .map((d) => ({ ...d, campaignName: d.campaignId === NONE ? "Sem campanha" : (campaignName.get(d.campaignId) ?? "Campanha removida") }))
+    .map((d) => ({ ...d, campaignName: d.campaignId === NONE ? "Sem campanha" : d.campaignId === BEFORE ? "Antes do zeramento" : (campaignName.get(d.campaignId) ?? "Campanha removida") }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const entriesByGroup = new Map<string, number>();

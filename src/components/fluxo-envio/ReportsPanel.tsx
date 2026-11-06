@@ -49,8 +49,18 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
 
 export function ReportsPanel() {
   const [period, setPeriod] = useState<EnvioReportsPeriod>("30d");
+  // "Por data": escolhe de/até (datas de Brasília). Mesmo dia nos dois campos = visão de um único dia.
+  const todayBrt = new Date(Date.now() - 3 * 3_600_000).toISOString().slice(0, 10);
+  const [byDate, setByDate] = useState(false);
+  const [dateFrom, setDateFrom] = useState(todayBrt);
+  const [dateTo, setDateTo] = useState(todayBrt);
+  const range = byDate && dateFrom && dateTo && dateFrom <= dateTo ? { from: dateFrom, to: dateTo } : null;
   const getReports = useServerFn(getEnvioReports);
-  const { data, isLoading } = useQuery({ queryKey: ["envio-reports", period], queryFn: () => getReports({ data: { period } }) });
+  const { data, isLoading } = useQuery({
+    queryKey: ["envio-reports", period, range?.from ?? null, range?.to ?? null],
+    queryFn: () => getReports({ data: { period, range } }),
+    placeholderData: (prev) => prev,
+  });
 
   const [campaignFilter, setCampaignFilter] = useState<string>("all");
 
@@ -66,7 +76,9 @@ export function ReportsPanel() {
       columns.set(r.campaignId, col);
       cells.set(`${r.date}|${r.campaignId}`, { clicks: r.clicks, entries: r.entries, exits: r.exits });
     }
-    const cols = [...columns.values()].sort((a, b) => b.entries + b.clicks - (a.entries + a.clicks));
+    // Colunas especiais (sem campanha / antes do zeramento) ficam no fim.
+    const special = (id: string) => (id === "__none__" ? 1 : id === "__before__" ? 2 : 0);
+    const cols = [...columns.values()].sort((a, b) => special(a.id) - special(b.id) || b.entries + b.clicks - (a.entries + a.clicks));
     const dates = (data?.timeline ?? []).map((t) => t.date).slice().reverse();
     return { cols, cells, dates };
   }, [data]);
@@ -100,7 +112,7 @@ export function ReportsPanel() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `fluxo-envio-relatorio-${period}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `fluxo-envio-relatorio-${range ? `${range.from}_a_${range.to}` : period}-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -118,15 +130,66 @@ export function ReportsPanel() {
       <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
         <Stack direction="row" spacing={1}>
           {PERIODS.map((p) => (
-            <Button key={p.value} size="small" variant={period === p.value ? "contained" : "outline"} onClick={() => setPeriod(p.value)}>
+            <Button
+              key={p.value}
+              size="small"
+              variant={!byDate && period === p.value ? "contained" : "outline"}
+              onClick={() => {
+                setByDate(false);
+                setPeriod(p.value);
+              }}
+            >
               {p.label}
             </Button>
           ))}
+          <Button size="small" variant={byDate ? "contained" : "outline"} onClick={() => setByDate(true)}>
+            Por data
+          </Button>
         </Stack>
         <Button variant="outline" size="small" startIcon={<Download size={16} />} onClick={exportCsv}>
           Exportar CSV
         </Button>
       </Stack>
+
+      {byDate && (
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+          <TextField
+            type="date"
+            size="small"
+            label="De"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: todayBrt } }}
+          />
+          <TextField
+            type="date"
+            size="small"
+            label="Até"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            slotProps={{ inputLabel: { shrink: true }, htmlInput: { max: todayBrt } }}
+          />
+          <Button size="small" variant="outline" onClick={() => { setDateFrom(todayBrt); setDateTo(todayBrt); }}>
+            Hoje
+          </Button>
+          <Button
+            size="small"
+            variant="outline"
+            onClick={() => {
+              const y = new Date(Date.now() - 27 * 3_600_000).toISOString().slice(0, 10);
+              setDateFrom(y);
+              setDateTo(y);
+            }}
+          >
+            Ontem
+          </Button>
+          {dateFrom > dateTo && (
+            <Typography variant="caption" color="error">
+              A data inicial não pode ser depois da final.
+            </Typography>
+          )}
+        </Stack>
+      )}
 
       <Grid container spacing={1.5}>
         <Grid size={{ xs: 6, sm: 12 / 5 }}>
@@ -232,7 +295,7 @@ export function ReportsPanel() {
             Entradas por dia e campanha
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-            Cada célula: entradas (cliques embaixo). "Sem campanha" = entrou por convite direto ou outro link.
+            Cada célula: entradas (cliques embaixo). "Sem campanha" = entrou por convite direto ou outro link. "Antes do zeramento" = entradas e cliques de antes da data em que a campanha foi zerada (não entram nos números dela). A coluna Total de cada dia bate com o gráfico.
           </Typography>
           <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, overflowX: "auto", maxHeight: 420 }}>
             <Table size="small" stickyHeader>

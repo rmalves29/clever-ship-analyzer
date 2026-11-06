@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Eye, BarChart3, Copy, Pencil, Trash2, RefreshCw, Plus, X, Clock } from "lucide-react";
+import { Eye, BarChart3, Copy, Pencil, Trash2, RefreshCw, Plus, X, Clock, Link2, Reply, Phone } from "lucide-react";
 import { toast } from "sonner";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -18,6 +18,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import {
   listMetaTemplates,
@@ -50,17 +51,54 @@ const EVENT_LABEL: Record<string, string> = {
   FLAGGED: "sinalizado pela Meta",
 };
 
+type TemplateButton = { type: string; text?: string; url?: string; phone_number?: string; example?: string[] };
+
 type TemplateRow = {
   id: string;
   name: string;
   status: string;
   category: string;
   language: string;
-  components: { type: string; text?: string; format?: string }[];
+  components: { type: string; text?: string; format?: string; buttons?: TemplateButton[] }[];
 };
 
 function bodyText(t: TemplateRow) {
   return t.components.find((c) => c.type === "BODY")?.text ?? "";
+}
+
+function templateButtons(t: TemplateRow): TemplateButton[] {
+  return t.components.find((c) => c.type === "BUTTONS")?.buttons ?? [];
+}
+
+/** Tipo do botão em português + pra onde ele leva. */
+function describeButton(b: TemplateButton): { kind: string; destination: string; href?: string | undefined; dynamic: boolean } {
+  const label = b.text ?? "";
+  if (b.type === "URL") {
+    const url = b.url ?? "";
+    const dynamic = /\{\{\d+\}\}/.test(url);
+    return { kind: "Link", destination: url || "(sem endereço)", href: dynamic || !url ? undefined : url, dynamic };
+  }
+  if (b.type === "PHONE_NUMBER") return { kind: "Ligar", destination: b.phone_number ?? "(sem número)", dynamic: false };
+  if (b.type === "QUICK_REPLY") return { kind: "Resposta rápida", destination: `Envia "${label}" de volta pra você no chat (não abre site)`, dynamic: false };
+  if (b.type === "COPY_CODE") return { kind: "Copiar código", destination: "Copia o código (cupom) pra área de transferência", dynamic: false };
+  if (b.type === "OTP") return { kind: "Código de verificação", destination: "Preenche/copia o código de verificação", dynamic: false };
+  if (b.type === "FLOW") return { kind: "Formulário", destination: "Abre um formulário do WhatsApp (Flow)", dynamic: false };
+  return { kind: b.type, destination: "—", dynamic: false };
+}
+
+function buttonHost(url?: string): string {
+  if (!url) return "";
+  try {
+    return new URL(url.replace(/\{\{\d+\}\}/g, "x")).host;
+  } catch {
+    return url;
+  }
+}
+
+function ButtonIcon({ type }: { type: string }) {
+  if (type === "URL") return <Link2 size={13} />;
+  if (type === "PHONE_NUMBER") return <Phone size={13} />;
+  return <Reply size={13} />;
 }
 
 const STATUS_COLOR: Record<string, "success" | "warning" | "error" | "default"> = {
@@ -322,20 +360,21 @@ export function TemplatesTab() {
               <TableCell>Nome</TableCell>
               <TableCell>Categoria</TableCell>
               <TableCell>Idioma</TableCell>
+              <TableCell>Botões</TableCell>
               <TableCell>Status</TableCell>
               <TableCell align="right">Ações</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {isLoading && (
-              <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4, color: "text.secondary" }}>Carregando...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: "text.secondary" }}>Carregando...</TableCell></TableRow>
             )}
             {!isLoading && templatesResult && !templatesResult.success && (
-              <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4, color: "text.secondary" }}>{templatesResult.error}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: "text.secondary" }}>{templatesResult.error}</TableCell></TableRow>
             )}
             {!isLoading && templatesResult?.success && templates.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                   <Typography color="text.secondary">Nenhum template encontrado na conta Meta.</Typography>
                   <Button
                     variant="outlined"
@@ -353,6 +392,29 @@ export function TemplatesTab() {
                 <TableCell sx={{ fontWeight: 600 }}>{t.name}</TableCell>
                 <TableCell sx={{ color: "text.secondary" }}>{t.category}</TableCell>
                 <TableCell sx={{ color: "text.secondary" }}>{t.language}</TableCell>
+                <TableCell>
+                  {templateButtons(t).length === 0 ? (
+                    <Typography variant="caption" color="text.disabled">Sem botão</Typography>
+                  ) : (
+                    <Stack spacing={0.5} sx={{ alignItems: "flex-start" }}>
+                      {templateButtons(t).map((b, i) => {
+                        const d = describeButton(b);
+                        return (
+                          <Tooltip key={i} title={`${d.kind}: ${d.destination}${d.dynamic ? " (o final do link muda por cliente)" : ""}`}>
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              icon={<ButtonIcon type={b.type} />}
+                              label={b.type === "URL" ? `${b.text ?? "Link"} → ${buttonHost(b.url)}` : `${b.text ?? d.kind}`}
+                              onClick={() => setPreviewTemplate(t)}
+                              sx={{ maxWidth: 260 }}
+                            />
+                          </Tooltip>
+                        );
+                      })}
+                    </Stack>
+                  )}
+                </TableCell>
                 <TableCell>
                   <Chip size="small" color={STATUS_COLOR[t.status] ?? "default"} label={t.status} />
                 </TableCell>
@@ -382,6 +444,63 @@ export function TemplatesTab() {
             {previewTemplate?.components
               .filter((c) => c.type === "FOOTER" && c.text)
               .map((c, i) => <Typography key={i} variant="caption" sx={{ mt: 0.5, display: "block", color: "rgba(255,255,255,0.7)" }}>{c.text}</Typography>)}
+          </Box>
+
+          {previewTemplate && templateButtons(previewTemplate).length > 0 && (
+            <Stack spacing={0.5} sx={{ mt: 0.5 }}>
+              {templateButtons(previewTemplate).map((b, i) => (
+                <Stack
+                  key={i}
+                  direction="row"
+                  spacing={0.75}
+                  sx={{ alignItems: "center", justifyContent: "center", borderRadius: 3, bgcolor: "#fff", border: "1px solid", borderColor: "divider", py: 0.9, color: "#00A5F4", fontWeight: 600 }}
+                >
+                  <ButtonIcon type={b.type} />
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: "inherit" }}>{b.text ?? describeButton(b).kind}</Typography>
+                </Stack>
+              ))}
+            </Stack>
+          )}
+
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="caption" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+              Botões deste modelo
+            </Typography>
+            {previewTemplate && templateButtons(previewTemplate).length === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Este modelo não tem botão.</Typography>
+            ) : (
+              <Stack spacing={1} sx={{ mt: 0.75 }}>
+                {previewTemplate &&
+                  templateButtons(previewTemplate).map((b, i) => {
+                    const d = describeButton(b);
+                    return (
+                      <Box key={i} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {b.text ?? d.kind} <Typography component="span" variant="caption" color="text.secondary">· {d.kind}</Typography>
+                        </Typography>
+                        {d.href ? (
+                          <Typography variant="body2" sx={{ wordBreak: "break-all" }}>
+                            Leva para:{" "}
+                            <a href={d.href} target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>
+                              {d.destination}
+                            </a>
+                          </Typography>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary" sx={{ wordBreak: "break-all" }}>
+                            {b.type === "URL" ? "Leva para: " : ""}
+                            {d.destination}
+                          </Typography>
+                        )}
+                        {d.dynamic && (
+                          <Typography variant="caption" color="text.secondary">
+                            O final do link (a parte {"{{1}}"}) muda a cada cliente.
+                          </Typography>
+                        )}
+                      </Box>
+                    );
+                  })}
+              </Stack>
+            )}
           </Box>
         </DialogContent>
       </Dialog>

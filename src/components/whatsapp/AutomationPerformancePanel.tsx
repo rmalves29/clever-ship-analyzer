@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, ChevronDown, RefreshCw } from "lucide-react";
+import { createLink } from "@tanstack/react-router";
+import { Archive, ArchiveRestore, BarChart3, ChevronDown, MessageSquareText, Pause, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
 import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
 import AccordionSummary from "@mui/material/AccordionSummary";
@@ -21,8 +22,20 @@ import type {
   AutomationPerformanceStep,
 } from "@/lib/whatsapp-automation-performance";
 
+const LinkButton = createLink(Button);
+
 export type PainelSituacao = "ativa" | "pausada" | "inativa";
 export type PainelFiltro = "todas" | PainelSituacao;
+
+/** Ações de cada régua, executadas pela página (que já sabe editar, pausar, inativar e apagar). */
+export type PainelAcoes = {
+  onEditar: (id: string) => void;
+  onPausarOuAtivar: (id: string, ativar: boolean) => void;
+  onInativarOuReativar: (id: string, inativar: boolean) => void;
+  onApagar: (id: string) => void;
+  /** Id da régua que está sendo alterada agora (desabilita os botões dela). */
+  ocupadoId?: string | null;
+};
 
 const SITUACAO_LABEL: Record<PainelSituacao, string> = { ativa: "Ativa", pausada: "Pausada", inativa: "Inativa" };
 const SITUACAO_COR: Record<PainelSituacao, "success" | "warning" | "default"> = {
@@ -105,6 +118,17 @@ function performanceSummary(metrics: AutomationPerformanceMetrics): string {
   ].join(" · ");
 }
 
+function dataHora(value: string | null): string {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function StepRow({ step }: { step: AutomationPerformanceStep }) {
   return (
     <TableRow hover>
@@ -155,7 +179,10 @@ function StepRow({ step }: { step: AutomationPerformanceStep }) {
 export function AutomationPerformancePanel({
   filtro = "ativa",
   situacaoPorId = {},
+  acoes,
 }: {
+  /** Botões de editar, pausar, inativar e apagar dentro de cada régua. */
+  acoes?: PainelAcoes;
   /** Quais réguas aparecem (e entram nos totais). Padrão: só as ativas. */
   filtro?: PainelFiltro;
   /** Situação de cada régua pelo id (ativa, pausada ou inativa). */
@@ -334,6 +361,84 @@ export function AutomationPerformancePanel({
                   </Stack>
                 </AccordionSummary>
                 <AccordionDetails sx={{ px: 0, pt: 0, pb: 0 }}>
+                  {acoes && (
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{ flexWrap: "wrap", rowGap: 1, px: 2, py: 1.5, borderTop: "1px solid", borderColor: "divider" }}
+                    >
+                      {(() => {
+                        const situacao = situacaoDe(automation);
+                        const ocupado = acoes.ocupadoId === automation.automationId;
+                        return (
+                          <>
+                            {automation.latestCampaignId && (
+                              <LinkButton
+                                size="small"
+                                variant="contained"
+                                startIcon={<MessageSquareText size={14} />}
+                                to="/whatsapp/$campaignId"
+                                params={{ campaignId: automation.latestCampaignId }}
+                              >
+                                Mensagens enviadas
+                              </LinkButton>
+                            )}
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={<Pencil size={14} />}
+                              onClick={() => acoes.onEditar(automation.automationId)}
+                            >
+                              Ver / editar
+                            </Button>
+                            {situacao !== "inativa" &&
+                              (situacao === "ativa" ? (
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  color="warning"
+                                  startIcon={<Pause size={14} />}
+                                  disabled={ocupado}
+                                  onClick={() => acoes.onPausarOuAtivar(automation.automationId, false)}
+                                >
+                                  Pausar
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  color="success"
+                                  startIcon={<Play size={14} />}
+                                  disabled={ocupado}
+                                  onClick={() => acoes.onPausarOuAtivar(automation.automationId, true)}
+                                >
+                                  Ativar
+                                </Button>
+                              ))}
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={situacao === "inativa" ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+                              disabled={ocupado}
+                              onClick={() => acoes.onInativarOuReativar(automation.automationId, situacao !== "inativa")}
+                            >
+                              {situacao === "inativa" ? "Reativar" : "Inativar"}
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color="error"
+                              startIcon={<Trash2 size={14} />}
+                              disabled={ocupado}
+                              onClick={() => acoes.onApagar(automation.automationId)}
+                            >
+                              Excluir
+                            </Button>
+                          </>
+                        );
+                      })()}
+                    </Stack>
+                  )}
                   <TableContainer sx={{ borderTop: "1px solid", borderColor: "divider" }}>
                     <Table size="small">
                       <TableHead>
@@ -367,6 +472,44 @@ export function AutomationPerformancePanel({
                       </TableBody>
                     </Table>
                   </TableContainer>
+                  <Box sx={{ borderTop: "1px solid", borderColor: "divider", px: 2, py: 1.5 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                      Envios recentes
+                    </Typography>
+                    {automation.recentSends.length === 0 ? (
+                      <Typography variant="caption" color="text.secondary">
+                        Esta régua ainda não enviou nenhuma mensagem.
+                      </Typography>
+                    ) : (
+                      <Stack spacing={0.5}>
+                        {automation.recentSends.map((send) => (
+                          <Stack
+                            key={send.campaignId}
+                            direction="row"
+                            spacing={2}
+                            sx={{ alignItems: "center", flexWrap: "wrap", rowGap: 0.5 }}
+                          >
+                            <Typography variant="body2" sx={{ minWidth: 110 }}>
+                              {dataHora(send.createdAt)}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ flex: 1, minWidth: 220 }}>
+                              {send.sent.toLocaleString("pt-BR")} enviadas · {send.delivered.toLocaleString("pt-BR")} entregues ·{" "}
+                              {send.read.toLocaleString("pt-BR")} lidas
+                              {send.failed > 0 ? ` · ${send.failed.toLocaleString("pt-BR")} falhas` : ""}
+                            </Typography>
+                            <LinkButton
+                              size="small"
+                              variant="text"
+                              to="/whatsapp/$campaignId"
+                              params={{ campaignId: send.campaignId }}
+                            >
+                              Ver destinatários
+                            </LinkButton>
+                          </Stack>
+                        ))}
+                      </Stack>
+                    )}
+                  </Box>
                 </AccordionDetails>
               </Accordion>
             ))}

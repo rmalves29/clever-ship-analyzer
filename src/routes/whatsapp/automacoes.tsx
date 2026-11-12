@@ -23,7 +23,7 @@ import {
 } from "@/components/crm/AutomationDialog";
 import { ConversationalFlowsTab } from "@/components/whatsapp/ConversationalFlowsTab";
 import { AUTOMATION_EVENT_BY_ID, parseEventTrigger } from "@/lib/automation-events";
-import { AutomationPerformancePanel } from "@/components/whatsapp/AutomationPerformancePanel";
+import { AutomationPerformancePanel, type PainelAcoes } from "@/components/whatsapp/AutomationPerformancePanel";
 import {
   deleteAutomation,
   installLifecycleAutomations,
@@ -105,6 +105,52 @@ function AutomacoesPage() {
     }
   };
 
+  const abrirEdicao = (a: any) => {
+    setSeed({
+      id: a.id,
+      nome: a.nome,
+      descricao: a.descricao ?? undefined,
+      segmentType: a.segmentType ?? undefined,
+      segmentId: a.segmentId ?? undefined,
+      steps: a.steps ?? undefined,
+      requerAprovacao: a.requerAprovacao ?? true,
+      ativo: Boolean(a.ativo),
+      automationKind: a.automationKind,
+      apenasContatosNovos: Boolean(a.apenasContatosNovos),
+      eventTrigger: parseEventTrigger(a.triggerConfig),
+      revalidateSegmentBeforeSend: Boolean(a.triggerConfig?.revalidateSegmentBeforeSend),
+      recoveryLandingPageId:
+        typeof a.triggerConfig?.landingPageId === "string" ? a.triggerConfig.landingPageId : undefined,
+    });
+    setOpen(true);
+  };
+
+  const acoesDoPainel: PainelAcoes = {
+    ocupadoId: busyId,
+    onEditar: (id) => {
+      const a = lista.find((item) => item.id === id);
+      if (a) abrirEdicao(a);
+    },
+    onPausarOuAtivar: (id, ativar) => {
+      const a = lista.find((item) => item.id === id);
+      const nome = a?.nome ?? "esta régua";
+      if (!ativar && !confirm(`Pausar a régua "${nome}"? Ela deixa de enviar até você ativar de novo.`)) return;
+      if (ativar && !confirm(`Ativar a régua "${nome}"? Ela volta a enviar mensagens.`)) return;
+      wrap(id, () => runToggle({ data: { id, ativo: ativar } }));
+    },
+    onInativarOuReativar: (id, inativar) => {
+      const a = lista.find((item) => item.id === id);
+      const nome = a?.nome ?? "esta régua";
+      if (inativar && !confirm(`Inativar a régua "${nome}"? Ela deixa de rodar e vai para a lista de inativas (nada é apagado).`)) return;
+      wrap(id, () => runInativa({ data: { id, inativa: inativar } }));
+    },
+    onApagar: (id) => {
+      const a = lista.find((item) => item.id === id);
+      if (confirm(`Apagar a régua "${a?.nome ?? "esta régua"}"? Isso não pode ser desfeito.`))
+        wrap(id, () => runDelete({ data: { id } }));
+    },
+  };
+
   const installLifecycle = async () => {
     setBusyId("lifecycle-install");
     try {
@@ -152,7 +198,7 @@ function AutomacoesPage() {
             />
           ))}
         </Stack>
-        <AutomationPerformancePanel filtro={filtro} situacaoPorId={situacaoPorId} />
+        <AutomationPerformancePanel filtro={filtro} situacaoPorId={situacaoPorId} acoes={acoesDoPainel} />
       </Stack>
 
       <Stack spacing={1.5}>
@@ -331,27 +377,7 @@ function AutomacoesPage() {
                 size="small"
                 variant="outlined"
                 startIcon={<Pencil size={14} />}
-                onClick={() => {
-                  setSeed({
-                    id: a.id,
-                    nome: a.nome,
-                    descricao: a.descricao ?? undefined,
-                    segmentType: a.segmentType ?? undefined,
-                    segmentId: a.segmentId ?? undefined,
-                    steps: a.steps ?? undefined,
-                    requerAprovacao: a.requerAprovacao ?? true,
-                    ativo: Boolean(a.ativo),
-                    automationKind: a.automationKind,
-                    apenasContatosNovos: Boolean(a.apenasContatosNovos),
-                    eventTrigger: parseEventTrigger(a.triggerConfig),
-                    revalidateSegmentBeforeSend: Boolean(a.triggerConfig?.revalidateSegmentBeforeSend),
-                    recoveryLandingPageId:
-                      typeof a.triggerConfig?.landingPageId === "string"
-                        ? a.triggerConfig.landingPageId
-                        : undefined,
-                  });
-                  setOpen(true);
-                }}
+                onClick={() => abrirEdicao(a)}
               >
                 Editar
               </Button>

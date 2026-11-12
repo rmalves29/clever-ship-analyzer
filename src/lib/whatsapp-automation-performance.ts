@@ -22,12 +22,26 @@ export type AutomationPerformanceStep = AutomationPerformanceMetrics & {
   messageType: "marketing" | "utility";
 };
 
+export type AutomationRecentSend = {
+  campaignId: string;
+  createdAt: string | null;
+  stepId: string | null;
+  sent: number;
+  delivered: number;
+  read: number;
+  failed: number;
+};
+
 export type AutomationPerformanceRow = AutomationPerformanceMetrics & {
   automationId: string;
   name: string;
   description: string | null;
   active: boolean;
   automationKind: string;
+  /** Campanha mais recente da régua (a lista de entrada vem da mais nova para a mais antiga). */
+  latestCampaignId: string | null;
+  /** Últimos envios da régua (cada um abre a lista de destinatários), do mais novo para o mais antigo. */
+  recentSends: AutomationRecentSend[];
   steps: AutomationPerformanceStep[];
 };
 
@@ -58,6 +72,7 @@ export type AutomationCampaignPerformanceInput = {
   delivered?: number | null;
   read?: number | null;
   failed?: number | null;
+  createdAt?: string | null;
 };
 
 export type AutomationCampaignRevenueInput = {
@@ -258,6 +273,16 @@ export function buildAutomationPerformanceReport(params: {
       description: definition?.description ?? null,
       active: Boolean(definition?.active),
       automationKind: definition?.automationKind ?? "historical",
+      latestCampaignId: automationCampaigns[0]?.id ?? null,
+      recentSends: automationCampaigns.slice(0, 10).map((campaign) => ({
+        campaignId: campaign.id,
+        createdAt: campaign.createdAt ?? null,
+        stepId: campaign.automationStepId ?? null,
+        sent: number(campaign.sent),
+        delivered: number(campaign.delivered),
+        read: number(campaign.read),
+        failed: number(campaign.failed),
+      })),
       steps,
       ...metricsWithRoas(total),
     };

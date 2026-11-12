@@ -31,10 +31,11 @@ export const getAutomationPerformance = createServerFn({ method: "GET" })
       supabaseAdmin
         .from("wa_campaigns")
         .select(
-          "id, name, automation_id, automation_step_id, template_name, message_type, sent_count, delivered_count, read_count, failed_count",
+          "id, name, automation_id, automation_step_id, template_name, message_type, sent_count, delivered_count, read_count, failed_count, created_at",
         )
         .eq("origin", "automacao")
-        .not("automation_id", "is", null),
+        .not("automation_id", "is", null)
+        .order("created_at", { ascending: false }),
       supabaseAdmin.rpc("wa_campaign_revenue", { p_window_days: WA_REVENUE_WINDOW_DAYS }),
       loadSettings(),
     ]);
@@ -65,6 +66,7 @@ export const getAutomationPerformance = createServerFn({ method: "GET" })
         delivered: Number(row.delivered_count ?? 0),
         read: Number(row.read_count ?? 0),
         failed: Number(row.failed_count ?? 0),
+        createdAt: row.created_at ? String(row.created_at) : null,
       }),
     );
 

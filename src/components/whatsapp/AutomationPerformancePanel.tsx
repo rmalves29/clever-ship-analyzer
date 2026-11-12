@@ -21,6 +21,16 @@ import type {
   AutomationPerformanceStep,
 } from "@/lib/whatsapp-automation-performance";
 
+export type PainelSituacao = "ativa" | "pausada" | "inativa";
+export type PainelFiltro = "todas" | PainelSituacao;
+
+const SITUACAO_LABEL: Record<PainelSituacao, string> = { ativa: "Ativa", pausada: "Pausada", inativa: "Inativa" };
+const SITUACAO_COR: Record<PainelSituacao, "success" | "warning" | "default"> = {
+  ativa: "success",
+  pausada: "warning",
+  inativa: "default",
+};
+
 function money(value: number): string {
   return value.toLocaleString("pt-BR", {
     style: "currency",
@@ -142,12 +152,38 @@ function StepRow({ step }: { step: AutomationPerformanceStep }) {
   );
 }
 
-export function AutomationPerformancePanel() {
+export function AutomationPerformancePanel({
+  filtro = "ativa",
+  situacaoPorId = {},
+}: {
+  /** Quais réguas aparecem (e entram nos totais). Padrão: só as ativas. */
+  filtro?: PainelFiltro;
+  /** Situação de cada régua pelo id (ativa, pausada ou inativa). */
+  situacaoPorId?: Record<string, PainelSituacao>;
+}) {
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ["whatsapp-automation-performance"],
     queryFn: () => getAutomationPerformance(),
     refetchInterval: 20_000,
   });
+
+  const situacaoDe = (automation: { automationId: string; active: boolean }): PainelSituacao =>
+    situacaoPorId[automation.automationId] ?? (automation.active ? "ativa" : "pausada");
+  const visiveis = (data?.automations ?? []).filter((a) => filtro === "todas" || situacaoDe(a) === filtro);
+  // Os cards somam só o que está na lista, para os números baterem com o que aparece abaixo.
+  const totais = visiveis.reduce(
+    (acc, a) => ({
+      sent: acc.sent + a.sent,
+      delivered: acc.delivered + a.delivered,
+      read: acc.read + a.read,
+      failed: acc.failed + a.failed,
+      orders: acc.orders + a.orders,
+      revenue: acc.revenue + a.revenue,
+      cost: acc.cost + a.cost,
+    }),
+    { sent: 0, delivered: 0, read: 0, failed: 0, orders: 0, revenue: 0, cost: 0 },
+  );
+  const totaisRoas = totais.cost > 0 ? totais.revenue / totais.cost : null;
 
   return (
     <Stack spacing={2}>
@@ -217,29 +253,29 @@ export function AutomationPerformancePanel() {
               },
             }}
           >
-            <MetricCard label="Enviadas" value={data.totals.sent.toLocaleString("pt-BR")} />
+            <MetricCard label="Enviadas" value={totais.sent.toLocaleString("pt-BR")} />
             <MetricCard
               label="Entregues"
-              value={data.totals.delivered.toLocaleString("pt-BR")}
-              hint={`${rate(data.totals.delivered, data.totals.sent)} das enviadas`}
+              value={totais.delivered.toLocaleString("pt-BR")}
+              hint={`${rate(totais.delivered, totais.sent)} das enviadas`}
             />
             <MetricCard
               label="Lidas"
-              value={data.totals.read.toLocaleString("pt-BR")}
-              hint={`${rate(data.totals.read, data.totals.delivered)} das entregues`}
+              value={totais.read.toLocaleString("pt-BR")}
+              hint={`${rate(totais.read, totais.delivered)} das entregues`}
             />
             <MetricCard
               label="Valor gasto"
-              value={money(data.totals.cost)}
+              value={money(totais.cost)}
               hint="estimado pela tarifa configurada"
             />
             <MetricCard
               label="Vendas"
-              value={data.totals.orders.toLocaleString("pt-BR")}
+              value={totais.orders.toLocaleString("pt-BR")}
               tone="success"
             />
-            <MetricCard label="Receita" value={money(data.totals.revenue)} tone="success" />
-            <MetricCard label="ROAS" value={roas(data.totals.roas)} tone="primary" />
+            <MetricCard label="Receita" value={money(totais.revenue)} tone="success" />
+            <MetricCard label="ROAS" value={roas(totaisRoas)} tone="primary" />
           </Box>
 
           <Typography variant="caption" color="text.secondary">
@@ -249,7 +285,7 @@ export function AutomationPerformancePanel() {
           </Typography>
 
           <Stack spacing={1}>
-            {data.automations.map((automation) => (
+            {visiveis.map((automation) => (
               <Accordion
                 key={automation.automationId}
                 disableGutters
@@ -280,8 +316,8 @@ export function AutomationPerformancePanel() {
                         <Chip
                           size="small"
                           variant="outlined"
-                          color={automation.active ? "success" : "default"}
-                          label={automation.active ? "Ativa" : "Pausada"}
+                          color={SITUACAO_COR[situacaoDe(automation)]}
+                          label={SITUACAO_LABEL[situacaoDe(automation)]}
                         />
                       </Stack>
                       <Typography variant="caption" color="text.secondary">
@@ -334,6 +370,11 @@ export function AutomationPerformancePanel() {
                 </AccordionDetails>
               </Accordion>
             ))}
+            {visiveis.length === 0 && (
+              <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+                Nenhuma régua nesta situação.
+              </Typography>
+            )}
           </Stack>
         </>
       )}

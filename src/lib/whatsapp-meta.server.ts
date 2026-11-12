@@ -752,9 +752,23 @@ export async function findAutomationStepCampaignId(automationId: string, automat
     .eq("automation_id", automationId)
     .eq("automation_step_id", automationStepId)
     .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  return (data as { id: string } | null)?.id ?? null;
+    .limit(200);
+  const row = await firstCampaignInQueue((data ?? []) as { id: string }[]);
+  return row?.id ?? null;
+}
+
+/** Desde 24/09 o envio roda pela fila nova (`wa_campaigns`). Campanhas de automação criadas antes
+ *  disso só existem na tabela antiga (`whatsapp_campaigns`): se o motor reaproveitasse uma delas, o
+ *  enfileiramento falharia com "Campanha não encontrada." (foi o que derrubou 65% a 71% das execuções
+ *  das réguas antigas). Aqui só vale a campanha que também existe na fila nova; sem nenhuma, o motor
+ *  cria uma nova (nas duas tabelas). Recebe as linhas em ordem de criação e devolve a mais antiga válida. */
+async function firstCampaignInQueue<T extends { id: string }>(rows: T[]): Promise<T | null> {
+  if (rows.length === 0) return null;
+  const supabaseAdmin = await admin();
+  const { CAMPAIGNS_TABLE } = await import("./wa-campaigns.server");
+  const { data } = await (supabaseAdmin.from(CAMPAIGNS_TABLE) as any).select("id").in("id", rows.map((r) => r.id));
+  const live = new Set(((data ?? []) as { id: string }[]).map((r) => r.id));
+  return rows.find((r) => live.has(r.id)) ?? null;
 }
 
 /** Uma campanha reaproveitada guarda uma cópia congelada da mensagem (template, variáveis, tipo)
@@ -795,13 +809,14 @@ export async function syncCampaignMessageConfig(
  *  tem nenhum envio real (enviadas=0): nesse caso é seguro, e mantém a UI simples pro caso comum. */
 export async function findPendingApprovalCampaignId(automationId: string, automationStepId: string): Promise<{ id: string; totalDestinatarios: number; status: string; enviadas: number } | null> {
   const supabaseAdmin = await admin();
-  const { data } = await (supabaseAdmin.from("whatsapp_campaigns") as any)
+  const { data: candidates } = await (supabaseAdmin.from("whatsapp_campaigns") as any)
     .select("id, total_destinatarios, status, enviadas")
     .eq("automation_id", automationId)
     .eq("automation_step_id", automationStepId)
     .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .limit(200);
+  // Só reaproveita campanha que também existe na fila nova (ver firstCampaignInQueue).
+  const data = await firstCampaignInQueue((candidates ?? []) as { id: string; total_destinatarios: number | null; status: string; enviadas: number | null }[]);
   if (!data) return null;
   return {
     id: data.id as string,

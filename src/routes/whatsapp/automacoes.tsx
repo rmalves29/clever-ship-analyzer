@@ -68,7 +68,7 @@ export const Route = createFileRoute("/whatsapp/automacoes")({
 function AutomacoesPage() {
   const runToggle = useServerFn(toggleAutomation);
   const runInativa = useServerFn(setAutomationInativa);
-  const [filtro, setFiltro] = useState<FiltroSituacao>("todas");
+  const [filtro, setFiltro] = useState<FiltroSituacao>("ativa");
   const runDelete = useServerFn(deleteAutomation);
   const runNow = useServerFn(runAutomationNow);
   const runLifecycleInstall = useServerFn(installLifecycleAutomations);
@@ -89,6 +89,7 @@ function AutomacoesPage() {
     inativa: lista.filter((a) => situacaoDe(a) === "inativa").length,
   };
   const visiveis = filtro === "todas" ? lista : lista.filter((a) => situacaoDe(a) === filtro);
+  const situacaoPorId: Record<string, Situacao> = Object.fromEntries(lista.map((a) => [a.id as string, situacaoDe(a)]));
 
   const wrap = async (id: string, fn: () => Promise<unknown>) => {
     setBusyId(id);
@@ -129,7 +130,30 @@ function AutomacoesPage() {
 
   return (
     <Stack spacing={5}>
-      <AutomationPerformancePanel />
+      <Stack spacing={2}>
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1, alignItems: "center" }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, mr: 0.5 }}>
+            Mostrar réguas:
+          </Typography>
+          {(
+            [
+              ["ativa", "Ativas"],
+              ["pausada", "Pausadas"],
+              ["inativa", "Inativas"],
+              ["todas", "Todas"],
+            ] as const
+          ).map(([key, label]) => (
+            <Chip
+              key={key}
+              label={`${label} (${contagem[key]})`}
+              color={filtro === key ? "primary" : "default"}
+              variant={filtro === key ? "filled" : "outlined"}
+              onClick={() => setFiltro(key)}
+            />
+          ))}
+        </Stack>
+        <AutomationPerformancePanel filtro={filtro} situacaoPorId={situacaoPorId} />
+      </Stack>
 
       <Stack spacing={1.5}>
         <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
@@ -248,25 +272,6 @@ function AutomacoesPage() {
             ))}
           </Box>
         </Box>
-
-        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
-          {(
-            [
-              ["todas", "Todas"],
-              ["ativa", "Ativas"],
-              ["pausada", "Pausadas"],
-              ["inativa", "Inativas"],
-            ] as const
-          ).map(([key, label]) => (
-            <Chip
-              key={key}
-              label={`${label} (${contagem[key]})`}
-              color={filtro === key ? "primary" : "default"}
-              variant={filtro === key ? "filled" : "outlined"}
-              onClick={() => setFiltro(key)}
-            />
-          ))}
-        </Stack>
 
         <Stack spacing={1}>
           {visiveis.map((a: any) => (

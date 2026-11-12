@@ -5,7 +5,7 @@ import { automationDeliveryAction } from "./whatsapp-automation-delivery-state";
 import { decideAutomationReentry } from "./whatsapp-automation-reentry";
 import { resolveWaitInput } from "./automation-wait";
 import { startOfBrazilDay } from "./brazil-day";
-import { alignToSendTime, parseCampaignTag, parseSendTime, parseStepAudience, type StepAudience } from "./automation-step-options";
+import { alignToSendTime, parseCampaignTag, parseSendTime, parseStepAudience, type StepAudience, isWithinSendWindow } from "./automation-step-options";
 import { parseEventTrigger, type EventTrigger } from "./automation-events";
 import type { EventTarget } from "./automation-events.server";
 import {
@@ -1022,7 +1022,8 @@ async function excludeAutomationBlockedRuns(runs: any[], automation: any): Promi
 /** Tira das execuções de carrinho abandonado quem já fez um pedido válido depois da abertura do carrinho. */
 async function excludeRunsWithPurchaseAfterCheckout(runs: any[]): Promise<any[]> {
   const supabaseAdmin = await admin();
-  const VALID = ["PAID", "PARTIALLY_PAID", "PARTIALLY_REFUNDED"];
+  // PENDING = pedido já criado e aguardando pagamento (Pix): a cliente saiu do carrinho e entrou na régua do Pix.
+  const VALID = ["PAID", "PARTIALLY_PAID", "PARTIALLY_REFUNDED", "PENDING"];
   const customerIds = [...new Set(runs.map((r) => String(r.customer_id)))];
   const since = runs.reduce((min: string, r) => {
     const at = String(r.event_context?.checkout?.createdAt ?? r.enrolled_at ?? "");
@@ -1038,7 +1039,7 @@ async function excludeRunsWithPurchaseAfterCheckout(runs: any[]): Promise<any[]>
     // Falha fechada: sem conseguir conferir, não cobra neste ciclo.
     if (error) throw new Error(`Erro ao conferir compras após o carrinho: ${error.message}`);
     for (const o of data ?? []) {
-      if (o.cancelled_at || !VALID.includes(String(o.financial_status ?? ""))) continue;
+      if (o.cancelled_at || !VALID.includes(String(o.financial_status ?? "").toUpperCase())) continue;
       const at = new Date(o.created_at).getTime();
       if (at > (latest.get(String(o.customer_id)) ?? 0)) latest.set(String(o.customer_id), at);
     }
@@ -1048,12 +1049,47 @@ async function excludeRunsWithPurchaseAfterCheckout(runs: any[]): Promise<any[]>
     return (latest.get(String(r.customer_id)) ?? 0) > cartAt;
   });
   if (bought.length === 0) return runs;
-  await markRunsExited(bought.map((r) => String(r.id)), "Cliente comprou depois de abrir o carrinho.");
+  await markRunsExited(bought.map((r) => String(r.id)), "Cliente fez um pedido (pago ou Pix pendente) depois de abrir o carrinho.");
   const gone = new Set(bought.map((r) => String(r.id)));
   return runs.filter((r) => !gone.has(String(r.id)));
 }
 
+/** Pix pendente: tira das execuções quem já pagou (ou teve o pedido cancelado) — não cobra mais. */
+async function excludeRunsWithResolvedOrder(runs: any[]): Promise<any[]> {
+  const supabaseAdmin = await admin();
+  const orderIdByRun = new Map<string, string>();
+  for (const r of runs) {
+    const key = String(r.enrollment_key ?? r.context_key ?? "");
+    if (key.startsWith("order:")) orderIdByRun.set(String(r.id), key.slice("order:".length));
+  }
+  const orderIds = [...new Set(orderIdByRun.values())];
+  if (orderIds.length === 0) return runs;
+  const stillPending = new Set<string>();
+  const known = new Set<string>();
+  for (let start = 0; start < orderIds.length; start += 200) {
+    const { data, error } = await (supabaseAdmin.from("shopify_orders") as any)
+      .select("id, financial_status, cancelled_at")
+      .in("id", orderIds.slice(start, start + 200));
+    // Falha fechada: sem conseguir conferir o pagamento, não cobra neste ciclo.
+    if (error) throw new Error(`Erro ao conferir pagamento do pedido: ${error.message}`);
+    for (const o of data ?? []) {
+      known.add(String(o.id));
+      if (!o.cancelled_at && String(o.financial_status ?? "").toUpperCase() === "PENDING") stillPending.add(String(o.id));
+    }
+  }
+  const resolved = runs.filter((r) => {
+    const orderId = orderIdByRun.get(String(r.id));
+    return orderId !== undefined && known.has(orderId) && !stillPending.has(orderId);
+  });
+  if (resolved.length === 0) return runs;
+  await markRunsExited(resolved.map((r) => String(r.id)), "Pedido não está mais pendente (pago ou cancelado).");
+  const gone = new Set(resolved.map((r) => String(r.id)));
+  return runs.filter((r) => !gone.has(String(r.id)));
+}
+
 async function processDueRuns(automation: any, steps: AutomationStep[]): Promise<number> {
+  // Janela de envio: fora de 08:00–20:30 (Brasília) nada sai; as execuções continuam vencidas e saem quando abrir.
+  if (!isWithinSendWindow(new Date())) return 0;
   const supabaseAdmin = await admin();
   const { dispatchCampaign, createCampaignRow, findAutomationStepCampaignId, syncCampaignMessageConfig } = await import("./whatsapp-meta.server");
 
@@ -1073,6 +1109,11 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
   // Carrinho abandonado: se a cliente comprou depois de abrir o carrinho, não cobra mais.
   if (parseEventTrigger(automation.trigger_config)?.event === "carrinho_abandonado") {
     runs = await excludeRunsWithPurchaseAfterCheckout(runs);
+    if (runs.length === 0) return 0;
+  }
+  // Pix pendente: se o pedido foi pago ou cancelado entre uma mensagem e outra, não cobra mais.
+  if (parseEventTrigger(automation.trigger_config)?.event === "pedido_pendente") {
+    runs = await excludeRunsWithResolvedOrder(runs);
     if (runs.length === 0) return 0;
   }
 

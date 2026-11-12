@@ -27,6 +27,18 @@ export function parseCampaignTag(raw: unknown): string | undefined {
 
 const BRT_OFFSET_MS = -3 * 3_600_000; // Brasília (sem horário de verão)
 
+/** Janela em que as automações podem enviar (relógio de Brasília). Fora dela nada sai: fica na fila até abrir. */
+export const AUTOMATION_SEND_WINDOW = { from: "08:00", until: "20:30" } as const;
+
+/** true se `at` (horário de Brasília) está dentro da janela de envio das automações, limites incluídos. */
+export function isWithinSendWindow(at: Date, window: { from: string; until: string } = AUTOMATION_SEND_WINDOW): boolean {
+  const local = new Date(at.getTime() + BRT_OFFSET_MS);
+  const minutes = local.getUTCHours() * 60 + local.getUTCMinutes();
+  const [fh, fm] = window.from.split(":").map(Number) as [number, number];
+  const [uh, um] = window.until.split(":").map(Number) as [number, number];
+  return minutes >= fh * 60 + fm && minutes <= uh * 60 + um;
+}
+
 /**
  * Primeiro instante a partir de `base` em que o relógio de Brasília marca `sendTime` (HH:MM).
  * Sem horário definido devolve `base`. Ex.: base 00:05 e "10:00" -> hoje às 10:00; base 10:30 -> amanhã às 10:00.

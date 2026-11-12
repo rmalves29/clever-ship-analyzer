@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alignToSendTime, parseCampaignTag, parseSendTime, parseStepAudience, renderStepPreview } from "./automation-step-options";
+import { alignToSendTime, isWithinSendWindow, parseCampaignTag, parseSendTime, parseStepAudience, renderStepPreview } from "./automation-step-options";
 
 describe("horário de envio da etapa", () => {
   it("aceita HH:MM e recusa o resto", () => {
@@ -51,5 +51,22 @@ describe("prévia da mensagem", () => {
   });
   it("aceita variável nomeada", () => {
     expect(renderStepPreview("Oi {{nome}}!", ["nome"], ["{{NOME_CLIENTE}}"])).toBe("Oi Camila!");
+  });
+});
+
+describe("janela de envio das automações (08:00–20:30, Brasília)", () => {
+  // Brasília = UTC-3: 20:30 BRT = 23:30 UTC; 08:00 BRT = 11:00 UTC.
+  it("permite dentro da janela, incluindo os limites", () => {
+    expect(isWithinSendWindow(new Date("2026-11-12T11:00:00Z"))).toBe(true); // 08:00
+    expect(isWithinSendWindow(new Date("2026-11-12T15:00:00Z"))).toBe(true); // 12:00
+    expect(isWithinSendWindow(new Date("2026-11-12T23:30:00Z"))).toBe(true); // 20:30
+  });
+
+  it("bloqueia depois das 20:30 e antes das 08:00", () => {
+    expect(isWithinSendWindow(new Date("2026-11-12T23:31:00Z"))).toBe(false); // 20:31
+    expect(isWithinSendWindow(new Date("2026-11-13T00:00:00Z"))).toBe(false); // 21:00
+    expect(isWithinSendWindow(new Date("2026-11-13T02:59:00Z"))).toBe(false); // 23:59
+    expect(isWithinSendWindow(new Date("2026-11-13T05:00:00Z"))).toBe(false); // 02:00
+    expect(isWithinSendWindow(new Date("2026-11-12T10:59:00Z"))).toBe(false); // 07:59
   });
 });

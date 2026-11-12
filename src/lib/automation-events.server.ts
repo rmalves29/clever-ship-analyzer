@@ -154,7 +154,8 @@ async function abandonedCheckoutTargets(from: Date, to: Date): Promise<EventTarg
   );
   const latestPurchaseAt = new Map<string, number>();
   for (const order of bought) {
-    if (order.cancelled_at || !VALID_PAID.includes(String(order.financial_status ?? ""))) continue;
+    // PENDING (Pix) também conta: quem gerou o pedido sai do carrinho e entra na régua do Pix.
+    if (order.cancelled_at || ![...VALID_PAID, "PENDING"].includes(String(order.financial_status ?? "").toUpperCase())) continue;
     const at = new Date(order.processed_at ?? order.created_at ?? 0).getTime();
     const current = latestPurchaseAt.get(String(order.customer_id)) ?? 0;
     if (at > current) latestPurchaseAt.set(String(order.customer_id), at);

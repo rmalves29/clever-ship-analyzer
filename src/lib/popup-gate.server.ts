@@ -43,6 +43,8 @@ export type GateSettings = {
   password: string;
   passwordPlaceholder: string;
   buttonText: string;
+  /** Mostra o botão de entrar. Desligado, a senha é enviada pela tecla Enter do campo. */
+  showEnterButton: boolean;
   /** Botões extras abaixo do "Entrar". Vazio = só o botão de entrar. */
   buttons: GateButton[];
   backgroundColor: string;
@@ -64,6 +66,7 @@ export const DEFAULT_GATE_SETTINGS: GateSettings = {
   password: "",
   passwordPlaceholder: "Digite a senha",
   buttonText: "Entrar",
+  showEnterButton: true,
   buttons: [],
   backgroundColor: "#0f172a",
   overlayOpacity: 0.7,
@@ -91,6 +94,7 @@ function rowToSettings(row: any): GateSettings {
     password: row.password ?? "",
     passwordPlaceholder: row.password_placeholder ?? DEFAULT_GATE_SETTINGS.passwordPlaceholder,
     buttonText: row.button_text ?? DEFAULT_GATE_SETTINGS.buttonText,
+    showEnterButton: row.show_enter_button !== false,
     buttons: parseButtons(row.extra_buttons),
     backgroundColor: row.background_color ?? DEFAULT_GATE_SETTINGS.backgroundColor,
     overlayOpacity: clampOpacity(row.overlay_opacity),
@@ -128,6 +132,7 @@ export async function saveGateSettings(input: GateSettings): Promise<GateSetting
       password: input.password,
       password_placeholder: input.passwordPlaceholder,
       button_text: input.buttonText,
+      show_enter_button: input.showEnterButton,
       extra_buttons: parseButtons(input.buttons),
       background_color: input.backgroundColor,
       overlay_opacity: clampOpacity(input.overlayOpacity),
@@ -157,6 +162,7 @@ export async function getPublicGateConfig(): Promise<Record<string, unknown>> {
     imageZoom: settings.imageZoom,
     passwordPlaceholder: settings.passwordPlaceholder,
     buttonText: settings.buttonText,
+    showEnterButton: settings.showEnterButton,
     buttons: settings.buttons,
     // Compatibilidade com o script antigo que ainda esteja no cache do navegador.
     groupUrl: settings.buttons[0]?.url ?? null,

@@ -17,6 +17,7 @@ const gateSchema = z
     password: z.string().trim().max(64),
     passwordPlaceholder: z.string().trim().min(1).max(60),
     buttonText: z.string().trim().min(1).max(40),
+    showEnterButton: z.boolean(),
     buttons: z
       .array(
         z.object({

@@ -34,6 +34,7 @@ type GateForm = {
   password: string;
   passwordPlaceholder: string;
   buttonText: string;
+  showEnterButton: boolean;
   buttons: GateButtonForm[];
   backgroundColor: string;
   overlayOpacity: number;
@@ -53,6 +54,7 @@ const EMPTY: GateForm = {
   password: "",
   passwordPlaceholder: "Digite a senha",
   buttonText: "Entrar",
+  showEnterButton: true,
   buttons: [],
   backgroundColor: "#0f172a",
   overlayOpacity: 0.7,
@@ -117,6 +119,7 @@ export function PopupGatePanel() {
       password: data.password,
       passwordPlaceholder: data.passwordPlaceholder,
       buttonText: data.buttonText,
+      showEnterButton: data.showEnterButton,
       buttons: data.buttons.map((b: GateButtonForm) => ({ ...b })),
       backgroundColor: data.backgroundColor,
       overlayOpacity: data.overlayOpacity,
@@ -144,6 +147,7 @@ export function PopupGatePanel() {
           password: form.password,
           passwordPlaceholder: form.passwordPlaceholder,
           buttonText: form.buttonText,
+          showEnterButton: form.showEnterButton,
           buttons: form.buttons.map((b) => ({ ...b, text: b.text.trim(), url: b.url.trim() })),
           backgroundColor: form.backgroundColor,
           overlayOpacity: form.overlayOpacity,
@@ -281,15 +285,20 @@ export function PopupGatePanel() {
         />
         <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}>
           <TextField label="Texto do campo da senha" value={form.passwordPlaceholder} onChange={(e) => patch({ passwordPlaceholder: e.target.value })} />
-          <TextField label="Texto do botão de entrar" value={form.buttonText} onChange={(e) => patch({ buttonText: e.target.value })} />
+          <TextField label="Texto do botão de entrar" value={form.buttonText} onChange={(e) => patch({ buttonText: e.target.value })} disabled={!form.showEnterButton} />
         </Box>
+        <FormControlLabel
+          control={<Switch checked={form.showEnterButton} onChange={(e) => patch({ showEnterButton: e.target.checked })} />}
+          label={form.showEnterButton ? 'Botão "Entrar" visível' : 'Botão "Entrar" escondido (a senha é enviada com a tecla Enter)'}
+        />
+
         <Box>
           <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
             Botões
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
-            O botão de entrar (que confere a senha) sempre existe. Abaixo dele você pode adicionar quantos botões de link quiser (até {MAX_BUTTONS}),
-            por exemplo o grupo VIP, o Instagram ou o WhatsApp da loja, e remover os que não quiser. Sem nenhum botão extra, fica só o de entrar.
+            Além do botão de entrar (que você pode esconder acima), adicione quantos botões de link quiser (até {MAX_BUTTONS}),
+            por exemplo o grupo VIP, o Instagram ou o WhatsApp da loja, e remover os que não quiser.
           </Typography>
           <Stack spacing={1.5}>
             {form.buttons.map((b, i) => (
@@ -467,9 +476,11 @@ export function PopupGatePanel() {
             <Box sx={{ height: 46, borderRadius: 2, bgcolor: "#fff", color: "#6b7280", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>
               {form.passwordPlaceholder || "Digite a senha"}
             </Box>
-            <Box sx={{ mt: 1.5, py: 1.5, borderRadius: 2, bgcolor: form.buttonColor, color: textOn(form.buttonColor), fontWeight: 800, fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5 }}>
-              {form.buttonText || "Entrar"}
-            </Box>
+            {form.showEnterButton && (
+              <Box sx={{ mt: 1.5, py: 1.5, borderRadius: 2, bgcolor: form.buttonColor, color: textOn(form.buttonColor), fontWeight: 800, fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                {form.buttonText || "Entrar"}
+              </Box>
+            )}
             {form.buttons
               .filter((b) => b.text.trim())
               .map((b) => (

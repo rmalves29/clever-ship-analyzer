@@ -17,13 +17,20 @@ const gateSchema = z
     password: z.string().trim().max(64),
     passwordPlaceholder: z.string().trim().min(1).max(60),
     buttonText: z.string().trim().min(1).max(40),
-    groupUrl: z.string().trim().url("Cole o link completo do grupo (https://…).").nullable(),
-    groupButtonText: z.string().trim().min(1).max(80),
+    buttons: z
+      .array(
+        z.object({
+          id: z.string().min(1).max(40),
+          text: z.string().trim().min(1, "Escreva o texto do botão.").max(60),
+          url: z.string().trim().url("Cole o link completo do botão (https://…)."),
+          color: hexColor,
+        }),
+      )
+      .max(5, "No máximo 5 botões extras."),
     backgroundColor: hexColor,
     overlayOpacity: z.number().min(0.3).max(1),
     textColor: hexColor,
     buttonColor: hexColor,
-    groupButtonColor: hexColor,
   })
   .refine((v) => !v.enabled || v.password.length >= 4, {
     path: ["password"],

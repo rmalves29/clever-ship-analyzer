@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Eye, EyeOff, ImagePlus, Lock, Trash2 } from "lucide-react";
+import { Eye, EyeOff, ImagePlus, Lock, Plus, Trash2 } from "lucide-react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -18,6 +18,10 @@ import Typography from "@mui/material/Typography";
 import { getSiteGateSettings, saveSiteGateSettings } from "@/lib/popup-gate.functions";
 import { uploadEnvioMedia } from "@/lib/envio-messages.functions";
 
+type GateButtonForm = { id: string; text: string; url: string; color: string };
+
+const MAX_BUTTONS = 5;
+
 type GateForm = {
   enabled: boolean;
   headline: string;
@@ -30,13 +34,11 @@ type GateForm = {
   password: string;
   passwordPlaceholder: string;
   buttonText: string;
-  groupUrl: string;
-  groupButtonText: string;
+  buttons: GateButtonForm[];
   backgroundColor: string;
   overlayOpacity: number;
   textColor: string;
   buttonColor: string;
-  groupButtonColor: string;
 };
 
 const EMPTY: GateForm = {
@@ -51,13 +53,11 @@ const EMPTY: GateForm = {
   password: "",
   passwordPlaceholder: "Digite a senha",
   buttonText: "Entrar",
-  groupUrl: "",
-  groupButtonText: "Entrar no grupo VIP para receber a senha",
+  buttons: [],
   backgroundColor: "#0f172a",
   overlayOpacity: 0.7,
   textColor: "#ffffff",
   buttonColor: "#25d366",
-  groupButtonColor: "#25d366",
 };
 
 function textOn(hex: string): string {
@@ -117,17 +117,17 @@ export function PopupGatePanel() {
       password: data.password,
       passwordPlaceholder: data.passwordPlaceholder,
       buttonText: data.buttonText,
-      groupUrl: data.groupUrl ?? "",
-      groupButtonText: data.groupButtonText,
+      buttons: data.buttons.map((b: GateButtonForm) => ({ ...b })),
       backgroundColor: data.backgroundColor,
       overlayOpacity: data.overlayOpacity,
       textColor: data.textColor,
       buttonColor: data.buttonColor,
-      groupButtonColor: data.groupButtonColor,
     });
   }, [data]);
 
   const patch = (p: Partial<GateForm>) => setForm((current) => ({ ...current, ...p }));
+  const patchButton = (id: string, p: Partial<GateButtonForm>) =>
+    setForm((current) => ({ ...current, buttons: current.buttons.map((b) => (b.id === id ? { ...b, ...p } : b)) }));
 
   const saveMut = useMutation({
     mutationFn: () =>
@@ -144,13 +144,11 @@ export function PopupGatePanel() {
           password: form.password,
           passwordPlaceholder: form.passwordPlaceholder,
           buttonText: form.buttonText,
-          groupUrl: form.groupUrl.trim() || null,
-          groupButtonText: form.groupButtonText,
+          buttons: form.buttons.map((b) => ({ ...b, text: b.text.trim(), url: b.url.trim() })),
           backgroundColor: form.backgroundColor,
           overlayOpacity: form.overlayOpacity,
           textColor: form.textColor,
           buttonColor: form.buttonColor,
-          groupButtonColor: form.groupButtonColor,
         },
       }),
     onSuccess: () => {
@@ -196,7 +194,7 @@ export function PopupGatePanel() {
         </Stack>
         <Typography variant="body2" color="text.secondary">
           Cobre a tela inteira do site com uma janela sem botão de fechar. Só quem digitar a senha entra. A senha é divulgada no grupo VIP,
-          e o botão abaixo do campo leva a pessoa para o grupo.
+          e os botões abaixo do campo levam a pessoa para o grupo ou para onde você definir.
         </Typography>
 
         <FormControlLabel
@@ -285,15 +283,48 @@ export function PopupGatePanel() {
           <TextField label="Texto do campo da senha" value={form.passwordPlaceholder} onChange={(e) => patch({ passwordPlaceholder: e.target.value })} />
           <TextField label="Texto do botão de entrar" value={form.buttonText} onChange={(e) => patch({ buttonText: e.target.value })} />
         </Box>
-        <TextField
-          label="Link do grupo VIP (WhatsApp)"
-          value={form.groupUrl}
-          onChange={(e) => patch({ groupUrl: e.target.value })}
-          placeholder="https://chat.whatsapp.com/…"
-          fullWidth
-          helperText="Se ficar vazio, o botão do grupo não aparece."
-        />
-        <TextField label="Texto do botão do grupo" value={form.groupButtonText} onChange={(e) => patch({ groupButtonText: e.target.value })} fullWidth />
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+            Botões
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+            O botão de entrar (que confere a senha) sempre existe. Abaixo dele você pode adicionar quantos botões de link quiser (até {MAX_BUTTONS}),
+            por exemplo o grupo VIP, o Instagram ou o WhatsApp da loja, e remover os que não quiser. Sem nenhum botão extra, fica só o de entrar.
+          </Typography>
+          <Stack spacing={1.5}>
+            {form.buttons.map((b, i) => (
+              <Stack key={b.id} spacing={1} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <Typography variant="caption" sx={{ fontWeight: 700, flex: 1 }}>
+                    Botão {i + 1}
+                  </Typography>
+                  <ColorField label="Cor" value={b.color} onChange={(v) => patchButton(b.id, { color: v })} />
+                  <IconButton size="small" title="Remover este botão" onClick={() => patch({ buttons: form.buttons.filter((x) => x.id !== b.id) })}>
+                    <Trash2 size={16} />
+                  </IconButton>
+                </Stack>
+                <TextField label="Texto do botão" value={b.text} onChange={(e) => patchButton(b.id, { text: e.target.value })} fullWidth slotProps={{ htmlInput: { maxLength: 60 } }} />
+                <TextField label="Link" value={b.url} onChange={(e) => patchButton(b.id, { url: e.target.value })} placeholder="https://…" fullWidth />
+              </Stack>
+            ))}
+            {form.buttons.length < MAX_BUTTONS && (
+              <Box>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<Plus size={14} />}
+                  onClick={() =>
+                    patch({
+                      buttons: [...form.buttons, { id: `b${Date.now().toString(36)}`, text: "", url: "", color: "#25d366" }],
+                    })
+                  }
+                >
+                  Adicionar botão
+                </Button>
+              </Box>
+            )}
+          </Stack>
+        </Box>
 
         <Box>
           <Typography variant="caption" sx={{ fontWeight: 600 }}>
@@ -310,7 +341,6 @@ export function PopupGatePanel() {
           <ColorField label="Fundo (cor do cartão)" value={form.backgroundColor} onChange={(v) => patch({ backgroundColor: v })} />
           <ColorField label="Texto" value={form.textColor} onChange={(v) => patch({ textColor: v })} />
           <ColorField label="Botão de entrar" value={form.buttonColor} onChange={(v) => patch({ buttonColor: v })} />
-          <ColorField label="Botão do grupo VIP" value={form.groupButtonColor} onChange={(v) => patch({ groupButtonColor: v })} />
         </Stack>
 
         <Box>
@@ -440,11 +470,13 @@ export function PopupGatePanel() {
             <Box sx={{ mt: 1.5, py: 1.5, borderRadius: 2, bgcolor: form.buttonColor, color: textOn(form.buttonColor), fontWeight: 800, fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5 }}>
               {form.buttonText || "Entrar"}
             </Box>
-            {form.groupUrl.trim() && (
-              <Box sx={{ mt: 1.5, py: 1.5, px: 1, borderRadius: 2, bgcolor: form.groupButtonColor, color: textOn(form.groupButtonColor), fontWeight: 800, fontSize: 12 }}>
-                {form.groupButtonText}
-              </Box>
-            )}
+            {form.buttons
+              .filter((b) => b.text.trim())
+              .map((b) => (
+                <Box key={b.id} sx={{ mt: 1.5, py: 1.5, px: 1, borderRadius: 2, bgcolor: b.color, color: textOn(b.color), fontWeight: 800, fontSize: 12 }}>
+                  {b.text}
+                </Box>
+              ))}
           </Box>
         </Box>
         </Box>

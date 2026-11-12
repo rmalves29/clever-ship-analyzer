@@ -376,8 +376,15 @@ export function renderPopupLoaderJs(): string {
     var imgY = Math.max(0, Math.min(100, Number(g.imagePosY))); if (isNaN(imgY)) imgY = 50;
     var imgZoom = Math.max(1, Math.min(3, Number(g.imageZoom) || 1));
     var image = g.imageUrl ? '<div style="width:' + imgSize + 'px;max-width:100%;aspect-ratio:1/1;margin:0 auto 22px;border-radius:18px;overflow:hidden;background:rgba(255,255,255,.06);"><img src="' + gateEsc(g.imageUrl) + '" alt="" style="display:block;width:100%;height:100%;object-fit:cover;object-position:' + imgX + '% ' + imgY + '%;transform:scale(' + imgZoom + ');transform-origin:' + imgX + '% ' + imgY + '%;"></div>' : "";
-    var groupBtn = g.groupButtonColor || btn;
-    var groupButton = g.groupUrl ? '<a id="mm_gate_group" href="' + gateEsc(g.groupUrl) + '" target="_blank" rel="noopener" style="display:block;box-sizing:border-box;width:100%;margin-top:12px;padding:14px 16px;border:none;border-radius:12px;background:' + groupBtn + ';color:' + gateTextOn(groupBtn) + ';font-size:13px;font-weight:800;letter-spacing:.02em;text-align:center;text-decoration:none;">' + gateEsc(g.groupButtonText) + '</a>' : "";
+    // Botões extras (links). Script antigo em cache só conhecia o botão do grupo.
+    var gateButtons = Array.isArray(g.buttons)
+      ? g.buttons
+      : (g.groupUrl ? [{ text: g.groupButtonText, url: g.groupUrl, color: g.groupButtonColor }] : []);
+    var groupButton = gateButtons.map(function (b) {
+      if (!b || !b.url || !b.text) return "";
+      var c = b.color || btn;
+      return '<a href="' + gateEsc(b.url) + '" target="_blank" rel="noopener" style="display:block;box-sizing:border-box;width:100%;margin-top:12px;padding:14px 16px;border:none;border-radius:12px;background:' + c + ';color:' + gateTextOn(c) + ';font-size:13px;font-weight:800;letter-spacing:.02em;text-align:center;text-decoration:none;">' + gateEsc(b.text) + '</a>';
+    }).join("");
 
     overlay.innerHTML = '<div style="' + cardStyle + '">' + image +
       '<h2 style="margin:0 0 10px;font-size:28px;line-height:1.1;font-weight:900;letter-spacing:-.02em;color:' + fg + ';">' + gateEsc(g.headline) + '</h2>' +

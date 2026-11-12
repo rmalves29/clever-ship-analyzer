@@ -7,6 +7,30 @@ async function admin() {
   return supabaseAdmin as any;
 }
 
+export type GateButton = { id: string; text: string; url: string; color: string };
+
+export const MAX_GATE_BUTTONS = 5;
+
+/** Lê a lista de botões extras guardada no banco (descarta o que estiver incompleto). */
+function parseButtons(raw: unknown): GateButton[] {
+  if (!Array.isArray(raw)) return [];
+  const out: GateButton[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const b = item as Record<string, unknown>;
+    const text = String(b["text"] ?? "").trim();
+    const url = String(b["url"] ?? "").trim();
+    if (!text || !url) continue;
+    out.push({
+      id: String(b["id"] ?? `b${out.length + 1}`).slice(0, 40),
+      text: text.slice(0, 60),
+      url,
+      color: /^#[0-9a-fA-F]{6}$/.test(String(b["color"] ?? "")) ? String(b["color"]) : "#25d366",
+    });
+  }
+  return out.slice(0, MAX_GATE_BUTTONS);
+}
+
 export type GateSettings = {
   enabled: boolean;
   headline: string;
@@ -19,14 +43,13 @@ export type GateSettings = {
   password: string;
   passwordPlaceholder: string;
   buttonText: string;
-  groupUrl: string | null;
-  groupButtonText: string;
+  /** Botões extras abaixo do "Entrar". Vazio = só o botão de entrar. */
+  buttons: GateButton[];
   backgroundColor: string;
   /** 0.3 a 1. 1 = fundo fechado (cor sólida); menor = fundo escurecido translúcido e conteúdo num cartão. */
   overlayOpacity: number;
   textColor: string;
   buttonColor: string;
-  groupButtonColor: string;
 };
 
 export const DEFAULT_GATE_SETTINGS: GateSettings = {
@@ -41,13 +64,11 @@ export const DEFAULT_GATE_SETTINGS: GateSettings = {
   password: "",
   passwordPlaceholder: "Digite a senha",
   buttonText: "Entrar",
-  groupUrl: null,
-  groupButtonText: "Entrar no grupo VIP para receber a senha",
+  buttons: [],
   backgroundColor: "#0f172a",
   overlayOpacity: 0.7,
   textColor: "#ffffff",
   buttonColor: "#25d366",
-  groupButtonColor: "#25d366",
 };
 
 function clampOpacity(value: unknown): number {
@@ -70,13 +91,11 @@ function rowToSettings(row: any): GateSettings {
     password: row.password ?? "",
     passwordPlaceholder: row.password_placeholder ?? DEFAULT_GATE_SETTINGS.passwordPlaceholder,
     buttonText: row.button_text ?? DEFAULT_GATE_SETTINGS.buttonText,
-    groupUrl: row.group_url ?? null,
-    groupButtonText: row.group_button_text ?? DEFAULT_GATE_SETTINGS.groupButtonText,
+    buttons: parseButtons(row.extra_buttons),
     backgroundColor: row.background_color ?? DEFAULT_GATE_SETTINGS.backgroundColor,
     overlayOpacity: clampOpacity(row.overlay_opacity),
     textColor: row.text_color ?? DEFAULT_GATE_SETTINGS.textColor,
     buttonColor: row.button_color ?? DEFAULT_GATE_SETTINGS.buttonColor,
-    groupButtonColor: row.group_button_color ?? DEFAULT_GATE_SETTINGS.groupButtonColor,
   };
 }
 
@@ -109,13 +128,11 @@ export async function saveGateSettings(input: GateSettings): Promise<GateSetting
       password: input.password,
       password_placeholder: input.passwordPlaceholder,
       button_text: input.buttonText,
-      group_url: input.groupUrl,
-      group_button_text: input.groupButtonText,
+      extra_buttons: parseButtons(input.buttons),
       background_color: input.backgroundColor,
       overlay_opacity: clampOpacity(input.overlayOpacity),
       text_color: input.textColor,
       button_color: input.buttonColor,
-      group_button_color: input.groupButtonColor,
       ...(passwordChanged ? { gate_version: crypto.randomUUID() } : {}),
       updated_at: new Date().toISOString(),
     },
@@ -140,13 +157,15 @@ export async function getPublicGateConfig(): Promise<Record<string, unknown>> {
     imageZoom: settings.imageZoom,
     passwordPlaceholder: settings.passwordPlaceholder,
     buttonText: settings.buttonText,
-    groupUrl: settings.groupUrl,
-    groupButtonText: settings.groupButtonText,
+    buttons: settings.buttons,
+    // Compatibilidade com o script antigo que ainda esteja no cache do navegador.
+    groupUrl: settings.buttons[0]?.url ?? null,
+    groupButtonText: settings.buttons[0]?.text ?? "",
+    groupButtonColor: settings.buttons[0]?.color ?? "#25d366",
     backgroundColor: settings.backgroundColor,
     overlayOpacity: settings.overlayOpacity,
     textColor: settings.textColor,
     buttonColor: settings.buttonColor,
-    groupButtonColor: settings.groupButtonColor,
   };
 }
 

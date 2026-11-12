@@ -33,6 +33,7 @@ type GateForm = {
   groupUrl: string;
   groupButtonText: string;
   backgroundColor: string;
+  overlayOpacity: number;
   textColor: string;
   buttonColor: string;
   groupButtonColor: string;
@@ -53,6 +54,7 @@ const EMPTY: GateForm = {
   groupUrl: "",
   groupButtonText: "Entrar no grupo VIP para receber a senha",
   backgroundColor: "#0f172a",
+  overlayOpacity: 0.7,
   textColor: "#ffffff",
   buttonColor: "#25d366",
   groupButtonColor: "#25d366",
@@ -118,6 +120,7 @@ export function PopupGatePanel() {
       groupUrl: data.groupUrl ?? "",
       groupButtonText: data.groupButtonText,
       backgroundColor: data.backgroundColor,
+      overlayOpacity: data.overlayOpacity,
       textColor: data.textColor,
       buttonColor: data.buttonColor,
       groupButtonColor: data.groupButtonColor,
@@ -144,6 +147,7 @@ export function PopupGatePanel() {
           groupUrl: form.groupUrl.trim() || null,
           groupButtonText: form.groupButtonText,
           backgroundColor: form.backgroundColor,
+          overlayOpacity: form.overlayOpacity,
           textColor: form.textColor,
           buttonColor: form.buttonColor,
           groupButtonColor: form.groupButtonColor,
@@ -291,8 +295,19 @@ export function PopupGatePanel() {
         />
         <TextField label="Texto do botão do grupo" value={form.groupButtonText} onChange={(e) => patch({ groupButtonText: e.target.value })} fullWidth />
 
+        <Box>
+          <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            Opacidade do fundo da tela: {Math.round(form.overlayOpacity * 100)}%
+            {form.overlayOpacity >= 1 ? " (fundo fechado)" : ""}
+          </Typography>
+          <Slider size="small" min={0.3} max={1} step={0.05} value={form.overlayOpacity} onChange={(_, v) => patch({ overlayOpacity: v as number })} />
+          <Typography variant="caption" color="text.secondary">
+            Abaixo de 100% o site aparece escurecido e desfocado por trás, e a janela vira um cartão com a cor de "Fundo". Em 100% a tela inteira fica numa cor só.
+          </Typography>
+        </Box>
+
         <Stack direction="row" spacing={3} sx={{ flexWrap: "wrap" }}>
-          <ColorField label="Fundo" value={form.backgroundColor} onChange={(v) => patch({ backgroundColor: v })} />
+          <ColorField label="Fundo (cor do cartão)" value={form.backgroundColor} onChange={(v) => patch({ backgroundColor: v })} />
           <ColorField label="Texto" value={form.textColor} onChange={(v) => patch({ textColor: v })} />
           <ColorField label="Botão de entrar" value={form.buttonColor} onChange={(v) => patch({ buttonColor: v })} />
           <ColorField label="Botão do grupo VIP" value={form.groupButtonColor} onChange={(v) => patch({ groupButtonColor: v })} />
@@ -321,7 +336,24 @@ export function PopupGatePanel() {
             borderRadius: 3,
             border: "1px solid",
             borderColor: "divider",
-            bgcolor: form.backgroundColor,
+            overflow: "hidden",
+            position: "relative",
+            minHeight: 420,
+            // "Site" por trás, só para a prévia mostrar a transparência.
+            backgroundImage: "linear-gradient(135deg, #f9a8d4 0%, #fde68a 35%, #93c5fd 70%, #c4b5fd 100%)",
+          }}
+        >
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            bgcolor: form.overlayOpacity < 1 ? `rgba(0,0,0,${form.overlayOpacity})` : form.backgroundColor,
+            backdropFilter: form.overlayOpacity < 1 ? "blur(6px)" : undefined,
+          }}
+        />
+        <Box
+          sx={{
+            position: "relative",
             color: form.textColor,
             p: 3,
             minHeight: 420,
@@ -330,7 +362,16 @@ export function PopupGatePanel() {
             justifyContent: "center",
           }}
         >
-          <Box sx={{ width: "100%", maxWidth: 400, textAlign: "center" }}>
+          <Box
+            sx={{
+              width: "100%",
+              maxWidth: form.overlayOpacity < 1 ? 360 : 400,
+              textAlign: "center",
+              ...(form.overlayOpacity < 1
+                ? { bgcolor: form.backgroundColor, borderRadius: "20px", p: "28px 24px", boxShadow: "0 25px 80px rgba(0,0,0,.35)" }
+                : {}),
+            }}
+          >
             {form.imageUrl && (
               <Box
                 title="Arraste para ajustar o enquadramento"
@@ -405,6 +446,7 @@ export function PopupGatePanel() {
               </Box>
             )}
           </Box>
+        </Box>
         </Box>
       </Box>
     </Box>

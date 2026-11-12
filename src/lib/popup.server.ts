@@ -356,12 +356,20 @@ export function renderPopupLoaderJs(): string {
     var bg = g.backgroundColor || "#0f172a";
     var fg = g.textColor || "#ffffff";
     var btn = g.buttonColor || "#25d366";
+    // Fundo: 1 = fechado (cor sólida, como antes). Menor = escurecido translúcido com desfoque e o conteúdo num cartão.
+    var op = Number(g.overlayOpacity);
+    if (!(op > 0 && op <= 1)) op = 1;
+    var translucent = op < 1;
 
     var overlay = document.createElement("div");
     overlay.id = "mm_gate_overlay";
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
-    overlay.style.cssText = "position:fixed;top:0;right:0;bottom:0;left:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;background:" + bg + ";color:" + fg + ";font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;";
+    overlay.style.cssText = "position:fixed;top:0;right:0;bottom:0;left:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;background:" + (translucent ? "rgba(0,0,0," + op + ")" : bg) + ";" + (translucent ? "-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);" : "") + "color:" + fg + ";font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;";
+
+    var cardStyle = translucent
+      ? "width:100%;max-width:440px;box-sizing:border-box;margin:auto;padding:28px 24px;text-align:center;background:" + bg + ";color:" + fg + ";border-radius:20px;box-shadow:0 25px 80px rgba(0,0,0,.35);"
+      : "width:100%;max-width:480px;text-align:center;";
 
     var imgSize = Math.max(120, Math.min(480, Number(g.imageSize) || 280));
     var imgX = Math.max(0, Math.min(100, Number(g.imagePosX))); if (isNaN(imgX)) imgX = 50;
@@ -371,7 +379,7 @@ export function renderPopupLoaderJs(): string {
     var groupBtn = g.groupButtonColor || btn;
     var groupButton = g.groupUrl ? '<a id="mm_gate_group" href="' + gateEsc(g.groupUrl) + '" target="_blank" rel="noopener" style="display:block;box-sizing:border-box;width:100%;margin-top:12px;padding:14px 16px;border:none;border-radius:12px;background:' + groupBtn + ';color:' + gateTextOn(groupBtn) + ';font-size:13px;font-weight:800;letter-spacing:.02em;text-align:center;text-decoration:none;">' + gateEsc(g.groupButtonText) + '</a>' : "";
 
-    overlay.innerHTML = '<div style="width:100%;max-width:480px;text-align:center;">' + image +
+    overlay.innerHTML = '<div style="' + cardStyle + '">' + image +
       '<h2 style="margin:0 0 10px;font-size:28px;line-height:1.1;font-weight:900;letter-spacing:-.02em;color:' + fg + ';">' + gateEsc(g.headline) + '</h2>' +
       (g.bodyText ? '<p style="margin:0 0 22px;font-size:15px;line-height:1.55;opacity:.85;white-space:pre-line;">' + gateEsc(g.bodyText) + '</p>' : '') +
       '<input id="mm_gate_input" type="password" autocomplete="off" placeholder="' + gateEsc(g.passwordPlaceholder) + '" style="width:100%;height:50px;padding:0 16px;box-sizing:border-box;border:1px solid rgba(255,255,255,.35);border-radius:12px;background:#fff;color:#111827;font-size:16px;text-align:center;outline:none;">' +

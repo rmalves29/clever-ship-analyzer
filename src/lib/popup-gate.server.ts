@@ -22,6 +22,8 @@ export type GateSettings = {
   groupUrl: string | null;
   groupButtonText: string;
   backgroundColor: string;
+  /** 0.3 a 1. 1 = fundo fechado (cor sólida); menor = fundo escurecido translúcido e conteúdo num cartão. */
+  overlayOpacity: number;
   textColor: string;
   buttonColor: string;
   groupButtonColor: string;
@@ -42,10 +44,17 @@ export const DEFAULT_GATE_SETTINGS: GateSettings = {
   groupUrl: null,
   groupButtonText: "Entrar no grupo VIP para receber a senha",
   backgroundColor: "#0f172a",
+  overlayOpacity: 0.7,
   textColor: "#ffffff",
   buttonColor: "#25d366",
   groupButtonColor: "#25d366",
 };
+
+function clampOpacity(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_GATE_SETTINGS.overlayOpacity;
+  return Math.min(1, Math.max(0.3, n));
+}
 
 function rowToSettings(row: any): GateSettings {
   if (!row) return { ...DEFAULT_GATE_SETTINGS };
@@ -64,6 +73,7 @@ function rowToSettings(row: any): GateSettings {
     groupUrl: row.group_url ?? null,
     groupButtonText: row.group_button_text ?? DEFAULT_GATE_SETTINGS.groupButtonText,
     backgroundColor: row.background_color ?? DEFAULT_GATE_SETTINGS.backgroundColor,
+    overlayOpacity: clampOpacity(row.overlay_opacity),
     textColor: row.text_color ?? DEFAULT_GATE_SETTINGS.textColor,
     buttonColor: row.button_color ?? DEFAULT_GATE_SETTINGS.buttonColor,
     groupButtonColor: row.group_button_color ?? DEFAULT_GATE_SETTINGS.groupButtonColor,
@@ -102,6 +112,7 @@ export async function saveGateSettings(input: GateSettings): Promise<GateSetting
       group_url: input.groupUrl,
       group_button_text: input.groupButtonText,
       background_color: input.backgroundColor,
+      overlay_opacity: clampOpacity(input.overlayOpacity),
       text_color: input.textColor,
       button_color: input.buttonColor,
       group_button_color: input.groupButtonColor,
@@ -132,6 +143,7 @@ export async function getPublicGateConfig(): Promise<Record<string, unknown>> {
     groupUrl: settings.groupUrl,
     groupButtonText: settings.groupButtonText,
     backgroundColor: settings.backgroundColor,
+    overlayOpacity: settings.overlayOpacity,
     textColor: settings.textColor,
     buttonColor: settings.buttonColor,
     groupButtonColor: settings.groupButtonColor,

@@ -20,6 +20,7 @@ const gateSchema = z
     groupUrl: z.string().trim().url("Cole o link completo do grupo (https://…).").nullable(),
     groupButtonText: z.string().trim().min(1).max(80),
     backgroundColor: hexColor,
+    overlayOpacity: z.number().min(0.3).max(1),
     textColor: hexColor,
     buttonColor: hexColor,
     groupButtonColor: hexColor,

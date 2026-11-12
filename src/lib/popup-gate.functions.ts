@@ -18,6 +18,8 @@ const gateSchema = z
     passwordPlaceholder: z.string().trim().min(1).max(60),
     buttonText: z.string().trim().min(1).max(40),
     showEnterButton: z.boolean(),
+    scope: z.enum(["site", "paths"]),
+    paths: z.array(z.string().trim().min(1).max(200)).max(20),
     buttons: z
       .array(
         z.object({
@@ -32,6 +34,10 @@ const gateSchema = z
     overlayOpacity: z.number().min(0.3).max(1),
     textColor: hexColor,
     buttonColor: hexColor,
+  })
+  .refine((v) => v.scope !== "paths" || v.paths.length > 0, {
+    path: ["paths"],
+    message: "Informe pelo menos um endereço (ex.: /collections/black-friday) ou escolha bloquear o site inteiro.",
   })
   .refine((v) => !v.enabled || v.password.length >= 4, {
     path: ["password"],

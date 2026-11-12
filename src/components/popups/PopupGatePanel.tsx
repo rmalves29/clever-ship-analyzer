@@ -10,6 +10,8 @@ import CircularProgress from "@mui/material/CircularProgress";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
+import Radio from "@mui/material/Radio";
+import RadioGroup from "@mui/material/RadioGroup";
 import Slider from "@mui/material/Slider";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
@@ -35,6 +37,8 @@ type GateForm = {
   passwordPlaceholder: string;
   buttonText: string;
   showEnterButton: boolean;
+  scope: "site" | "paths";
+  paths: string[];
   buttons: GateButtonForm[];
   backgroundColor: string;
   overlayOpacity: number;
@@ -55,6 +59,8 @@ const EMPTY: GateForm = {
   passwordPlaceholder: "Digite a senha",
   buttonText: "Entrar",
   showEnterButton: true,
+  scope: "site",
+  paths: [],
   buttons: [],
   backgroundColor: "#0f172a",
   overlayOpacity: 0.7,
@@ -120,6 +126,8 @@ export function PopupGatePanel() {
       passwordPlaceholder: data.passwordPlaceholder,
       buttonText: data.buttonText,
       showEnterButton: data.showEnterButton,
+      scope: data.scope,
+      paths: [...data.paths],
       buttons: data.buttons.map((b: GateButtonForm) => ({ ...b })),
       backgroundColor: data.backgroundColor,
       overlayOpacity: data.overlayOpacity,
@@ -148,6 +156,8 @@ export function PopupGatePanel() {
           passwordPlaceholder: form.passwordPlaceholder,
           buttonText: form.buttonText,
           showEnterButton: form.showEnterButton,
+          scope: form.scope,
+          paths: form.paths.map((p) => p.trim()).filter(Boolean),
           buttons: form.buttons.map((b) => ({ ...b, text: b.text.trim(), url: b.url.trim() })),
           backgroundColor: form.backgroundColor,
           overlayOpacity: form.overlayOpacity,
@@ -205,6 +215,51 @@ export function PopupGatePanel() {
           control={<Switch checked={form.enabled} onChange={(e) => patch({ enabled: e.target.checked })} />}
           label={form.enabled ? "Trava ativa no site" : "Trava desativada"}
         />
+
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.25 }}>
+            Onde a trava aparece
+          </Typography>
+          <RadioGroup
+            value={form.scope}
+            onChange={(e) => {
+              const scope = e.target.value as "site" | "paths";
+              patch({ scope, ...(scope === "paths" && form.paths.length === 0 ? { paths: ["/collections/black-friday"] } : {}) });
+            }}
+          >
+            <FormControlLabel value="site" control={<Radio size="small" />} label="Site inteiro" />
+            <FormControlLabel value="paths" control={<Radio size="small" />} label="Só em categorias ou páginas específicas" />
+          </RadioGroup>
+          {form.scope === "paths" && (
+            <Stack spacing={1} sx={{ mt: 1, pl: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                A trava só aparece quando a pessoa abre uma destas páginas, ou um produto aberto por dentro dela (endereço /collections/…/products/…). No resto do site ela não aparece. Quem abrir um produto direto por /products/… não vê a trava.
+                Cole o endereço da categoria (com ou sem https://maniadmulher.com na frente). A categoria "Black Friday" do menu é /collections/black-friday.
+              </Typography>
+              {form.paths.map((p, i) => (
+                <Stack key={i} direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    value={p}
+                    placeholder="/collections/black-friday"
+                    onChange={(e) => patch({ paths: form.paths.map((x, j) => (j === i ? e.target.value : x)) })}
+                  />
+                  <IconButton size="small" title="Remover" onClick={() => patch({ paths: form.paths.filter((_, j) => j !== i) })}>
+                    <Trash2 size={16} />
+                  </IconButton>
+                </Stack>
+              ))}
+              {form.paths.length < 20 && (
+                <Box>
+                  <Button size="small" variant="outlined" startIcon={<Plus size={14} />} onClick={() => patch({ paths: [...form.paths, ""] })}>
+                    Adicionar página ou categoria
+                  </Button>
+                </Box>
+              )}
+            </Stack>
+          )}
+        </Box>
 
         <TextField label="Título" value={form.headline} onChange={(e) => patch({ headline: e.target.value })} fullWidth slotProps={{ htmlInput: { maxLength: 120 } }} />
         <TextField

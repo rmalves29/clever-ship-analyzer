@@ -448,9 +448,22 @@ export function renderPopupLoaderJs(): string {
     setTimeout(function () { try { input.focus(); } catch (e) {} }, 50);
   }
 
+  // Trava só em páginas específicas: confere se a página atual está na lista (sem regex, por segmentos do caminho).
+  function gatePathMatches(g) {
+    if (g.scope !== "paths") return true;
+    var here = "/" + location.pathname.toLowerCase().split("/").filter(Boolean).join("/") + "/";
+    var list = Array.isArray(g.paths) ? g.paths : [];
+    for (var i = 0; i < list.length; i++) {
+      var p = String(list[i] || "").toLowerCase().split("/").filter(Boolean).join("/");
+      if (p && here.indexOf("/" + p + "/") !== -1) return true;
+    }
+    return false;
+  }
+
   function startWithGate() {
     fetch(API + "/api/popup/gate-config").then(function (r) { return r.json(); }).then(function (g) {
       if (!g || !g.enabled) return startCapturePopup();
+      if (!gatePathMatches(g)) return startCapturePopup();
       var saved = null;
       try { saved = localStorage.getItem(STORAGE_GATE); } catch (e) {}
       if (!saved) return renderGate(g);

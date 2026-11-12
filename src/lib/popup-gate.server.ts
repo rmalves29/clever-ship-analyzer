@@ -10,6 +10,31 @@ async function admin() {
 export type GateButton = { id: string; text: string; url: string; color: string };
 
 export const MAX_GATE_BUTTONS = 5;
+export const MAX_GATE_PATHS = 20;
+
+/** Normaliza um endereço digitado: aceita URL completa ou só o caminho; tira domínio, parâmetros e barras sobrando. */
+export function normalizeGatePath(raw: unknown): string {
+  let value = String(raw ?? "").trim().toLowerCase();
+  if (!value) return "";
+  const protocol = value.indexOf("://");
+  if (protocol >= 0) {
+    const afterHost = value.indexOf("/", protocol + 3);
+    value = afterHost >= 0 ? value.slice(afterHost) : "";
+  }
+  value = value.split("?")[0]!.split("#")[0]!;
+  const segments = value.split("/").filter(Boolean);
+  return segments.length > 0 ? `/${segments.join("/")}` : "";
+}
+
+function parsePaths(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    const path = normalizeGatePath(item);
+    if (path && !out.includes(path)) out.push(path);
+  }
+  return out.slice(0, MAX_GATE_PATHS);
+}
 
 /** Lê a lista de botões extras guardada no banco (descarta o que estiver incompleto). */
 function parseButtons(raw: unknown): GateButton[] {
@@ -45,6 +70,10 @@ export type GateSettings = {
   buttonText: string;
   /** Mostra o botão de entrar. Desligado, a senha é enviada pela tecla Enter do campo. */
   showEnterButton: boolean;
+  /** Onde a trava aparece: "site" = site inteiro; "paths" = só nas páginas de `paths`. */
+  scope: "site" | "paths";
+  /** Caminhos onde a trava aparece quando scope = "paths" (ex.: /collections/black-friday). */
+  paths: string[];
   /** Botões extras abaixo do "Entrar". Vazio = só o botão de entrar. */
   buttons: GateButton[];
   backgroundColor: string;
@@ -67,6 +96,8 @@ export const DEFAULT_GATE_SETTINGS: GateSettings = {
   passwordPlaceholder: "Digite a senha",
   buttonText: "Entrar",
   showEnterButton: true,
+  scope: "site",
+  paths: [],
   buttons: [],
   backgroundColor: "#0f172a",
   overlayOpacity: 0.7,
@@ -95,6 +126,8 @@ function rowToSettings(row: any): GateSettings {
     passwordPlaceholder: row.password_placeholder ?? DEFAULT_GATE_SETTINGS.passwordPlaceholder,
     buttonText: row.button_text ?? DEFAULT_GATE_SETTINGS.buttonText,
     showEnterButton: row.show_enter_button !== false,
+    scope: row.scope === "paths" ? "paths" : "site",
+    paths: parsePaths(row.paths),
     buttons: parseButtons(row.extra_buttons),
     backgroundColor: row.background_color ?? DEFAULT_GATE_SETTINGS.backgroundColor,
     overlayOpacity: clampOpacity(row.overlay_opacity),
@@ -134,6 +167,8 @@ export async function saveGateSettings(input: GateSettings): Promise<GateSetting
       button_text: input.buttonText,
       show_enter_button: input.showEnterButton,
       extra_buttons: parseButtons(input.buttons),
+      scope: input.scope === "paths" ? "paths" : "site",
+      paths: parsePaths(input.paths),
       background_color: input.backgroundColor,
       overlay_opacity: clampOpacity(input.overlayOpacity),
       text_color: input.textColor,
@@ -163,6 +198,8 @@ export async function getPublicGateConfig(): Promise<Record<string, unknown>> {
     passwordPlaceholder: settings.passwordPlaceholder,
     buttonText: settings.buttonText,
     showEnterButton: settings.showEnterButton,
+    scope: settings.scope,
+    paths: settings.paths,
     buttons: settings.buttons,
     // Compatibilidade com o script antigo que ainda esteja no cache do navegador.
     groupUrl: settings.buttons[0]?.url ?? null,

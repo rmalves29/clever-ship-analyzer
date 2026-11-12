@@ -1480,6 +1480,8 @@ export async function upsertAutomation(input: AutomationInput) {
     steps,
     requer_aprovacao: input.requerAprovacao,
     ativo: input.ativo,
+    // Ativar uma régua pelo editor tira ela de "inativa".
+    ...(input.ativo ? { inativa: false } : {}),
     apenas_contatos_novos: input.apenasContatosNovos ?? false,
     ...(!input.id || input.origem !== undefined ? { origem: input.origem ?? "crm" } : {}),
     // Um disparo por pedido/carrinho: sem isso o motor só deixaria cada cliente entrar uma única vez.
@@ -1532,6 +1534,8 @@ export async function listAutomationsRows() {
     steps: (Array.isArray(a.steps) ? a.steps : []) as AutomationStepInput[],
     requerAprovacao: a.requer_aprovacao as boolean,
     ativo: a.ativo as boolean,
+    /** Fora de uso (não roda): separada das pausadas na tela. */
+    inativa: Boolean(a.inativa),
     apenasContatosNovos: Boolean(a.apenas_contatos_novos),
     origem: (a.origem ?? "crm") as string,
     automationKind: (a.automation_kind ?? "segment") as "segment" | "rfm" | "cashback",

@@ -534,7 +534,21 @@ export const toggleAutomation = createServerFn({ method: "POST" })
     }
     const { error } = await supabaseAdmin
       .from("whatsapp_automations")
-      .update({ ativo: data.ativo, updated_at: new Date().toISOString() } as never)
+      .update({ ativo: data.ativo, ...(data.ativo ? { inativa: false } : {}), updated_at: new Date().toISOString() } as never)
+      .eq("id", data.id);
+    if (error) return { success: false as const, error: error.message };
+    return { success: true as const };
+  });
+
+/** Marca a régua como "Inativa" (desliga e separa das pausadas) ou volta para "Pausada". Não apaga nada. */
+export const setAutomationInativa = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) => z.object({ id: z.string().uuid(), inativa: z.boolean() }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("whatsapp_automations")
+      .update({ inativa: data.inativa, ...(data.inativa ? { ativo: false } : {}), updated_at: new Date().toISOString() } as never)
       .eq("id", data.id);
     if (error) return { success: false as const, error: error.message };
     return { success: true as const };

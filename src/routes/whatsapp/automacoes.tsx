@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Copy, Pencil, Play, Plus, Sparkles, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, Copy, Pencil, Play, Plus, Sparkles, Trash2 } from "lucide-react";
 import { AUTOMATION_RECIPES } from "@/components/whatsapp/flowRecipes";
 import { toast } from "sonner";
 import Box from "@mui/material/Box";
@@ -29,8 +29,21 @@ import {
   installLifecycleAutomations,
   listAutomations,
   runAutomationNow,
+  setAutomationInativa,
   toggleAutomation,
 } from "@/lib/whatsapp-meta.functions";
+
+type Situacao = "ativa" | "pausada" | "inativa";
+type FiltroSituacao = "todas" | Situacao;
+
+const SITUACAO_LABEL: Record<Situacao, string> = { ativa: "Ativa", pausada: "Pausada", inativa: "Inativa" };
+const SITUACAO_COR: Record<Situacao, "success" | "warning" | "default"> = { ativa: "success", pausada: "warning", inativa: "default" };
+
+/** Ativa = roda; Pausada = desligada mas deve voltar; Inativa = fora de uso (candidata a apagar). */
+function situacaoDe(a: { ativo?: boolean; inativa?: boolean }): Situacao {
+  if (a.ativo) return "ativa";
+  return a.inativa ? "inativa" : "pausada";
+}
 
 export const Route = createFileRoute("/whatsapp/automacoes")({
   head: () => ({
@@ -54,6 +67,8 @@ export const Route = createFileRoute("/whatsapp/automacoes")({
 
 function AutomacoesPage() {
   const runToggle = useServerFn(toggleAutomation);
+  const runInativa = useServerFn(setAutomationInativa);
+  const [filtro, setFiltro] = useState<FiltroSituacao>("todas");
   const runDelete = useServerFn(deleteAutomation);
   const runNow = useServerFn(runAutomationNow);
   const runLifecycleInstall = useServerFn(installLifecycleAutomations);
@@ -65,6 +80,15 @@ function AutomacoesPage() {
     queryKey: ["whatsapp-automations"],
     queryFn: () => listAutomations(),
   });
+
+  const lista = (automations ?? []) as any[];
+  const contagem: Record<FiltroSituacao, number> = {
+    todas: lista.length,
+    ativa: lista.filter((a) => situacaoDe(a) === "ativa").length,
+    pausada: lista.filter((a) => situacaoDe(a) === "pausada").length,
+    inativa: lista.filter((a) => situacaoDe(a) === "inativa").length,
+  };
+  const visiveis = filtro === "todas" ? lista : lista.filter((a) => situacaoDe(a) === filtro);
 
   const wrap = async (id: string, fn: () => Promise<unknown>) => {
     setBusyId(id);
@@ -225,8 +249,27 @@ function AutomacoesPage() {
           </Box>
         </Box>
 
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
+          {(
+            [
+              ["todas", "Todas"],
+              ["ativa", "Ativas"],
+              ["pausada", "Pausadas"],
+              ["inativa", "Inativas"],
+            ] as const
+          ).map(([key, label]) => (
+            <Chip
+              key={key}
+              label={`${label} (${contagem[key]})`}
+              color={filtro === key ? "primary" : "default"}
+              variant={filtro === key ? "filled" : "outlined"}
+              onClick={() => setFiltro(key)}
+            />
+          ))}
+        </Stack>
+
         <Stack spacing={1}>
-          {(automations ?? []).map((a: any) => (
+          {visiveis.map((a: any) => (
             <Stack
               key={a.id}
               direction="row"
@@ -262,10 +305,10 @@ function AutomacoesPage() {
                   label={a.automationKind === "rfm" ? "RFM" : "Cashback"}
                 />
               )}
-              <Chip size="small" variant="outlined" label={a.ativo ? "Ativa" : "Pausada"} />
+              <Chip size="small" color={SITUACAO_COR[situacaoDe(a)]} variant="outlined" label={SITUACAO_LABEL[situacaoDe(a)]} />
               <Switch
                 checked={Boolean(a.ativo)}
-                disabled={busyId === a.id}
+                disabled={busyId === a.id || situacaoDe(a) === "inativa"}
                 onChange={(e) =>
                   wrap(a.id, () => runToggle({ data: { id: a.id, ativo: e.target.checked } }))
                 }
@@ -274,7 +317,7 @@ function AutomacoesPage() {
                 size="small"
                 variant="outlined"
                 startIcon={<Play size={14} />}
-                disabled={busyId === a.id || (a.automationKind !== "segment" && !a.ativo)}
+                disabled={busyId === a.id || situacaoDe(a) === "inativa" || (a.automationKind !== "segment" && !a.ativo)}
                 onClick={() => wrap(a.id, () => runNow({ data: { id: a.id } }))}
               >
                 Rodar agora
@@ -335,6 +378,30 @@ function AutomacoesPage() {
                   Duplicar
                 </Button>
               )}
+              {situacaoDe(a) === "inativa" ? (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<ArchiveRestore size={14} />}
+                  disabled={busyId === a.id}
+                  onClick={() => wrap(a.id, () => runInativa({ data: { id: a.id, inativa: false } }))}
+                >
+                  Reativar
+                </Button>
+              ) : (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<Archive size={14} />}
+                  disabled={busyId === a.id}
+                  onClick={() => {
+                    if (confirm(`Inativar a régua "${a.nome}"? Ela deixa de rodar e vai para a lista de inativas (nada é apagado).`))
+                      wrap(a.id, () => runInativa({ data: { id: a.id, inativa: true } }));
+                  }}
+                >
+                  Inativar
+                </Button>
+              )}
               <IconButton
                 disabled={busyId === a.id}
                 onClick={() => {
@@ -346,9 +413,14 @@ function AutomacoesPage() {
               </IconButton>
             </Stack>
           ))}
-          {(automations ?? []).length === 0 && (
+          {lista.length === 0 && (
             <Typography variant="body2" color="text.secondary">
               Nenhuma régua criada ainda.
+            </Typography>
+          )}
+          {lista.length > 0 && visiveis.length === 0 && (
+            <Typography variant="body2" color="text.secondary">
+              Nenhuma régua nesta situação.
             </Typography>
           )}
         </Stack>

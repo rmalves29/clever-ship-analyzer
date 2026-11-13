@@ -4,7 +4,9 @@ import { normalizePopupDesignConfig, type PopupDesignConfig } from "./popup-desi
  *  popup_campaigns/popup_leads/site_visits (ver migração add_popup_capture). O snippet colado no
  *  theme.liquid chama os endpoints públicos em src/server.ts, que usam as funções deste arquivo. */
 
-const APP_URL = process.env["PUBLIC_APP_URL"] || "https://clever-ship-analyzer.lovable.app";
+// O script do pop-up roda no site da loja e fala com esta API. O padrão é o CRM (Vercel, banco hfm): o tema da loja ainda
+// carrega o loader pelo endereço antigo do Lovable, e sem isto ele lia a configuração de OUTRO banco (trava sempre "desativada").
+const APP_URL = process.env["PUBLIC_APP_URL"] || "https://crm.maniadmulher.com";
 
 async function admin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

@@ -398,6 +398,27 @@ export function renderPopupLoaderJs(): string {
       (showEnter ? '<button id="mm_gate_submit" type="button" style="width:100%;padding:14px 16px;border:none;border-radius:12px;background:' + btn + ';color:' + gateTextOn(btn) + ';font-size:14px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;">' + gateEsc(g.buttonText) + '</button>' : '') +
       groupButton + '</div>';
 
+    // Trava só de categorias/páginas (scope "paths"): o menu e o cabeçalho do site ficam livres e a
+    // tela só cobre a área abaixo deles. No site inteiro continua tela cheia.
+    function placeGateOverlay() {
+      if (g.scope !== "paths") return;
+      var h = document.querySelector("header, [role='banner']");
+      var top = 0;
+      if (h) {
+        var r = h.getBoundingClientRect();
+        if (r.bottom > 0 && r.bottom < window.innerHeight * 0.6) top = Math.round(r.bottom);
+      }
+      overlay.style.top = top + "px";
+    }
+    placeGateOverlay();
+    if (g.scope === "paths") {
+      window.addEventListener("resize", placeGateOverlay);
+      window.addEventListener("scroll", placeGateOverlay, { passive: true });
+      window.addEventListener("load", placeGateOverlay);
+      setTimeout(placeGateOverlay, 600);
+    }
+
+    // Em "paths" só a página fica travada; o menu continua clicável.
     document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
     document.body.appendChild(overlay);

@@ -370,14 +370,14 @@ export function renderPopupLoaderJs(): string {
     overlay.style.cssText = "position:fixed;top:0;right:0;bottom:0;left:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;overflow-y:auto;padding:20px;box-sizing:border-box;background:" + (translucent ? "rgba(0,0,0," + op + ")" : bg) + ";" + (translucent ? "-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);" : "") + "color:" + fg + ";font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;";
 
     var cardStyle = translucent
-      ? "width:100%;max-width:440px;box-sizing:border-box;margin:auto;padding:28px 24px;text-align:center;background:" + bg + ";color:" + fg + ";border-radius:20px;box-shadow:0 25px 80px rgba(0,0,0,.35);"
+      ? "width:100%;max-width:440px;box-sizing:border-box;margin:auto;padding:clamp(14px,3vh,28px) clamp(14px,4vw,24px);text-align:center;background:" + bg + ";color:" + fg + ";border-radius:20px;box-shadow:0 25px 80px rgba(0,0,0,.35);"
       : "width:100%;max-width:480px;text-align:center;";
 
     var imgSize = Math.max(120, Math.min(480, Number(g.imageSize) || 280));
     var imgX = Math.max(0, Math.min(100, Number(g.imagePosX))); if (isNaN(imgX)) imgX = 50;
     var imgY = Math.max(0, Math.min(100, Number(g.imagePosY))); if (isNaN(imgY)) imgY = 50;
     var imgZoom = Math.max(1, Math.min(3, Number(g.imageZoom) || 1));
-    var image = g.imageUrl ? '<div style="width:' + imgSize + 'px;max-width:100%;aspect-ratio:1/1;margin:0 auto 22px;border-radius:18px;overflow:hidden;background:rgba(255,255,255,.06);"><img src="' + gateEsc(g.imageUrl) + '" alt="" style="display:block;width:100%;height:100%;object-fit:cover;object-position:' + imgX + '% ' + imgY + '%;transform:scale(' + imgZoom + ');transform-origin:' + imgX + '% ' + imgY + '%;"></div>' : "";
+    var image = g.imageUrl ? '<div style="width:min(' + imgSize + 'px,28vh,100%);aspect-ratio:1/1;margin:0 auto clamp(10px,2.4vh,22px);border-radius:18px;overflow:hidden;background:rgba(255,255,255,.06);"><img src="' + gateEsc(g.imageUrl) + '" alt="" style="display:block;width:100%;height:100%;object-fit:cover;object-position:' + imgX + '% ' + imgY + '%;transform:scale(' + imgZoom + ');transform-origin:' + imgX + '% ' + imgY + '%;"></div>' : "";
     // Botão de entrar pode ser escondido: a senha continua indo pela tecla Enter do campo.
     var showEnter = g.showEnterButton !== false;
     // Botões extras (links). Script antigo em cache só conhecia o botão do grupo.
@@ -387,15 +387,15 @@ export function renderPopupLoaderJs(): string {
     var groupButton = gateButtons.map(function (b) {
       if (!b || !b.url || !b.text) return "";
       var c = b.color || btn;
-      return '<a href="' + gateEsc(b.url) + '" target="_blank" rel="noopener" style="display:block;box-sizing:border-box;width:100%;margin-top:12px;padding:14px 16px;border:none;border-radius:12px;background:' + c + ';color:' + gateTextOn(c) + ';font-size:13px;font-weight:800;letter-spacing:.02em;text-align:center;text-decoration:none;">' + gateEsc(b.text) + '</a>';
+      return '<a href="' + gateEsc(b.url) + '" target="_blank" rel="noopener" style="display:block;box-sizing:border-box;width:100%;margin-top:clamp(8px,1.4vh,12px);padding:clamp(10px,1.8vh,14px) 16px;border:none;border-radius:12px;background:' + c + ';color:' + gateTextOn(c) + ';font-size:13px;font-weight:800;letter-spacing:.02em;text-align:center;text-decoration:none;">' + gateEsc(b.text) + '</a>';
     }).join("");
 
     overlay.innerHTML = '<div style="' + cardStyle + '">' + image +
-      '<h2 style="margin:0 0 10px;font-size:28px;line-height:1.1;font-weight:900;letter-spacing:-.02em;color:' + fg + ';">' + gateEsc(g.headline) + '</h2>' +
-      (g.bodyText ? '<p style="margin:0 0 22px;font-size:15px;line-height:1.55;opacity:.85;white-space:pre-line;">' + gateEsc(g.bodyText) + '</p>' : '') +
-      '<input id="mm_gate_input" type="password" autocomplete="off" enterkeyhint="go" placeholder="' + gateEsc(g.passwordPlaceholder) + '" style="width:100%;height:50px;padding:0 16px;box-sizing:border-box;border:1px solid rgba(255,255,255,.35);border-radius:12px;background:#fff;color:#111827;font-size:16px;text-align:center;outline:none;">' +
+      '<h2 style="margin:0 0 clamp(6px,1.2vh,10px);font-size:clamp(20px,4vh,28px);line-height:1.1;font-weight:900;letter-spacing:-.02em;color:' + fg + ';">' + gateEsc(g.headline) + '</h2>' +
+      (g.bodyText ? '<p style="margin:0 0 clamp(10px,2.4vh,22px);font-size:clamp(13px,2.2vh,15px);line-height:1.45;opacity:.85;white-space:pre-line;">' + gateEsc(g.bodyText) + '</p>' : '') +
+      '<input id="mm_gate_input" type="password" autocomplete="off" enterkeyhint="go" placeholder="' + gateEsc(g.passwordPlaceholder) + '" style="width:100%;height:clamp(42px,6.4vh,50px);padding:0 16px;box-sizing:border-box;border:1px solid rgba(255,255,255,.35);border-radius:12px;background:#fff;color:#111827;font-size:16px;text-align:center;outline:none;">' +
       '<div id="mm_gate_msg" style="min-height:20px;margin:8px 0 4px;font-size:13px;color:#fca5a5;"></div>' +
-      (showEnter ? '<button id="mm_gate_submit" type="button" style="width:100%;padding:14px 16px;border:none;border-radius:12px;background:' + btn + ';color:' + gateTextOn(btn) + ';font-size:14px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;">' + gateEsc(g.buttonText) + '</button>' : '') +
+      (showEnter ? '<button id="mm_gate_submit" type="button" style="width:100%;padding:clamp(10px,1.8vh,14px) 16px;border:none;border-radius:12px;background:' + btn + ';color:' + gateTextOn(btn) + ';font-size:14px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;">' + gateEsc(g.buttonText) + '</button>' : '') +
       groupButton + '</div>';
 
     // Trava só de categorias/páginas (scope "paths"): o menu e o cabeçalho do site ficam livres e a

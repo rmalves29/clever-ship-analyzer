@@ -33,12 +33,8 @@ async function resolveCustomSegmentCustomerIds(segmentId: string): Promise<strin
   }
 
   // Não é um segmento por regra — pode ser uma lista estática (mesmo formato de id UUID).
-  const { data: members, error: listError } = await supabaseAdmin
-    .from("crm_list_members")
-    .select("customer_id")
-    .eq("lista_id", segmentId);
-  if (listError) throw new Error(`Erro ao carregar a lista estática: ${listError.message}`);
-  return (members ?? []).map((row) => row.customer_id);
+  const { loadStaticListMemberIds } = await import("./crm-static-list-members.server");
+  return loadStaticListMemberIds(segmentId);
 }
 
 async function loadAudienceCustomers(ids: string[]) {

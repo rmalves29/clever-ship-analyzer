@@ -75,6 +75,9 @@ function NovaCampanha() {
 
   const [nome, setNome] = useState("");
   const [audience, setAudience] = useState("sem_recompra");
+  const [deliveryMode, setDeliveryMode] = useState<"template" | "session">("template");
+  const [freeText, setFreeText] = useState("");
+  const session = deliveryMode === "session";
   const [templateName, setTemplateName] = useState("");
   const [params, setParams] = useState<string[]>([]);
   const [activeVar, setActiveVar] = useState(0);
@@ -101,6 +104,8 @@ function NovaCampanha() {
     const f = loadedDraft.form;
     setNome(loadedDraft.name === "Rascunho sem nome" ? "" : loadedDraft.name);
     setAudience(f.audience);
+    setDeliveryMode(f.deliveryMode);
+    setFreeText(f.freeText);
     setTemplateName(f.templateName);
     setParams(f.params);
     setCoupon(f.coupon);
@@ -134,8 +139,8 @@ function NovaCampanha() {
   }, [audience, segments, staticLists]);
 
   const { data: preview, isFetching: loadingPreview } = useQuery({
-    queryKey: ["wa-audience", selection?.segmentType, selection?.segmentId],
-    queryFn: () => runPreview({ data: { segmentType: selection!.segmentType, segmentId: selection!.segmentId } }),
+    queryKey: ["wa-audience", selection?.segmentType, selection?.segmentId, deliveryMode],
+    queryFn: () => runPreview({ data: { segmentType: selection!.segmentType, segmentId: selection!.segmentId, deliveryMode } }),
     enabled: Boolean(selection),
   });
 
@@ -147,6 +152,7 @@ function NovaCampanha() {
   const semTelefone = Math.max(0, (preview?.clientes ?? 0) - (preview?.comTelefone ?? 0));
 
   const renderedBody = useMemo(() => {
+    if (session) return freeText;
     let text = bodyText(template);
     tokens.forEach((token, i) => {
       const firstName = (sample?.name ?? "Cliente").split(" ")[0] ?? "Cliente";
@@ -155,11 +161,15 @@ function NovaCampanha() {
       text = text.replace(new RegExp(`\\{\\{\\s*${token}\\s*\\}\\}`, "g"), value);
     });
     return text;
-  }, [template, tokens, params, sample]);
+  }, [template, tokens, params, sample, session, freeText]);
 
-  const blocker = !nome.trim()
+  const blocker = loadingPreview
+    ? "Atualizando o público…"
+    : !nome.trim()
     ? "Dê um nome à campanha."
-    : !template
+    : session && !freeText.trim()
+      ? "Escreva a mensagem livre."
+      : !session && !template
       ? "Escolha um modelo aprovado."
       : destinatarios === 0
         ? "Esse público está com 0 destinatários válidos."
@@ -171,7 +181,7 @@ function NovaCampanha() {
     setSavingDraft(true);
     try {
       const res = await runSaveDraft({
-        data: { id: draftId ?? undefined, name: nome.trim(), form: { audience, templateName, params, coupon, tag, requireApproval, scheduleOn, scheduledAt } },
+        data: { id: draftId ?? undefined, name: nome.trim(), form: { deliveryMode, freeText, audience, templateName, params, coupon, tag, requireApproval, scheduleOn, scheduledAt } },
       });
       if (!res.success) {
         toast.error(res.error);
@@ -187,7 +197,7 @@ function NovaCampanha() {
   };
 
   const submit = async () => {
-    if (blocker || !selection || !template) return;
+    if (blocker || !selection || (!session && !template)) return;
     setBusy(true);
     try {
       const res: any = await runCreate({
@@ -195,9 +205,11 @@ function NovaCampanha() {
           nome: nome.trim(),
           segmentType: selection.segmentType,
           segmentId: selection.segmentId,
-          messageType: String(template.category).toUpperCase() === "UTILITY" ? "utility" : "marketing",
-          templateName: template.name,
-          templateLanguage: template.language,
+          deliveryMode,
+          freeText: session ? freeText.trim() : undefined,
+          messageType: !session && String(template?.category).toUpperCase() === "UTILITY" ? "utility" : "marketing",
+          templateName: session ? undefined : template?.name,
+          templateLanguage: session ? undefined : template?.language,
           couponCode: coupon.trim() || undefined,
           bodyParams: params.map((p) => p.trim()),
           bodyParamTokens: tokens,
@@ -271,6 +283,14 @@ function NovaCampanha() {
           </Stack>
 
           <Stack spacing={2} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.5 }}>
+            <TextField select label="Tipo de envio" value={deliveryMode} onChange={(e) => setDeliveryMode(e.target.value as "template" | "session")} fullWidth>
+              <MenuItem value="template">Modelo aprovado</MenuItem>
+              <MenuItem value="session">Mensagem livre · janela de 24h</MenuItem>
+            </TextField>
+            {session ? <>
+              <Typography variant="body2" color="text.secondary">Somente contatos que mandaram mensagem nas últimas 24 horas receberão o texto. A janela será verificada antes de cada envio; contatos com janela encerrada serão descartados. Opt-outs de marketing continuam excluídos.</Typography>
+              <TextField label="Mensagem livre" value={freeText} onChange={(e) => setFreeText(e.target.value)} multiline minRows={6} fullWidth slotProps={{ htmlInput: { maxLength: 4096 } }} helperText={`${freeText.length}/4096 caracteres · links são permitidos`} />
+            </> : <>
             <TextField select label="Modelo aprovado" value={templateName} onChange={(e) => setTemplateName(e.target.value)} fullWidth
               slotProps={{ select: { displayEmpty: true } }}
             >
@@ -317,6 +337,7 @@ function NovaCampanha() {
                   : `Clique numa variável para inserir no campo selecionado (agora: {{${tokens[Math.min(activeVar, tokens.length - 1)]}}}). Ex.: "Oi {{NOME_CLIENTE}}, seu pedido {{NUMERO_PEDIDO}}…"`}
               </Typography>
             </Box>
+            </>}
             <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}>
               <TextField label="Cupom (opcional)" value={coupon} onChange={(e) => setCoupon(e.target.value)} fullWidth />
               <TextField label="Etiqueta (opcional)" value={tag} onChange={(e) => setTag(e.target.value)} fullWidth />
@@ -358,10 +379,10 @@ function NovaCampanha() {
             <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>Prévia da mensagem</Typography>
             <Box sx={{ mt: 1.5, borderRadius: 4, bgcolor: "#0b141a", p: 2 }}>
               <Box sx={{ maxWidth: "85%", borderRadius: 3, borderTopLeftRadius: 4, bgcolor: "#005c4b", px: 1.5, py: 1, fontSize: 14, lineHeight: 1.6, color: "#fff", whiteSpace: "pre-wrap" }}>
-                {renderedBody || "Escolha um modelo para ver a mensagem."}
+                {renderedBody || (session ? "Escreva a mensagem para ver a prévia." : "Escolha um modelo para ver a mensagem.")}
               </Box>
             </Box>
-            {template && (
+            {!session && template && (
               <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", mt: 1.5 }}>
                 <Chip size="small" variant="outlined" label={template.category} />
                 <Chip size="small" variant="outlined" label={template.language} />
@@ -377,7 +398,7 @@ function NovaCampanha() {
           <Typography variant="body2">
             <Box component="span" sx={{ fontWeight: 700 }}>{destinatarios.toLocaleString("pt-BR")}</Box> destinatários
           </Typography>
-          {template && (
+          {!session && template && (
             <Tooltip
               title={
                 sendCost
@@ -393,6 +414,7 @@ function NovaCampanha() {
               </Typography>
             </Tooltip>
           )}
+          {session && <Typography variant="body2">Mensagem de sessão · sem cobrança de template</Typography>}
           <Typography variant="caption" sx={{ mr: "auto", color: blocker ? "warning.main" : "text.secondary" }}>
             {blocker ?? (scheduleOn ? "Pronto para agendar." : "Pronto para enviar.")}
           </Typography>

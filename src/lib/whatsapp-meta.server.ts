@@ -1,3 +1,4 @@
+import { SESSION_TEXT_TEMPLATE, sessionTextError } from "./whatsapp-session";
 import { GOALS, type SegmentType } from "./crm-mock";
 import { buildBodyParameters } from "./whatsapp-template-body-tokens";
 import { findFirstTouchCampaign } from "./whatsapp-attribution";
@@ -646,6 +647,8 @@ async function rememberCampaignCouponCode(
 }
 
 export type NewCampaignInput = {
+  deliveryMode?: "template" | "session";
+  freeText?: string | undefined;
   nome: string;
   segmentType: string;
   segmentId?: string | undefined;
@@ -670,7 +673,15 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
   const supabaseAdmin = await admin();
   const settings = await loadSettings();
 
-  const templateName = input.templateName?.trim() || settings.templateName;
+  const session = input.deliveryMode === "session";
+  if (session) {
+    const error = sessionTextError(input.freeText ?? "");
+    if (error) return { success: false as const, error };
+  }
+  const templateName = session ? SESSION_TEXT_TEMPLATE : input.templateName?.trim() || settings.templateName;
+  const bodyParams = session ? [input.freeText!.trim()] : input.bodyParams;
+  const bodyParamTokens = session ? null : input.bodyParamTokens ?? null;
+  const messageType = session ? "marketing" : input.messageType;
   const segmentId = input.segmentId;
 
   if (!settings.accessToken || !settings.phoneNumberId || !templateName) {
@@ -698,9 +709,9 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
       audience_label: input.segmentType,
       template_name: templateName,
       template_language: templateLanguage,
-      message_type: input.messageType,
-      body_params: input.bodyParams,
-      body_param_tokens: input.bodyParamTokens ?? null,
+      message_type: messageType,
+      body_params: bodyParams,
+      body_param_tokens: bodyParamTokens,
       coupon_code: normalizeCouponCode(input.couponCode) || null,
       automation_id: input.automationId ?? null,
       automation_step_id: input.automationStepId ?? null,
@@ -723,9 +734,9 @@ export async function createCampaignRow(input: NewCampaignInput, status: "aguard
       segment_id: segmentId || null,
       template_name: templateName,
       template_language: templateLanguage,
-      message_type: input.messageType,
-      body_params: input.bodyParams,
-      body_param_tokens: input.bodyParamTokens ?? null,
+      message_type: messageType,
+      body_params: bodyParams,
+      body_param_tokens: bodyParamTokens,
       coupon_code: normalizeCouponCode(input.couponCode) || null,
       origem: input.origem ?? "crm",
       automation_id: input.automationId ?? null,

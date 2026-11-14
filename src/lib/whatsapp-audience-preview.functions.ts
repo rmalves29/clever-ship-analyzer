@@ -8,13 +8,14 @@ export const previewWhatsappAudience = createServerFn({ method: "POST" })
   .validator((data: unknown) =>
     z.object({
       segmentType: z.string(),
+      deliveryMode: z.enum(["template", "session"]).default("template"),
       segmentId: z.string().uuid().optional(),
     }).parse(data),
   )
   .handler(async ({ data }) => {
     const selection = normalizeWhatsappAudienceSelection(data.segmentType, data.segmentId);
     const { resolveWhatsappSegmentAudience } = await import("./whatsapp-segment-resolver.server");
-    const audience = await resolveWhatsappSegmentAudience(selection.segmentType, selection.segmentId);
+    const audience = await resolveWhatsappSegmentAudience(selection.segmentType, selection.segmentId, data.deliveryMode);
     return {
       clientes: audience.clientes,
       comTelefone: audience.comTelefone,

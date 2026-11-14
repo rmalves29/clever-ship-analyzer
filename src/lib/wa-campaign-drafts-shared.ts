@@ -2,6 +2,8 @@ import { z } from "zod";
 
 /** Formulário da tela "Nova campanha" como fica salvo no rascunho. */
 export const campaignDraftFormSchema = z.object({
+  deliveryMode: z.enum(["template", "session"]).default("template"),
+  freeText: z.string().max(4096).default(""),
   audience: z.string().max(200).default("sem_recompra"),
   templateName: z.string().max(200).default(""),
   params: z.array(z.string().max(2000)).max(20).default([]),

@@ -1,3 +1,4 @@
+import { SESSION_TEXT_TEMPLATE } from "./whatsapp-session";
 /**
  * Camada de leitura/ação da nova estrutura de campanhas (wa_campaigns / wa_campaign_recipients /
  * wa_jobs). As telas de /whatsapp falam SÓ com este arquivo — nada de ler as tabelas antigas.
@@ -76,14 +77,14 @@ function mapRow(
   // grátis na Meta — essa nuance não entra aqui, então o custo de campanhas de Utilidade pode
   // ficar um pouco acima do real.
   const custo =
-    sent * (messageType === "utility" ? costPerMessage.utility : costPerMessage.marketing);
+    row.template_name === SESSION_TEXT_TEMPLATE ? 0 : sent * (messageType === "utility" ? costPerMessage.utility : costPerMessage.marketing);
   return {
     id: row.id,
     name: row.name,
     status: row.status,
     origin: row.origin ?? "crm",
     audienceLabel: row.audience_label ?? null,
-    templateName: row.template_name ?? "",
+    templateName: row.template_name === SESSION_TEXT_TEMPLATE ? "Mensagem livre · janela 24h" : row.template_name ?? "",
     templateLanguage: row.template_language ?? "pt_BR",
     messageType: row.message_type ?? "marketing",
     campaignTag: row.campaign_tag ?? null,

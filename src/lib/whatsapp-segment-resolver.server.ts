@@ -86,15 +86,23 @@ export async function resolveWhatsappSegmentCustomerIds(segmentType: string, seg
   return getSegmentCustomerIds(segmentType, segmentId);
 }
 
-export async function resolveWhatsappSegmentAudience(segmentType: string, segmentId?: string) {
+export async function resolveWhatsappSegmentAudience(segmentType: string, segmentId?: string, deliveryMode: "template" | "session" = "template") {
   const ids = await resolveWhatsappSegmentCustomerIds(segmentType, segmentId);
   const { toE164 } = await import("./whatsapp-meta.server");
   const customers = await loadAudienceCustomers(ids);
   const withPhone = customers.filter((customer) => Boolean(customer.phone));
-  const eligible = withPhone.filter((customer) => {
+  let eligible = withPhone.filter((customer) => {
     const phone = toE164(customer.phone);
     return Boolean(phone && phone.length >= 12);
   });
+  if (deliveryMode === "session") {
+    const phones = eligible.map((c) => toE164(c.phone)!);
+    const [{ getOpenSessionPhones }, { getSuppressedWhatsappPhones }] = await Promise.all([
+      import("./whatsapp-session.server"), import("./whatsapp-suppression.server"),
+    ]);
+    const [open, suppressed] = await Promise.all([getOpenSessionPhones(phones), getSuppressedWhatsappPhones(phones)]);
+    eligible = eligible.filter((c) => open.has(toE164(c.phone)!) && !suppressed.has(toE164(c.phone)!));
+  }
 
   return {
     ids,

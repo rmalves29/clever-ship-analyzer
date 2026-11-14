@@ -1,3 +1,4 @@
+import { SESSION_TEXT_TEMPLATE } from "./whatsapp-session";
 /**
  * Motor único das campanhas de WhatsApp (Meta Cloud API).
  *
@@ -371,6 +372,13 @@ export async function enqueueCampaign(
     recipients = recipients.filter((recipient) => !suppressed.has(toE164(recipient.phone) ?? ""));
     suppressionSkipped = resolvedRecipients.length - recipients.length;
   }
+  if (campaign.template_name === SESSION_TEXT_TEMPLATE) {
+    const { getOpenSessionPhones } = await import("./whatsapp-session.server");
+    const open = await getOpenSessionPhones(recipients.map((r) => toE164(r.phone) ?? ""));
+    const before = recipients.length;
+    recipients = recipients.filter((r) => open.has(toE164(r.phone) ?? ""));
+    suppressionSkipped += before - recipients.length;
+  }
 
   let frozenContexts = new Map<string, AutomationEventContext>();
   if (campaign.origin === "automacao") {
@@ -407,7 +415,7 @@ export async function enqueueCampaign(
       name: recipient.first_name ?? null,
       phone: to,
       event_key: eventKey,
-      params: await resolveBodyParams(bodyParams, recipient, context, bundles.get(recipient.id)),
+      params: campaign.template_name === SESSION_TEXT_TEMPLATE ? bodyParams : await resolveBodyParams(bodyParams, recipient, context, bundles.get(recipient.id)),
       status: "queued" satisfies RecipientStatus,
     });
   }
@@ -716,7 +724,7 @@ export async function processWhatsappQueueBatch(options?: {
 
   // Corpo real dos templates deste lote (1 busca), pra espelhar o texto na caixa de entrada.
   let templateBodyByKey: Map<string, string> | null = null;
-  if (!useMock) {
+  if (!useMock && [...campaignById.values()].some((c) => c.template_name !== SESSION_TEXT_TEMPLATE)) {
     try {
       const { listMetaTemplates } = await import("./whatsapp-meta.server");
       const templatesResult = await listMetaTemplates();
@@ -780,7 +788,12 @@ export async function processWhatsappQueueBatch(options?: {
           bodyParams,
           dedupKey: `mock:${job.id}`,
         })
-      : await sendTemplateMessage({
+      : campaign.template_name === SESSION_TEXT_TEMPLATE
+        ? await (await import("./whatsapp-session.server")).sendSessionCampaignText({
+            to: recipient.phone, text: bodyParams[0] ?? "",
+            accessToken: settings.accessToken ?? "", phoneNumberId: settings.phoneNumberId ?? "",
+          })
+        : await sendTemplateMessage({
           accessToken: settings.accessToken ?? "",
           phoneNumberId: settings.phoneNumberId ?? "",
           to: recipient.phone,
@@ -798,7 +811,7 @@ export async function processWhatsappQueueBatch(options?: {
       let body: string | null = null;
       if (!useMock) {
         const templateBody = templateBodyByKey?.get(`${campaign.template_name}:${templateLanguage}`);
-        body = templateBody
+        body = campaign.template_name === SESSION_TEXT_TEMPLATE ? bodyParams[0] ?? "" : templateBody
           ? renderTemplateBody(templateBody, bodyParams, campaign.body_param_tokens)
           : `Template: ${campaign.template_name}`;
         phone = toE164(recipient.phone);
@@ -806,7 +819,7 @@ export async function processWhatsappQueueBatch(options?: {
       return { job_id: job.id, recipient_id: recipient.id, kind: "sent", wa_message_id: result.waMessageId ?? null, phone, body };
     }
 
-    const canRetry = job.attempts < job.max_attempts && !isPermanentSendError(result.error);
+    const canRetry = !("permanent" in result && result.permanent) && job.attempts < job.max_attempts && !isPermanentSendError(result.error);
     if (canRetry) retry++;
     else failed++;
     queueAutomation(campaign, recipient, canRetry ? "retry" : "failed", result.error);

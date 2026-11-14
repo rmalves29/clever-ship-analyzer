@@ -1,3 +1,4 @@
+import { SESSION_TEXT_TEMPLATE, sessionTextError } from "./whatsapp-session";
 import { createServerFn } from "@tanstack/react-start";
 import { requireAppAuth } from "./app-auth";
 import { z } from "zod";
@@ -93,6 +94,8 @@ export const previewSegment = createServerFn({ method: "POST" })
   });
 
 const createCampaignSchema = z.object({
+  deliveryMode: z.enum(["template", "session"]).default("template"),
+  freeText: z.string().max(4096).optional(),
   nome: z.string().min(1),
   segmentType: z.string(),
   segmentId: z.string().uuid().optional(),
@@ -120,6 +123,12 @@ export const createAndSendCampaign = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => createCampaignSchema.parse(data))
   .handler(async ({ data }) => {
+    if (data.deliveryMode === "session") {
+      const error = sessionTextError(data.freeText ?? "");
+      if (error) return { success: false as const, error };
+    } else if (data.templateName === SESSION_TEXT_TEMPLATE) {
+      return { success: false as const, error: "Selecione o modo Mensagem livre para esse envio." };
+    }
     const schedule = validateSendAt(data.sendAt);
     if (!schedule.success) return { success: false as const, error: schedule.error };
 
@@ -127,14 +136,19 @@ export const createAndSendCampaign = createServerFn({ method: "POST" })
       import("./whatsapp-meta.server"),
       import("./whatsapp-segment-resolver.server"),
     ]);
-    const audience = await resolveWhatsappSegmentAudience(data.segmentType, data.segmentId);
+    const audience = await resolveWhatsappSegmentAudience(data.segmentType, data.segmentId, data.deliveryMode);
+    if (data.deliveryMode === "session" && audience.destinatarios === 0) {
+      return { success: false as const, error: "Nenhum destinatário com janela de 24h aberta e sem opt-out." };
+    }
 
     const created = await createCampaignRow(
       {
         nome: data.nome,
         segmentType: data.segmentType,
         segmentId: data.segmentId,
-        messageType: data.messageType,
+        deliveryMode: data.deliveryMode,
+        freeText: data.freeText,
+        messageType: data.deliveryMode === "session" ? "marketing" : data.messageType,
         templateName: data.templateName,
         templateLanguage: data.templateLanguage,
         bodyParams: data.bodyParams,

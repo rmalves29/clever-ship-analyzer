@@ -235,3 +235,78 @@ export async function getEnvioReports(period: EnvioReportsPeriod, range?: EnvioR
 
   return { totalClicks, totalEntries, totalExits, net, conversionPct, retentionPct, timeline, dailyByCampaign, campaigns: campaignRows, groups: groupRows, recentEvents };
 }
+
+/**
+ * Entradas e saídas de grupo, uma linha por pessoa/evento, para exportar em CSV.
+ * Respeita o mesmo período/intervalo da aba Relatórios. Inclui todos os grupos do tenant
+ * (inclusive os que não estão em campanha); a coluna "campanhas_do_grupo" mostra onde cada um está.
+ */
+export async function getEnvioGroupEventsExport(
+  period: EnvioReportsPeriod,
+  range: EnvioReportsRange | null,
+  eventType: "all" | "join" | "leave",
+) {
+  const supabase = await db();
+  const tenant = await tenantId();
+  const start = range ? new Date(`${range.from}T00:00:00-03:00`).toISOString() : periodStart(period);
+  const end = range ? new Date(`${range.to}T23:59:59.999-03:00`).toISOString() : null;
+
+  const { data: campaignData, error: campaignError } = await supabase.from("fe_campaigns").select("id, name").eq("tenant_id", tenant);
+  if (campaignError) throw new Error(campaignError.message);
+  const campaignName = new Map<string, string>(((campaignData ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
+  const campaignIds = [...campaignName.keys()];
+
+  const [groups, links, events] = await Promise.all([
+    fetchAll<any>((from, to) => supabase.from("fe_groups").select("id, group_jid, group_name").eq("tenant_id", tenant).order("id").range(from, to)),
+    fetchAll<any>((from, to) =>
+      campaignIds.length
+        ? supabase.from("fe_campaign_groups").select("campaign_id, group_id").in("campaign_id", campaignIds).order("campaign_id").order("group_id").range(from, to)
+        : Promise.resolve({ data: [], error: null }),
+    ),
+    fetchAll<{ group_id: string | null; group_jid: string | null; event_type: string; created_at: string; phone: string | null; campaign_id: string | null }>((from, to) => {
+      let q = supabase.from("fe_group_events").select("group_id, group_jid, event_type, created_at, phone, campaign_id").eq("tenant_id", tenant);
+      if (eventType !== "all") q = q.eq("event_type", eventType);
+      if (start) q = q.gte("created_at", start);
+      if (end) q = q.lte("created_at", end);
+      return q.order("created_at").order("id").range(from, to);
+    }),
+  ]);
+
+  const groupById = new Map<string, any>(groups.map((g) => [g.id, g]));
+  const groupByJid = new Map<string, any>();
+  for (const g of groups) {
+    const key = canonicalWhatsappGroupJid(g.group_jid);
+    if (key && !groupByJid.has(key)) groupByJid.set(key, g);
+  }
+  // Campanhas por grupo; linhas duplicadas do mesmo jid ("-group" e "@g.us") compartilham as campanhas.
+  const campaignsByGroupId = new Map<string, Set<string>>();
+  for (const link of links) {
+    const set = campaignsByGroupId.get(link.group_id) ?? new Set<string>();
+    set.add(link.campaign_id);
+    campaignsByGroupId.set(link.group_id, set);
+  }
+  const campaignsByJid = new Map<string, Set<string>>();
+  for (const g of groups) {
+    const key = canonicalWhatsappGroupJid(g.group_jid);
+    if (!key) continue;
+    const set = campaignsByJid.get(key) ?? new Set<string>();
+    for (const c of campaignsByGroupId.get(g.id) ?? []) set.add(c);
+    campaignsByJid.set(key, set);
+  }
+
+  const rows = events.map((e) => {
+    const group = (e.group_id && groupById.get(e.group_id)) || (e.group_jid ? groupByJid.get(canonicalWhatsappGroupJid(e.group_jid)) : undefined) || null;
+    const jidKey = group ? canonicalWhatsappGroupJid(group.group_jid) : canonicalWhatsappGroupJid(e.group_jid);
+    const groupCampaignIds = [...(campaignsByJid.get(jidKey) ?? campaignsByGroupId.get(group?.id) ?? [])];
+    return {
+      createdAt: e.created_at,
+      eventType: e.event_type,
+      phone: e.phone,
+      groupName: (group?.group_name as string | undefined) ?? e.group_jid ?? "Grupo removido",
+      campaignName: e.campaign_id ? (campaignName.get(e.campaign_id) ?? "Campanha removida") : "Sem campanha",
+      groupCampaignNames: groupCampaignIds.map((id) => campaignName.get(id)).filter(Boolean) as string[],
+    };
+  });
+
+  return { rows };
+}

@@ -20,7 +20,8 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { getEnvioReports } from "@/lib/envio-reports.functions";
+import { exportEnvioGroupEvents, getEnvioReports } from "@/lib/envio-reports.functions";
+import { buildEnvioEventsCsv, envioEventsFileName, type EnvioEventsExportFilter } from "@/lib/envio-events-csv";
 import type { EnvioReportsPeriod } from "@/lib/envio-reports.server";
 import { getAiContentPerformanceFn } from "@/lib/ai-content-queue.functions";
 
@@ -117,6 +118,34 @@ export function ReportsPanel() {
     URL.revokeObjectURL(url);
   };
 
+  // Exportação por pessoa: um evento (entrou/saiu) por linha, com telefone, grupo e campanha.
+  const exportEvents = useServerFn(exportEnvioGroupEvents);
+  const [eventFilter, setEventFilter] = useState<EnvioEventsExportFilter>("all");
+  const [exportingPeople, setExportingPeople] = useState(false);
+  const [exportPeopleError, setExportPeopleError] = useState<string | null>(null);
+  const exportPeopleCsv = async () => {
+    setExportingPeople(true);
+    setExportPeopleError(null);
+    try {
+      const { rows } = await exportEvents({ data: { period, range, eventType: eventFilter } });
+      if (rows.length === 0) {
+        setExportPeopleError("Nenhuma entrada ou saída no período escolhido.");
+        return;
+      }
+      const blob = new Blob([buildEnvioEventsCsv(rows)], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = envioEventsFileName(eventFilter, range ? `${range.from}_a_${range.to}` : period, new Date().toISOString().slice(0, 10));
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setExportPeopleError(error instanceof Error ? error.message : "Não foi possível gerar o arquivo.");
+    } finally {
+      setExportingPeople(false);
+    }
+  };
+
   if (isLoading || !data) {
     return (
       <Typography variant="body2" color="text.secondary" sx={{ p: 3 }}>
@@ -146,10 +175,32 @@ export function ReportsPanel() {
             Por data
           </Button>
         </Stack>
-        <Button variant="outline" size="small" startIcon={<Download size={16} />} onClick={exportCsv}>
-          Exportar CSV
-        </Button>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+          <Button variant="outline" size="small" startIcon={<Download size={16} />} onClick={exportCsv}>
+            Exportar CSV
+          </Button>
+          <TextField
+            select
+            size="small"
+            label="Pessoas"
+            value={eventFilter}
+            onChange={(e) => setEventFilter(e.target.value as EnvioEventsExportFilter)}
+            sx={{ minWidth: 170 }}
+          >
+            <MenuItem value="all">Entradas e saídas</MenuItem>
+            <MenuItem value="join">Só entradas</MenuItem>
+            <MenuItem value="leave">Só saídas</MenuItem>
+          </TextField>
+          <Button variant="outline" size="small" startIcon={<Download size={16} />} onClick={exportPeopleCsv} disabled={exportingPeople}>
+            {exportingPeople ? "Gerando…" : "Exportar pessoas"}
+          </Button>
+        </Stack>
       </Stack>
+      {exportPeopleError && (
+        <Typography variant="caption" color="error">
+          {exportPeopleError}
+        </Typography>
+      )}
 
       {byDate && (
         <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", flexWrap: "wrap" }}>

@@ -24,6 +24,7 @@ import {
 import { ConversationalFlowsTab } from "@/components/whatsapp/ConversationalFlowsTab";
 import { AUTOMATION_EVENT_BY_ID, parseEventTrigger } from "@/lib/automation-events";
 import { AutomationPerformancePanel, type PainelAcoes } from "@/components/whatsapp/AutomationPerformancePanel";
+import { PurchaseRecoveryPanel } from "@/components/whatsapp/PurchaseRecoveryPanel";
 import {
   deleteAutomation,
   installLifecycleAutomations,
@@ -201,6 +202,8 @@ function AutomacoesPage() {
         <AutomationPerformancePanel filtro={filtro} situacaoPorId={situacaoPorId} acoes={acoesDoPainel} />
       </Stack>
 
+      <PurchaseRecoveryPanel />
+
       <Stack spacing={1.5}>
         <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
           <Box>
@@ -337,7 +340,9 @@ function AutomacoesPage() {
               <Box sx={{ minWidth: 200, flex: 1 }}>
                 <Typography sx={{ fontWeight: 600 }}>{a.nome}</Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {a.automationKind === "rfm"
+                  {a.automationKind === "purchase_recovery"
+                    ? "Checkout abandonado / pedido expirado · 1ª mensagem + 1 lembrete"
+                    : a.automationKind === "rfm"
                     ? `Matriz RFM · ${String(a.triggerConfig?.rfmSegment ?? "")}`
                     : a.automationKind === "cashback"
                       ? "Cashback por pedido"
@@ -345,7 +350,7 @@ function AutomacoesPage() {
                         ? `Evento · ${AUTOMATION_EVENT_BY_ID.get(parseEventTrigger(a.triggerConfig)!.event)?.label ?? ""}`
                         : (SEGMENT_LABEL[a.segmentType as keyof typeof SEGMENT_LABEL] ??
                           a.segmentType)}{" "}
-                  · {a.steps?.length ?? 0} etapa(s)
+                  {a.automationKind !== "purchase_recovery" && <> · {a.steps?.length ?? 0} etapa(s)</>}
                 </Typography>
               </Box>
               {a.automationKind !== "segment" && (
@@ -353,17 +358,18 @@ function AutomacoesPage() {
                   size="small"
                   color="primary"
                   variant="outlined"
-                  label={a.automationKind === "rfm" ? "RFM" : "Cashback"}
+                  label={a.automationKind === "rfm" ? "RFM" : a.automationKind === "purchase_recovery" ? "Recuperação" : "Cashback"}
                 />
               )}
               <Chip size="small" color={SITUACAO_COR[situacaoDe(a)]} variant="outlined" label={SITUACAO_LABEL[situacaoDe(a)]} />
               <Switch
-                checked={Boolean(a.ativo)}
+                checked={a.automationKind === "purchase_recovery" ? a.triggerConfig?.recoveryArmed === true : Boolean(a.ativo)}
                 disabled={busyId === a.id || situacaoDe(a) === "inativa"}
                 onChange={(e) =>
                   wrap(a.id, () => runToggle({ data: { id: a.id, ativo: e.target.checked } }))
                 }
               />
+              {a.automationKind !== "purchase_recovery" && (<>
               <Button
                 size="small"
                 variant="outlined"
@@ -381,6 +387,7 @@ function AutomacoesPage() {
               >
                 Editar
               </Button>
+              </>)}
               {a.automationKind === "segment" && (
                 <Button
                   size="small"

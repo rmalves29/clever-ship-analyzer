@@ -120,6 +120,56 @@ export function nextRecoverySendTime(at: Date): Date {
   return new Date((sameDay ? dayStartLocal : dayStartLocal + DAY) - BRT_OFFSET_MS);
 }
 
+// ---------------------------------------------------------------------------
+// Exceção temporária de horário — SÓ a 1ª mensagem do lote inicial de 13–14/11
+// ---------------------------------------------------------------------------
+
+/** Única automação que aceita a exceção (autorizada expressamente pelo proprietário). */
+export const INITIAL_WINDOW_OVERRIDE_AUTOMATION_ID = "cad05e8f-3dba-4e32-966a-a691956c7e76";
+/** Faixa das tentativas liberáveis: sexta e sábado, 13 e 14/11/2026 (Brasília). */
+export const INITIAL_WINDOW_OVERRIDE_ATTEMPT_RANGE = { since: "2026-11-13T03:00:00Z", before: "2026-11-15T03:00:00Z" } as const;
+export const INITIAL_WINDOW_OVERRIDE_MAX_MINUTES = 60;
+
+export type InitialWindowOverrideCheck = { valid: true; startsAt: string; expiresAt: string; reason: string } | { valid: false; why: string };
+
+/**
+ * Lê `trigger_config.recoveryInitialWindowOverride = { startsAt, expiresAt, reason }`.
+ * Sem campo, malformado, início no futuro, expirado ou prazo > 60 min: não libera nada.
+ */
+export function checkInitialWindowOverride(automationId: string, triggerConfig: unknown, now: Date): InitialWindowOverrideCheck {
+  if (automationId !== INITIAL_WINDOW_OVERRIDE_AUTOMATION_ID) return { valid: false, why: "automação sem exceção autorizada" };
+  const tc = (triggerConfig && typeof triggerConfig === "object" ? triggerConfig : {}) as Record<string, unknown>;
+  const raw = tc["recoveryInitialWindowOverride"];
+  if (raw === undefined || raw === null) return { valid: false, why: "sem exceção configurada" };
+  if (typeof raw !== "object" || Array.isArray(raw)) return { valid: false, why: "exceção malformada" };
+  const o = raw as Record<string, unknown>;
+  const startsAtRaw = typeof o["startsAt"] === "string" ? o["startsAt"] : "";
+  const expiresAtRaw = typeof o["expiresAt"] === "string" ? o["expiresAt"] : "";
+  const reason = typeof o["reason"] === "string" ? o["reason"].trim() : "";
+  const startsAt = Date.parse(startsAtRaw);
+  const expiresAt = Date.parse(expiresAtRaw);
+  if (!Number.isFinite(startsAt) || !Number.isFinite(expiresAt) || !reason) return { valid: false, why: "exceção malformada" };
+  if (expiresAt <= startsAt) return { valid: false, why: "exceção com prazo inválido" };
+  if (expiresAt - startsAt > INITIAL_WINDOW_OVERRIDE_MAX_MINUTES * MINUTE) return { valid: false, why: "exceção acima de 60 minutos" };
+  if (now.getTime() < startsAt) return { valid: false, why: "exceção ainda não começou" };
+  if (now.getTime() >= expiresAt) return { valid: false, why: "exceção expirada" };
+  return { valid: true, startsAt: new Date(startsAt).toISOString(), expiresAt: new Date(expiresAt).toISOString(), reason };
+}
+
+/** A exceção vale só para: esta automação, 1ª mensagem, lote inicial e tentativa dentro de 13–14/11. */
+export function initialWindowOverrideApplies(
+  check: InitialWindowOverrideCheck,
+  target: { stage: RecoveryStage; cohort: string; attemptAt: string },
+): boolean {
+  if (!check.valid || target.stage !== "initial" || target.cohort !== "initial") return false;
+  const at = Date.parse(target.attemptAt);
+  return (
+    Number.isFinite(at) &&
+    at >= Date.parse(INITIAL_WINDOW_OVERRIDE_ATTEMPT_RANGE.since) &&
+    at < Date.parse(INITIAL_WINDOW_OVERRIDE_ATTEMPT_RANGE.before)
+  );
+}
+
 export function eligibleAtFor(attemptAt: Date): Date {
   return new Date(attemptAt.getTime() + RECOVERY_DELAY_MINUTES * MINUTE);
 }

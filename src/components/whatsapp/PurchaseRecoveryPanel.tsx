@@ -107,6 +107,13 @@ export function PurchaseRecoveryPanel() {
               Última verificação: {fmt(f.lastTickAt)}
               {f.lastBlocker ? ` · ${f.lastBlocker}` : ""}
             </Typography>
+            {f.windowOverride && (
+              <Typography variant="caption" color={f.windowOverride.active ? "warning.main" : "text.secondary"} sx={{ display: "block" }}>
+                {f.windowOverride.active
+                  ? `Exceção de horário ATIVA (só 1ª mensagem do lote 13–14/11) até ${fmt(f.windowOverride.expiresAt)} · ${f.windowOverride.reason}`
+                  : `Exceção de horário sem efeito: ${f.windowOverride.why}`}
+              </Typography>
+            )}
             {f.lastError && (
               <Typography variant="caption" color="error" sx={{ display: "block" }}>
                 Erro: {f.lastError}

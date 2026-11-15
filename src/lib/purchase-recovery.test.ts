@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  INITIAL_WINDOW_OVERRIDE_AUTOMATION_ID,
+  checkInitialWindowOverride,
+  initialWindowOverrideApplies,
   PURCHASE_RECOVERY_IMPLEMENTATION,
   RECOVERY_TEMPLATES,
   evaluateRecoveryGuards,
@@ -265,5 +268,38 @@ describe("telefone e link", () => {
   it("aceita só o link individual de checkout da própria loja", () => {
     expect(validateRecoveryUrl(URL_A, HOSTS)).toEqual({ ok: true, url: URL_A });
     expect(validateRecoveryUrl("https://maniadmulher.com/77747060914/orders/abc/authenticate?key=x", HOSTS).ok).toBe(false);
+  });
+});
+
+describe("exceção temporária de horário (regras puras)", () => {
+  const ID = INITIAL_WINDOW_OVERRIDE_AUTOMATION_ID;
+  const now = new Date("2026-11-16T22:30:00Z");
+  const cfg = (o: unknown) => ({ recoveryInitialWindowOverride: o });
+  const ok = { startsAt: "2026-11-16T22:00:00Z", expiresAt: "2026-11-16T23:00:00Z", reason: "autorizado pelo proprietário" };
+
+  it("sem campo não dá exceção (padrão)", () => {
+    expect(checkInitialWindowOverride(ID, {}, now).valid).toBe(false);
+  });
+  it("válida só dentro do prazo e com no máximo 60 minutos", () => {
+    expect(checkInitialWindowOverride(ID, cfg(ok), now).valid).toBe(true);
+    expect(checkInitialWindowOverride(ID, cfg({ ...ok, expiresAt: "2026-11-16T23:00:01Z" }), now).valid).toBe(false);
+    expect(checkInitialWindowOverride(ID, cfg(ok), new Date("2026-11-16T23:00:00Z")).valid).toBe(false);
+    expect(checkInitialWindowOverride(ID, cfg(ok), new Date("2026-11-16T21:59:59Z")).valid).toBe(false);
+  });
+  it("malformada ou de outra automação não libera", () => {
+    expect(checkInitialWindowOverride(ID, cfg("agora"), now).valid).toBe(false);
+    expect(checkInitialWindowOverride(ID, cfg({ ...ok, reason: " " }), now).valid).toBe(false);
+    expect(checkInitialWindowOverride(ID, cfg({ ...ok, startsAt: 123 }), now).valid).toBe(false);
+    expect(checkInitialWindowOverride(ID, cfg({ ...ok, expiresAt: ok.startsAt }), now).valid).toBe(false);
+    expect(checkInitialWindowOverride("outra-automacao", cfg(ok), now).valid).toBe(false);
+  });
+  it("aplica só à 1ª mensagem do lote inicial com tentativa em 13–14/11", () => {
+    const check = checkInitialWindowOverride(ID, cfg(ok), now);
+    expect(initialWindowOverrideApplies(check, { stage: "initial", cohort: "initial", attemptAt: "2026-11-13T03:00:00Z" })).toBe(true);
+    expect(initialWindowOverrideApplies(check, { stage: "initial", cohort: "initial", attemptAt: "2026-11-15T02:59:59Z" })).toBe(true);
+    expect(initialWindowOverrideApplies(check, { stage: "initial", cohort: "initial", attemptAt: "2026-11-15T03:00:00Z" })).toBe(false);
+    expect(initialWindowOverrideApplies(check, { stage: "initial", cohort: "initial", attemptAt: "2026-11-13T02:59:59Z" })).toBe(false);
+    expect(initialWindowOverrideApplies(check, { stage: "initial", cohort: "continuous", attemptAt: "2026-11-14T10:00:00Z" })).toBe(false);
+    expect(initialWindowOverrideApplies(check, { stage: "reminder", cohort: "initial", attemptAt: "2026-11-14T10:00:00Z" })).toBe(false);
   });
 });

@@ -186,7 +186,7 @@ import { decideRecoveryJobsBeforeSend, runPurchaseRecoveryTick } from "./purchas
 import { processWhatsappQueueBatch } from "./wa-campaigns.server";
 
 const HOST = "clever-ship-analyzer.lovable.app";
-const AUTOMATION_ID = "auto-1";
+const AUTOMATION_ID = "cad05e8f-3dba-4e32-966a-a691956c7e76";
 
 function approvedTemplates(status = "APPROVED") {
   return (["initial", "reminder"] as const).map((stage) => ({
@@ -623,5 +623,182 @@ describe("worker da fila: reconferência depois da espera do ritmo e antes do pr
     expect(sentTo()).toEqual(["+5521977776666"]);
     expect(job("job-ana")).toMatchObject({ status: "retry_wait", attempts: 0, locked_by: null });
     expect(job("job-bia")).toMatchObject({ status: "retry_wait", attempts: 0, locked_by: null });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Exceção temporária de horário (1ª mensagem do lote inicial de 13–14/11)
+// ---------------------------------------------------------------------------
+describe("exceção temporária de horário do lote inicial", () => {
+  const automationRow = () => db.tables["whatsapp_automations"]![0]!;
+  const setOverride = (startsAt: string, expiresAt: string, reason = "Proprietário autorizou envio agora do lote 13–14/11") => {
+    automationRow().trigger_config.recoveryInitialWindowOverride = { startsAt, expiresAt, reason };
+  };
+  const tickAt = (now: string) => runPurchaseRecoveryTick(automationRow(), { requestHost: HOST }, new Date(now));
+  const addPending = (over: Row) =>
+    attempts().push({
+      id: over.id, automation_id: AUTOMATION_ID, source: "checkout", cohort: "initial", customer_id: null, email: null,
+      first_name: "Teste", status: "pending", initial_recipient_id: null, reminder_recipient_id: null, created_at: "2026-11-16T12:00:00Z", ...over,
+    });
+
+  beforeEach(() => {
+    meta.templates = approvedTemplates();
+  });
+
+  it("sem exceção, 19h30 e 20h30: nada do lote inicial é enfileirado", async () => {
+    await tickAt("2026-11-16T22:30:00Z");
+    await tickAt("2026-11-16T23:30:00Z");
+    expect(byKey("checkout:ck-ana")?.status).toBe("pending");
+    expect(db.tables["wa_jobs"]).toHaveLength(0);
+  });
+
+  it("19h30 e 20h30 com exceção válida: libera só a 1ª mensagem do lote inicial (guardas continuam)", async () => {
+    setOverride("2026-11-16T22:20:00Z", "2026-11-16T23:20:00Z");
+    await tickAt("2026-11-16T22:30:00Z"); // 19h30
+    expect(byKey("checkout:ck-ana")?.status).toBe("queued_initial");
+    expect(byKey("checkout:ck-bia")).toMatchObject({ status: "exited", exit_reason: "compra posterior à tentativa" });
+    expect(byKey("order:o-exp")).toMatchObject({ status: "excluded", exit_reason: "pedido expirado sem link reutilizável seguro" });
+    expect(db.tables["wa_jobs"]).toHaveLength(1);
+    expect(automationRow().trigger_config.recoveryLastOverrideCheck).toMatchObject({ valid: true });
+
+    // 20h30: outra tentativa do lote inicial ainda pendente também sai dentro da exceção.
+    addPending({ id: "p-late", attempt_key: "checkout:ck-late", source_id: "ck-late", phone: "+5541911112222", phone_key: "+5541911112222", recovery_url: "https://maniadmulher.com/77747060914/checkouts/ac/late", attempt_at: "2026-11-14T20:00:00Z", eligible_at: "2026-11-14T20:30:00Z" });
+    db.tables["shopify_abandoned_checkouts"]!.push({ id: "ck-late", completed_at: null, raw_data: {}, created_at: "2026-11-14T20:00:00Z" });
+    setOverride("2026-11-16T23:00:00Z", "2026-11-16T23:59:00Z");
+    await tickAt("2026-11-16T23:30:00Z");
+    expect(byKey("checkout:ck-late")?.status).toBe("queued_initial");
+  });
+
+  it("entrada contínua não é liberada pela exceção", async () => {
+    setOverride("2026-11-16T22:20:00Z", "2026-11-16T23:20:00Z");
+    addPending({ id: "p-cont", cohort: "continuous", attempt_key: "checkout:ck-cont", source_id: "ck-cont", phone: "+5541922223333", phone_key: "+5541922223333", recovery_url: "https://maniadmulher.com/77747060914/checkouts/ac/cont", attempt_at: "2026-11-16T21:00:00Z", eligible_at: "2026-11-16T21:30:00Z" });
+    db.tables["shopify_abandoned_checkouts"]!.push({ id: "ck-cont", completed_at: null, raw_data: {}, created_at: "2026-11-16T21:00:00Z" });
+    await tickAt("2026-11-16T22:30:00Z");
+    expect(byKey("checkout:ck-cont")?.status).toBe("pending");
+  });
+
+  it("tentativa fora de sexta/sábado não é liberada, mesmo marcada como lote inicial", async () => {
+    setOverride("2026-11-16T22:20:00Z", "2026-11-16T23:20:00Z");
+    addPending({ id: "p-out", attempt_key: "checkout:ck-out", source_id: "ck-out", phone: "+5541933334444", phone_key: "+5541933334444", recovery_url: "https://maniadmulher.com/77747060914/checkouts/ac/out", attempt_at: "2026-11-15T03:00:00Z", eligible_at: "2026-11-15T03:30:00Z" });
+    db.tables["shopify_abandoned_checkouts"]!.push({ id: "ck-out", completed_at: null, raw_data: {}, created_at: "2026-11-15T03:00:00Z" });
+    await tickAt("2026-11-16T22:30:00Z");
+    expect(byKey("checkout:ck-out")?.status).toBe("pending");
+  });
+
+  it("lembrete vencido não sai fora da janela, mesmo com exceção", async () => {
+    setOverride("2026-11-16T22:20:00Z", "2026-11-16T23:20:00Z");
+    addPending({ id: "p-rem", status: "waiting_reminder", attempt_key: "checkout:ck-rem", source_id: "ck-rem", phone: "+5541944445555", phone_key: "+5541944445555", recovery_url: "https://maniadmulher.com/77747060914/checkouts/ac/rem", attempt_at: "2026-11-13T20:00:00Z", eligible_at: "2026-11-13T20:30:00Z", reminder_due_at: "2026-11-16T20:00:00Z", initial_recipient_id: "r-x" });
+    await tickAt("2026-11-16T22:30:00Z");
+    expect(byKey("checkout:ck-rem")?.status).toBe("waiting_reminder");
+  });
+
+  it.each([
+    ["malformada", "nao-e-data", "2026-11-16T23:00:00Z", "motivo"],
+    ["sem motivo", "2026-11-16T22:20:00Z", "2026-11-16T23:00:00Z", ""],
+    ["acima de 60 min", "2026-11-16T22:00:00Z", "2026-11-16T23:01:00Z", "motivo"],
+    ["início futuro", "2026-11-16T22:40:00Z", "2026-11-16T23:30:00Z", "motivo"],
+    ["expirada", "2026-11-16T21:00:00Z", "2026-11-16T22:00:00Z", "motivo"],
+  ])("exceção %s não libera nada", async (_label, startsAt, expiresAt, reason) => {
+    setOverride(startsAt, expiresAt, reason);
+    await tickAt("2026-11-16T22:30:00Z");
+    expect(byKey("checkout:ck-ana")?.status).toBe("pending");
+    expect(db.tables["wa_jobs"]).toHaveLength(0);
+    expect(automationRow().trigger_config.recoveryLastOverrideCheck).toMatchObject({ valid: false });
+  });
+
+  it("fluxo desarmado, inativo ou com gate Meta negado não libera", async () => {
+    setOverride("2026-11-16T22:20:00Z", "2026-11-16T23:20:00Z");
+    automationRow().trigger_config.recoveryArmed = false;
+    await tickAt("2026-11-16T22:30:00Z");
+    automationRow().trigger_config.recoveryArmed = true;
+    automationRow().inativa = true;
+    await tickAt("2026-11-16T22:31:00Z");
+    automationRow().inativa = false;
+    meta.templates = approvedTemplates("PAUSED");
+    await tickAt("2026-11-16T22:32:00Z");
+    expect(db.tables["wa_jobs"]).toHaveLength(0);
+    expect(byKey("checkout:ck-ana")?.status ?? "pending").toBe("pending");
+  });
+});
+
+describe("worker: exceção de horário na reconferência antes do provedor", () => {
+  const automationRow = () => db.tables["whatsapp_automations"]![0]!;
+  const sentTo = () => meta.sends.map((x) => x.to);
+
+  function seedWorker(now: string, opts: { cohort?: string; reminder?: boolean } = {}) {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(now));
+    db.tables["shopify_orders"] = [];
+    automationRow().trigger_config.recoveryGate = { ok: true, checkedAt: now, reason: null };
+    const stepId = opts.reminder ? "recovery_reminder" : "recovery_initial";
+    db.tables["wa_campaigns"] = [
+      { id: "camp-rec", origin: "automacao", automation_id: AUTOMATION_ID, automation_step_id: stepId, template_name: RECOVERY_TEMPLATES[opts.reminder ? "reminder" : "initial"].name, template_language: "pt_BR", message_type: "marketing", body_params: [], body_param_tokens: null, header_media_url: null, total_recipients: 2, sent_count: 0, failed_count: 0 },
+    ];
+    const past = new Date(Date.parse(now) - 60_000).toISOString();
+    [
+      { key: "ana", customer: "c-ana", phone: "+5531992904210", email: "ana@x.com", checkout: "ck-ana", attemptAt: "2026-11-13T15:00:00Z" },
+      { key: "bia", customer: "c-bia", phone: "+5511988887777", email: "bia@x.com", checkout: "ck-bia", attemptAt: "2026-11-14T15:00:00Z" },
+    ].forEach((p, i) => {
+      attempts().push({
+        id: `att-${p.key}`, automation_id: AUTOMATION_ID, attempt_key: `checkout:${p.checkout}`, source: "checkout", source_id: p.checkout, cohort: opts.cohort ?? "initial",
+        customer_id: p.customer, email: p.email, phone: p.phone, phone_key: p.phone, first_name: p.key, recovery_url: `https://maniadmulher.com/77747060914/checkouts/ac/${p.key}`,
+        attempt_at: p.attemptAt, eligible_at: p.attemptAt, status: opts.reminder ? "queued_reminder" : "queued_initial",
+        initial_recipient_id: opts.reminder ? `init-${p.key}` : `rec-${p.key}`, reminder_recipient_id: opts.reminder ? `rec-${p.key}` : null, created_at: "2026-11-16T12:00:00Z",
+      });
+      if (opts.reminder) db.tables["wa_campaign_recipients"]!.push({ id: `init-${p.key}`, campaign_id: "camp-init", status: "delivered" });
+      db.tables["wa_campaign_recipients"]!.push({ id: `rec-${p.key}`, campaign_id: "camp-rec", customer_id: p.customer, name: p.key, phone: p.phone, params: [p.key, "https://maniadmulher.com/x"], status: "queued", event_key: `checkout:${p.checkout}:${opts.reminder ? "reminder" : "initial"}` });
+      db.tables["wa_jobs"]!.push({ id: `job-${p.key}`, campaign_id: "camp-rec", recipient_id: `rec-${p.key}`, status: "queued", attempts: 0, max_attempts: 3, priority: 5, scheduled_at: past, next_attempt_at: past, created_at: `2026-11-16T12:00:0${i}Z` });
+    });
+  }
+  const job = (id: string) => db.tables["wa_jobs"]!.find((j) => j.id === id)!;
+
+  it("19h30 com exceção válida: lote inicial sai", async () => {
+    seedWorker("2026-11-16T22:30:00Z");
+    automationRow().trigger_config.recoveryInitialWindowOverride = { startsAt: "2026-11-16T22:20:00Z", expiresAt: "2026-11-16T23:20:00Z", reason: "autorizado" };
+    await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual(["+5531992904210", "+5511988887777"]);
+  });
+
+  it("exceção expira entre a espera do ritmo e o envio: item não vai ao provedor e volta sem gastar tentativa", async () => {
+    seedWorker("2026-11-16T23:19:30Z");
+    automationRow().trigger_config.recoveryInitialWindowOverride = { startsAt: "2026-11-16T22:20:00Z", expiresAt: "2026-11-16T23:20:00Z", reason: "autorizado" };
+    gateHook.fn = (call) => {
+      if (call === 2) vi.setSystemTime(new Date("2026-11-16T23:20:00Z"));
+    };
+    await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual(["+5531992904210"]);
+    expect(job("job-bia")).toMatchObject({ status: "retry_wait", attempts: 0, locked_by: null, next_attempt_at: "2026-11-17T12:00:00.000Z" });
+  });
+
+  it("20h30: item contínuo já na fila não sai com a exceção", async () => {
+    seedWorker("2026-11-16T23:30:00Z", { cohort: "continuous" });
+    automationRow().trigger_config.recoveryInitialWindowOverride = { startsAt: "2026-11-16T23:00:00Z", expiresAt: "2026-11-16T23:59:00Z", reason: "autorizado" };
+    await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual([]);
+    expect(job("job-ana")).toMatchObject({ status: "retry_wait", attempts: 0 });
+  });
+
+  it("20h30: lembrete já na fila não sai com a exceção", async () => {
+    seedWorker("2026-11-16T23:30:00Z", { reminder: true });
+    automationRow().trigger_config.recoveryInitialWindowOverride = { startsAt: "2026-11-16T23:00:00Z", expiresAt: "2026-11-16T23:59:00Z", reason: "autorizado" };
+    await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual([]);
+  });
+
+  it("exceção válida, mas fluxo inativo, desarmado ou gate Meta antigo: não sai", async () => {
+    const override = { startsAt: "2026-11-16T22:20:00Z", expiresAt: "2026-11-16T23:20:00Z", reason: "autorizado" };
+    seedWorker("2026-11-16T22:30:00Z");
+    automationRow().trigger_config.recoveryInitialWindowOverride = override;
+    automationRow().inativa = true;
+    await processWhatsappQueueBatch({ limit: 50 });
+    automationRow().inativa = false;
+    automationRow().trigger_config.recoveryArmed = false;
+    for (const j of db.tables["wa_jobs"]!) Object.assign(j, { status: "queued", next_attempt_at: "2026-11-16T22:00:00Z" });
+    await processWhatsappQueueBatch({ limit: 50 });
+    automationRow().trigger_config.recoveryArmed = true;
+    automationRow().trigger_config.recoveryGate = { ok: false, checkedAt: "2026-11-16T22:30:00Z", reason: "PAUSED" };
+    for (const j of db.tables["wa_jobs"]!) Object.assign(j, { status: "queued", next_attempt_at: "2026-11-16T22:00:00Z" });
+    await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual([]);
   });
 });

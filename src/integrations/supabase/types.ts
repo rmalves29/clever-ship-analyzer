@@ -2801,6 +2801,7 @@ export type Database = {
           created_at: string
           descricao: string | null
           id: string
+          inativa: boolean
           last_error: string | null
           last_run_at: string | null
           nome: string
@@ -2822,6 +2823,7 @@ export type Database = {
           created_at?: string
           descricao?: string | null
           id?: string
+          inativa?: boolean
           last_error?: string | null
           last_run_at?: string | null
           nome: string
@@ -2843,6 +2845,7 @@ export type Database = {
           created_at?: string
           descricao?: string | null
           id?: string
+          inativa?: boolean
           last_error?: string | null
           last_run_at?: string | null
           nome?: string

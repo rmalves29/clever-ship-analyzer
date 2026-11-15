@@ -475,6 +475,14 @@ export function reconcileAttemptWithQueue(stage: RecoveryStage, recipient: Queue
   return null;
 }
 
+/** Campanha criada por uma etapa do fluxo de recuperação (o worker reconfere antes de enviar). */
+export function isRecoveryCampaign(campaign: { automation_step_id?: string | null; automation_id?: string | null }): boolean {
+  return Boolean(
+    campaign.automation_id &&
+      (campaign.automation_step_id === RECOVERY_TEMPLATES.initial.stepId || campaign.automation_step_id === RECOVERY_TEMPLATES.reminder.stepId),
+  );
+}
+
 export function recoveryParams(firstName: string, url: string): string[] {
   return [firstName, url];
 }

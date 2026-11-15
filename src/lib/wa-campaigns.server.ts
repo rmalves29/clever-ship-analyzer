@@ -1,4 +1,6 @@
 import { SESSION_TEXT_TEMPLATE } from "./whatsapp-session";
+import { isRecoveryCampaign } from "./purchase-recovery";
+import type { WorkerRecoveryDecision } from "./purchase-recovery.server";
 /**
  * Motor único das campanhas de WhatsApp (Meta Cloud API).
  *
@@ -709,6 +711,36 @@ export async function processWhatsappQueueBatch(options?: {
   let failed = 0;
   let retry = 0;
   const touchedCampaigns = new Set<string>();
+
+  // Recuperação de compras: reconferência IMEDIATAMENTE antes do envio (compra/pedido posterior, resposta,
+  // opt-out, sem-automacao, tentativa recuperada/inválida, janela 09h–19h e aprovação recente na Meta).
+  // Sem conseguir conferir, nada sai: o item volta para nova tentativa com o erro visível.
+  const recoveryDecisions = new Map<string, WorkerRecoveryDecision>();
+  let recoveryCheckError: string | null = null;
+  const recoveryItems = batch.flatMap((job) => {
+    const campaign = campaignById.get(job.campaign_id);
+    return campaign && isRecoveryCampaign(campaign) ? [{ recipientId: job.recipient_id, campaign }] : [];
+  });
+  if (recoveryItems.length > 0) {
+    try {
+      const { decideRecoveryJobsBeforeSend } = await import("./purchase-recovery.server");
+      for (const [recipientId, decision] of await decideRecoveryJobsBeforeSend(recoveryItems)) recoveryDecisions.set(recipientId, decision);
+    } catch (error) {
+      recoveryCheckError = error instanceof Error ? error.message : String(error);
+      console.error("[worker] conferência da recuperação de compras falhou — nada desse fluxo é enviado neste lote:", recoveryCheckError);
+    }
+  }
+  // Adiados (fora da janela / aguardando Meta): voltam à fila sem gastar tentativa.
+  const deferredJobs = batch.filter((job) => recoveryDecisions.get(job.recipient_id)?.kind === "defer");
+  for (const job of deferredJobs) {
+    const decision = recoveryDecisions.get(job.recipient_id) as Extract<WorkerRecoveryDecision, { kind: "defer" }>;
+    await supabaseAdmin
+      .from(JOBS_TABLE)
+      .update({ status: "retry_wait", attempts: Math.max(job.attempts - 1, 0), next_attempt_at: decision.until, error: decision.reason, locked_by: null, locked_at: null })
+      .eq("id", job.id);
+  }
+  const deferredIds = new Set(deferredJobs.map((job) => job.id));
+  const workBatch = batch.filter((job) => !deferredIds.has(job.id));
   const { sendTemplateMessageMock } = useMock
     ? await import("./whatsapp-mock-provider.server")
     : ({} as typeof import("./whatsapp-mock-provider.server"));
@@ -744,7 +776,7 @@ export async function processWhatsappQueueBatch(options?: {
   type AutomationEvent = { campaignId: string; customerId: string; outcome: "sent" | "retry" | "failed"; error: string | null };
   const automationEvents: AutomationEvent[] = [];
   const queueAutomation = (campaign: CampaignRow, recipient: RecipientRow, outcome: AutomationEvent["outcome"], error: string | null) => {
-    if (automationQueueHandler && campaign.origin === "automacao" && recipient.customer_id) {
+    if (automationQueueHandler && campaign.origin === "automacao" && recipient.customer_id && !isRecoveryCampaign(campaign)) {
       automationEvents.push({ campaignId: campaign.id, customerId: recipient.customer_id, outcome, error });
     }
   };
@@ -759,6 +791,26 @@ export async function processWhatsappQueueBatch(options?: {
       return { job_id: job.id, recipient_id: job.recipient_id, kind: "failed", error: "destinatário ou campanha ausente" };
     }
     touchedCampaigns.add(campaign.id);
+
+    if (isRecoveryCampaign(campaign)) {
+      const decision = recoveryDecisions.get(recipient.id);
+      if (recoveryCheckError || !decision) {
+        const canRetry = job.attempts < job.max_attempts;
+        if (canRetry) retry++;
+        else failed++;
+        return {
+          job_id: job.id,
+          recipient_id: recipient.id,
+          kind: canRetry ? "retry" : "failed",
+          error: `Envio bloqueado: ${recoveryCheckError ?? "conferência antes do envio não concluída"}`,
+          next_attempt_at: canRetry ? backoffFor(job.attempts) : null,
+        };
+      }
+      if (decision.kind === "cancel") {
+        failed++;
+        return { job_id: job.id, recipient_id: recipient.id, kind: "cancelled", error: decision.reason };
+      }
+    }
 
     if (campaign.message_type === "marketing" && suppressedPhones.has(recipient.phone)) {
       const reason = "opt-out de marketing";
@@ -881,7 +933,7 @@ export async function processWhatsappQueueBatch(options?: {
   // Ondas: envia até `waveSize` itens (no máximo `concurrency` ao mesmo tempo, no ritmo do `gate`) e grava tudo de uma vez.
   // Se o prazo do tick acabar, as ondas restantes não começam e os itens reservados voltam à fila sem gastar tentativa.
   const unprocessed: JobRow[] = [];
-  const waves = chunkArray(batch, throughput.waveSize);
+  const waves = chunkArray(workBatch, throughput.waveSize);
   for (let w = 0; w < waves.length; w++) {
     const wave = waves[w] as JobRow[];
     if (options?.deadlineMs && Date.now() > options.deadlineMs) {

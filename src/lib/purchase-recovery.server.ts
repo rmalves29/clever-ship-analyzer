@@ -701,7 +701,14 @@ export async function runPurchaseRecoveryTick(automation: Rec, ctx: { requestHos
   }
 
   const gate = await checkRecoveryTemplateGate(now);
-  const state = gate.ok ? "online" : gate.initial.status === "REJECTED" || gate.reminder.status === "REJECTED" ? "rejeitado_meta" : "aguardando_meta";
+  const statuses = [gate.initial.status, gate.reminder.status];
+  const state = gate.ok
+    ? "online"
+    : statuses.includes("REJECTED")
+      ? "rejeitado_meta"
+      : statuses.every((s) => s === "APPROVED" || s === "PENDING" || s === "IN_APPEAL") && gate.initial.bodyMatches !== false
+        ? "aguardando_meta"
+        : "bloqueado_meta";
   await patchTriggerConfig(
     String(automation["id"]),
     { recoveryGate: gate, recoveryState: state, recoveryLastBlocker: gate.ok ? null : gate.reason, recoveryLastSeenHost: ctx.requestHost, recoveryLastTickAt: now.toISOString() },
@@ -738,13 +745,6 @@ export type WorkerRecoveryDecision =
   | { kind: "send" }
   | { kind: "cancel"; reason: string }
   | { kind: "defer"; until: string; reason: string };
-
-export function isRecoveryCampaign(campaign: { automation_step_id?: string | null; automation_id?: string | null }): boolean {
-  return Boolean(
-    campaign.automation_id &&
-      (campaign.automation_step_id === RECOVERY_TEMPLATES.initial.stepId || campaign.automation_step_id === RECOVERY_TEMPLATES.reminder.stepId),
-  );
-}
 
 /**
  * Decide, para cada destinatário de campanha de recuperação do lote, se pode sair agora.

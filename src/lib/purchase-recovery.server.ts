@@ -11,6 +11,8 @@ import {
   evaluateRecoveryGuards,
   evaluateTemplateGate,
   firstNameForMessage,
+  checkInitialWindowOverride,
+  initialWindowOverrideApplies,
   isWithinRecoveryWindow,
   nextRecoverySendTime,
   parseRecoveryConfig,
@@ -708,15 +710,31 @@ async function reconcileQueued(automationId: string): Promise<number> {
   return changed;
 }
 
-async function processStage(automation: Rec, config: RecoveryConfig, hosts: string[], stage: RecoveryStage, now: Date): Promise<number> {
+async function processStage(
+  automation: Rec,
+  config: RecoveryConfig,
+  hosts: string[],
+  stage: RecoveryStage,
+  now: Date,
+  options: { overrideOnly?: boolean } = {},
+): Promise<number> {
   const supabaseAdmin = await admin();
   let query = supabaseAdmin.from(ATTEMPTS).select("*").eq("automation_id", automation["id"]);
+  // Exceção de horário: fora da janela, só o lote inicial de 13–14/11 (1ª mensagem).
+  if (options.overrideOnly) {
+    if (stage !== "initial") return 0;
+    query = query.eq("cohort", "initial");
+  }
   query = stage === "initial"
     ? query.eq("status", "pending").lte("eligible_at", now.toISOString()).order("attempt_at", { ascending: true })
     : query.eq("status", "waiting_reminder").lte("reminder_due_at", now.toISOString()).order("reminder_due_at", { ascending: true });
   const { data, error } = await query.limit(MAX_PER_STAGE_PER_TICK);
   if (error) throw new Error(`Erro ao ler tentativas: ${error.message}`);
-  const attempts = (data ?? []) as AttemptDbRow[];
+  let attempts = (data ?? []) as AttemptDbRow[];
+  if (options.overrideOnly) {
+    const override = checkInitialWindowOverride(String(automation["id"]), automation["trigger_config"], now);
+    attempts = attempts.filter((a) => initialWindowOverrideApplies(override, { stage, cohort: a.cohort, attemptAt: a.attempt_at }));
+  }
   if (attempts.length === 0) return 0;
 
   let facts: Map<string, RecoveryGuardFacts>;
@@ -809,7 +827,18 @@ export async function runPurchaseRecoveryTick(automation: Rec, ctx: { requestHos
   const r = await enrollAttempts(String(automation["id"]), continuous, hosts, now);
   processed += r.entered + r.excluded;
 
-  if (!gate.ok || !isWithinRecoveryWindow(now)) return { processed, state, blocker: gate.ok ? "fora da janela 09h–19h" : gate.reason, gate };
+  if (!gate.ok) return { processed, state, blocker: gate.reason, gate };
+
+  if (!isWithinRecoveryWindow(now)) {
+    // Fora de 09h–19h: só a exceção temporária (auditável) da 1ª mensagem do lote inicial, se válida agora.
+    const override = checkInitialWindowOverride(String(automation["id"]), automation["trigger_config"], now);
+    await patchTriggerConfig(String(automation["id"]), {
+      recoveryLastOverrideCheck: { checkedAt: now.toISOString(), ...(override.valid ? { valid: true, expiresAt: override.expiresAt, reason: override.reason } : { valid: false, why: override.why }) },
+    });
+    if (!override.valid) return { processed, state, blocker: "fora da janela 09h–19h", gate };
+    processed += await processStage(automation, config, hosts, "initial", now, { overrideOnly: true });
+    return { processed, state, blocker: "fora da janela 09h–19h (exceção ativa só para o lote inicial)", gate };
+  }
 
   processed += await processStage(automation, config, hosts, "initial", now);
   processed += await processStage(automation, config, hosts, "reminder", now);
@@ -891,8 +920,11 @@ export async function decideRecoveryJobsBeforeSend(
       continue;
     }
     if (!isWithinRecoveryWindow(now)) {
-      decisions.set(item.recipientId, { kind: "defer", until: deferUntil.toISOString(), reason: "fora da janela 09h–19h (Brasília)" });
-      continue;
+      const override = checkInitialWindowOverride(String(automation["id"]), automation["trigger_config"], now);
+      if (!initialWindowOverrideApplies(override, { stage, cohort: attempt.cohort, attemptAt: attempt.attempt_at })) {
+        decisions.set(item.recipientId, { kind: "defer", until: deferUntil.toISOString(), reason: "fora da janela 09h–19h (Brasília)" });
+        continue;
+      }
     }
     toCheck.push({ recipientId: item.recipientId, attempt, stage, config });
   }

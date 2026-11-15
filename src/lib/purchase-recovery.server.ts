@@ -392,6 +392,15 @@ export async function loadGuardFacts(attempts: AttemptDbRow[], config: RecoveryC
   }
 
   // Identidade: clientes ligados por id, telefone ou email.
+  // Toda leitura que pode passar de 1000 linhas é paginada: truncamento nunca pode autorizar envio.
+  const pages = async (what: string, build: (from: number, to: number) => PromiseLike<PageResult>) => {
+    try {
+      return await fetchAllPages(what, build);
+    } catch (error) {
+      throw new Error(`Conferência antes do envio falhou (${error instanceof Error ? error.message : String(error)})`);
+    }
+  };
+
   const customerIdsByPhone = new Map<string, Set<string>>();
   const customerIdsByEmail = new Map<string, Set<string>>();
   const pushTo = (map: Map<string, Set<string>>, key: string, id: string) => {
@@ -400,15 +409,17 @@ export async function loadGuardFacts(attempts: AttemptDbRow[], config: RecoveryC
     map.set(key, set);
   };
   for (const part of chunk(allVariants, 150)) {
-    const { data, error } = await supabaseAdmin.from("shopify_customers").select("id, phone").in("phone", part);
-    if (error) fail("clientes por telefone", error);
-    for (const r of data ?? []) pushTo(customerIdsByPhone, String(r.phone), String(r.id));
+    const rows = await pages("clientes por telefone", (from, to) =>
+      supabaseAdmin.from("shopify_customers").select("id, phone").in("phone", part).order("id", { ascending: true }).range(from, to),
+    );
+    for (const r of rows) pushTo(customerIdsByPhone, String(r.phone), String(r.id));
   }
   // Email sem diferenciar maiúsculas (a base tem emails gravados com caixa mista).
   for (const part of chunk(emails, 150)) {
-    const { data, error } = await supabaseAdmin.rpc("purchase_recovery_customers_by_emails", { p_emails: part });
-    if (error) fail("clientes por email", error);
-    for (const r of data ?? []) pushTo(customerIdsByEmail, String(r.email).toLowerCase(), String(r.id));
+    const rows = await pages("clientes por email", (from, to) =>
+      supabaseAdmin.rpc("purchase_recovery_customers_by_emails", { p_emails: part }).order("id", { ascending: true }).range(from, to),
+    );
+    for (const r of rows) pushTo(customerIdsByEmail, String(r.email).toLowerCase(), String(r.id));
   }
   const idsByAttempt = new Map<string, Set<string>>();
   for (const a of attempts) {
@@ -425,34 +436,51 @@ export async function loadGuardFacts(attempts: AttemptDbRow[], config: RecoveryC
   const orderCols = "id, customer_id, email, phone, created_at, financial_status, cancelled_at";
   for (const [column, values] of [["customer_id", allCustomerIds], ["phone", allVariants]] as const) {
     for (const part of chunk(values as string[], 150)) {
-      const { data, error } = await supabaseAdmin.from("shopify_orders").select(orderCols).in(column, part).gte("created_at", minAttemptAt);
-      if (error) fail("pedidos posteriores", error);
-      for (const r of data ?? []) orders.set(String(r.id), r);
+      const rows = await pages("pedidos posteriores", (from, to) =>
+        supabaseAdmin
+          .from("shopify_orders")
+          .select(orderCols)
+          .in(column, part)
+          .gte("created_at", minAttemptAt)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to),
+      );
+      for (const r of rows) orders.set(String(r.id), r);
     }
   }
   for (const part of chunk(emails, 150)) {
-    const { data, error } = await supabaseAdmin.rpc("purchase_recovery_orders_by_emails", { p_emails: part, p_since: minAttemptAt });
-    if (error) fail("pedidos posteriores por email", error);
-    for (const r of data ?? []) orders.set(String(r.id), r);
+    const rows = await pages("pedidos posteriores por email", (from, to) =>
+      supabaseAdmin
+        .rpc("purchase_recovery_orders_by_emails", { p_emails: part, p_since: minAttemptAt })
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    for (const r of rows) orders.set(String(r.id), r);
   }
 
   // Respostas recebidas.
   const lastInboundByPhone = new Map<string, string>();
   const threadPhone = new Map<string, string>();
   for (const part of chunk(allVariants, 150)) {
-    const { data, error } = await supabaseAdmin.from("whatsapp_inbox_threads").select("id, phone").in("phone", part);
-    if (error) fail("conversas", error);
-    for (const r of data ?? []) threadPhone.set(String(r.id), String(r.phone));
+    const rows = await pages("conversas", (from, to) =>
+      supabaseAdmin.from("whatsapp_inbox_threads").select("id, phone").in("phone", part).order("id", { ascending: true }).range(from, to),
+    );
+    for (const r of rows) threadPhone.set(String(r.id), String(r.phone));
   }
   for (const part of chunk([...threadPhone.keys()], 150)) {
-    const { data, error } = await supabaseAdmin
-      .from("whatsapp_inbox_messages")
-      .select("thread_id, sent_at")
-      .in("thread_id", part)
-      .eq("direction", "inbound")
-      .gte("sent_at", minAttemptAt);
-    if (error) fail("mensagens recebidas", error);
-    for (const r of data ?? []) {
+    const rows = await pages("mensagens recebidas", (from, to) =>
+      supabaseAdmin
+        .from("whatsapp_inbox_messages")
+        .select("id, thread_id, sent_at")
+        .in("thread_id", part)
+        .eq("direction", "inbound")
+        .gte("sent_at", minAttemptAt)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    for (const r of rows) {
       const phone = threadPhone.get(String(r.thread_id));
       if (phone && String(r.sent_at) > (lastInboundByPhone.get(phone) ?? "")) lastInboundByPhone.set(phone, String(r.sent_at));
     }
@@ -471,9 +499,10 @@ export async function loadGuardFacts(attempts: AttemptDbRow[], config: RecoveryC
   // Tag sem-automacao.
   const blocked = new Set<string>();
   for (const part of chunk(allCustomerIds, 150)) {
-    const { data, error } = await supabaseAdmin.from("shopify_customers").select("id").in("id", part).contains("tags_custom", [AUTOMATION_BLOCK_TAG]);
-    if (error) fail("tag sem-automacao", error);
-    for (const r of data ?? []) blocked.add(String(r.id));
+    const rows = await pages("tag sem-automacao", (from, to) =>
+      supabaseAdmin.from("shopify_customers").select("id").in("id", part).contains("tags_custom", [AUTOMATION_BLOCK_TAG]).order("id", { ascending: true }).range(from, to),
+    );
+    for (const r of rows) blocked.add(String(r.id));
   }
 
   // Execuções abertas nas automações que não podemos invadir (PIX pendente).
@@ -482,14 +511,17 @@ export async function loadGuardFacts(attempts: AttemptDbRow[], config: RecoveryC
   if (config.blockingAutomationIds.length > 0) {
     for (const [column, values] of [["customer_id", allCustomerIds], ["phone", allVariants]] as const) {
       for (const part of chunk(values as string[], 150)) {
-        const { data, error } = await supabaseAdmin
-          .from("whatsapp_automation_runs")
-          .select("customer_id, phone")
-          .in("automation_id", config.blockingAutomationIds)
-          .in("status", OPEN_RUN_STATUSES)
-          .in(column, part);
-        if (error) fail("automações em andamento", error);
-        for (const r of data ?? []) {
+        const rows = await pages("automações em andamento", (from, to) =>
+          supabaseAdmin
+            .from("whatsapp_automation_runs")
+            .select("id, customer_id, phone")
+            .in("automation_id", config.blockingAutomationIds)
+            .in("status", OPEN_RUN_STATUSES)
+            .in(column, part)
+            .order("id", { ascending: true })
+            .range(from, to),
+        );
+        for (const r of rows) {
           if (r.customer_id) blockingCustomers.add(String(r.customer_id));
           if (r.phone) for (const v of phoneVariants(r.phone)) blockingPhones.add(v);
         }
@@ -808,7 +840,7 @@ export async function decideRecoveryJobsBeforeSend(
   const automationIds = uniq<string>(items.map((i) => i.campaign.automation_id));
   const { data: automations, error: automationError } = await supabaseAdmin
     .from("whatsapp_automations")
-    .select("id, automation_kind, trigger_config")
+    .select("id, automation_kind, trigger_config, inativa")
     .in("id", automationIds);
   if (automationError) throw new Error(`Conferência antes do envio falhou (fluxo): ${automationError.message}`);
   const automationById = new Map<string, Rec>((automations ?? []).map((a: Rec) => [String(a["id"]), a]));
@@ -842,6 +874,14 @@ export async function decideRecoveryJobsBeforeSend(
     const config = parseRecoveryConfig(automation["trigger_config"]);
     const gate = (automation["trigger_config"] ?? {})["recoveryGate"] as TemplateGate | undefined;
     const gateFresh = gate?.ok === true && now.getTime() - new Date(gate.checkedAt).getTime() <= GATE_MAX_AGE_MS;
+    if (automation["inativa"] === true) {
+      decisions.set(item.recipientId, {
+        kind: "defer",
+        until: new Date(now.getTime() + 15 * 60_000).toISOString(),
+        reason: "fluxo de recuperação marcado como inativo",
+      });
+      continue;
+    }
     if (!config.armed || !gateFresh) {
       decisions.set(item.recipientId, {
         kind: "defer",

@@ -1562,7 +1562,7 @@ export async function listAutomationsRows() {
     inativa: Boolean(a.inativa),
     apenasContatosNovos: Boolean(a.apenas_contatos_novos),
     origem: (a.origem ?? "crm") as string,
-    automationKind: (a.automation_kind ?? "segment") as "segment" | "rfm" | "cashback",
+    automationKind: (a.automation_kind ?? "segment") as "segment" | "rfm" | "cashback" | "purchase_recovery",
     triggerConfig: (a.trigger_config ?? {}) as Record<string, string | number | boolean | null>,
     lastRunAt: (a.last_run_at ?? null) as string | null,
     totalExecucoes: (a.total_execucoes ?? 0) as number,

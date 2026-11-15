@@ -686,7 +686,7 @@ export type RecoveryTickResult = { processed: number; state: string; blocker: st
 export async function runPurchaseRecoveryTick(automation: Rec, ctx: { requestHost: string | null }, now = new Date()): Promise<RecoveryTickResult> {
   if (automation["automation_kind"] !== PURCHASE_RECOVERY_KIND) return { processed: 0, state: "ignored", blocker: "tipo diferente", gate: null };
   const config = parseRecoveryConfig(automation["trigger_config"]);
-  const blocker = recoveryProcessingBlocker(config, ctx.requestHost);
+  const blocker = automation["inativa"] ? "Fluxo marcado como inativo." : recoveryProcessingBlocker(config, ctx.requestHost);
   if (blocker) {
     // Só o tick agendado grava o motivo (execuções manuais/preview não mexem no estado).
     if (ctx.requestHost && config.armed) {

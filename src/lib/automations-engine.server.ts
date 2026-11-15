@@ -1320,7 +1320,7 @@ export async function runAutomationsTick(options?: { automationId?: string; forc
       try {
         const { runPurchaseRecoveryTick } = await import("./purchase-recovery.server");
         const result = await runPurchaseRecoveryTick(a, { requestHost: options?.requestHost ?? null });
-        if (!result.blocker || result.state !== "bloqueado") automationsProcessed++;
+        if (result.state !== "bloqueado") automationsProcessed++;
         runsProcessed += result.processed;
         if (options?.requestHost) {
           await supabaseAdmin

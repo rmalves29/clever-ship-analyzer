@@ -504,6 +504,17 @@ export const saveAutomation = createServerFn({ method: "POST" })
   .middleware([requireAppAuth])
   .validator((data: unknown) => automationSchema.parse(data))
   .handler(async ({ data }) => {
+    if (data.id) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: kindRow, error: kindError } = await (supabaseAdmin.from("whatsapp_automations") as any)
+        .select("automation_kind")
+        .eq("id", data.id)
+        .maybeSingle();
+      if (kindError) return { success: false as const, error: kindError.message };
+      if (kindRow?.automation_kind === "purchase_recovery") {
+        return { success: false as const, error: "O fluxo de recuperação de compras tem regras fixas e não é editado por aqui." };
+      }
+    }
     if (data.id && data.ativo) {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const { data: current, error } = await (supabaseAdmin.from("whatsapp_automations") as any)
@@ -535,6 +546,25 @@ export const toggleAutomation = createServerFn({ method: "POST" })
   .validator((data: unknown) => z.object({ id: z.string().uuid(), ativo: z.boolean() }).parse(data))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    {
+      const { data: kindRow, error: kindError } = await (supabaseAdmin.from("whatsapp_automations") as any)
+        .select("automation_kind, trigger_config")
+        .eq("id", data.id)
+        .maybeSingle();
+      if (kindError) return { success: false as const, error: kindError.message };
+      if (kindRow?.automation_kind === "purchase_recovery") {
+        // Liga = arma (o envio só começa com os modelos aprovados na Meta); desliga = desarma e para na hora.
+        const { error } = await (supabaseAdmin.from("whatsapp_automations") as any)
+          .update({
+            trigger_config: { ...(kindRow.trigger_config ?? {}), recoveryArmed: data.ativo, recoveryState: data.ativo ? "armado" : "desarmado" },
+            ...(data.ativo ? { inativa: false } : { ativo: false }),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", data.id);
+        if (error) return { success: false as const, error: error.message };
+        return { success: true as const };
+      }
+    }
     if (data.ativo) {
       const { data: automation, error: automationError } = await (supabaseAdmin.from("whatsapp_automations") as any)
         .select("automation_kind, steps")
@@ -590,6 +620,9 @@ export const runAutomationNow = createServerFn({ method: "POST" })
       .eq("id", data.id)
       .maybeSingle();
     if (error) return { success: false as const, error: error.message };
+    if (automation?.automation_kind === "purchase_recovery") {
+      return { success: false as const, error: "O fluxo de recuperação de compras roda só pelo agendamento do site publicado, a cada minuto." };
+    }
     if (
       automation &&
       (automation.automation_kind === "rfm" || automation.automation_kind === "cashback") &&

@@ -24,7 +24,6 @@ import {
 import { ConversationalFlowsTab } from "@/components/whatsapp/ConversationalFlowsTab";
 import { AUTOMATION_EVENT_BY_ID, parseEventTrigger } from "@/lib/automation-events";
 import { AutomationPerformancePanel, type PainelAcoes } from "@/components/whatsapp/AutomationPerformancePanel";
-import { PurchaseRecoveryPanel } from "@/components/whatsapp/PurchaseRecoveryPanel";
 import {
   deleteAutomation,
   installLifecycleAutomations,
@@ -202,8 +201,6 @@ function AutomacoesPage() {
         <AutomationPerformancePanel filtro={filtro} situacaoPorId={situacaoPorId} acoes={acoesDoPainel} />
       </Stack>
 
-      <PurchaseRecoveryPanel />
-
       <Stack spacing={1.5}>
         <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
           <Box>
@@ -323,7 +320,7 @@ function AutomacoesPage() {
         </Box>
 
         <Stack spacing={1}>
-          {visiveis.map((a: any) => (
+          {visiveis.filter((a: any) => a.automationKind !== "purchase_recovery").map((a: any) => (
             <Stack
               key={a.id}
               direction="row"

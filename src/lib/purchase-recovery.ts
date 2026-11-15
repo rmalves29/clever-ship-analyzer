@@ -354,6 +354,8 @@ export type RecoveryGuardFacts = {
   suppressed: boolean;
   blockedTag: boolean;
   openBlockingRun: boolean;
+  /** Lembrete: a 1ª mensagem acabou falhando na entrega (webhook da Meta). */
+  previousMessageFailed?: boolean;
 };
 
 export type GuardDecision = { send: true } | { send: false; reason: string };
@@ -384,6 +386,7 @@ export function evaluateRecoveryGuards(f: RecoveryGuardFacts): GuardDecision {
   if (f.suppressed) return { send: false, reason: "opt-out de marketing" };
   if (f.blockedTag) return { send: false, reason: "contato marcado como sem-automacao" };
   if (f.openBlockingRun) return { send: false, reason: "cliente em outra automação (PIX pendente)" };
+  if (f.previousMessageFailed) return { send: false, reason: "1ª mensagem falhou na entrega" };
   return { send: true };
 }
 

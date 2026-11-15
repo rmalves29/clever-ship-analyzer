@@ -231,7 +231,9 @@ async function discoverContinuousCandidates(config: RecoveryConfig, now: Date): 
   if (!config.continuousSince) return [];
   const supabaseAdmin = await admin();
   const lookback = new Date(now.getTime() - DISCOVERY_LOOKBACK_DAYS * 86_400_000).toISOString();
-  const since = config.continuousSince > lookback ? config.continuousSince : lookback;
+  const installedAt = new Date(config.continuousSince);
+  if (!Number.isFinite(installedAt.getTime())) throw new Error("Data de instalação do fluxo contínuo inválida.");
+  const since = installedAt.toISOString() > lookback ? installedAt.toISOString() : lookback;
   const [c, o] = await Promise.all([
     supabaseAdmin
       .from("shopify_abandoned_checkouts")

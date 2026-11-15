@@ -363,8 +363,9 @@ export async function loadGuardFacts(attempts: AttemptDbRow[], config: RecoveryC
     if (error) fail("clientes por telefone", error);
     for (const r of data ?? []) pushTo(customerIdsByPhone, String(r.phone), String(r.id));
   }
+  // Email sem diferenciar maiúsculas (a base tem emails gravados com caixa mista).
   for (const part of chunk(emails, 150)) {
-    const { data, error } = await supabaseAdmin.from("shopify_customers").select("id, email").in("email", part);
+    const { data, error } = await supabaseAdmin.rpc("purchase_recovery_customers_by_emails", { p_emails: part });
     if (error) fail("clientes por email", error);
     for (const r of data ?? []) pushTo(customerIdsByEmail, String(r.email).toLowerCase(), String(r.id));
   }
@@ -381,12 +382,17 @@ export async function loadGuardFacts(attempts: AttemptDbRow[], config: RecoveryC
   // Pedidos posteriores (corte = tentativa original mais antiga do lote; o filtro fino é por tentativa).
   const orders = new Map<string, Rec>();
   const orderCols = "id, customer_id, email, phone, created_at, financial_status, cancelled_at";
-  for (const [column, values] of [["customer_id", allCustomerIds], ["email", emails], ["phone", allVariants]] as const) {
+  for (const [column, values] of [["customer_id", allCustomerIds], ["phone", allVariants]] as const) {
     for (const part of chunk(values as string[], 150)) {
       const { data, error } = await supabaseAdmin.from("shopify_orders").select(orderCols).in(column, part).gte("created_at", minAttemptAt);
       if (error) fail("pedidos posteriores", error);
       for (const r of data ?? []) orders.set(String(r.id), r);
     }
+  }
+  for (const part of chunk(emails, 150)) {
+    const { data, error } = await supabaseAdmin.rpc("purchase_recovery_orders_by_emails", { p_emails: part, p_since: minAttemptAt });
+    if (error) fail("pedidos posteriores por email", error);
+    for (const r of data ?? []) orders.set(String(r.id), r);
   }
 
   // Respostas recebidas.

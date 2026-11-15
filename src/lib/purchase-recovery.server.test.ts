@@ -74,7 +74,21 @@ function builder(table: string) {
   return b;
 }
 
-vi.mock("@/integrations/supabase/client.server", () => ({ supabaseAdmin: { from: (t: string) => builder(t) } }));
+function rpc(name: string, args: any) {
+  const emails = (args.p_emails as string[]).map((e) => e.toLowerCase());
+  if (name === "purchase_recovery_orders_by_emails") {
+    if (db.failOn.has("shopify_orders")) return Promise.resolve({ data: null, error: { message: "falha simulada em shopify_orders" } });
+    const data = (db.tables["shopify_orders"] ?? []).filter((o) => o.email && emails.includes(String(o.email).toLowerCase()) && new Date(o.created_at) >= new Date(args.p_since));
+    return Promise.resolve({ data, error: null });
+  }
+  if (name === "purchase_recovery_customers_by_emails") {
+    const data = (db.tables["shopify_customers"] ?? []).filter((c) => c.email && emails.includes(String(c.email).toLowerCase()));
+    return Promise.resolve({ data, error: null });
+  }
+  return Promise.resolve({ data: null, error: { message: `rpc desconhecida ${name}` } });
+}
+
+vi.mock("@/integrations/supabase/client.server", () => ({ supabaseAdmin: { from: (t: string) => builder(t), rpc } }));
 
 const meta = vi.hoisted(() => ({ templates: [] as any[], apiError: null as string | null, campaigns: 0 }));
 vi.mock("./whatsapp-meta.server", () => ({
@@ -321,6 +335,7 @@ describe("worker: reconferência imediatamente antes do envio", () => {
 
   it("fora da janela adia para 09h sem enviar", async () => {
     const { recipient, items } = await queued();
+    db.tables["whatsapp_automations"]![0]!.trigger_config.recoveryGate.checkedAt = "2026-11-16T22:25:00Z";
     const d = await decideRecoveryJobsBeforeSend(items, new Date("2026-11-16T22:30:00Z"));
     expect(d.get(recipient.id)).toEqual({ kind: "defer", until: "2026-11-17T12:00:00.000Z", reason: expect.stringContaining("janela") });
   });

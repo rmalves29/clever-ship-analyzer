@@ -183,6 +183,7 @@ vi.mock("./wa-queue-throughput", async (importOriginal) => {
 
 import { PURCHASE_RECOVERY_IMPLEMENTATION, RECOVERY_TEMPLATES } from "./purchase-recovery";
 import { decideRecoveryJobsBeforeSend, runPurchaseRecoveryTick } from "./purchase-recovery.server";
+import { processWhatsappQueueBatch } from "./wa-campaigns.server";
 
 const HOST = "clever-ship-analyzer.lovable.app";
 const AUTOMATION_ID = "auto-1";
@@ -263,9 +264,15 @@ beforeEach(() => {
   meta.templates = approvedTemplates("PENDING");
   meta.apiError = null;
   meta.campaigns = 0;
+  meta.sends = [];
+  gateHook.fn = null;
+  gateHook.calls = 0;
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 const tick = (now: string, host: string | null = HOST) =>
   runPurchaseRecoveryTick(db.tables["whatsapp_automations"]![0]!, { requestHost: host }, new Date(now));
@@ -437,5 +444,181 @@ describe("worker: reconferência imediatamente antes do envio", () => {
     byKey("checkout:ck-ana")!.status = "failed";
     const d = await decideRecoveryJobsBeforeSend(items, new Date("2026-11-16T14:01:00Z"));
     expect(d.get(recipient.id)).toMatchObject({ kind: "cancel" });
+  });
+});
+
+describe("fluxo inativo e leituras acima de 1000 linhas", () => {
+  async function queued() {
+    meta.templates = approvedTemplates();
+    await tick("2026-11-16T14:00:00Z");
+    const recipient = db.tables["wa_campaign_recipients"]![0]!;
+    const campaign = { id: recipient.campaign_id, automation_id: AUTOMATION_ID, automation_step_id: "recovery_initial" };
+    return { recipient, items: [{ recipientId: recipient.id, campaign }] };
+  }
+
+  it("fluxo marcado como inativo não envia itens já na fila, mesmo com gate aprovado", async () => {
+    const { recipient, items } = await queued();
+    db.tables["whatsapp_automations"]![0]!.inativa = true;
+    const d = await decideRecoveryJobsBeforeSend(items, new Date("2026-11-16T14:01:00Z"));
+    expect(d.get(recipient.id)).toMatchObject({ kind: "defer", reason: expect.stringContaining("inativo") });
+  });
+
+  it("descoberta contínua lê todas as páginas: a tentativa mais nova depois de 1000 é vista", async () => {
+    const checkouts = db.tables["shopify_abandoned_checkouts"]!;
+    for (let i = 0; i < 1100; i++) {
+      const n = String(i).padStart(4, "0");
+      checkouts.push({
+        id: `ck-bulk-${n}`, customer_id: null, email: null, phone: `+55119${String(60000000 + i)}`,
+        checkout_url: `https://maniadmulher.com/77747060914/checkouts/ac/bulk${n}`,
+        created_at: new Date(Date.parse("2026-11-15T22:00:00Z") + i * 60_000).toISOString(), raw_data: { completedAt: null }, completed_at: null,
+      });
+    }
+    checkouts.push({
+      id: "ck-newest", customer_id: null, email: null, phone: "+5541955554444",
+      checkout_url: "https://maniadmulher.com/77747060914/checkouts/ac/newest",
+      created_at: "2026-11-16T13:29:00Z", raw_data: { completedAt: null }, completed_at: null,
+    });
+    await tick("2026-11-16T14:00:00Z"); // modelos PENDING: só registra
+    expect(byKey("checkout:ck-newest")?.status).toBe("pending");
+    expect(attempts().filter((a) => a.cohort === "continuous")).toHaveLength(1101);
+  });
+
+  it("compra bloqueadora numa página seguinte (após 1000 pedidos) impede o envio", async () => {
+    const { recipient, items } = await queued();
+    const orders = db.tables["shopify_orders"]!;
+    for (let i = 0; i < 1100; i++) {
+      orders.push({ id: `o-noise-${String(i).padStart(4, "0")}`, customer_id: "c-ana", email: null, phone: null, financial_status: "EXPIRED", cancelled_at: null, created_at: new Date(Date.parse("2026-11-13T16:00:00Z") + i * 1000).toISOString() });
+    }
+    orders.push({ id: "o-ana-late-paid", customer_id: "c-ana", email: null, phone: null, financial_status: "PAID", cancelled_at: null, created_at: "2026-11-16T14:00:30Z" });
+    const d = await decideRecoveryJobsBeforeSend(items, new Date("2026-11-16T14:01:00Z"));
+    expect(d.get(recipient.id)).toEqual({ kind: "cancel", reason: "compra posterior à tentativa" });
+  });
+
+  it("resposta numa página seguinte (após 1000 mensagens) impede o envio", async () => {
+    const { recipient, items } = await queued();
+    db.tables["whatsapp_inbox_threads"]!.push({ id: "t-ana", phone: "+5531992904210" });
+    const messages = db.tables["whatsapp_inbox_messages"]!;
+    // 1100 mensagens antigas (antes da tentativa não contam, mas aqui ficam depois do corte do lote para ocupar a página)
+    for (let i = 0; i < 1100; i++) messages.push({ id: `m-${String(i).padStart(5, "0")}`, thread_id: "t-other", direction: "inbound", sent_at: "2026-11-16T10:00:00Z" });
+    db.tables["whatsapp_inbox_threads"]!.push({ id: "t-other", phone: "+553192904210" });
+    messages.push({ id: "m-99999", thread_id: "t-ana", direction: "inbound", sent_at: "2026-11-16T14:00:40Z" });
+    const d = await decideRecoveryJobsBeforeSend(items, new Date("2026-11-16T14:01:00Z"));
+    expect(d.get(recipient.id)).toEqual({ kind: "cancel", reason: "cliente respondeu" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Worker real (processWhatsappQueueBatch) com provedor simulado
+// ---------------------------------------------------------------------------
+describe("worker da fila: reconferência depois da espera do ritmo e antes do provedor", () => {
+  const PEOPLE = [
+    { key: "ana", customer: "c-ana", phone: "+5531992904210", email: "ana@x.com", checkout: "ck-ana", attemptAt: "2026-11-13T15:00:00Z" },
+    { key: "bia", customer: "c-bia", phone: "+5511988887777", email: "bia@x.com", checkout: "ck-bia", attemptAt: "2026-11-14T15:00:00Z" },
+  ];
+
+  function seedQueue(now: string, opts: { withOtherFlow?: boolean } = {}) {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(now));
+    db.tables["shopify_orders"] = []; // ninguém comprou ainda
+    const automationRow = db.tables["whatsapp_automations"]![0]!;
+    automationRow.trigger_config.recoveryGate = { ok: true, checkedAt: now, reason: null };
+    db.tables["wa_campaigns"] = [
+      { id: "camp-rec", origin: "automacao", automation_id: AUTOMATION_ID, automation_step_id: "recovery_initial", template_name: RECOVERY_TEMPLATES.initial.name, template_language: "pt_BR", message_type: "marketing", body_params: [], body_param_tokens: null, header_media_url: null, total_recipients: 2, sent_count: 0, failed_count: 0 },
+      { id: "camp-other", origin: "crm", automation_id: null, automation_step_id: null, template_name: "outro_modelo", template_language: "pt_BR", message_type: "utility", body_params: [], body_param_tokens: null, header_media_url: null, total_recipients: 1, sent_count: 0, failed_count: 0 },
+    ];
+    const past = new Date(Date.parse(now) - 60_000).toISOString();
+    PEOPLE.forEach((p, i) => {
+      attempts().push({
+        id: `att-${p.key}`, automation_id: AUTOMATION_ID, attempt_key: `checkout:${p.checkout}`, source: "checkout", source_id: p.checkout, cohort: "initial",
+        customer_id: p.customer, email: p.email, phone: p.phone, phone_key: p.phone, first_name: p.key, recovery_url: `https://maniadmulher.com/77747060914/checkouts/ac/${p.key}`,
+        attempt_at: p.attemptAt, eligible_at: p.attemptAt, status: "queued_initial", initial_recipient_id: `rec-${p.key}`, created_at: "2026-11-16T12:00:00Z",
+      });
+      db.tables["wa_campaign_recipients"]!.push({ id: `rec-${p.key}`, campaign_id: "camp-rec", customer_id: p.customer, name: p.key, phone: p.phone, params: [p.key, "https://maniadmulher.com/x"], status: "queued", event_key: `checkout:${p.checkout}:initial` });
+      db.tables["wa_jobs"]!.push({ id: `job-${p.key}`, campaign_id: "camp-rec", recipient_id: `rec-${p.key}`, status: "queued", attempts: 0, max_attempts: 3, priority: 5, scheduled_at: past, next_attempt_at: past, created_at: `2026-11-16T12:00:0${i}Z` });
+    });
+    if (opts.withOtherFlow) {
+      db.tables["wa_campaign_recipients"]!.push({ id: "rec-other", campaign_id: "camp-other", customer_id: "c-cris", name: "Cris", phone: "+5521977776666", params: ["Cris"], status: "queued", event_key: "" });
+      db.tables["wa_jobs"]!.push({ id: "job-other", campaign_id: "camp-other", recipient_id: "rec-other", status: "queued", attempts: 0, max_attempts: 3, priority: 5, scheduled_at: past, next_attempt_at: past, created_at: "2026-11-16T12:00:09Z" });
+    }
+  }
+
+  const job = (id: string) => db.tables["wa_jobs"]!.find((j) => j.id === id)!;
+  const recipientRow = (id: string) => db.tables["wa_campaign_recipients"]!.find((r) => r.id === id)!;
+  const sentTo = () => meta.sends.map((s) => s.to);
+
+  it("sem mudanças: os dois itens saem e outros fluxos continuam", async () => {
+    seedQueue("2026-11-16T14:00:00Z", { withOtherFlow: true });
+    const r = await processWhatsappQueueBatch({ limit: 50 });
+    expect(r).toMatchObject({ success: true, claimed: 3, sent: 3 });
+    expect(sentTo()).toEqual(["+5531992904210", "+5511988887777", "+5521977776666"]);
+  });
+
+  it("compra durante a espera do ritmo: zero chamadas ao provedor para o item afetado; demais seguem", async () => {
+    seedQueue("2026-11-16T14:00:00Z", { withOtherFlow: true });
+    gateHook.fn = (call) => {
+      if (call === 2) db.tables["shopify_orders"]!.push({ id: "o-bia-now", customer_id: "c-bia", email: null, phone: null, financial_status: "PAID", cancelled_at: null, created_at: "2026-11-16T14:00:00Z" });
+    };
+    const r = await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual(["+5531992904210", "+5521977776666"]);
+    expect(r).toMatchObject({ sent: 2 });
+    expect(job("job-bia").status).toBe("cancelled");
+    expect(recipientRow("rec-bia")).toMatchObject({ status: "cancelled", error_message: "compra posterior à tentativa" });
+    expect(byKey("checkout:ck-bia")).toMatchObject({ status: "exited", exit_reason: "compra posterior à tentativa" });
+  });
+
+  it("resposta recebida durante a espera do ritmo: item não vai ao provedor", async () => {
+    seedQueue("2026-11-16T14:00:00Z");
+    gateHook.fn = (call) => {
+      if (call !== 2) return;
+      db.tables["whatsapp_inbox_threads"]!.push({ id: "t-bia", phone: "+5511988887777" });
+      db.tables["whatsapp_inbox_messages"]!.push({ id: "m-bia", thread_id: "t-bia", direction: "inbound", sent_at: "2026-11-16T14:00:00Z" });
+    };
+    await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual(["+5531992904210"]);
+    expect(byKey("checkout:ck-bia")).toMatchObject({ status: "exited", exit_reason: "cliente respondeu" });
+  });
+
+  it("opt-out registrado depois da onda anterior: item não vai ao provedor", async () => {
+    seedQueue("2026-11-16T14:00:00Z");
+    gateHook.fn = (call) => {
+      if (call === 2) db.tables["whatsapp_suppressions"]!.push({ phone: "+5511988887777", marketing_opt_out: true });
+    };
+    await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual(["+5531992904210"]);
+    expect(recipientRow("rec-bia").status).toBe("cancelled");
+    expect(byKey("checkout:ck-bia")).toMatchObject({ status: "exited", exit_reason: "opt-out de marketing" });
+  });
+
+  it("relógio chega às 19h durante a espera: item volta à fila sem gastar tentativa nem trava, sem provedor", async () => {
+    seedQueue("2026-11-16T21:59:30Z"); // 18:59:30 Brasília
+    gateHook.fn = (call) => {
+      if (call === 2) vi.setSystemTime(new Date("2026-11-16T22:00:00Z")); // 19:00
+    };
+    await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual(["+5531992904210"]);
+    expect(job("job-bia")).toMatchObject({ status: "retry_wait", attempts: 0, locked_by: null, locked_at: null, next_attempt_at: "2026-11-17T12:00:00.000Z" });
+    expect(recipientRow("rec-bia").status).toBe("queued");
+    expect(byKey("checkout:ck-bia")?.status).toBe("queued_initial");
+  });
+
+  it("erro na consulta durante a reconferência: não envia e deixa erro visível", async () => {
+    seedQueue("2026-11-16T14:00:00Z");
+    gateHook.fn = (call) => {
+      if (call === 2) db.failOn.add("whatsapp_inbox_threads");
+    };
+    const r = await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual(["+5531992904210"]);
+    expect(r).toMatchObject({ sent: 1, retry: 1 });
+    expect(job("job-bia")).toMatchObject({ status: "retry_wait", error: expect.stringContaining("Envio bloqueado") });
+    expect(recipientRow("rec-bia").status).toBe("queued");
+  });
+
+  it("fluxo inativo: itens na fila não chamam o provedor e voltam sem gastar tentativa", async () => {
+    seedQueue("2026-11-16T14:00:00Z", { withOtherFlow: true });
+    db.tables["whatsapp_automations"]![0]!.inativa = true;
+    await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual(["+5521977776666"]);
+    expect(job("job-ana")).toMatchObject({ status: "retry_wait", attempts: 0, locked_by: null });
+    expect(job("job-bia")).toMatchObject({ status: "retry_wait", attempts: 0, locked_by: null });
   });
 });

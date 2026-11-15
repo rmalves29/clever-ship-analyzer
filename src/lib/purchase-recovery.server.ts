@@ -989,6 +989,14 @@ export async function getPurchaseRecoveryOverview() {
       lastBlocker: (tc["recoveryLastBlocker"] ?? null) as string | null,
       lastTickAt: (tc["recoveryLastTickAt"] ?? null) as string | null,
       gate: (tc["recoveryGate"] ?? null) as TemplateGate | null,
+      windowOverride: (() => {
+        const check = checkInitialWindowOverride(String(a["id"]), tc, new Date());
+        const raw = tc["recoveryInitialWindowOverride"];
+        if (!raw) return null;
+        return check.valid
+          ? { active: true as const, expiresAt: check.expiresAt, reason: check.reason }
+          : { active: false as const, why: check.why };
+      })(),
       lastError: (a["last_error"] ?? null) as string | null,
       byStatus,
       reasons,

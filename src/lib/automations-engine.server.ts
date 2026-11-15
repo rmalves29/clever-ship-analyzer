@@ -1303,7 +1303,7 @@ async function processDueRuns(automation: any, steps: AutomationStep[]): Promise
   return processed;
 }
 
-export async function runAutomationsTick(options?: { automationId?: string; force?: boolean }) {
+export async function runAutomationsTick(options?: { automationId?: string; force?: boolean; requestHost?: string | null }) {
   const supabaseAdmin = await admin();
   let query = supabaseAdmin.from("whatsapp_automations").select("*");
   if (options?.automationId) query = query.eq("id", options.automationId);
@@ -1314,6 +1314,30 @@ export async function runAutomationsTick(options?: { automationId?: string; forc
   let runsProcessed = 0;
   const failures: Array<{ automationId: string; nome: string; error: string }> = [];
   for (const a of automations) {
+    // Recuperação de compras: fluxo próprio (tentativas + gate Meta), independente de etapas e do "ativo"
+    // — quem liga/desliga é o próprio gate. Só roda pelo tick agendado do site publicado (requestHost).
+    if (a.automation_kind === "purchase_recovery") {
+      try {
+        const { runPurchaseRecoveryTick } = await import("./purchase-recovery.server");
+        const result = await runPurchaseRecoveryTick(a, { requestHost: options?.requestHost ?? null });
+        if (result.state !== "bloqueado") automationsProcessed++;
+        runsProcessed += result.processed;
+        if (options?.requestHost) {
+          await supabaseAdmin
+            .from("whatsapp_automations")
+            .update({ last_run_at: new Date().toISOString(), last_error: null } as never)
+            .eq("id", a.id);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        failures.push({ automationId: a.id, nome: a.nome, error: message });
+        await supabaseAdmin
+          .from("whatsapp_automations")
+          .update({ last_run_at: new Date().toISOString(), last_error: message } as never)
+          .eq("id", a.id);
+      }
+      continue;
+    }
     if (!a.ativo && !options?.force) continue;
     const steps = parseSteps(a.steps);
     if (steps.length === 0) continue;
@@ -1482,7 +1506,7 @@ async function releaseTickLease(holder: string) {
     .eq("holder", holder);
 }
 
-export async function runAutomationsTickWithLog() {
+export async function runAutomationsTickWithLog(options?: { requestHost?: string | null }) {
   const supabaseAdmin = await admin();
 
   const holder = await acquireTickLease();
@@ -1498,7 +1522,7 @@ export async function runAutomationsTickWithLog() {
   const logId = (logRow as { id: string } | null)?.id;
 
   try {
-    const result = await runAutomationsTick();
+    const result = await runAutomationsTick({ requestHost: options?.requestHost ?? null });
     const { processDueConversationRuns, checkUnansweredThreads } = await import("./conversational-flows.server");
     await processDueConversationRuns();
     await checkUnansweredThreads();

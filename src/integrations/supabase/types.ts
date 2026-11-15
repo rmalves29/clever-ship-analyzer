@@ -1759,6 +1759,104 @@ export type Database = {
         }
         Relationships: []
       }
+      purchase_recovery_attempts: {
+        Row: {
+          attempt_at: string
+          attempt_key: string
+          automation_id: string
+          cohort: string
+          created_at: string
+          customer_id: string | null
+          eligible_at: string
+          email: string | null
+          exit_reason: string | null
+          first_name: string | null
+          id: string
+          initial_queued_at: string | null
+          initial_recipient_id: string | null
+          initial_sent_at: string | null
+          last_checked_at: string | null
+          last_error: string | null
+          phone: string | null
+          phone_key: string | null
+          recovery_url: string | null
+          reminder_due_at: string | null
+          reminder_queued_at: string | null
+          reminder_recipient_id: string | null
+          reminder_sent_at: string | null
+          source: string
+          source_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempt_at: string
+          attempt_key: string
+          automation_id: string
+          cohort: string
+          created_at?: string
+          customer_id?: string | null
+          eligible_at: string
+          email?: string | null
+          exit_reason?: string | null
+          first_name?: string | null
+          id?: string
+          initial_queued_at?: string | null
+          initial_recipient_id?: string | null
+          initial_sent_at?: string | null
+          last_checked_at?: string | null
+          last_error?: string | null
+          phone?: string | null
+          phone_key?: string | null
+          recovery_url?: string | null
+          reminder_due_at?: string | null
+          reminder_queued_at?: string | null
+          reminder_recipient_id?: string | null
+          reminder_sent_at?: string | null
+          source: string
+          source_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempt_at?: string
+          attempt_key?: string
+          automation_id?: string
+          cohort?: string
+          created_at?: string
+          customer_id?: string | null
+          eligible_at?: string
+          email?: string | null
+          exit_reason?: string | null
+          first_name?: string | null
+          id?: string
+          initial_queued_at?: string | null
+          initial_recipient_id?: string | null
+          initial_sent_at?: string | null
+          last_checked_at?: string | null
+          last_error?: string | null
+          phone?: string | null
+          phone_key?: string | null
+          recovery_url?: string | null
+          reminder_due_at?: string | null
+          reminder_queued_at?: string | null
+          reminder_recipient_id?: string | null
+          reminder_sent_at?: string | null
+          source?: string
+          source_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_recovery_attempts_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_automations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shopify_abandoned_checkouts: {
         Row: {
           checkout_url: string | null
@@ -3358,6 +3456,25 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      purchase_recovery_customers_by_emails: {
+        Args: { p_emails: string[] }
+        Returns: {
+          email: string
+          id: string
+        }[]
+      }
+      purchase_recovery_orders_by_emails: {
+        Args: { p_emails: string[]; p_since: string }
+        Returns: {
+          cancelled_at: string
+          created_at: string
+          customer_id: string
+          email: string
+          financial_status: string
+          id: string
+          phone: string
+        }[]
       }
       requeue_stale_wa_jobs: {
         Args: { p_stale_minutes?: number }

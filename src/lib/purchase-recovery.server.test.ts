@@ -7,13 +7,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 type Row = any;
 const db = vi.hoisted(() => ({ tables: {} as Record<string, Row[]>, failOn: new Set<string>(), seq: 0 }));
 
-function builder(table: string) {
+/** Simula o limite padrão do Data API: no máximo 1000 linhas por requisição. */
+const MAX_ROWS = 1000;
+
+function compare(a: any, b: any): number {
+  if (a === b) return 0;
+  if (a === null || a === undefined) return 1;
+  if (b === null || b === undefined) return -1;
+  return String(a) < String(b) ? -1 : 1;
+}
+
+function makeBuilder(table: string, source?: () => Row[] | { error: { message: string } }) {
   const filters: Array<(r: Row) => boolean> = [];
+  const orders: Array<[string, boolean]> = [];
   let op: "select" | "update" | "insert" | "upsert" = "select";
   let payload: any = null;
   let onConflict: string | null = null;
   let ignoreDuplicates = false;
   let limitN: number | null = null;
+  let range: [number, number] | null = null;
   let single: "maybe" | "one" | null = null;
   let returning = false;
   const rows = () => (db.tables[table] ??= []);
@@ -43,13 +55,22 @@ function builder(table: string) {
       }
       return { data: returning ? out : null, error: null };
     }
-    const matched = rows().filter((r) => filters.every((f) => f(r)));
+    let base: Row[];
+    if (source) {
+      const r = source();
+      if (!Array.isArray(r)) return { data: null, error: r.error };
+      base = r;
+    } else base = rows();
+    const matched = base.filter((r) => filters.every((f) => f(r)));
     if (op === "update") {
       for (const r of matched) Object.assign(r, payload);
       return { data: returning ? matched : null, error: null };
     }
     let data = matched.map((r) => ({ ...r }));
+    if (orders.length) data.sort((x, y) => { for (const [c, asc] of orders) { const d = compare(x[c], y[c]); if (d) return asc ? d : -d; } return 0; });
+    if (range) data = data.slice(range[0], range[1] + 1);
     if (limitN !== null) data = data.slice(0, limitN);
+    if (!single) data = data.slice(0, MAX_ROWS);
     if (single) return { data: data[0] ?? null, error: single === "one" && !data[0] ? { message: "not found" } : null };
     return { data, error: null };
   };
@@ -63,7 +84,8 @@ function builder(table: string) {
     lt: (c: string, v: any) => (filters.push((r) => r[c] != null && new Date(r[c]) < new Date(v)), b),
     not: () => b,
     contains: (c: string, vs: any[]) => (filters.push((r) => Array.isArray(r[c]) && vs.every((v) => r[c].includes(v))), b),
-    order: () => b,
+    order: (c: string, o?: { ascending?: boolean }) => (orders.push([c, o?.ascending !== false]), b),
+    range: (from: number, to: number) => ((range = [from, to]), b),
     limit: (n: number) => ((limitN = n), b),
     maybeSingle: () => ((single = "maybe"), Promise.resolve(run())),
     single: () => ((single = "one"), Promise.resolve(run())),
@@ -74,36 +96,94 @@ function builder(table: string) {
   };
   return b;
 }
+const builder = (table: string) => makeBuilder(table);
 
 function rpc(name: string, args: any) {
-  const emails = (args.p_emails as string[]).map((e) => e.toLowerCase());
+  const lower = () => (args.p_emails as string[]).map((e) => e.toLowerCase());
   if (name === "purchase_recovery_orders_by_emails") {
-    if (db.failOn.has("shopify_orders")) return Promise.resolve({ data: null, error: { message: "falha simulada em shopify_orders" } });
-    const data = (db.tables["shopify_orders"] ?? []).filter((o) => o.email && emails.includes(String(o.email).toLowerCase()) && new Date(o.created_at) >= new Date(args.p_since));
-    return Promise.resolve({ data, error: null });
+    return makeBuilder("__rpc_orders", () => {
+      if (db.failOn.has("shopify_orders")) return { error: { message: "falha simulada em shopify_orders" } };
+      const emails = lower();
+      return (db.tables["shopify_orders"] ?? []).filter((o) => o.email && emails.includes(String(o.email).toLowerCase()) && new Date(o.created_at) >= new Date(args.p_since));
+    });
   }
   if (name === "purchase_recovery_customers_by_emails") {
-    const data = (db.tables["shopify_customers"] ?? []).filter((c) => c.email && emails.includes(String(c.email).toLowerCase()));
-    return Promise.resolve({ data, error: null });
+    return makeBuilder("__rpc_customers", () => {
+      const emails = lower();
+      return (db.tables["shopify_customers"] ?? []).filter((c) => c.email && emails.includes(String(c.email).toLowerCase()));
+    });
+  }
+  // --- fila (worker) ---
+  if (name === "requeue_stale_wa_jobs") return Promise.resolve({ data: 0, error: null });
+  if (name === "claim_wa_jobs") {
+    const now = Date.now();
+    const picked = (db.tables["wa_jobs"] ?? [])
+      .filter((j) => ["queued", "retry_wait"].includes(j.status) && new Date(j.scheduled_at).getTime() <= now && (!j.next_attempt_at || new Date(j.next_attempt_at).getTime() <= now))
+      .sort((a, b) => a.priority - b.priority || compare(a.created_at, b.created_at))
+      .slice(0, args.p_limit);
+    for (const j of picked) Object.assign(j, { status: "sending", attempts: j.attempts + 1, locked_by: args.p_worker, locked_at: new Date().toISOString() });
+    return Promise.resolve({ data: picked.map((j) => ({ ...j })), error: null });
+  }
+  if (name === "wa_queue_apply_results") {
+    for (const o of args.p_results as any[]) {
+      const job = (db.tables["wa_jobs"] ?? []).find((j) => j.id === o.job_id);
+      const status = o.kind === "sent" ? "done" : o.kind === "retry" ? "retry_wait" : o.kind;
+      if (job) Object.assign(job, { status, error: o.kind === "sent" ? null : o.error ?? null, next_attempt_at: o.kind === "retry" ? o.next_attempt_at : null, locked_by: null, locked_at: null });
+      const recipient = (db.tables["wa_campaign_recipients"] ?? []).find((r) => r.id === o.recipient_id);
+      if (!recipient) continue;
+      if (o.kind === "sent") Object.assign(recipient, { status: "sent", wa_message_id: o.wa_message_id, sent_at: new Date().toISOString() });
+      if (o.kind === "failed") Object.assign(recipient, { status: "failed", error_message: o.error });
+      if (o.kind === "cancelled") Object.assign(recipient, { status: "cancelled", error_message: o.error });
+    }
+    return Promise.resolve({ data: null, error: null });
+  }
+  if (name === "release_wa_jobs") {
+    for (const j of db.tables["wa_jobs"] ?? []) if ((args.p_ids as string[]).includes(j.id)) Object.assign(j, { status: "queued", locked_by: null, locked_at: null });
+    return Promise.resolve({ data: null, error: null });
   }
   return Promise.resolve({ data: null, error: { message: `rpc desconhecida ${name}` } });
 }
 
 vi.mock("@/integrations/supabase/client.server", () => ({ supabaseAdmin: { from: (t: string) => builder(t), rpc } }));
 
-const meta = vi.hoisted(() => ({ templates: [] as any[], apiError: null as string | null, campaigns: 0 }));
-vi.mock("./whatsapp-meta.server", () => ({
-  listMetaTemplates: async () => (meta.apiError ? { success: false, error: meta.apiError, templates: [] } : { success: true, templates: meta.templates }),
-  createCampaignRow: async () => {
-    meta.campaigns++;
-    const id = `camp-${meta.campaigns}`;
-    (db.tables["wa_campaigns"] ??= []).push({ id });
-    return { success: true, campaignId: id };
-  },
-}));
+const meta = vi.hoisted(() => ({ templates: [] as any[], apiError: null as string | null, campaigns: 0, sends: [] as Array<{ to: string; templateName: string }> }));
+vi.mock("./whatsapp-meta.server", async () => {
+  const { normalizeShopifyPhone } = await import("./shopify-order-phone");
+  return {
+    listMetaTemplates: async () => (meta.apiError ? { success: false, error: meta.apiError, templates: [] } : { success: true, templates: meta.templates }),
+    createCampaignRow: async () => {
+      meta.campaigns++;
+      const id = `camp-${meta.campaigns}`;
+      (db.tables["wa_campaigns"] ??= []).push({ id });
+      return { success: true, campaignId: id };
+    },
+    loadSettings: async () => ({ accessToken: "test-token", phoneNumberId: "test-phone", templateLanguage: "pt_BR" }),
+    toE164: (raw: string) => normalizeShopifyPhone(raw),
+    // Provedor simulado: registra cada chamada (a Meta real nunca é chamada nos testes).
+    sendTemplateMessage: async (params: { to: string; templateName: string }) => {
+      meta.sends.push({ to: params.to, templateName: params.templateName });
+      return { ok: true, waMessageId: `wamid.${meta.sends.length}` };
+    },
+  };
+});
+
+// Ritmo do worker: 1 item por vez, e a "espera do gate" roda um gancho do teste (compra/resposta/relógio…).
+const gateHook = vi.hoisted(() => ({ fn: null as null | ((call: number) => void | Promise<void>), calls: 0 }));
+vi.mock("./wa-queue-throughput", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./wa-queue-throughput")>();
+  return {
+    ...original,
+    readThroughputConfig: () => ({ ratePerSec: 80, concurrency: 1, batchSize: 50, waveSize: 1 }),
+    createRateGate: () => async () => {
+      gateHook.calls++;
+      if (gateHook.fn) await gateHook.fn(gateHook.calls);
+    },
+  };
+});
 
 import { PURCHASE_RECOVERY_IMPLEMENTATION, RECOVERY_TEMPLATES } from "./purchase-recovery";
 import { decideRecoveryJobsBeforeSend, runPurchaseRecoveryTick } from "./purchase-recovery.server";
+import { processWhatsappQueueBatch } from "./wa-campaigns.server";
 
 const HOST = "clever-ship-analyzer.lovable.app";
 const AUTOMATION_ID = "auto-1";
@@ -184,9 +264,15 @@ beforeEach(() => {
   meta.templates = approvedTemplates("PENDING");
   meta.apiError = null;
   meta.campaigns = 0;
+  meta.sends = [];
+  gateHook.fn = null;
+  gateHook.calls = 0;
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 const tick = (now: string, host: string | null = HOST) =>
   runPurchaseRecoveryTick(db.tables["whatsapp_automations"]![0]!, { requestHost: host }, new Date(now));
@@ -358,5 +444,184 @@ describe("worker: reconferência imediatamente antes do envio", () => {
     byKey("checkout:ck-ana")!.status = "failed";
     const d = await decideRecoveryJobsBeforeSend(items, new Date("2026-11-16T14:01:00Z"));
     expect(d.get(recipient.id)).toMatchObject({ kind: "cancel" });
+  });
+});
+
+describe("fluxo inativo e leituras acima de 1000 linhas", () => {
+  async function queued() {
+    meta.templates = approvedTemplates();
+    await tick("2026-11-16T14:00:00Z");
+    const recipient = db.tables["wa_campaign_recipients"]![0]!;
+    const campaign = { id: recipient.campaign_id, automation_id: AUTOMATION_ID, automation_step_id: "recovery_initial" };
+    return { recipient, items: [{ recipientId: recipient.id, campaign }] };
+  }
+
+  it("fluxo marcado como inativo não envia itens já na fila, mesmo com gate aprovado", async () => {
+    const { recipient, items } = await queued();
+    db.tables["whatsapp_automations"]![0]!.inativa = true;
+    const d = await decideRecoveryJobsBeforeSend(items, new Date("2026-11-16T14:01:00Z"));
+    expect(d.get(recipient.id)).toMatchObject({ kind: "defer", reason: expect.stringContaining("inativo") });
+  });
+
+  it("descoberta contínua lê todas as páginas: a tentativa mais nova depois de 1000 é vista", async () => {
+    const checkouts = db.tables["shopify_abandoned_checkouts"]!;
+    for (let i = 0; i < 1100; i++) {
+      const n = String(i).padStart(4, "0");
+      checkouts.push({
+        id: `ck-bulk-${n}`, customer_id: null, email: null, phone: `+55119${String(60000000 + i)}`,
+        checkout_url: `https://maniadmulher.com/77747060914/checkouts/ac/bulk${n}`,
+        created_at: new Date(Date.parse("2026-11-15T22:00:00Z") + i * 30_000).toISOString(), raw_data: { completedAt: null }, completed_at: null,
+      });
+    }
+    checkouts.push({
+      id: "ck-newest", customer_id: null, email: null, phone: "+5541955554444",
+      checkout_url: "https://maniadmulher.com/77747060914/checkouts/ac/newest",
+      created_at: "2026-11-16T13:29:00Z", raw_data: { completedAt: null }, completed_at: null,
+    });
+    await tick("2026-11-16T14:00:00Z"); // modelos PENDING: só registra
+    expect(byKey("checkout:ck-newest")?.status).toBe("pending");
+    expect(attempts().filter((a) => a.cohort === "continuous")).toHaveLength(1101);
+  });
+
+  it("compra bloqueadora numa página seguinte (após 1000 pedidos) impede o envio", async () => {
+    const { recipient, items } = await queued();
+    const orders = db.tables["shopify_orders"]!;
+    for (let i = 0; i < 1100; i++) {
+      orders.push({ id: `o-noise-${String(i).padStart(4, "0")}`, customer_id: "c-ana", email: null, phone: null, financial_status: "EXPIRED", cancelled_at: null, created_at: new Date(Date.parse("2026-11-13T16:00:00Z") + i * 1000).toISOString() });
+    }
+    orders.push({ id: "o-ana-late-paid", customer_id: "c-ana", email: null, phone: null, financial_status: "PAID", cancelled_at: null, created_at: "2026-11-16T14:00:30Z" });
+    const d = await decideRecoveryJobsBeforeSend(items, new Date("2026-11-16T14:01:00Z"));
+    expect(d.get(recipient.id)).toEqual({ kind: "cancel", reason: "compra posterior à tentativa" });
+  });
+
+  it("resposta numa página seguinte (após 1000 mensagens) impede o envio", async () => {
+    const base = { automation_id: AUTOMATION_ID, source: "checkout", cohort: "continuous", status: "queued_initial", initial_recipient_id: null, created_at: "2026-11-16T12:00:00Z" };
+    const ana = { ...base, id: "a-ana", attempt_key: "checkout:ck-ana", source_id: "ck-ana", customer_id: "c-ana", email: "ana@x.com", phone: "+5531992904210", phone_key: "+5531992904210", recovery_url: "https://maniadmulher.com/77747060914/checkouts/ac/ana", attempt_at: "2026-11-13T15:00:00Z" };
+    // Outra tentativa mais antiga no mesmo lote: o corte do lote recua e as conversas dela ocupam a 1ª página.
+    const ze = { ...base, id: "a-ze", attempt_key: "checkout:ck-ze", source_id: "ck-ze", customer_id: null, email: null, phone: "+5548933332222", phone_key: "+5548933332222", recovery_url: "https://maniadmulher.com/77747060914/checkouts/ac/ze", attempt_at: "2026-11-10T00:00:00Z" };
+    db.tables["whatsapp_inbox_threads"]!.push({ id: "t-ze", phone: "+5548933332222" }, { id: "t-ana", phone: "+5531992904210" });
+    const messages = db.tables["whatsapp_inbox_messages"]!;
+    for (let i = 0; i < 1100; i++) messages.push({ id: `m-${String(i).padStart(5, "0")}`, thread_id: "t-ze", direction: "inbound", sent_at: "2026-11-11T10:00:00Z" });
+    messages.push({ id: "m-99999", thread_id: "t-ana", direction: "inbound", sent_at: "2026-11-16T14:00:40Z" });
+    const { loadGuardFacts } = await import("./purchase-recovery.server");
+    const { parseRecoveryConfig, evaluateRecoveryGuards } = await import("./purchase-recovery");
+    const facts = await loadGuardFacts([ana, ze] as any, parseRecoveryConfig(automation().trigger_config), ["maniadmulher.com"], "initial");
+    expect(evaluateRecoveryGuards(facts.get("a-ana")!)).toEqual({ send: false, reason: "cliente respondeu" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Worker real (processWhatsappQueueBatch) com provedor simulado
+// ---------------------------------------------------------------------------
+describe("worker da fila: reconferência depois da espera do ritmo e antes do provedor", () => {
+  const PEOPLE = [
+    { key: "ana", customer: "c-ana", phone: "+5531992904210", email: "ana@x.com", checkout: "ck-ana", attemptAt: "2026-11-13T15:00:00Z" },
+    { key: "bia", customer: "c-bia", phone: "+5511988887777", email: "bia@x.com", checkout: "ck-bia", attemptAt: "2026-11-14T15:00:00Z" },
+  ];
+
+  function seedQueue(now: string, opts: { withOtherFlow?: boolean } = {}) {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(now));
+    db.tables["shopify_orders"] = []; // ninguém comprou ainda
+    const automationRow = db.tables["whatsapp_automations"]![0]!;
+    automationRow.trigger_config.recoveryGate = { ok: true, checkedAt: now, reason: null };
+    db.tables["wa_campaigns"] = [
+      { id: "camp-rec", origin: "automacao", automation_id: AUTOMATION_ID, automation_step_id: "recovery_initial", template_name: RECOVERY_TEMPLATES.initial.name, template_language: "pt_BR", message_type: "marketing", body_params: [], body_param_tokens: null, header_media_url: null, total_recipients: 2, sent_count: 0, failed_count: 0 },
+      { id: "camp-other", origin: "crm", automation_id: null, automation_step_id: null, template_name: "outro_modelo", template_language: "pt_BR", message_type: "utility", body_params: [], body_param_tokens: null, header_media_url: null, total_recipients: 1, sent_count: 0, failed_count: 0 },
+    ];
+    const past = new Date(Date.parse(now) - 60_000).toISOString();
+    PEOPLE.forEach((p, i) => {
+      attempts().push({
+        id: `att-${p.key}`, automation_id: AUTOMATION_ID, attempt_key: `checkout:${p.checkout}`, source: "checkout", source_id: p.checkout, cohort: "initial",
+        customer_id: p.customer, email: p.email, phone: p.phone, phone_key: p.phone, first_name: p.key, recovery_url: `https://maniadmulher.com/77747060914/checkouts/ac/${p.key}`,
+        attempt_at: p.attemptAt, eligible_at: p.attemptAt, status: "queued_initial", initial_recipient_id: `rec-${p.key}`, created_at: "2026-11-16T12:00:00Z",
+      });
+      db.tables["wa_campaign_recipients"]!.push({ id: `rec-${p.key}`, campaign_id: "camp-rec", customer_id: p.customer, name: p.key, phone: p.phone, params: [p.key, "https://maniadmulher.com/x"], status: "queued", event_key: `checkout:${p.checkout}:initial` });
+      db.tables["wa_jobs"]!.push({ id: `job-${p.key}`, campaign_id: "camp-rec", recipient_id: `rec-${p.key}`, status: "queued", attempts: 0, max_attempts: 3, priority: 5, scheduled_at: past, next_attempt_at: past, created_at: `2026-11-16T12:00:0${i}Z` });
+    });
+    if (opts.withOtherFlow) {
+      db.tables["wa_campaign_recipients"]!.push({ id: "rec-other", campaign_id: "camp-other", customer_id: "c-cris", name: "Cris", phone: "+5521977776666", params: ["Cris"], status: "queued", event_key: "" });
+      db.tables["wa_jobs"]!.push({ id: "job-other", campaign_id: "camp-other", recipient_id: "rec-other", status: "queued", attempts: 0, max_attempts: 3, priority: 5, scheduled_at: past, next_attempt_at: past, created_at: "2026-11-16T12:00:09Z" });
+    }
+  }
+
+  const job = (id: string) => db.tables["wa_jobs"]!.find((j) => j.id === id)!;
+  const recipientRow = (id: string) => db.tables["wa_campaign_recipients"]!.find((r) => r.id === id)!;
+  const sentTo = () => meta.sends.map((s) => s.to);
+
+  it("sem mudanças: os dois itens saem e outros fluxos continuam", async () => {
+    seedQueue("2026-11-16T14:00:00Z", { withOtherFlow: true });
+    const r = await processWhatsappQueueBatch({ limit: 50 });
+    expect(r).toMatchObject({ success: true, claimed: 3, sent: 3 });
+    expect(sentTo()).toEqual(["+5531992904210", "+5511988887777", "+5521977776666"]);
+  });
+
+  it("compra durante a espera do ritmo: zero chamadas ao provedor para o item afetado; demais seguem", async () => {
+    seedQueue("2026-11-16T14:00:00Z", { withOtherFlow: true });
+    gateHook.fn = (call) => {
+      if (call === 2) db.tables["shopify_orders"]!.push({ id: "o-bia-now", customer_id: "c-bia", email: null, phone: null, financial_status: "PAID", cancelled_at: null, created_at: "2026-11-16T14:00:00Z" });
+    };
+    const r = await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual(["+5531992904210", "+5521977776666"]);
+    expect(r).toMatchObject({ sent: 2 });
+    expect(job("job-bia").status).toBe("cancelled");
+    expect(recipientRow("rec-bia")).toMatchObject({ status: "cancelled", error_message: "compra posterior à tentativa" });
+    expect(byKey("checkout:ck-bia")).toMatchObject({ status: "exited", exit_reason: "compra posterior à tentativa" });
+  });
+
+  it("resposta recebida durante a espera do ritmo: item não vai ao provedor", async () => {
+    seedQueue("2026-11-16T14:00:00Z");
+    gateHook.fn = (call) => {
+      if (call !== 2) return;
+      db.tables["whatsapp_inbox_threads"]!.push({ id: "t-bia", phone: "+5511988887777" });
+      db.tables["whatsapp_inbox_messages"]!.push({ id: "m-bia", thread_id: "t-bia", direction: "inbound", sent_at: "2026-11-16T14:00:00Z" });
+    };
+    await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual(["+5531992904210"]);
+    expect(byKey("checkout:ck-bia")).toMatchObject({ status: "exited", exit_reason: "cliente respondeu" });
+  });
+
+  it("opt-out registrado depois da onda anterior: item não vai ao provedor", async () => {
+    seedQueue("2026-11-16T14:00:00Z");
+    gateHook.fn = (call) => {
+      if (call === 2) db.tables["whatsapp_suppressions"]!.push({ phone: "+5511988887777", marketing_opt_out: true });
+    };
+    await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual(["+5531992904210"]);
+    expect(recipientRow("rec-bia").status).toBe("cancelled");
+    expect(byKey("checkout:ck-bia")).toMatchObject({ status: "exited", exit_reason: "opt-out de marketing" });
+  });
+
+  it("relógio chega às 19h durante a espera: item volta à fila sem gastar tentativa nem trava, sem provedor", async () => {
+    seedQueue("2026-11-16T21:59:30Z"); // 18:59:30 Brasília
+    gateHook.fn = (call) => {
+      if (call === 2) vi.setSystemTime(new Date("2026-11-16T22:00:00Z")); // 19:00
+    };
+    await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual(["+5531992904210"]);
+    expect(job("job-bia")).toMatchObject({ status: "retry_wait", attempts: 0, locked_by: null, locked_at: null, next_attempt_at: "2026-11-17T12:00:00.000Z" });
+    expect(recipientRow("rec-bia").status).toBe("queued");
+    expect(byKey("checkout:ck-bia")?.status).toBe("queued_initial");
+  });
+
+  it("erro na consulta durante a reconferência: não envia e deixa erro visível", async () => {
+    seedQueue("2026-11-16T14:00:00Z");
+    gateHook.fn = (call) => {
+      if (call === 2) db.failOn.add("whatsapp_inbox_threads");
+    };
+    const r = await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual(["+5531992904210"]);
+    expect(r).toMatchObject({ sent: 1, retry: 1 });
+    expect(job("job-bia")).toMatchObject({ status: "retry_wait", error: expect.stringContaining("Envio bloqueado") });
+    expect(recipientRow("rec-bia").status).toBe("queued");
+  });
+
+  it("fluxo inativo: itens na fila não chamam o provedor e voltam sem gastar tentativa", async () => {
+    seedQueue("2026-11-16T14:00:00Z", { withOtherFlow: true });
+    db.tables["whatsapp_automations"]![0]!.inativa = true;
+    await processWhatsappQueueBatch({ limit: 50 });
+    expect(sentTo()).toEqual(["+5521977776666"]);
+    expect(job("job-ana")).toMatchObject({ status: "retry_wait", attempts: 0, locked_by: null });
+    expect(job("job-bia")).toMatchObject({ status: "retry_wait", attempts: 0, locked_by: null });
   });
 });

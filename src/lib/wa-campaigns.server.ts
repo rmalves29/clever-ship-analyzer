@@ -730,14 +730,18 @@ export async function processWhatsappQueueBatch(options?: {
       console.error("[worker] conferência da recuperação de compras falhou — nada desse fluxo é enviado neste lote:", recoveryCheckError);
     }
   }
-  // Adiados (fora da janela / aguardando Meta): voltam à fila sem gastar tentativa.
+  // Adiados (fora da janela / aguardando Meta / fluxo inativo): voltam à fila sem gastar tentativa e sem trava.
+  const releaseDeferredJob = async (job: JobRow, until: string, reason: string) => {
+    const { error } = await supabaseAdmin
+      .from(JOBS_TABLE)
+      .update({ status: "retry_wait", attempts: Math.max(job.attempts - 1, 0), next_attempt_at: until, error: reason, locked_by: null, locked_at: null })
+      .eq("id", job.id);
+    if (error) console.error("[worker] falha ao devolver item adiado da recuperação de compras:", error.message);
+  };
   const deferredJobs = batch.filter((job) => recoveryDecisions.get(job.recipient_id)?.kind === "defer");
   for (const job of deferredJobs) {
     const decision = recoveryDecisions.get(job.recipient_id) as Extract<WorkerRecoveryDecision, { kind: "defer" }>;
-    await supabaseAdmin
-      .from(JOBS_TABLE)
-      .update({ status: "retry_wait", attempts: Math.max(job.attempts - 1, 0), next_attempt_at: decision.until, error: decision.reason, locked_by: null, locked_at: null })
-      .eq("id", job.id);
+    await releaseDeferredJob(job, decision.until, decision.reason);
   }
   const deferredIds = new Set(deferredJobs.map((job) => job.id));
   const workBatch = batch.filter((job) => !deferredIds.has(job.id));
@@ -783,7 +787,22 @@ export async function processWhatsappQueueBatch(options?: {
 
   /** Decide o destino de um item (enviando à Meta quando for o caso) e devolve o resultado. A gravação no banco é
    *  feita em lote, por onda, em `flushOutcomes` — não aqui. */
-  const processJob = async (job: JobRow): Promise<QueueOutcome> => {
+  /** Item de recuperação bloqueado por falha de conferência: não envia; repete mais tarde com o erro visível. */
+  const recoveryBlockedOutcome = (job: JobRow, recipientId: string, error: string): QueueOutcome => {
+    const canRetry = job.attempts < job.max_attempts;
+    if (canRetry) retry++;
+    else failed++;
+    return {
+      job_id: job.id,
+      recipient_id: recipientId,
+      kind: canRetry ? "retry" : "failed",
+      error: `Envio bloqueado: ${error}`,
+      next_attempt_at: canRetry ? backoffFor(job.attempts) : null,
+    };
+  };
+
+  /** null = item devolvido à fila (adiado) — nada a gravar na onda. */
+  const processJob = async (job: JobRow): Promise<QueueOutcome | null> => {
     const recipient = recipientById.get(job.recipient_id);
     const campaign = campaignById.get(job.campaign_id);
     if (!recipient || !campaign) {
@@ -795,16 +814,7 @@ export async function processWhatsappQueueBatch(options?: {
     if (isRecoveryCampaign(campaign)) {
       const decision = recoveryDecisions.get(recipient.id);
       if (recoveryCheckError || !decision) {
-        const canRetry = job.attempts < job.max_attempts;
-        if (canRetry) retry++;
-        else failed++;
-        return {
-          job_id: job.id,
-          recipient_id: recipient.id,
-          kind: canRetry ? "retry" : "failed",
-          error: `Envio bloqueado: ${recoveryCheckError ?? "conferência antes do envio não concluída"}`,
-          next_attempt_at: canRetry ? backoffFor(job.attempts) : null,
-        };
+        return recoveryBlockedOutcome(job, recipient.id, recoveryCheckError ?? "conferência antes do envio não concluída");
       }
       if (decision.kind === "cancel") {
         failed++;
@@ -831,6 +841,28 @@ export async function processWhatsappQueueBatch(options?: {
 
     // Teto de envios por segundo (80/s = limite padrão da Meta): cada envio espera a sua vaga.
     if (!useMock) await gate();
+
+    // Recuperação de compras: a conferência do lote pode ter ficado velha (ondas anteriores, espera do ritmo).
+    // Reconfere ESTE destinatário agora, imediatamente antes de chamar o provedor.
+    if (isRecoveryCampaign(campaign)) {
+      let finalDecision: WorkerRecoveryDecision | undefined;
+      try {
+        const { decideRecoveryJobsBeforeSend } = await import("./purchase-recovery.server");
+        finalDecision = (await decideRecoveryJobsBeforeSend([{ recipientId: recipient.id, campaign }])).get(recipient.id);
+      } catch (error) {
+        return recoveryBlockedOutcome(job, recipient.id, error instanceof Error ? error.message : String(error));
+      }
+      if (!finalDecision) return recoveryBlockedOutcome(job, recipient.id, "conferência antes do envio não concluída");
+      if (finalDecision.kind === "cancel") {
+        failed++;
+        return { job_id: job.id, recipient_id: recipient.id, kind: "cancelled", error: finalDecision.reason };
+      }
+      if (finalDecision.kind === "defer") {
+        await releaseDeferredJob(job, finalDecision.until, finalDecision.reason);
+        return null;
+      }
+    }
+
     const result = useMock
       ? await sendTemplateMessageMock({
           jobId: job.id,
@@ -942,7 +974,8 @@ export async function processWhatsappQueueBatch(options?: {
     }
     const outcomes: QueueOutcome[] = [];
     await runPool(wave, throughput.concurrency, async (job) => {
-      outcomes.push(await processJob(job));
+      const outcome = await processJob(job);
+      if (outcome) outcomes.push(outcome);
     });
     await flushOutcomes(outcomes);
     const events = automationEvents.splice(0);

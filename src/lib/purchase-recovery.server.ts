@@ -49,6 +49,25 @@ function chunk<T>(list: T[], size: number): T[][] {
   return out;
 }
 
+/** Tamanho de página do Data API (padrão de 1000 linhas por requisição). */
+const PAGE_SIZE = 1000;
+type PageResult = { data: any[] | null; error: { message: string } | null };
+
+/**
+ * Lê TODAS as páginas de uma consulta (ordenação estável obrigatória no `build`). Truncar em 1000 linhas
+ * poderia esconder uma compra/resposta/tentativa — e falta de dado nunca pode autorizar envio.
+ */
+export async function fetchAllPages(what: string, build: (from: number, to: number) => PromiseLike<PageResult>): Promise<any[]> {
+  const out: any[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await build(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(`${what}: ${error.message}`);
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < PAGE_SIZE) return out;
+  }
+}
+
 const uniq = <T,>(list: (T | null | undefined)[]): T[] => [...new Set(list.filter((v): v is T => v !== null && v !== undefined && v !== ("" as unknown)))];
 
 export type AttemptDbRow = {
@@ -193,32 +212,44 @@ function expiredOrderCandidate(row: Rec, customers: Map<string, Rec>, cohort: "i
 export async function discoverInitialCandidates(config: RecoveryConfig): Promise<AttemptCandidate[]> {
   if (!config.staticListId || !config.initialSince || !config.initialBefore) return [];
   const supabaseAdmin = await admin();
-  const { data: members, error } = await supabaseAdmin.from("crm_list_members").select("customer_id").eq("lista_id", config.staticListId);
-  if (error) throw new Error(`Erro ao ler a lista inicial: ${error.message}`);
-  const memberIds = uniq<string>((members ?? []).map((m: Rec) => (m["customer_id"] ? String(m["customer_id"]) : null)));
+  const listId = config.staticListId;
+  const members = await fetchAllPages("Erro ao ler a lista inicial", (from, to) =>
+    supabaseAdmin.from("crm_list_members").select("id, customer_id").eq("lista_id", listId).order("id", { ascending: true }).range(from, to),
+  );
+  const memberIds = uniq<string>(members.map((m: Rec) => (m["customer_id"] ? String(m["customer_id"]) : null)));
   if (memberIds.length === 0) return [];
   const checkouts: Rec[] = [];
   const orders: Rec[] = [];
+  const since = config.initialSince;
+  const before = config.initialBefore;
   for (const part of chunk(memberIds, 200)) {
     const [c, o] = await Promise.all([
-      supabaseAdmin
-        .from("shopify_abandoned_checkouts")
-        .select("id, customer_id, email, phone, checkout_url, created_at, raw_data")
-        .in("customer_id", part)
-        .gte("created_at", config.initialSince)
-        .lt("created_at", config.initialBefore),
-      supabaseAdmin
-        .from("shopify_orders")
-        .select("id, customer_id, email, phone, created_at, raw_data")
-        .in("customer_id", part)
-        .eq("financial_status", "EXPIRED")
-        .gte("created_at", config.initialSince)
-        .lt("created_at", config.initialBefore),
+      fetchAllPages("Erro ao ler checkouts do lote inicial", (from, to) =>
+        supabaseAdmin
+          .from("shopify_abandoned_checkouts")
+          .select("id, customer_id, email, phone, checkout_url, created_at, raw_data")
+          .in("customer_id", part)
+          .gte("created_at", since)
+          .lt("created_at", before)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to),
+      ),
+      fetchAllPages("Erro ao ler pedidos expirados do lote inicial", (from, to) =>
+        supabaseAdmin
+          .from("shopify_orders")
+          .select("id, customer_id, email, phone, created_at, raw_data")
+          .in("customer_id", part)
+          .eq("financial_status", "EXPIRED")
+          .gte("created_at", since)
+          .lt("created_at", before)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to),
+      ),
     ]);
-    if (c.error) throw new Error(`Erro ao ler checkouts do lote inicial: ${c.error.message}`);
-    if (o.error) throw new Error(`Erro ao ler pedidos expirados do lote inicial: ${o.error.message}`);
-    checkouts.push(...(c.data ?? []));
-    orders.push(...(o.data ?? []));
+    checkouts.push(...c);
+    orders.push(...o);
   }
   const customers = await loadCustomers([...checkouts, ...orders].map((r) => String(r["customer_id"] ?? "")));
   return [
@@ -234,25 +265,30 @@ async function discoverContinuousCandidates(config: RecoveryConfig, now: Date): 
   const installedAt = new Date(config.continuousSince);
   if (!Number.isFinite(installedAt.getTime())) throw new Error("Data de instalação do fluxo contínuo inválida.");
   const since = installedAt.toISOString() > lookback ? installedAt.toISOString() : lookback;
+  // Todas as páginas, ordem estável (created_at, id): a tentativa mais nova nunca fica de fora do limite de 1000.
   const [c, o] = await Promise.all([
-    supabaseAdmin
-      .from("shopify_abandoned_checkouts")
-      .select("id, customer_id, email, phone, checkout_url, created_at, raw_data")
-      .gte("created_at", since)
-      .order("created_at", { ascending: true })
-      .limit(1000),
-    supabaseAdmin
-      .from("shopify_orders")
-      .select("id, customer_id, email, phone, created_at, raw_data")
-      .eq("financial_status", "EXPIRED")
-      .gte("created_at", since)
-      .order("created_at", { ascending: true })
-      .limit(1000),
+    fetchAllPages("Erro ao ler checkouts abandonados", (from, to) =>
+      supabaseAdmin
+        .from("shopify_abandoned_checkouts")
+        .select("id, customer_id, email, phone, checkout_url, created_at, raw_data")
+        .gte("created_at", since)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
+    fetchAllPages("Erro ao ler pedidos expirados", (from, to) =>
+      supabaseAdmin
+        .from("shopify_orders")
+        .select("id, customer_id, email, phone, created_at, raw_data")
+        .eq("financial_status", "EXPIRED")
+        .gte("created_at", since)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
   ]);
-  if (c.error) throw new Error(`Erro ao ler checkouts abandonados: ${c.error.message}`);
-  if (o.error) throw new Error(`Erro ao ler pedidos expirados: ${o.error.message}`);
-  const checkouts = (c.data ?? []).filter((r: Rec) => !rec(r["raw_data"])["completedAt"]);
-  const orders = o.data ?? [];
+  const checkouts = c.filter((r: Rec) => !rec(r["raw_data"])["completedAt"]);
+  const orders = o;
   const customers = await loadCustomers([...checkouts, ...orders].map((r: Rec) => String(r["customer_id"] ?? "")));
   return [
     ...checkouts.map((r: Rec) => checkoutCandidate(r, customers, "continuous")),
@@ -274,7 +310,7 @@ async function loadExistingForCandidates(automationId: string, candidates: Attem
       });
     }
   };
-  const cols = "attempt_key, phone_key, status, created_at, recovery_url";
+  const cols = "id, attempt_key, phone_key, status, created_at, recovery_url";
   const keys = uniq<string>(candidates.map((c) => c.attemptKey));
   const phones = uniq<string>(candidates.map((c) => phoneKey(c.rawPhone)));
   const urls = uniq<string>(candidates.map((c) => {
@@ -283,9 +319,11 @@ async function loadExistingForCandidates(automationId: string, candidates: Attem
   }));
   for (const [column, values] of [["attempt_key", keys], ["phone_key", phones], ["recovery_url", urls]] as const) {
     for (const part of chunk(values as string[], 150)) {
-      const { data, error } = await supabaseAdmin.from(ATTEMPTS).select(cols).eq("automation_id", automationId).in(column, part);
-      if (error) throw new Error(`Erro ao ler tentativas já registradas: ${error.message}`);
-      add(data ?? []);
+      add(
+        await fetchAllPages("Erro ao ler tentativas já registradas", (from, to) =>
+          supabaseAdmin.from(ATTEMPTS).select(cols).eq("automation_id", automationId).in(column, part).order("id", { ascending: true }).range(from, to),
+        ),
+      );
     }
   }
   return [...byKey.values()];

@@ -122,7 +122,8 @@ export async function checkRecoveryTemplateGate(now = new Date()): Promise<Templ
 // Descoberta de tentativas
 // ---------------------------------------------------------------------------
 
-type Rec = Record<string, any>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Rec = any;
 const rec = (v: unknown): Rec => (v && typeof v === "object" ? (v as Rec) : {});
 
 function phoneFromRaw(raw: Rec, ...extra: unknown[]): string | null {

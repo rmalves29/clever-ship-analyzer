@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // ---------------------------------------------------------------------------
 // Banco em memória (subconjunto do cliente usado pelo fluxo)
 // ---------------------------------------------------------------------------
-type Row = Record<string, any>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Row = any;
 const db = vi.hoisted(() => ({ tables: {} as Record<string, Row[]>, failOn: new Set<string>(), seq: 0 }));
 
 function builder(table: string) {

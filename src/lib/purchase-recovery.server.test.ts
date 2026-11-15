@@ -7,13 +7,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 type Row = any;
 const db = vi.hoisted(() => ({ tables: {} as Record<string, Row[]>, failOn: new Set<string>(), seq: 0 }));
 
-function builder(table: string) {
+/** Simula o limite padrão do Data API: no máximo 1000 linhas por requisição. */
+const MAX_ROWS = 1000;
+
+function compare(a: any, b: any): number {
+  if (a === b) return 0;
+  if (a === null || a === undefined) return 1;
+  if (b === null || b === undefined) return -1;
+  return String(a) < String(b) ? -1 : 1;
+}
+
+function makeBuilder(table: string, source?: () => Row[] | { error: { message: string } }) {
   const filters: Array<(r: Row) => boolean> = [];
+  const orders: Array<[string, boolean]> = [];
   let op: "select" | "update" | "insert" | "upsert" = "select";
   let payload: any = null;
   let onConflict: string | null = null;
   let ignoreDuplicates = false;
   let limitN: number | null = null;
+  let range: [number, number] | null = null;
   let single: "maybe" | "one" | null = null;
   let returning = false;
   const rows = () => (db.tables[table] ??= []);
@@ -43,13 +55,22 @@ function builder(table: string) {
       }
       return { data: returning ? out : null, error: null };
     }
-    const matched = rows().filter((r) => filters.every((f) => f(r)));
+    let base: Row[];
+    if (source) {
+      const r = source();
+      if (!Array.isArray(r)) return { data: null, error: r.error };
+      base = r;
+    } else base = rows();
+    const matched = base.filter((r) => filters.every((f) => f(r)));
     if (op === "update") {
       for (const r of matched) Object.assign(r, payload);
       return { data: returning ? matched : null, error: null };
     }
     let data = matched.map((r) => ({ ...r }));
+    if (orders.length) data.sort((x, y) => { for (const [c, asc] of orders) { const d = compare(x[c], y[c]); if (d) return asc ? d : -d; } return 0; });
+    if (range) data = data.slice(range[0], range[1] + 1);
     if (limitN !== null) data = data.slice(0, limitN);
+    if (!single) data = data.slice(0, MAX_ROWS);
     if (single) return { data: data[0] ?? null, error: single === "one" && !data[0] ? { message: "not found" } : null };
     return { data, error: null };
   };
@@ -63,7 +84,8 @@ function builder(table: string) {
     lt: (c: string, v: any) => (filters.push((r) => r[c] != null && new Date(r[c]) < new Date(v)), b),
     not: () => b,
     contains: (c: string, vs: any[]) => (filters.push((r) => Array.isArray(r[c]) && vs.every((v) => r[c].includes(v))), b),
-    order: () => b,
+    order: (c: string, o?: { ascending?: boolean }) => (orders.push([c, o?.ascending !== false]), b),
+    range: (from: number, to: number) => ((range = [from, to]), b),
     limit: (n: number) => ((limitN = n), b),
     maybeSingle: () => ((single = "maybe"), Promise.resolve(run())),
     single: () => ((single = "one"), Promise.resolve(run())),
@@ -74,33 +96,90 @@ function builder(table: string) {
   };
   return b;
 }
+const builder = (table: string) => makeBuilder(table);
 
 function rpc(name: string, args: any) {
-  const emails = (args.p_emails as string[]).map((e) => e.toLowerCase());
+  const lower = () => (args.p_emails as string[]).map((e) => e.toLowerCase());
   if (name === "purchase_recovery_orders_by_emails") {
-    if (db.failOn.has("shopify_orders")) return Promise.resolve({ data: null, error: { message: "falha simulada em shopify_orders" } });
-    const data = (db.tables["shopify_orders"] ?? []).filter((o) => o.email && emails.includes(String(o.email).toLowerCase()) && new Date(o.created_at) >= new Date(args.p_since));
-    return Promise.resolve({ data, error: null });
+    return makeBuilder("__rpc_orders", () => {
+      if (db.failOn.has("shopify_orders")) return { error: { message: "falha simulada em shopify_orders" } };
+      const emails = lower();
+      return (db.tables["shopify_orders"] ?? []).filter((o) => o.email && emails.includes(String(o.email).toLowerCase()) && new Date(o.created_at) >= new Date(args.p_since));
+    });
   }
   if (name === "purchase_recovery_customers_by_emails") {
-    const data = (db.tables["shopify_customers"] ?? []).filter((c) => c.email && emails.includes(String(c.email).toLowerCase()));
-    return Promise.resolve({ data, error: null });
+    return makeBuilder("__rpc_customers", () => {
+      const emails = lower();
+      return (db.tables["shopify_customers"] ?? []).filter((c) => c.email && emails.includes(String(c.email).toLowerCase()));
+    });
+  }
+  // --- fila (worker) ---
+  if (name === "requeue_stale_wa_jobs") return Promise.resolve({ data: 0, error: null });
+  if (name === "claim_wa_jobs") {
+    const now = Date.now();
+    const picked = (db.tables["wa_jobs"] ?? [])
+      .filter((j) => ["queued", "retry_wait"].includes(j.status) && new Date(j.scheduled_at).getTime() <= now && (!j.next_attempt_at || new Date(j.next_attempt_at).getTime() <= now))
+      .sort((a, b) => a.priority - b.priority || compare(a.created_at, b.created_at))
+      .slice(0, args.p_limit);
+    for (const j of picked) Object.assign(j, { status: "sending", attempts: j.attempts + 1, locked_by: args.p_worker, locked_at: new Date().toISOString() });
+    return Promise.resolve({ data: picked.map((j) => ({ ...j })), error: null });
+  }
+  if (name === "wa_queue_apply_results") {
+    for (const o of args.p_results as any[]) {
+      const job = (db.tables["wa_jobs"] ?? []).find((j) => j.id === o.job_id);
+      const status = o.kind === "sent" ? "done" : o.kind === "retry" ? "retry_wait" : o.kind;
+      if (job) Object.assign(job, { status, error: o.kind === "sent" ? null : o.error ?? null, next_attempt_at: o.kind === "retry" ? o.next_attempt_at : null, locked_by: null, locked_at: null });
+      const recipient = (db.tables["wa_campaign_recipients"] ?? []).find((r) => r.id === o.recipient_id);
+      if (!recipient) continue;
+      if (o.kind === "sent") Object.assign(recipient, { status: "sent", wa_message_id: o.wa_message_id, sent_at: new Date().toISOString() });
+      if (o.kind === "failed") Object.assign(recipient, { status: "failed", error_message: o.error });
+      if (o.kind === "cancelled") Object.assign(recipient, { status: "cancelled", error_message: o.error });
+    }
+    return Promise.resolve({ data: null, error: null });
+  }
+  if (name === "release_wa_jobs") {
+    for (const j of db.tables["wa_jobs"] ?? []) if ((args.p_ids as string[]).includes(j.id)) Object.assign(j, { status: "queued", locked_by: null, locked_at: null });
+    return Promise.resolve({ data: null, error: null });
   }
   return Promise.resolve({ data: null, error: { message: `rpc desconhecida ${name}` } });
 }
 
 vi.mock("@/integrations/supabase/client.server", () => ({ supabaseAdmin: { from: (t: string) => builder(t), rpc } }));
 
-const meta = vi.hoisted(() => ({ templates: [] as any[], apiError: null as string | null, campaigns: 0 }));
-vi.mock("./whatsapp-meta.server", () => ({
-  listMetaTemplates: async () => (meta.apiError ? { success: false, error: meta.apiError, templates: [] } : { success: true, templates: meta.templates }),
-  createCampaignRow: async () => {
-    meta.campaigns++;
-    const id = `camp-${meta.campaigns}`;
-    (db.tables["wa_campaigns"] ??= []).push({ id });
-    return { success: true, campaignId: id };
-  },
-}));
+const meta = vi.hoisted(() => ({ templates: [] as any[], apiError: null as string | null, campaigns: 0, sends: [] as Array<{ to: string; templateName: string }> }));
+vi.mock("./whatsapp-meta.server", async () => {
+  const { normalizeShopifyPhone } = await import("./shopify-order-phone");
+  return {
+    listMetaTemplates: async () => (meta.apiError ? { success: false, error: meta.apiError, templates: [] } : { success: true, templates: meta.templates }),
+    createCampaignRow: async () => {
+      meta.campaigns++;
+      const id = `camp-${meta.campaigns}`;
+      (db.tables["wa_campaigns"] ??= []).push({ id });
+      return { success: true, campaignId: id };
+    },
+    loadSettings: async () => ({ accessToken: "test-token", phoneNumberId: "test-phone", templateLanguage: "pt_BR" }),
+    toE164: (raw: string) => normalizeShopifyPhone(raw),
+    // Provedor simulado: registra cada chamada (a Meta real nunca é chamada nos testes).
+    sendTemplateMessage: async (params: { to: string; templateName: string }) => {
+      meta.sends.push({ to: params.to, templateName: params.templateName });
+      return { ok: true, waMessageId: `wamid.${meta.sends.length}` };
+    },
+  };
+});
+
+// Ritmo do worker: 1 item por vez, e a "espera do gate" roda um gancho do teste (compra/resposta/relógio…).
+const gateHook = vi.hoisted(() => ({ fn: null as null | ((call: number) => void | Promise<void>), calls: 0 }));
+vi.mock("./wa-queue-throughput", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./wa-queue-throughput")>();
+  return {
+    ...original,
+    readThroughputConfig: () => ({ ratePerSec: 80, concurrency: 1, batchSize: 50, waveSize: 1 }),
+    createRateGate: () => async () => {
+      gateHook.calls++;
+      if (gateHook.fn) await gateHook.fn(gateHook.calls);
+    },
+  };
+});
 
 import { PURCHASE_RECOVERY_IMPLEMENTATION, RECOVERY_TEMPLATES } from "./purchase-recovery";
 import { decideRecoveryJobsBeforeSend, runPurchaseRecoveryTick } from "./purchase-recovery.server";

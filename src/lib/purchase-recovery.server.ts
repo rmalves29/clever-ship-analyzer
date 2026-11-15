@@ -77,7 +77,7 @@ export type AttemptDbRow = {
   created_at: string;
 };
 
-async function loadStoreHosts(): Promise<string[]> {
+export async function loadStoreHosts(): Promise<string[]> {
   const supabaseAdmin = await admin();
   const { data, error } = await supabaseAdmin
     .from("store_settings")
@@ -190,7 +190,7 @@ function expiredOrderCandidate(row: Rec, customers: Map<string, Rec>, cohort: "i
   };
 }
 
-async function discoverInitialCandidates(config: RecoveryConfig): Promise<AttemptCandidate[]> {
+export async function discoverInitialCandidates(config: RecoveryConfig): Promise<AttemptCandidate[]> {
   if (!config.staticListId || !config.initialSince || !config.initialBefore) return [];
   const supabaseAdmin = await admin();
   const { data: members, error } = await supabaseAdmin.from("crm_list_members").select("customer_id").eq("lista_id", config.staticListId);

@@ -470,7 +470,7 @@ describe("fluxo inativo e leituras acima de 1000 linhas", () => {
       checkouts.push({
         id: `ck-bulk-${n}`, customer_id: null, email: null, phone: `+55119${String(60000000 + i)}`,
         checkout_url: `https://maniadmulher.com/77747060914/checkouts/ac/bulk${n}`,
-        created_at: new Date(Date.parse("2026-11-15T22:00:00Z") + i * 60_000).toISOString(), raw_data: { completedAt: null }, completed_at: null,
+        created_at: new Date(Date.parse("2026-11-15T22:00:00Z") + i * 30_000).toISOString(), raw_data: { completedAt: null }, completed_at: null,
       });
     }
     checkouts.push({

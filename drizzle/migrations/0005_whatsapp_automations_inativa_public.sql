@@ -1,0 +1,2 @@
+ALTER TABLE public.whatsapp_automations ADD COLUMN IF NOT EXISTS inativa boolean NOT NULL DEFAULT false;
+COMMENT ON COLUMN public.whatsapp_automations.inativa IS 'Régua fora de uso, separada das pausadas; deve impedir tick e itens já enfileirados.';

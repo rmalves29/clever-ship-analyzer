@@ -36,6 +36,13 @@
       "when": 1794779569732,
       "tag": "0004_purchase_recovery_email_lookup",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794781173814,
+      "tag": "0005_whatsapp_automations_inativa_public",
+      "breakpoints": true
     }
   ]
 }

@@ -181,7 +181,8 @@ async function handleAutomationsTick(request: Request): Promise<Response> {
   }
 
   try {
-    const result = await runAutomationsTickWithLog();
+    // Host da chamada: o fluxo de recuperação de compras só processa pelo endereço publicado autorizado.
+    const result = await runAutomationsTickWithLog({ requestHost: new URL(request.url).host });
     return new Response(JSON.stringify(result), {
       status: 200,
       headers: { "content-type": "application/json" },

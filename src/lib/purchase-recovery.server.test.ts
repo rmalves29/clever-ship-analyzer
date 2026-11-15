@@ -495,15 +495,18 @@ describe("fluxo inativo e leituras acima de 1000 linhas", () => {
   });
 
   it("resposta numa página seguinte (após 1000 mensagens) impede o envio", async () => {
-    const { recipient, items } = await queued();
-    db.tables["whatsapp_inbox_threads"]!.push({ id: "t-ana", phone: "+5531992904210" });
+    const base = { automation_id: AUTOMATION_ID, source: "checkout", cohort: "continuous", status: "queued_initial", initial_recipient_id: null, created_at: "2026-11-16T12:00:00Z" };
+    const ana = { ...base, id: "a-ana", attempt_key: "checkout:ck-ana", source_id: "ck-ana", customer_id: "c-ana", email: "ana@x.com", phone: "+5531992904210", phone_key: "+5531992904210", recovery_url: "https://maniadmulher.com/77747060914/checkouts/ac/ana", attempt_at: "2026-11-13T15:00:00Z" };
+    // Outra tentativa mais antiga no mesmo lote: o corte do lote recua e as conversas dela ocupam a 1ª página.
+    const ze = { ...base, id: "a-ze", attempt_key: "checkout:ck-ze", source_id: "ck-ze", customer_id: null, email: null, phone: "+5548933332222", phone_key: "+5548933332222", recovery_url: "https://maniadmulher.com/77747060914/checkouts/ac/ze", attempt_at: "2026-11-10T00:00:00Z" };
+    db.tables["whatsapp_inbox_threads"]!.push({ id: "t-ze", phone: "+5548933332222" }, { id: "t-ana", phone: "+5531992904210" });
     const messages = db.tables["whatsapp_inbox_messages"]!;
-    // 1100 mensagens antigas (antes da tentativa não contam, mas aqui ficam depois do corte do lote para ocupar a página)
-    for (let i = 0; i < 1100; i++) messages.push({ id: `m-${String(i).padStart(5, "0")}`, thread_id: "t-other", direction: "inbound", sent_at: "2026-11-16T10:00:00Z" });
-    db.tables["whatsapp_inbox_threads"]!.push({ id: "t-other", phone: "+553192904210" });
+    for (let i = 0; i < 1100; i++) messages.push({ id: `m-${String(i).padStart(5, "0")}`, thread_id: "t-ze", direction: "inbound", sent_at: "2026-11-11T10:00:00Z" });
     messages.push({ id: "m-99999", thread_id: "t-ana", direction: "inbound", sent_at: "2026-11-16T14:00:40Z" });
-    const d = await decideRecoveryJobsBeforeSend(items, new Date("2026-11-16T14:01:00Z"));
-    expect(d.get(recipient.id)).toEqual({ kind: "cancel", reason: "cliente respondeu" });
+    const { loadGuardFacts } = await import("./purchase-recovery.server");
+    const { parseRecoveryConfig, evaluateRecoveryGuards } = await import("./purchase-recovery");
+    const facts = await loadGuardFacts([ana, ze] as any, parseRecoveryConfig(automation().trigger_config), ["maniadmulher.com"], "initial");
+    expect(evaluateRecoveryGuards(facts.get("a-ana")!)).toEqual({ send: false, reason: "cliente respondeu" });
   });
 });
 

@@ -3457,6 +3457,25 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      purchase_recovery_customers_by_emails: {
+        Args: { p_emails: string[] }
+        Returns: {
+          email: string
+          id: string
+        }[]
+      }
+      purchase_recovery_orders_by_emails: {
+        Args: { p_emails: string[]; p_since: string }
+        Returns: {
+          cancelled_at: string
+          created_at: string
+          customer_id: string
+          email: string
+          financial_status: string
+          id: string
+          phone: string
+        }[]
+      }
       requeue_stale_wa_jobs: {
         Args: { p_stale_minutes?: number }
         Returns: number

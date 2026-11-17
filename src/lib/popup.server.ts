@@ -272,7 +272,35 @@ export async function capturePopupLead(params: {
  *  já mordeu — um <script> colado por valor no tema ficava congelado na versão de quando foi
  *  colado, e passou a rodar sem roleta/cores mesmo depois dessas features existirem). */
 export function renderPopupLoaderJs(): string {
-  return `(function () {
+  return `/* Afiliadas: quem entra pelo link /a/<codigo> chega com ?ref=<codigo>. Guardamos a afiliada por 30 dias e
+   marcamos o carrinho (atributo "afiliada"); o atributo vira dado do pedido e atribui a venda mesmo que o
+   cliente use outro cupom. Tudo em try/catch: nunca pode atrapalhar a loja. */
+(function () {
+  try {
+    var KEY = "mm_aff_ref";
+    var TTL = 30 * 24 * 3600 * 1000;
+    var now = Date.now();
+    var m = /[?&]ref=([A-Za-z0-9]{3,20})(?:&|$)/.exec(location.search);
+    if (m) localStorage.setItem(KEY, JSON.stringify({ c: m[1].toUpperCase(), t: now }));
+    var raw = localStorage.getItem(KEY);
+    if (!raw) return;
+    var d = JSON.parse(raw);
+    if (!d || !d.c || now - d.t > TTL) { localStorage.removeItem(KEY); return; }
+    fetch("/cart.js", { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (cart) {
+        if (cart && cart.attributes && cart.attributes.afiliada === d.c) return null;
+        return fetch("/cart/update.js", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ attributes: { afiliada: d.c } })
+        });
+      })
+      .catch(function () {});
+  } catch (e) {}
+})();
+(function () {
   var API = "${APP_URL}";
   var STORAGE_CAPTURED = "mm_popup_captured";
   var STORAGE_HIDE_UNTIL = "mm_popup_hide_until";

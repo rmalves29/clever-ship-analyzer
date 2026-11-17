@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Download } from "lucide-react";
 import Alert from "@mui/material/Alert";
@@ -15,7 +15,8 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { getAffiliateSalesFn, listAffiliatesFn } from "@/lib/affiliates.functions";
+import { toast } from "sonner";
+import { assignAffiliateOrderFn, getAffiliateSalesFn, listAffiliatesFn, removeAffiliateOrderAttributionFn } from "@/lib/affiliates.functions";
 import { COMMISSION_STATUS_LABEL, type CommissionStatus } from "@/lib/affiliate-commission";
 import { brl, csvCell, dateTimeBr, downloadCsv } from "./format";
 
@@ -29,13 +30,45 @@ const COLOR: Record<CommissionStatus, "default" | "success" | "warning" | "error
   self_purchase: "default",
 };
 
+const ORIGIN: Record<"coupon" | "link" | "manual", string> = { coupon: "Cupom", link: "Link", manual: "Manual" };
+
 const STATUSES = Object.keys(COMMISSION_STATUS_LABEL) as CommissionStatus[];
 
 export function AffiliateSalesPanel() {
   const sales = useServerFn(getAffiliateSalesFn);
   const list = useServerFn(listAffiliatesFn);
+  const queryClient = useQueryClient();
+  const assign = useServerFn(assignAffiliateOrderFn);
+  const unassign = useServerFn(removeAffiliateOrderAttributionFn);
   const [affiliateId, setAffiliateId] = useState("");
   const [status, setStatus] = useState<CommissionStatus | "">("");
+  const [manualOrder, setManualOrder] = useState("");
+  const [manualAffiliate, setManualAffiliate] = useState("");
+  const [manualNote, setManualNote] = useState("");
+
+  const refreshAll = () => {
+    void queryClient.invalidateQueries({ queryKey: ["affiliate-sales"] });
+    void queryClient.invalidateQueries({ queryKey: ["affiliates"] });
+    void queryClient.invalidateQueries({ queryKey: ["affiliate-payouts"] });
+  };
+  const assignMutation = useMutation({
+    mutationFn: () => assign({ data: { orderNumber: manualOrder, affiliateId: manualAffiliate, note: manualNote.trim() || null } }),
+    onSuccess: (r) => {
+      toast.success(`Pedido ${r.orderNumber} atribuído a ${r.affiliateName}.`);
+      setManualOrder("");
+      setManualNote("");
+      refreshAll();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Não foi possível atribuir."),
+  });
+  const unassignMutation = useMutation({
+    mutationFn: (orderId: string) => unassign({ data: { orderId } }),
+    onSuccess: () => {
+      toast.success("Atribuição manual removida.");
+      refreshAll();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Não foi possível remover."),
+  });
 
   const affiliates = useQuery({ queryKey: ["affiliates"], queryFn: () => list() });
   const { data, isLoading, error } = useQuery({
@@ -45,7 +78,7 @@ export function AffiliateSalesPanel() {
 
   const exportCsv = () => {
     if (!data) return;
-    const lines = [["pedido", "data", "afiliada", "cupom", "status_pedido", "base_produtos", "comissao", "situacao_comissao", "conferir"].join(";")];
+    const lines = [["pedido", "data", "afiliada", "cupom", "origem", "status_pedido", "base_produtos", "comissao", "situacao_comissao", "conferir"].join(";")];
     for (const s of data.sales) {
       lines.push(
         [
@@ -53,6 +86,7 @@ export function AffiliateSalesPanel() {
           dateTimeBr(s.createdAt),
           s.affiliateName,
           s.code,
+          ORIGIN[s.attribution],
           s.financialStatus ?? "",
           String(s.base).replace(".", ","),
           String(s.commission).replace(".", ","),
@@ -88,6 +122,20 @@ export function AffiliateSalesPanel() {
         </Button>
       </Stack>
 
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ alignItems: { md: "center" }, border: "1px dashed", borderColor: "divider", borderRadius: 2, p: 1.5 }}>
+        <Typography variant="body2" sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>Atribuir pedido à mão</Typography>
+        <TextField size="small" label="Nº do pedido" placeholder="#3995" value={manualOrder} onChange={(e) => setManualOrder(e.target.value)} sx={{ width: 140 }} />
+        <TextField select size="small" label="Afiliada" value={manualAffiliate} onChange={(e) => setManualAffiliate(e.target.value)} sx={{ minWidth: 220 }}>
+          {(affiliates.data?.affiliates ?? []).filter((a) => a.code).map((a) => (
+            <MenuItem key={a.id} value={a.id}>{a.name} ({a.code})</MenuItem>
+          ))}
+        </TextField>
+        <TextField size="small" label="Motivo (opcional)" value={manualNote} onChange={(e) => setManualNote(e.target.value)} sx={{ flex: 1, minWidth: 160 }} />
+        <Button variant="contained" size="small" disabled={!manualOrder.trim() || !manualAffiliate || assignMutation.isPending} onClick={() => assignMutation.mutate()}>
+          Atribuir
+        </Button>
+      </Stack>
+
       {error && <Alert severity="error">{error instanceof Error ? error.message : "Erro ao carregar."}</Alert>}
       {isLoading && <Typography color="text.secondary">Carregando…</Typography>}
 
@@ -98,6 +146,7 @@ export function AffiliateSalesPanel() {
               <TableCell>Pedido</TableCell>
               <TableCell>Data</TableCell>
               <TableCell>Afiliada</TableCell>
+              <TableCell>Origem</TableCell>
               <TableCell align="right">Produtos</TableCell>
               <TableCell align="right">Comissão</TableCell>
               <TableCell>Situação</TableCell>
@@ -111,6 +160,12 @@ export function AffiliateSalesPanel() {
                 <TableCell>
                   {s.affiliateName} <Typography component="span" variant="caption" color="text.secondary">({s.code})</Typography>
                 </TableCell>
+                <TableCell>
+                  <Chip size="small" variant="outlined" label={ORIGIN[s.attribution]} color={s.attribution === "manual" ? "warning" : "default"} title={s.attribution === "link" ? "O cliente entrou pelo link da afiliada" : s.attribution === "coupon" ? "O pedido usou o cupom da afiliada" : "Atribuído à mão"} />
+                  {s.attribution === "manual" && s.status !== "paid" && (
+                    <Button size="small" color="inherit" disabled={unassignMutation.isPending} onClick={() => unassignMutation.mutate(s.orderId)}>desfazer</Button>
+                  )}
+                </TableCell>
                 <TableCell align="right">{brl(s.base)}</TableCell>
                 <TableCell align="right">{brl(s.commission)}</TableCell>
                 <TableCell>
@@ -121,7 +176,7 @@ export function AffiliateSalesPanel() {
             ))}
             {!isLoading && (data?.sales ?? []).length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ color: "text.secondary", py: 4 }}>
+                <TableCell colSpan={7} align="center" sx={{ color: "text.secondary", py: 4 }}>
                   Nenhum pedido com cupom de afiliada ainda.
                 </TableCell>
               </TableRow>

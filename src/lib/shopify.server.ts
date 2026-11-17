@@ -149,6 +149,7 @@ export const ORDERS_QUERY = `
           subtotalPriceSet { presentmentMoney { amount } }
           totalDiscountsSet { presentmentMoney { amount } }
           discountCodes
+          customAttributes { key value }
           totalShippingPriceSet { presentmentMoney { amount } }
           totalTaxSet { presentmentMoney { amount } }
           totalPriceSet { presentmentMoney { amount } }

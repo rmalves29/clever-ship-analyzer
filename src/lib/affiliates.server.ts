@@ -65,7 +65,10 @@ export async function resolveAffiliateLink(input: { code: string; to: string | n
     const { error } = await supabase.from("affiliate_clicks").insert({ affiliate_id: data.id, referrer });
     if (error) console.error("Falha ao registrar clique de afiliada:", error.message);
   }
-  return `${store}/discount/${encodeURIComponent(data.code)}?redirect=${encodeURIComponent(safeRedirectPath(input.to))}`;
+  // O ?ref=<codigo> vai junto no destino: o script da loja o guarda e marca o carrinho (atribui a venda pela origem do clique).
+  const path = safeRedirectPath(input.to);
+  const destination = `${path}${path.includes("?") ? "&" : "?"}ref=${encodeURIComponent(String(data.code).toLowerCase())}`;
+  return `${store}/discount/${encodeURIComponent(data.code)}?redirect=${encodeURIComponent(destination)}`;
 }
 
 async function loadClickCounts(): Promise<Map<string, { clicks: number; clicks7d: number }>> {
@@ -254,6 +257,7 @@ type OrderRow = {
   phone: string | null;
   affiliate_id: string;
   code: string;
+  attribution: "coupon" | "link" | "manual";
 };
 
 async function loadAffiliateOrders(affiliateId?: string): Promise<OrderRow[]> {
@@ -283,6 +287,8 @@ export type AffiliateSaleRow = {
   commission: number;
   status: CommissionStatus;
   needsReview: boolean;
+  /** Como a venda foi ligada à afiliada: cupom dela, link dela ou atribuição manual. */
+  attribution: "coupon" | "link" | "manual";
 };
 
 async function classifyAll(affiliates: AffiliateRow[], orders: OrderRow[], settings: AffiliateSettings, campaigns: AffiliateCampaign[]) {
@@ -328,6 +334,7 @@ async function classifyAll(affiliates: AffiliateRow[], orders: OrderRow[], setti
       commission: classified.commission,
       status: classified.status,
       needsReview: classified.needsReview,
+      attribution: o.attribution,
     });
   }
   return sales;
@@ -735,4 +742,36 @@ export async function listAffiliatePosts(affiliateId: string) {
   const { data, error } = await supabase.from("affiliate_posts").select("id, url, created_at").eq("affiliate_id", affiliateId).order("created_at", { ascending: false }).limit(100);
   if (error) throw new Error(error.message);
   return ((data ?? []) as any[]).map((p) => ({ id: p.id as string, url: p.url as string, createdAt: p.created_at as string }));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Atribuição manual de pedido (corrige venda feita pelo link mas com outro cupom, ou sem cupom)
+
+export async function assignOrderToAffiliate(input: { orderNumber: string; affiliateId: string; note: string | null }) {
+  const supabase = await db();
+  const raw = input.orderNumber.trim().replace(/^#/, "");
+  if (!raw) throw new Error("Informe o número do pedido.");
+  const { data: orders, error } = await supabase.from("shopify_orders").select("id, order_number, created_at, financial_status").in("order_number", [`#${raw}`, raw]).limit(2);
+  if (error) throw new Error(error.message);
+  const order = (orders ?? [])[0] as { id: string; order_number: string } | undefined;
+  if (!order) throw new Error(`Não encontrei o pedido #${raw} no CRM. Ele pode ainda não ter sincronizado.`);
+  const { data: affiliate } = await supabase.from("affiliates").select("id, name, code, status").eq("id", input.affiliateId).maybeSingle();
+  if (!affiliate) throw new Error("Afiliada não encontrada.");
+  const { data: paid } = await supabase.from("affiliate_payout_orders").select("order_id").eq("order_id", order.id).maybeSingle();
+  if (paid) throw new Error("Esse pedido já foi pago a uma afiliada e não pode ser reatribuído.");
+
+  const { error: upsertError } = await supabase
+    .from("affiliate_order_overrides")
+    .upsert({ order_id: order.id, affiliate_id: input.affiliateId, note: input.note?.trim() || null });
+  if (upsertError) throw new Error(upsertError.message);
+  return { orderNumber: order.order_number, affiliateName: affiliate.name as string };
+}
+
+export async function removeOrderAttribution(orderId: string) {
+  const supabase = await db();
+  const { data: paid } = await supabase.from("affiliate_payout_orders").select("order_id").eq("order_id", orderId).maybeSingle();
+  if (paid) throw new Error("Esse pedido já foi pago a uma afiliada.");
+  const { error } = await supabase.from("affiliate_order_overrides").delete().eq("order_id", orderId);
+  if (error) throw new Error(error.message);
+  return { success: true as const };
 }

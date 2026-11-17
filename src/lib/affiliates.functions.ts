@@ -141,6 +141,24 @@ export const listAffiliatePostsFn = createServerFn({ method: "POST" })
     return listAffiliatePosts(data.id);
   });
 
+export const assignAffiliateOrderFn = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) =>
+    z.object({ orderNumber: z.string().min(1).max(30), affiliateId: z.string().uuid(), note: z.string().max(300).nullable() }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { assignOrderToAffiliate } = await import("./affiliates.server");
+    return assignOrderToAffiliate(data);
+  });
+
+export const removeAffiliateOrderAttributionFn = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) => z.object({ orderId: z.string().min(1).max(100) }).parse(data))
+  .handler(async ({ data }) => {
+    const { removeOrderAttribution } = await import("./affiliates.server");
+    return removeOrderAttribution(data.orderId);
+  });
+
 export const getPayoutsOverviewFn = createServerFn({ method: "GET" })
   .middleware([requireAppAuth])
   .handler(async () => {

@@ -92,13 +92,28 @@ describe("totais", () => {
 });
 
 describe("cupom exclusivo", () => {
-  it("usa o primeiro nome sem acento e resolve conflito com sufixo", () => {
-    expect(pickAffiliateCode("Ana Clara Souza", new Set())).toBe("ANA");
-    expect(pickAffiliateCode("Ana Clara", new Set(["ana"]))).toBe("ANA10");
-    expect(pickAffiliateCode("Ana", new Set(["ANA", "ANA10", "ANA11"]))).toBe("ANA12");
-    expect(pickAffiliateCode("Thaís Fávero", new Set())).toBe("THAIS");
-    expect(pickAffiliateCode("Jo", new Set())).toBe("JOM");
-    expect(pickAffiliateCode("12 34", new Set())).toBe("MMM");
+  it("usa o primeiro nome sem acento mais 3 caracteres aleatórios", () => {
+    for (const [name, base] of [["Ana Clara Souza", "ANA"], ["Thaís Fávero", "THAIS"], ["Jo", "JOM"], ["12 34", "MMM"], ["Rafael", "RAFAEL"]] as const) {
+      const code = pickAffiliateCode(name, new Set());
+      expect(code).toMatch(new RegExp(`^${base}[A-Z0-9]{3}$`));
+      expect(isValidAffiliateCode(code)).toBe(true);
+    }
+  });
+  it("duas afiliadas com o mesmo nome recebem códigos diferentes", () => {
+    const taken = new Set<string>();
+    for (let i = 0; i < 200; i++) {
+      const code = pickAffiliateCode("Rafael", taken);
+      expect(taken.has(code)).toBe(false);
+      taken.add(code);
+    }
+  });
+  it("pula um código já usado (sorteio repetido)", () => {
+    const values = [0, 0, 0, 0.5, 0.5, 0.5];
+    let i = 0;
+    const random = () => values[i++ % values.length]!;
+    const first = pickAffiliateCode("Ana", new Set(), random);
+    i = 0;
+    expect(pickAffiliateCode("Ana", new Set([first]), random)).not.toBe(first);
   });
   it("valida o formato do código", () => {
     expect(isValidAffiliateCode("ANA10")).toBe(true);

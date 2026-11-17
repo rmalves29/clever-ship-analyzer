@@ -140,18 +140,28 @@ function normalizeLetters(value: string): string {
     .toUpperCase();
 }
 
-/** Candidatos de código a partir do nome: ANA, ANA10, ANA11 … ANA99, ANA100 … (mínimo 3 letras). */
-export function* affiliateCodeCandidates(name: string): Generator<string> {
+/** Letras e números sem ambiguidade (sem I, L, O, 0, 1) para o final do código. */
+const SUFFIX_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+/** Primeiro nome sem acento, até 8 letras (mínimo 3). */
+export function affiliateCodeBase(name: string): string {
   const first = name.trim().split(/\s+/)[0] ?? "";
   let base = normalizeLetters(first).slice(0, 8);
   if (base.length < 3) base = (base + "MM").slice(0, 3).padEnd(3, "M");
-  yield base;
-  for (let n = 10; n < 1000; n++) yield `${base}${n}`;
+  return base;
 }
 
-export function pickAffiliateCode(name: string, taken: Set<string>): string {
+/**
+ * Código exclusivo: primeiro nome + 3 caracteres aleatórios (RAFAELK7X). Duas afiliadas com o mesmo nome
+ * nunca recebem o mesmo cupom, e o código não é fácil de adivinhar por quem não é a afiliada.
+ */
+export function pickAffiliateCode(name: string, taken: Set<string>, random: () => number = Math.random): string {
   const lowered = new Set([...taken].map((code) => code.toUpperCase()));
-  for (const candidate of affiliateCodeCandidates(name)) {
+  const base = affiliateCodeBase(name);
+  for (let attempt = 0; attempt < 200; attempt++) {
+    let suffix = "";
+    for (let i = 0; i < 3; i++) suffix += SUFFIX_ALPHABET[Math.floor(random() * SUFFIX_ALPHABET.length)];
+    const candidate = `${base}${suffix}`;
     if (!lowered.has(candidate)) return candidate;
   }
   throw new Error("Não foi possível gerar um código livre para essa afiliada.");

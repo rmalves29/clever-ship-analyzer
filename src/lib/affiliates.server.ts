@@ -65,10 +65,11 @@ export async function resolveAffiliateLink(input: { code: string; to: string | n
     const { error } = await supabase.from("affiliate_clicks").insert({ affiliate_id: data.id, referrer });
     if (error) console.error("Falha ao registrar clique de afiliada:", error.message);
   }
-  // O ?ref=<codigo> vai junto no destino: o script da loja o guarda e marca o carrinho (atribui a venda pela origem do clique).
+  // Vai direto para a loja com ?ref=<codigo>: o script da loja guarda a afiliada, marca o carrinho (atribui a venda
+  // pela origem do clique) e aplica o cupom. Não passa por /discount/ porque a Shopify descarta o ?ref= quando o
+  // visitante já tem desconto na sessão.
   const path = safeRedirectPath(input.to);
-  const destination = `${path}${path.includes("?") ? "&" : "?"}ref=${encodeURIComponent(String(data.code).toLowerCase())}`;
-  return `${store}/discount/${encodeURIComponent(data.code)}?redirect=${encodeURIComponent(destination)}`;
+  return `${store}${path}${path.includes("?") ? "&" : "?"}ref=${encodeURIComponent(String(data.code).toLowerCase())}`;
 }
 
 async function loadClickCounts(): Promise<Map<string, { clicks: number; clicks7d: number }>> {

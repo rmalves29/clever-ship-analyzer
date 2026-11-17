@@ -281,7 +281,12 @@ export function renderPopupLoaderJs(): string {
     var TTL = 30 * 24 * 3600 * 1000;
     var now = Date.now();
     var m = /[?&]ref=([A-Za-z0-9]{3,20})(?:&|$)/.exec(location.search);
-    if (m) localStorage.setItem(KEY, JSON.stringify({ c: m[1].toUpperCase(), t: now }));
+    if (m) {
+      localStorage.setItem(KEY, JSON.stringify({ c: m[1].toUpperCase(), t: now }));
+      // Aplica o cupom da afiliada aqui (e não no redirecionamento do link): a Shopify descarta o ?ref= quando o
+      // visitante já tem desconto na sessão, e sem o ?ref= a venda não seria atribuída.
+      fetch("/discount/" + encodeURIComponent(m[1].toUpperCase()), { credentials: "same-origin" }).catch(function () {});
+    }
     var raw = localStorage.getItem(KEY);
     if (!raw) return;
     var d = JSON.parse(raw);

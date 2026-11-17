@@ -31,7 +31,7 @@ import {
   setAffiliateStatusFn,
   updateAffiliateFn,
 } from "@/lib/affiliates.functions";
-import { affiliateLink } from "@/lib/affiliate-commission";
+import { affiliateShortLink } from "@/lib/affiliate-commission";
 import { brl, dateBr, formatWhatsapp, whatsappLink } from "./format";
 
 type Row = Awaited<ReturnType<typeof listAffiliatesFn>>["affiliates"][number];
@@ -178,7 +178,7 @@ export function AffiliatesManager() {
   const welcomeText = (a: Row) =>
     `Oi, ${a.name.split(" ")[0]}! Seu cadastro no programa de afiliadas da Mania de Mulher foi aprovado 🎉\n\n` +
     `Seu cupom exclusivo: *${a.code}*\n` +
-    (data?.storeUrl && a.code ? `Seu link: ${affiliateLink(data.storeUrl, a.code)}\n` : "") +
+    (a.code ? `Seu link: ${affiliateShortLink(window.location.origin, a.code)}\n` : "") +
     `\nAcompanhe suas vendas e comissões no seu painel: ${portalUrl(a)}`;
 
   if (isLoading) return <Typography sx={{ p: 3 }} color="text.secondary">Carregando…</Typography>;
@@ -264,7 +264,14 @@ export function AffiliatesManager() {
                     "—"
                   )}
                 </TableCell>
-                <TableCell align="right">{a.orders}</TableCell>
+                <TableCell align="right">
+                  {a.orders}
+                  {a.status === "approved" && (
+                    <Typography variant="caption" color="text.secondary" component="div" title="Cliques no link curto (total · últimos 7 dias)">
+                      {a.clicks} cliques ({a.clicks7d} em 7d)
+                    </Typography>
+                  )}
+                </TableCell>
                 <TableCell align="right">{brl(a.revenue)}</TableCell>
                 <TableCell align="right">
                   <Typography variant="caption" component="div">carência {brl(a.commissionPending)}</Typography>
@@ -282,7 +289,7 @@ export function AffiliatesManager() {
                     {a.status === "approved" && a.code && (
                       <>
                         <Button size="small" variant="outlined" onClick={() => copy(a.code!, "Cupom")}>Copiar cupom</Button>
-                        {data?.storeUrl && <Button size="small" variant="outlined" onClick={() => copy(affiliateLink(data.storeUrl!, a.code!), "Link com cupom")}>Copiar link</Button>}
+                        <Button size="small" variant="outlined" onClick={() => copy(affiliateShortLink(window.location.origin, a.code!), "Link")}>Copiar link</Button>
                         <Button size="small" variant="outlined" onClick={() => copy(portalUrl(a), "Link do painel")}>Link do painel</Button>
                         <Button size="small" variant="outlined" component="a" href={whatsappLink(a.whatsapp, welcomeText(a))} target="_blank" rel="noreferrer">Enviar no WhatsApp</Button>
                         {a.shopifyError && !a.shopifyDiscountId && (

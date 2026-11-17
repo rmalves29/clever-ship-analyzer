@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   addToTotals,
   affiliateLink,
+  affiliateShortLink,
   classifyAffiliateOrder,
   emptyTotals,
   isValidAffiliateCode,
   phoneKey,
   pickAffiliateCode,
+  safeRedirectPath,
   type AffiliateIdentity,
   type AffiliateOrderInput,
   type AffiliateProgramRules,
@@ -112,5 +114,22 @@ describe("cupom exclusivo", () => {
   it("phoneKey usa os 11 últimos dígitos", () => {
     expect(phoneKey("+55 (31) 99999-1111")).toBe("31999991111");
     expect(phoneKey(null)).toBe("");
+  });
+});
+
+describe("link curto", () => {
+  it("monta /a/<codigo> em minúsculas e aceita um destino interno", () => {
+    expect(affiliateShortLink("https://crm.maniadmulher.com/", "RAFAEL")).toBe("https://crm.maniadmulher.com/a/rafael");
+    expect(affiliateShortLink("https://crm.maniadmulher.com", "ANA10", "/collections/black-friday")).toBe(
+      "https://crm.maniadmulher.com/a/ana10?to=%2Fcollections%2Fblack-friday",
+    );
+  });
+  it("só aceita caminhos internos (sem redirecionamento aberto)", () => {
+    expect(safeRedirectPath("/collections/black-friday")).toBe("/collections/black-friday");
+    expect(safeRedirectPath("https://evil.com")).toBe("/");
+    expect(safeRedirectPath("//evil.com")).toBe("/");
+    expect(safeRedirectPath("/\\evil.com")).toBe("/");
+    expect(safeRedirectPath("")).toBe("/");
+    expect(safeRedirectPath(null)).toBe("/");
   });
 });

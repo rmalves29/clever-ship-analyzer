@@ -20,7 +20,7 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { addAffiliatePostFn, getAffiliatePortalFn } from "@/lib/affiliates.functions";
-import { affiliateLink, COMMISSION_STATUS_LABEL } from "@/lib/affiliate-commission";
+import { affiliateShortLink, COMMISSION_STATUS_LABEL } from "@/lib/affiliate-commission";
 import { brl, dateBr } from "@/components/afiliadas/format";
 
 export const Route = createFileRoute("/afiliada/$token")({
@@ -114,12 +114,13 @@ function PainelAfiliada() {
                   <Button size="small" variant="contained" onClick={() => copy(data.code, "code")}>
                     {copied === "code" ? "Copiado!" : "Copiar cupom"}
                   </Button>
-                  {data.storeUrl && (
-                    <Button size="small" variant="outlined" onClick={() => copy(affiliateLink(data.storeUrl!, data.code), "link")}>
-                      {copied === "link" ? "Copiado!" : "Copiar link com cupom"}
-                    </Button>
-                  )}
+                  <Button size="small" variant="outlined" onClick={() => copy(affiliateShortLink(window.location.origin, data.code), "link")}>
+                    {copied === "link" ? "Copiado!" : "Copiar meu link"}
+                  </Button>
                 </Stack>
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  Seu link: <b>{typeof window !== "undefined" ? affiliateShortLink(window.location.origin, data.code) : ""}</b> (já aplica o cupom na loja)
+                </Typography>
                 <Typography variant="body2" sx={{ mt: 1 }}>
                   Quem comprar com o seu cupom ganha <b>{data.discountPct}% de desconto</b> e você ganha <b>{data.commissionPct}%</b> de comissão sobre os produtos
                   {data.campaignName ? ` (campanha ${data.campaignName})` : ""}.
@@ -128,6 +129,9 @@ function PainelAfiliada() {
             </Card>
 
             <Grid container spacing={1.5}>
+              <Grid size={{ xs: 6, sm: 3 }}>
+                <Stat label="Cliques no seu link" value={data.clicks} />
+              </Grid>
               <Grid size={{ xs: 6, sm: 3 }}>
                 <Stat label="Pedidos" value={data.orders} />
               </Grid>

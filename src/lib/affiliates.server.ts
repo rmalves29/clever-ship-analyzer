@@ -5,6 +5,7 @@ import {
   isValidAffiliateCode,
   pickAffiliateCode,
   round2,
+  safeRedirectPath,
   type ClassifiedOrder,
   type CommissionStatus,
 } from "./affiliate-commission";
@@ -27,6 +28,51 @@ async function fetchAll<T>(build: (from: number, to: number) => PromiseLike<{ da
     if (!data || data.length < PAGE) break;
   }
   return out;
+}
+
+/** Endereço público da loja (o domínio de verdade, ex.: maniadmulher.com) e não o myshopify interno. */
+async function getStorefrontUrl(): Promise<string> {
+  const supabase = await db();
+  const { data } = await supabase.from("store_settings").select("storefront_domain").limit(1).maybeSingle();
+  const domain = String(data?.storefront_domain ?? "").trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+  if (domain) return `https://${domain}`;
+  const { getShopifyStoreUrl } = await import("./shopify.server");
+  return (await getShopifyStoreUrl()) ?? "https://maniadmulher.com";
+}
+
+/**
+ * Link curto /a/<codigo>: conta o clique e manda para a loja já com o cupom da afiliada aplicado.
+ * Código desconhecido ou afiliada não aprovada vai para a página inicial, sem cupom.
+ */
+export async function resolveAffiliateLink(input: { code: string; to: string | null; referrer: string | null; ip: string }): Promise<string> {
+  const store = await getStorefrontUrl();
+  const code = input.code.trim().toUpperCase();
+  if (!isValidAffiliateCode(code)) return store;
+
+  const supabase = await db();
+  const { data } = await supabase.from("affiliates").select("id, code, status").ilike("code", code).maybeSingle();
+  if (!data || data.status !== "approved" || !data.code) return store;
+
+  // No máximo 5 cliques por pessoa/minuto entram na contagem (recarregar a página não infla o número).
+  const { memoryHit } = await import("./rate-limit.server");
+  if (memoryHit(`affclick:${input.ip}:${code}`, 5, 60).allowed) {
+    let referrer: string | null = null;
+    try {
+      referrer = input.referrer ? new URL(input.referrer).hostname.slice(0, 120) : null;
+    } catch {
+      referrer = null;
+    }
+    const { error } = await supabase.from("affiliate_clicks").insert({ affiliate_id: data.id, referrer });
+    if (error) console.error("Falha ao registrar clique de afiliada:", error.message);
+  }
+  return `${store}/discount/${encodeURIComponent(data.code)}?redirect=${encodeURIComponent(safeRedirectPath(input.to))}`;
+}
+
+async function loadClickCounts(): Promise<Map<string, { clicks: number; clicks7d: number }>> {
+  const supabase = await db();
+  const { data, error } = await supabase.from("affiliate_click_counts").select("*");
+  if (error) throw new Error(error.message);
+  return new Map(((data ?? []) as any[]).map((r) => [r.affiliate_id as string, { clicks: Number(r.clicks), clicks7d: Number(r.clicks_7d) }]));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -306,6 +352,7 @@ export async function listAffiliates() {
   const orders = await loadAffiliateOrders();
   const sales = await classifyAll(affiliates, orders, settings, campaigns);
   const campaignName = new Map(campaigns.map((c) => [c.id, c.name]));
+  const clickCounts = await loadClickCounts();
   const byAffiliate = new Map<string, AffiliateSaleRow[]>();
   for (const s of sales) {
     const list = byAffiliate.get(s.affiliateId) ?? [];
@@ -317,6 +364,8 @@ export async function listAffiliates() {
     return {
       ...a,
       campaignName: a.campaignId ? (campaignName.get(a.campaignId) ?? null) : null,
+      clicks: clickCounts.get(a.id)?.clicks ?? 0,
+      clicks7d: clickCounts.get(a.id)?.clicks7d ?? 0,
       orders: summary.orders,
       revenue: summary.revenue,
       commissionPending: summary.totals.pending.commission,
@@ -325,10 +374,9 @@ export async function listAffiliates() {
     };
   });
   const overall = totalsOf(sales);
-  const { getShopifyStoreUrl } = await import("./shopify.server");
   return {
     affiliates: rows,
-    storeUrl: await getShopifyStoreUrl(),
+    storeUrl: await getStorefrontUrl(),
     summary: {
       affiliates: affiliates.length,
       approved: affiliates.filter((a) => a.status === "approved").length,
@@ -628,8 +676,7 @@ export async function getAffiliatePortal(token: string) {
   const affiliate = mapAffiliate(row);
   const [settings, campaigns] = await Promise.all([getAffiliateSettings(), loadCampaigns()]);
   const campaign = affiliate.campaignId ? (campaigns.find((c) => c.id === affiliate.campaignId) ?? null) : null;
-  const { getShopifyStoreUrl } = await import("./shopify.server");
-  const storeUrl = await getShopifyStoreUrl();
+  const storeUrl = await getStorefrontUrl();
 
   const base = { name: affiliate.name.split(" ")[0] ?? affiliate.name, status: affiliate.status, storeUrl };
   if (affiliate.status !== "approved" || !affiliate.code) return { ...base, approved: false as const };
@@ -648,6 +695,7 @@ export async function getAffiliatePortal(token: string) {
     windowStart: campaign?.salesStart ?? null,
     windowEnd: campaign?.salesEnd ?? null,
     adsAuthorizationDays: affiliate.adsAuthorizationDays,
+    clicks: (await loadClickCounts()).get(affiliate.id)?.clicks ?? 0,
     orders: summary.orders,
     revenue: summary.revenue,
     commissionPending: summary.totals.pending.commission,

@@ -166,3 +166,17 @@ export function affiliateLink(storeUrl: string, code: string, redirectPath = "/"
   const base = storeUrl.replace(/\/+$/, "");
   return `${base}/discount/${encodeURIComponent(code)}?redirect=${encodeURIComponent(redirectPath)}`;
 }
+
+/** Só aceita caminho interno da loja ("/collections/x"); qualquer outra coisa vira "/". */
+export function safeRedirectPath(value: string | null | undefined): string {
+  const path = String(value ?? "").trim();
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\") || /[\r\n]/.test(path)) return "/";
+  return path.slice(0, 300);
+}
+
+/** Link curto e amigável da afiliada, no domínio do CRM: /a/ana. Passa por um redirecionamento que conta o clique. */
+export function affiliateShortLink(origin: string, code: string, toPath?: string): string {
+  const base = `${origin.replace(/\/+$/, "")}/a/${encodeURIComponent(code.toLowerCase())}`;
+  const to = safeRedirectPath(toPath);
+  return to === "/" ? base : `${base}?to=${encodeURIComponent(to)}`;
+}

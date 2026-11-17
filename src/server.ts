@@ -290,6 +290,33 @@ async function handleFlowButtonClick(request: Request): Promise<Response> {
   }
 }
 
+// Link curto de afiliada: /a/<codigo>. Conta o clique e leva à loja com o cupom aplicado.
+const AFFILIATE_LINK_PREFIX = "/a/";
+
+async function handleAffiliateLink(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  let code = "";
+  try {
+    code = decodeURIComponent(url.pathname.slice(AFFILIATE_LINK_PREFIX.length).split("/")[0] ?? "");
+  } catch {
+    code = "";
+  }
+  if (!code) return new Response("Not Found", { status: 404 });
+  try {
+    const { resolveAffiliateLink } = await import("./lib/affiliates.server");
+    const destination = await resolveAffiliateLink({
+      code,
+      to: url.searchParams.get("to"),
+      referrer: request.headers.get("referer"),
+      ip: clientIp(request),
+    });
+    return new Response(null, { status: 302, headers: { Location: destination, "Cache-Control": "no-store" } });
+  } catch (error) {
+    console.error("Falha ao processar link de afiliada:", error);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+}
+
 async function handleTrackedLink(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const messageId = url.pathname.slice(TRACKED_LINK_PREFIX.length);
@@ -730,6 +757,9 @@ export default {
     }
     if (pathname.startsWith(ENVIO_REDIRECT_PREFIX)) {
       return handleEnvioRedirect(request, ctx);
+    }
+    if (pathname.startsWith(AFFILIATE_LINK_PREFIX)) {
+      return handleAffiliateLink(request);
     }
     if (pathname.startsWith(TRACKED_LINK_PREFIX)) {
       return handleTrackedLink(request);

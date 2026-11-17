@@ -448,6 +448,8 @@ async function createCoupon(code: string, name: string, discountPct: number, sal
     startsAt: now.toISOString(),
     endsAt: (endsAt.getTime() > now.getTime() ? endsAt : new Date(now.getTime() + 365 * 86_400_000)).toISOString(),
     appliesOncePerCustomer: false,
+    // Soma com outros descontos (o desconto progressivo automático e outros cupons que também aceitem combinar).
+    combinesWith: { orderDiscounts: true, productDiscounts: true, shippingDiscounts: true },
   });
 }
 

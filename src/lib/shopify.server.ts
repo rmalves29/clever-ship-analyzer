@@ -477,6 +477,8 @@ export type DiscountCodeBasicCreateInput = {
   endsAt: string; // ISO
   /** Padrão false (mantém o comportamento já em produção pro cupom VIP de domingo). */
   appliesOncePerCustomer?: boolean;
+  /** Padrão: só combina com frete grátis. Passe tudo true para o cupom somar com outros descontos. */
+  combinesWith?: { orderDiscounts: boolean; productDiscounts: boolean; shippingDiscounts: boolean };
 };
 
 /** Cria um cupom de desconto de verdade na Shopify (percentual ou valor fixo) — sem restrição
@@ -502,7 +504,7 @@ export async function createShopifyDiscountCodeBasic(
         customerSelection: { all: true },
         customerGets: { value, items: { all: true } },
         appliesOncePerCustomer: input.appliesOncePerCustomer ?? false,
-        combinesWith: { orderDiscounts: false, productDiscounts: false, shippingDiscounts: true },
+        combinesWith: input.combinesWith ?? { orderDiscounts: false, productDiscounts: false, shippingDiscounts: true },
       },
     });
     const result = data?.discountCodeBasicCreate;

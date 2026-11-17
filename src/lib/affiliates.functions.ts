@@ -20,18 +20,42 @@ export const saveAffiliateSettingsFn = createServerFn({ method: "POST" })
   .validator((data: unknown) =>
     z
       .object({
-        commissionPct: z.number().min(0).max(100),
-        discountPct: z.number().min(1).max(100),
         holdDays: z.number().int().min(0).max(90),
-        windowStart: z.string().datetime().nullable(),
-        windowEnd: z.string().datetime().nullable(),
+        adsAuthorizationDays: z.number().int().min(1).max(90),
       })
-      .refine((v) => !v.windowStart || !v.windowEnd || v.windowStart < v.windowEnd, "A data final precisa ser depois da inicial.")
       .parse(data),
   )
   .handler(async ({ data }) => {
     const { saveAffiliateSettings } = await import("./affiliates.server");
     return saveAffiliateSettings(data);
+  });
+
+export const listAffiliateCampaignsFn = createServerFn({ method: "GET" })
+  .middleware([requireAppAuth])
+  .handler(async () => {
+    const { listAffiliateCampaigns } = await import("./affiliates.server");
+    return listAffiliateCampaigns();
+  });
+
+export const saveAffiliateCampaignFn = createServerFn({ method: "POST" })
+  .middleware([requireAppAuth])
+  .validator((data: unknown) =>
+    z
+      .object({
+        id: z.string().uuid().optional(),
+        name: z.string().min(2).max(80),
+        commissionPct: z.number().min(0).max(100),
+        discountPct: z.number().min(1).max(100),
+        salesStart: z.string().datetime().nullable(),
+        salesEnd: z.string().datetime().nullable(),
+        isActive: z.boolean(),
+      })
+      .refine((v) => !v.salesStart || !v.salesEnd || v.salesStart < v.salesEnd, "A data final das vendas precisa ser depois da inicial.")
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { saveAffiliateCampaign } = await import("./affiliates.server");
+    return saveAffiliateCampaign(data);
   });
 
 export const listAffiliatesFn = createServerFn({ method: "GET" })
@@ -153,6 +177,7 @@ export const submitAffiliateSignupFn = createServerFn({ method: "POST" })
         tiktok: z.string().max(80).nullable(),
         pixKey: z.string().max(120).nullable(),
         acceptTerms: z.literal(true),
+        acceptAds: z.literal(true),
         // Campo escondido: robô preenche, pessoa não.
         website: z.string().max(200).optional(),
       })
@@ -185,7 +210,6 @@ export const addAffiliatePostFn = createServerFn({ method: "POST" })
 
 /** Regras que aparecem na página pública de cadastro (sem dados de ninguém). */
 export const getAffiliateProgramFn = createServerFn({ method: "GET" }).handler(async () => {
-  const { getAffiliateSettings } = await import("./affiliates.server");
-  const s = await getAffiliateSettings();
-  return { commissionPct: s.commissionPct, holdDays: s.holdDays, windowStart: s.windowStart, windowEnd: s.windowEnd };
+  const { getAffiliateProgram } = await import("./affiliates.server");
+  return getAffiliateProgram();
 });

@@ -33,11 +33,10 @@ async function fetchAll<T>(build: (from: number, to: number) => PromiseLike<{ da
 // Configuração
 
 export type AffiliateSettings = {
-  commissionPct: number;
-  discountPct: number;
+  /** Dias depois do pedido até a comissão ficar aprovada. */
   holdDays: number;
-  windowStart: string | null;
-  windowEnd: string | null;
+  /** Dias de uso dos vídeos em anúncios autorizados no cadastro. */
+  adsAuthorizationDays: number;
 };
 
 export async function getAffiliateSettings(): Promise<AffiliateSettings> {
@@ -45,11 +44,8 @@ export async function getAffiliateSettings(): Promise<AffiliateSettings> {
   const { data, error } = await supabase.from("affiliate_settings").select("*").eq("id", true).maybeSingle();
   if (error) throw new Error(error.message);
   return {
-    commissionPct: Number(data?.commission_pct ?? 15),
-    discountPct: Number(data?.discount_pct ?? 5),
     holdDays: Number(data?.hold_days ?? 10),
-    windowStart: data?.window_start ?? null,
-    windowEnd: data?.window_end ?? null,
+    adsAuthorizationDays: Number(data?.ads_authorization_days ?? 5),
   };
 }
 
@@ -57,15 +53,89 @@ export async function saveAffiliateSettings(input: AffiliateSettings): Promise<A
   const supabase = await db();
   const { error } = await supabase.from("affiliate_settings").upsert({
     id: true,
-    commission_pct: input.commissionPct,
-    discount_pct: input.discountPct,
     hold_days: input.holdDays,
-    window_start: input.windowStart,
-    window_end: input.windowEnd,
+    ads_authorization_days: input.adsAuthorizationDays,
     updated_at: new Date().toISOString(),
   });
   if (error) throw new Error(error.message);
   return getAffiliateSettings();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Campanhas (comissão, desconto e período de vendas; a inscrição herda a campanha aberta)
+
+export type AffiliateCampaign = {
+  id: string;
+  name: string;
+  commissionPct: number;
+  discountPct: number;
+  salesStart: string | null;
+  salesEnd: string | null;
+  isActive: boolean;
+  createdAt: string;
+};
+
+function mapCampaign(row: any): AffiliateCampaign {
+  return {
+    id: row.id,
+    name: row.name,
+    commissionPct: Number(row.commission_pct),
+    discountPct: Number(row.discount_pct),
+    salesStart: row.sales_start,
+    salesEnd: row.sales_end,
+    isActive: Boolean(row.is_active),
+    createdAt: row.created_at,
+  };
+}
+
+async function loadCampaigns(): Promise<AffiliateCampaign[]> {
+  const supabase = await db();
+  const { data, error } = await supabase.from("affiliate_campaigns").select("*").order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as any[]).map(mapCampaign);
+}
+
+/** Campanha aberta para inscrição agora: a ativa mais recente. */
+export async function getOpenCampaign(): Promise<AffiliateCampaign | null> {
+  return (await loadCampaigns()).find((c) => c.isActive) ?? null;
+}
+
+export async function listAffiliateCampaigns() {
+  const supabase = await db();
+  const [campaigns, affiliates] = await Promise.all([loadCampaigns(), supabase.from("affiliates").select("campaign_id")]);
+  const counts = new Map<string, number>();
+  for (const a of (affiliates.data ?? []) as { campaign_id: string | null }[]) {
+    if (a.campaign_id) counts.set(a.campaign_id, (counts.get(a.campaign_id) ?? 0) + 1);
+  }
+  return campaigns.map((c) => ({ ...c, affiliates: counts.get(c.id) ?? 0 }));
+}
+
+export async function saveAffiliateCampaign(input: {
+  id?: string | undefined;
+  name: string;
+  commissionPct: number;
+  discountPct: number;
+  salesStart: string | null;
+  salesEnd: string | null;
+  isActive: boolean;
+}) {
+  const supabase = await db();
+  const row = {
+    name: input.name.trim(),
+    commission_pct: input.commissionPct,
+    discount_pct: input.discountPct,
+    sales_start: input.salesStart,
+    sales_end: input.salesEnd,
+    is_active: input.isActive,
+  };
+  if (input.id) {
+    const { error } = await supabase.from("affiliate_campaigns").update(row).eq("id", input.id);
+    if (error) throw new Error(error.message);
+    return { id: input.id };
+  }
+  const { data, error } = await supabase.from("affiliate_campaigns").insert(row).select("id").single();
+  if (error) throw new Error(error.message);
+  return { id: data.id as string };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -89,6 +159,9 @@ export type AffiliateRow = {
   shopifyError: string | null;
   notes: string | null;
   accessToken: string;
+  campaignId: string | null;
+  adsAuthorizationAt: string | null;
+  adsAuthorizationDays: number | null;
   createdAt: string;
   approvedAt: string | null;
 };
@@ -110,6 +183,9 @@ function mapAffiliate(row: any): AffiliateRow {
     shopifyError: row.shopify_error,
     notes: row.notes,
     accessToken: row.access_token,
+    campaignId: row.campaign_id ?? null,
+    adsAuthorizationAt: row.ads_authorization_at ?? null,
+    adsAuthorizationDays: row.ads_authorization_days ?? null,
     createdAt: row.created_at,
     approvedAt: row.approved_at,
   };
@@ -163,10 +239,15 @@ export type AffiliateSaleRow = {
   needsReview: boolean;
 };
 
-async function classifyAll(affiliates: AffiliateRow[], orders: OrderRow[], settings: AffiliateSettings) {
+async function classifyAll(affiliates: AffiliateRow[], orders: OrderRow[], settings: AffiliateSettings, campaigns: AffiliateCampaign[]) {
   const paid = await loadPaidOrderIds();
   const byId = new Map(affiliates.map((a) => [a.id, a]));
-  const rules = { holdDays: settings.holdDays, windowStart: settings.windowStart, windowEnd: settings.windowEnd };
+  const campaignById = new Map(campaigns.map((c) => [c.id, c]));
+  const rulesOf = (affiliate: AffiliateRow) => {
+    // O período de vendas que conta é o da campanha em que a afiliada se inscreveu.
+    const campaign = affiliate.campaignId ? campaignById.get(affiliate.campaignId) : undefined;
+    return { holdDays: settings.holdDays, windowStart: campaign?.salesStart ?? null, windowEnd: campaign?.salesEnd ?? null };
+  };
   const sales: AffiliateSaleRow[] = [];
   const seen = new Set<string>();
   for (const o of orders) {
@@ -186,7 +267,7 @@ async function classifyAll(affiliates: AffiliateRow[], orders: OrderRow[], setti
         customerPhone: o.phone,
       },
       { commissionPct: affiliate.commissionPct, whatsapp: affiliate.whatsapp, email: affiliate.email },
-      rules,
+      rulesOf(affiliate),
       paid.has(o.order_id),
     );
     sales.push({
@@ -221,9 +302,10 @@ function totalsOf(sales: AffiliateSaleRow[]) {
 // Admin
 
 export async function listAffiliates() {
-  const [affiliates, settings] = await Promise.all([loadAffiliates(), getAffiliateSettings()]);
+  const [affiliates, settings, campaigns] = await Promise.all([loadAffiliates(), getAffiliateSettings(), loadCampaigns()]);
   const orders = await loadAffiliateOrders();
-  const sales = await classifyAll(affiliates, orders, settings);
+  const sales = await classifyAll(affiliates, orders, settings, campaigns);
+  const campaignName = new Map(campaigns.map((c) => [c.id, c.name]));
   const byAffiliate = new Map<string, AffiliateSaleRow[]>();
   for (const s of sales) {
     const list = byAffiliate.get(s.affiliateId) ?? [];
@@ -234,6 +316,7 @@ export async function listAffiliates() {
     const summary = totalsOf(byAffiliate.get(a.id) ?? []);
     return {
       ...a,
+      campaignName: a.campaignId ? (campaignName.get(a.campaignId) ?? null) : null,
       orders: summary.orders,
       revenue: summary.revenue,
       commissionPending: summary.totals.pending.commission,
@@ -260,9 +343,9 @@ export async function listAffiliates() {
 }
 
 export async function getAffiliateSales(input: { affiliateId?: string | null; status?: CommissionStatus | null }) {
-  const [affiliates, settings] = await Promise.all([loadAffiliates(), getAffiliateSettings()]);
+  const [affiliates, settings, campaigns] = await Promise.all([loadAffiliates(), getAffiliateSettings(), loadCampaigns()]);
   const orders = await loadAffiliateOrders(input.affiliateId ?? undefined);
-  let sales = await classifyAll(affiliates, orders, settings);
+  let sales = await classifyAll(affiliates, orders, settings, campaigns);
   if (input.status) sales = sales.filter((s) => s.status === input.status);
   return { sales: sales.slice(0, 2000), total: sales.length };
 }
@@ -297,10 +380,11 @@ export async function setAffiliateStatus(id: string, status: "pending" | "reject
 
 const TAKEN_PATTERN = /unique|taken|already|exist|j[aá] (est[aá]|foi|existe)|em uso/i;
 
-async function createCoupon(code: string, name: string, discountPct: number, settings: AffiliateSettings) {
+/** O cupom vale até o fim do período de vendas da campanha (ou 1 ano, se a campanha não tiver fim). */
+async function createCoupon(code: string, name: string, discountPct: number, salesEnd: string | null) {
   const { createShopifyDiscountCodeBasic } = await import("./shopify.server");
   const now = new Date();
-  const endsAt = settings.windowEnd ? new Date(settings.windowEnd) : new Date(now.getTime() + 365 * 86_400_000);
+  const endsAt = salesEnd ? new Date(salesEnd) : new Date(now.getTime() + 365 * 86_400_000);
   return createShopifyDiscountCodeBasic({
     title: `Afiliada ${name} (${code})`,
     code,
@@ -314,14 +398,15 @@ async function createCoupon(code: string, name: string, discountPct: number, set
 /** Aprova a afiliada: gera o cupom exclusivo, cria na Shopify (se falhar, guarda o motivo para tentar de novo). */
 export async function approveAffiliate(id: string, opts: { commissionPct?: number | undefined; discountPct?: number | undefined; code?: string | null | undefined }) {
   const supabase = await db();
-  const settings = await getAffiliateSettings();
   const { data: row, error } = await supabase.from("affiliates").select("*").eq("id", id).maybeSingle();
   if (error) throw new Error(error.message);
   if (!row) throw new Error("Afiliada não encontrada.");
   const affiliate = mapAffiliate(row);
+  const campaign = affiliate.campaignId ? (await loadCampaigns()).find((c) => c.id === affiliate.campaignId) ?? null : null;
 
-  const commissionPct = opts.commissionPct ?? affiliate.commissionPct ?? settings.commissionPct;
-  const discountPct = opts.discountPct ?? (affiliate.code ? affiliate.discountPct : settings.discountPct);
+  // Comissão e desconto já foram herdados da campanha no cadastro; aqui só mudam se você ajustar na aprovação.
+  const commissionPct = opts.commissionPct ?? affiliate.commissionPct;
+  const discountPct = opts.discountPct ?? affiliate.discountPct;
 
   const { data: codes } = await supabase.from("affiliates").select("code").not("code", "is", null).neq("id", id);
   const taken = new Set<string>(((codes ?? []) as { code: string }[]).map((c) => c.code.toUpperCase()));
@@ -339,7 +424,7 @@ export async function approveAffiliate(id: string, opts: { commissionPct?: numbe
     code = code ?? wanted ?? pickAffiliateCode(affiliate.name, taken);
 
     for (let attempt = 0; attempt < 6; attempt++) {
-      const result = await createCoupon(code, affiliate.name, discountPct, settings);
+      const result = await createCoupon(code, affiliate.name, discountPct, campaign?.salesEnd ?? null);
       if (result.success) {
         discountId = result.discountId;
         shopifyError = null;
@@ -371,12 +456,12 @@ export async function approveAffiliate(id: string, opts: { commissionPct?: numbe
 
 export async function retryAffiliateCoupon(id: string) {
   const supabase = await db();
-  const settings = await getAffiliateSettings();
   const { data: row, error } = await supabase.from("affiliates").select("*").eq("id", id).maybeSingle();
   if (error) throw new Error(error.message);
   if (!row?.code) throw new Error("Aprove a afiliada antes de criar o cupom.");
   const affiliate = mapAffiliate(row);
-  const result = await createCoupon(affiliate.code as string, affiliate.name, affiliate.discountPct, settings);
+  const campaign = affiliate.campaignId ? (await loadCampaigns()).find((c) => c.id === affiliate.campaignId) ?? null : null;
+  const result = await createCoupon(affiliate.code as string, affiliate.name, affiliate.discountPct, campaign?.salesEnd ?? null);
   const { error: updateError } = await supabase
     .from("affiliates")
     .update({ shopify_discount_id: result.success ? result.discountId : null, shopify_error: result.success ? null : result.error })
@@ -390,9 +475,9 @@ export async function retryAffiliateCoupon(id: string) {
 
 export async function getPayoutsOverview() {
   const supabase = await db();
-  const [affiliates, settings] = await Promise.all([loadAffiliates(), getAffiliateSettings()]);
+  const [affiliates, settings, campaigns] = await Promise.all([loadAffiliates(), getAffiliateSettings(), loadCampaigns()]);
   const orders = await loadAffiliateOrders();
-  const sales = await classifyAll(affiliates, orders, settings);
+  const sales = await classifyAll(affiliates, orders, settings, campaigns);
   const toPay = affiliates
     .map((a) => {
       const approved = sales.filter((s) => s.affiliateId === a.id && s.status === "approved");
@@ -428,13 +513,13 @@ export async function getPayoutsOverview() {
 /** Marca como paga toda a comissão aprovada da afiliada (cada pedido só pode ser pago uma vez). */
 export async function registerAffiliatePayout(affiliateId: string, note: string | null) {
   const supabase = await db();
-  const [affiliates, settings] = await Promise.all([loadAffiliates(), getAffiliateSettings()]);
+  const [affiliates, settings, campaigns] = await Promise.all([loadAffiliates(), getAffiliateSettings(), loadCampaigns()]);
   const affiliate = affiliates.find((a) => a.id === affiliateId);
   if (!affiliate) throw new Error("Afiliada não encontrada.");
   if (affiliate.status !== "approved") throw new Error("Só é possível pagar afiliadas aprovadas.");
 
   const orders = await loadAffiliateOrders(affiliateId);
-  const sales = (await classifyAll([affiliate], orders, settings)).filter((s) => s.status === "approved");
+  const sales = (await classifyAll([affiliate], orders, settings, campaigns)).filter((s) => s.status === "approved");
   if (sales.length === 0) throw new Error("Não há comissão aprovada a pagar para essa afiliada.");
   const amount = round2(sales.reduce((sum, s) => sum + s.commission, 0));
   if (amount <= 0) throw new Error("O valor a pagar é zero.");
@@ -476,7 +561,23 @@ export type AffiliateSignupInput = {
   instagram: string | null;
   tiktok: string | null;
   pixKey: string | null;
+  /** Aceite da autorização de uso dos vídeos em anúncios (obrigatório). */
+  acceptAds: boolean;
 };
+
+/** Regras exibidas na página de cadastro: vêm da campanha aberta agora (não há cadastro sem campanha aberta). */
+export async function getAffiliateProgram() {
+  const [campaign, settings] = await Promise.all([getOpenCampaign(), getAffiliateSettings()]);
+  return {
+    open: Boolean(campaign),
+    campaignName: campaign?.name ?? null,
+    commissionPct: campaign?.commissionPct ?? null,
+    salesStart: campaign?.salesStart ?? null,
+    salesEnd: campaign?.salesEnd ?? null,
+    holdDays: settings.holdDays,
+    adsAuthorizationDays: settings.adsAuthorizationDays,
+  };
+}
 
 export async function registerAffiliate(input: AffiliateSignupInput): Promise<{ success: true } | { success: false; error: string }> {
   const name = input.name.trim().replace(/\s+/g, " ");
@@ -491,8 +592,12 @@ export async function registerAffiliate(input: AffiliateSignupInput): Promise<{ 
   const email = input.email?.trim().toLowerCase() || null;
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { success: false, error: "E-mail inválido." };
 
+  if (!input.acceptAds) return { success: false, error: "É preciso aceitar a autorização de uso dos vídeos em anúncios." };
+
   const supabase = await db();
-  const settings = await getAffiliateSettings();
+  // A comissão é a da campanha aberta NO MOMENTO da inscrição e fica gravada na afiliada.
+  const [campaign, settings] = await Promise.all([getOpenCampaign(), getAffiliateSettings()]);
+  if (!campaign) return { success: false, error: "As inscrições estão fechadas no momento." };
   const { error } = await supabase.from("affiliates").insert({
     name,
     whatsapp,
@@ -500,8 +605,11 @@ export async function registerAffiliate(input: AffiliateSignupInput): Promise<{ 
     instagram,
     tiktok,
     pix_key: input.pixKey?.trim().slice(0, 120) || null,
-    commission_pct: settings.commissionPct,
-    discount_pct: settings.discountPct,
+    commission_pct: campaign.commissionPct,
+    discount_pct: campaign.discountPct,
+    campaign_id: campaign.id,
+    ads_authorization_at: new Date().toISOString(),
+    ads_authorization_days: settings.adsAuthorizationDays,
   });
   // Já cadastrada (mesmo WhatsApp): responde igual, sem revelar quem já está na base.
   if (error && error.code !== "23505") throw new Error(error.message);
@@ -518,14 +626,15 @@ export async function getAffiliatePortal(token: string) {
   if (error) throw new Error(error.message);
   if (!row) return null;
   const affiliate = mapAffiliate(row);
-  const settings = await getAffiliateSettings();
+  const [settings, campaigns] = await Promise.all([getAffiliateSettings(), loadCampaigns()]);
+  const campaign = affiliate.campaignId ? (campaigns.find((c) => c.id === affiliate.campaignId) ?? null) : null;
   const { getShopifyStoreUrl } = await import("./shopify.server");
   const storeUrl = await getShopifyStoreUrl();
 
   const base = { name: affiliate.name.split(" ")[0] ?? affiliate.name, status: affiliate.status, storeUrl };
   if (affiliate.status !== "approved" || !affiliate.code) return { ...base, approved: false as const };
 
-  const sales = await classifyAll([affiliate], await loadAffiliateOrders(affiliate.id), settings);
+  const sales = await classifyAll([affiliate], await loadAffiliateOrders(affiliate.id), settings, campaigns);
   const summary = totalsOf(sales);
   const { data: posts } = await supabase.from("affiliate_posts").select("id, url, created_at").eq("affiliate_id", affiliate.id).order("created_at", { ascending: false }).limit(50);
   return {
@@ -535,8 +644,10 @@ export async function getAffiliatePortal(token: string) {
     commissionPct: affiliate.commissionPct,
     discountPct: affiliate.discountPct,
     holdDays: settings.holdDays,
-    windowStart: settings.windowStart,
-    windowEnd: settings.windowEnd,
+    campaignName: campaign?.name ?? null,
+    windowStart: campaign?.salesStart ?? null,
+    windowEnd: campaign?.salesEnd ?? null,
+    adsAuthorizationDays: affiliate.adsAuthorizationDays,
     orders: summary.orders,
     revenue: summary.revenue,
     commissionPending: summary.totals.pending.commission,

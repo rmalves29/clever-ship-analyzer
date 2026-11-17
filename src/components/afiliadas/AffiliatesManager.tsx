@@ -232,6 +232,16 @@ export function AffiliatesManager() {
                     {formatWhatsapp(a.whatsapp)} · cadastro em {dateBr(a.createdAt)}
                   </Typography>
                   <Chip size="small" label={STATUS[a.status].label} color={STATUS[a.status].color} sx={{ mt: 0.5 }} />
+                  {a.campaignName && (
+                    <Typography variant="caption" color="text.secondary" component="div">
+                      Campanha: {a.campaignName}
+                    </Typography>
+                  )}
+                  {a.adsAuthorizationAt && (
+                    <Typography variant="caption" color="text.secondary" component="div" title="Autorização de uso dos vídeos em anúncios aceita no cadastro">
+                      Autoriza uso em Ads por {a.adsAuthorizationDays} dias (aceite em {dateBr(a.adsAuthorizationAt)})
+                    </Typography>
+                  )}
                 </TableCell>
                 <TableCell>
                   {a.instagram && <Link href={handleLink("instagram", a.instagram)} target="_blank" rel="noreferrer" variant="caption" sx={{ display: "block" }}>@{a.instagram} (Instagram)</Link>}

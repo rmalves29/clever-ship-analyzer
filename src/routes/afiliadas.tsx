@@ -2,13 +2,14 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import Box from "@mui/material/Box";
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
-import { Banknote, Receipt, Settings2, Users } from "lucide-react";
+import { Banknote, Megaphone, Receipt, Settings2, Users } from "lucide-react";
 import { AffiliatesManager } from "@/components/afiliadas/AffiliatesManager";
+import { AffiliateCampaignsPanel } from "@/components/afiliadas/AffiliateCampaignsPanel";
 import { AffiliateSalesPanel } from "@/components/afiliadas/AffiliateSalesPanel";
 import { AffiliatePayoutsPanel } from "@/components/afiliadas/AffiliatePayoutsPanel";
 import { AffiliateSettingsPanel } from "@/components/afiliadas/AffiliateSettingsPanel";
 
-const VALID_TABS = ["afiliadas", "vendas", "pagamentos", "configuracoes"] as const;
+const VALID_TABS = ["afiliadas", "campanhas", "vendas", "pagamentos", "configuracoes"] as const;
 
 export const Route = createFileRoute("/afiliadas")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -33,6 +34,7 @@ function Afiliadas() {
       <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
           <Tab value="afiliadas" icon={<Users size={16} />} iconPosition="start" label="Afiliadas" sx={{ minHeight: 40 }} />
+          <Tab value="campanhas" icon={<Megaphone size={16} />} iconPosition="start" label="Campanhas" sx={{ minHeight: 40 }} />
           <Tab value="vendas" icon={<Receipt size={16} />} iconPosition="start" label="Vendas e comissões" sx={{ minHeight: 40 }} />
           <Tab value="pagamentos" icon={<Banknote size={16} />} iconPosition="start" label="Pagamentos" sx={{ minHeight: 40 }} />
           <Tab value="configuracoes" icon={<Settings2 size={16} />} iconPosition="start" label="Configurações" sx={{ minHeight: 40 }} />
@@ -40,6 +42,7 @@ function Afiliadas() {
       </Box>
 
       {tab === "afiliadas" && <AffiliatesManager />}
+      {tab === "campanhas" && <AffiliateCampaignsPanel />}
       {tab === "vendas" && <AffiliateSalesPanel />}
       {tab === "pagamentos" && <AffiliatePayoutsPanel />}
       {tab === "configuracoes" && <AffiliateSettingsPanel />}

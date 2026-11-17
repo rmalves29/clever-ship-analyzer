@@ -121,7 +121,8 @@ function PainelAfiliada() {
                   )}
                 </Stack>
                 <Typography variant="body2" sx={{ mt: 1 }}>
-                  Quem comprar com o seu cupom ganha <b>{data.discountPct}% de desconto</b> e você ganha <b>{data.commissionPct}%</b> de comissão sobre os produtos.
+                  Quem comprar com o seu cupom ganha <b>{data.discountPct}% de desconto</b> e você ganha <b>{data.commissionPct}%</b> de comissão sobre os produtos
+                  {data.campaignName ? ` (campanha ${data.campaignName})` : ""}.
                 </Typography>
               </CardContent>
             </Card>

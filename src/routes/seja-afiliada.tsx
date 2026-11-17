@@ -43,6 +43,7 @@ function SejaAfiliada() {
   const [tiktok, setTiktok] = useState("");
   const [pixKey, setPixKey] = useState("");
   const [accepted, setAccepted] = useState(false);
+  const [acceptedAds, setAcceptedAds] = useState(false);
   const [website, setWebsite] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +58,7 @@ function SejaAfiliada() {
           tiktok: tiktok.trim() || null,
           pixKey: pixKey.trim() || null,
           acceptTerms: true,
+          acceptAds: true,
           website,
         },
       }),
@@ -67,9 +69,11 @@ function SejaAfiliada() {
   });
 
   const done = mutation.data?.success === true;
-  const from = data?.windowStart ? dayLabel(data.windowStart) : null;
-  const until = data?.windowEnd ? dayLabel(data.windowEnd) : null;
+  const from = data?.salesStart ? dayLabel(data.salesStart) : null;
+  const until = data?.salesEnd ? dayLabel(data.salesEnd) : null;
   const windowText = from || until ? `Vale para vendas ${from ? `a partir de ${from}` : ""}${from && until ? " " : ""}${until ? `até ${until}` : ""}.` : null;
+  const adsDays = data?.adsAuthorizationDays ?? 5;
+  const closed = data ? !data.open : false;
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default", py: { xs: 3, md: 6 }, px: 2 }}>
@@ -78,10 +82,12 @@ function SejaAfiliada() {
           Seja afiliada Mania de Mulher
         </Typography>
         <Typography color="text.secondary" sx={{ mb: 3 }}>
-          Poste nossos produtos nas suas redes e ganhe {data ? `${data.commissionPct}%` : "comissão"} de cada venda feita com o seu cupom exclusivo.
+          Poste nossos produtos nas suas redes e ganhe {data?.commissionPct != null ? `${data.commissionPct}%` : "comissão"} de cada venda feita com o seu cupom exclusivo.{data?.campaignName ? ` Campanha: ${data.campaignName}.` : ""}
         </Typography>
 
-        {done ? (
+        {closed ? (
+          <Alert severity="info">As inscrições de afiliadas estão fechadas no momento. Fique de olho: avisamos quando abrir uma nova campanha.</Alert>
+        ) : done ? (
           <Alert severity="success">Cadastro recebido! Vamos analisar e, quando for aprovado, você recebe seu cupom e o link do seu painel pelo WhatsApp.</Alert>
         ) : (
           <Stack
@@ -108,7 +114,8 @@ function SejaAfiliada() {
               </Typography>
               <Typography variant="caption" component="div" color="text.secondary">
                 • Depois de aprovada, você recebe um cupom exclusivo (e o cliente ganha desconto ao usar).
-                <br />• A comissão é de {data ? `${data.commissionPct}%` : "—"} sobre o valor dos produtos (sem frete) de pedidos pagos com o seu cupom.
+                <br />• A comissão é de {data?.commissionPct != null ? `${data.commissionPct}%` : "—"}
+                {data?.campaignName ? ` (campanha ${data.campaignName})` : ""} sobre o valor dos produtos (sem frete) de pedidos pagos com o seu cupom.
                 <br />• A comissão fica liberada {data ? `${data.holdDays} dias` : "alguns dias"} depois do pedido, para cobrir cancelamento e devolução; pedidos cancelados ou devolvidos não geram comissão.
                 <br />• O pagamento é feito por PIX. Compra feita por você com o seu próprio cupom não gera comissão.
                 {windowText && (
@@ -116,13 +123,18 @@ function SejaAfiliada() {
                     <br />• {windowText}
                   </>
                 )}
+                <br />• Autorizo a Mania de Mulher a usar, por {adsDays} dias, os vídeos e posts que eu publicar divulgando os produtos em anúncios pagos (Ads).
                 <br />• O cadastro passa por aprovação da Mania de Mulher.
               </Typography>
             </Box>
 
             <FormControlLabel control={<Checkbox checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />} label="Li e concordo com as regras acima" />
+            <FormControlLabel
+              control={<Checkbox checked={acceptedAds} onChange={(e) => setAcceptedAds(e.target.checked)} />}
+              label={`Autorizo o uso dos meus vídeos e posts sobre a Mania de Mulher em anúncios (Ads) por ${adsDays} dias`}
+            />
             {error && <Alert severity="error">{error}</Alert>}
-            <Button type="submit" variant="contained" size="large" disabled={!accepted || mutation.isPending}>
+            <Button type="submit" variant="contained" size="large" disabled={!accepted || !acceptedAds || mutation.isPending}>
               {mutation.isPending ? "Enviando…" : "Quero ser afiliada"}
             </Button>
           </Stack>

@@ -15,6 +15,7 @@ import {
   LayoutTemplate,
   Coins,
   ClipboardList,
+  Handshake,
 } from "lucide-react";
 import Box from "@mui/material/Box";
 import Drawer from "@mui/material/Drawer";
@@ -54,6 +55,7 @@ type NavItem = {
     | "/fluxo-envio"
     | "/popups"
     | "/cashback"
+    | "/afiliadas"
     | "/ga4"
     | "/pesquisas"
     | "/landing-pages";
@@ -131,6 +133,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: "Ferramentas",
     items: [
       { label: "Cashback", to: "/cashback", icon: Coins },
+      { label: "Afiliadas", to: "/afiliadas", icon: Handshake },
       { label: "Google Analytics", to: "/ga4", icon: BarChart3 },
       { label: "Pesquisas", to: "/pesquisas", icon: ClipboardList },
       { label: "Landing Pages", to: "/landing-pages", icon: FileText },

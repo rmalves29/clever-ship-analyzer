@@ -155,7 +155,7 @@ function RootComponent() {
   // o chrome do admin (Sidebar/Topbar), já que quem responde não é usuário logado do CRM.
   // /lp/$slug é a mesma ideia para as landing pages de anúncio (Facebook Ads).
   const isPublicSurveyPage = pathname.startsWith("/pesquisa/");
-  const isPublicLandingPage = pathname.startsWith("/lp/");
+  const isPublicLandingPage = pathname.startsWith("/lp/") || pathname === "/seja-afiliada" || pathname.startsWith("/afiliada/");
   const isAuthPage = pathname === "/auth";
 
   // Login do CRM: só vale quando VITE_APP_AUTH_ENABLED=true (junto de APP_AUTH_ENABLED no servidor). Páginas

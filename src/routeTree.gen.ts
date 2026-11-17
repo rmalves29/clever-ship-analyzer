@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AfiliadasRouteImport } from './routes/afiliadas'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CampanhasWhatsappRouteImport } from './routes/campanhas-whatsapp'
 import { Route as CashbackRouteImport } from './routes/cashback'
@@ -20,7 +21,9 @@ import { Route as FluxoEnvioRouteImport } from './routes/fluxo-envio'
 import { Route as Ga4RouteImport } from './routes/ga4'
 import { Route as InstagramRouteImport } from './routes/instagram'
 import { Route as PopupsRouteImport } from './routes/popups'
+import { Route as SejaAfiliadaRouteImport } from './routes/seja-afiliada'
 import { Route as WhatsappRouteRouteImport } from './routes/whatsapp/route'
+import { Route as AfiliadaTokenRouteImport } from './routes/afiliada/$token'
 import { Route as CrmIndexRouteImport } from './routes/crm/index'
 import { Route as CrmContatosRouteImport } from './routes/crm/contatos'
 import { Route as CrmImportarTrayRouteImport } from './routes/crm/importar-tray'
@@ -50,6 +53,11 @@ import { Route as CrmReguasPrimeiraSegundaRouteImport } from './routes/crm/regua
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AfiliadasRoute = AfiliadasRouteImport.update({
+  id: '/afiliadas',
+  path: '/afiliadas',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -102,9 +110,19 @@ const PopupsRoute = PopupsRouteImport.update({
   path: '/popups',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SejaAfiliadaRoute = SejaAfiliadaRouteImport.update({
+  id: '/seja-afiliada',
+  path: '/seja-afiliada',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WhatsappRouteRoute = WhatsappRouteRouteImport.update({
   id: '/whatsapp',
   path: '/whatsapp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AfiliadaTokenRoute = AfiliadaTokenRouteImport.update({
+  id: '/afiliada/$token',
+  path: '/afiliada/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CrmIndexRoute = CrmIndexRouteImport.update({
@@ -237,6 +255,7 @@ const CrmReguasPrimeiraSegundaRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/whatsapp': typeof WhatsappRouteRouteWithChildren
+  '/afiliadas': typeof AfiliadasRoute
   '/auth': typeof AuthRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/cashback': typeof CashbackRoute
@@ -247,6 +266,8 @@ export interface FileRoutesByFullPath {
   '/ga4': typeof Ga4Route
   '/instagram': typeof InstagramRoute
   '/popups': typeof PopupsRoute
+  '/seja-afiliada': typeof SejaAfiliadaRoute
+  '/afiliada/$token': typeof AfiliadaTokenRoute
   '/crm/contatos': typeof CrmContatosRoute
   '/crm/importar-tray': typeof CrmImportarTrayRoute
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
@@ -275,6 +296,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/afiliadas': typeof AfiliadasRoute
   '/auth': typeof AuthRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/cashback': typeof CashbackRoute
@@ -285,6 +307,8 @@ export interface FileRoutesByTo {
   '/ga4': typeof Ga4Route
   '/instagram': typeof InstagramRoute
   '/popups': typeof PopupsRoute
+  '/seja-afiliada': typeof SejaAfiliadaRoute
+  '/afiliada/$token': typeof AfiliadaTokenRoute
   '/crm/contatos': typeof CrmContatosRoute
   '/crm/importar-tray': typeof CrmImportarTrayRoute
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
@@ -315,6 +339,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/whatsapp': typeof WhatsappRouteRouteWithChildren
+  '/afiliadas': typeof AfiliadasRoute
   '/auth': typeof AuthRoute
   '/campanhas-whatsapp': typeof CampanhasWhatsappRoute
   '/cashback': typeof CashbackRoute
@@ -325,6 +350,8 @@ export interface FileRoutesById {
   '/ga4': typeof Ga4Route
   '/instagram': typeof InstagramRoute
   '/popups': typeof PopupsRoute
+  '/seja-afiliada': typeof SejaAfiliadaRoute
+  '/afiliada/$token': typeof AfiliadaTokenRoute
   '/crm/contatos': typeof CrmContatosRoute
   '/crm/importar-tray': typeof CrmImportarTrayRoute
   '/crm/listas-estaticas': typeof CrmListasEstaticasRoute
@@ -356,6 +383,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/whatsapp'
+    | '/afiliadas'
     | '/auth'
     | '/campanhas-whatsapp'
     | '/cashback'
@@ -366,6 +394,8 @@ export interface FileRouteTypes {
     | '/ga4'
     | '/instagram'
     | '/popups'
+    | '/seja-afiliada'
+    | '/afiliada/$token'
     | '/crm/contatos'
     | '/crm/importar-tray'
     | '/crm/listas-estaticas'
@@ -394,6 +424,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/afiliadas'
     | '/auth'
     | '/campanhas-whatsapp'
     | '/cashback'
@@ -404,6 +435,8 @@ export interface FileRouteTypes {
     | '/ga4'
     | '/instagram'
     | '/popups'
+    | '/seja-afiliada'
+    | '/afiliada/$token'
     | '/crm/contatos'
     | '/crm/importar-tray'
     | '/crm/listas-estaticas'
@@ -433,6 +466,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/whatsapp'
+    | '/afiliadas'
     | '/auth'
     | '/campanhas-whatsapp'
     | '/cashback'
@@ -443,6 +477,8 @@ export interface FileRouteTypes {
     | '/ga4'
     | '/instagram'
     | '/popups'
+    | '/seja-afiliada'
+    | '/afiliada/$token'
     | '/crm/contatos'
     | '/crm/importar-tray'
     | '/crm/listas-estaticas'
@@ -473,6 +509,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   WhatsappRouteRoute: typeof WhatsappRouteRouteWithChildren
+  AfiliadasRoute: typeof AfiliadasRoute
   AuthRoute: typeof AuthRoute
   CampanhasWhatsappRoute: typeof CampanhasWhatsappRoute
   CashbackRoute: typeof CashbackRoute
@@ -483,6 +520,8 @@ export interface RootRouteChildren {
   Ga4Route: typeof Ga4Route
   InstagramRoute: typeof InstagramRoute
   PopupsRoute: typeof PopupsRoute
+  SejaAfiliadaRoute: typeof SejaAfiliadaRoute
+  AfiliadaTokenRoute: typeof AfiliadaTokenRoute
   CrmContatosRoute: typeof CrmContatosRoute
   CrmImportarTrayRoute: typeof CrmImportarTrayRoute
   CrmListasEstaticasRoute: typeof CrmListasEstaticasRoute
@@ -510,6 +549,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/afiliadas': {
+      id: '/afiliadas'
+      path: '/afiliadas'
+      fullPath: '/afiliadas'
+      preLoaderRoute: typeof AfiliadasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -582,11 +628,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PopupsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/seja-afiliada': {
+      id: '/seja-afiliada'
+      path: '/seja-afiliada'
+      fullPath: '/seja-afiliada'
+      preLoaderRoute: typeof SejaAfiliadaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/whatsapp': {
       id: '/whatsapp'
       path: '/whatsapp'
       fullPath: '/whatsapp'
       preLoaderRoute: typeof WhatsappRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/afiliada/$token': {
+      id: '/afiliada/$token'
+      path: '/afiliada/$token'
+      fullPath: '/afiliada/$token'
+      preLoaderRoute: typeof AfiliadaTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/crm/': {
@@ -794,6 +854,7 @@ const WhatsappRouteRouteWithChildren = WhatsappRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   WhatsappRouteRoute: WhatsappRouteRouteWithChildren,
+  AfiliadasRoute: AfiliadasRoute,
   AuthRoute: AuthRoute,
   CampanhasWhatsappRoute: CampanhasWhatsappRoute,
   CashbackRoute: CashbackRoute,
@@ -804,6 +865,8 @@ const rootRouteChildren: RootRouteChildren = {
   Ga4Route: Ga4Route,
   InstagramRoute: InstagramRoute,
   PopupsRoute: PopupsRoute,
+  SejaAfiliadaRoute: SejaAfiliadaRoute,
+  AfiliadaTokenRoute: AfiliadaTokenRoute,
   CrmContatosRoute: CrmContatosRoute,
   CrmImportarTrayRoute: CrmImportarTrayRoute,
   CrmListasEstaticasRoute: CrmListasEstaticasRoute,

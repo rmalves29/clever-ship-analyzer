@@ -22,6 +22,7 @@ import {
   type AutomationSeed,
 } from "@/components/crm/AutomationDialog";
 import { ConversationalFlowsTab } from "@/components/whatsapp/ConversationalFlowsTab";
+import { CashbackRulesSummary } from "@/components/whatsapp/CashbackRulesSummary";
 import { AUTOMATION_EVENT_BY_ID, parseEventTrigger } from "@/lib/automation-events";
 import { AutomationPerformancePanel, type PainelAcoes } from "@/components/whatsapp/AutomationPerformancePanel";
 import {
@@ -446,6 +447,7 @@ function AutomacoesPage() {
               >
                 <Trash2 size={16} color="var(--mui-palette-error-main, #EA5455)" />
               </IconButton>
+              {a.automationKind === "cashback" && <CashbackRulesSummary steps={a.steps ?? []} />}
             </Stack>
           ))}
           {lista.length === 0 && (

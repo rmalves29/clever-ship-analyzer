@@ -363,6 +363,7 @@ export async function runShopifySync(fullSync: boolean) {
     // por pedido roda logo após o pedido e os itens serem persistidos, garantindo que o cupom
     // já exista quando o próximo tick de automações montar o contexto congelado.
     const {
+      alignCashbackExpirations,
       loadCashbackSettings,
       reconcileCashbackForOrder,
       reconcileCashbackRedemptionForOrder,
@@ -528,6 +529,9 @@ export async function runShopifySync(fullSync: boolean) {
       // que o match por texto do código nunca veria (pedido criado manualmente no Admin).
       await reconcileCashbackUsageViaShopify();
       await reprocessPendingCashback();
+      // Leva o vencimento dos cashbacks em aberto para o fim do dia (em lotes; os novos já nascem assim).
+      const aligned = await alignCashbackExpirations(150);
+      if (aligned.checked > 0) console.log(`Vencimento do cashback alinhado: ${aligned.aligned} ok, ${aligned.failed} falha(s).`);
     } catch (cashbackError) {
       cashbackErrors++;
       console.error("Reprocessamento de cashback falhou:", cashbackError);

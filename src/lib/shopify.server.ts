@@ -542,6 +542,30 @@ export type CashbackDiscountInput = {
   customerGid: string;
 };
 
+/** Muda só a data de término de um cupom (usado para alinhar o vencimento do cashback ao fim do dia).
+ *  Nunca lança — devolve {success:false} para o caller tentar de novo na próxima sincronização. */
+export async function updateShopifyDiscountEndsAt(
+  discountId: string,
+  endsAt: string,
+): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    const data = await shopifyGraphQL(
+      `mutation($id: ID!, $input: DiscountCodeBasicInput!) {
+        discountCodeBasicUpdate(id: $id, basicCodeDiscount: $input) {
+          codeDiscountNode { id }
+          userErrors { field message code }
+        }
+      }`,
+      { id: discountId, input: { endsAt } },
+    );
+    const userErrors = data?.discountCodeBasicUpdate?.userErrors ?? [];
+    if (userErrors.length > 0) return { success: false, error: userErrors.map((e: any) => e.message).join("; ") };
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 /** Busca um cupom de valor fixo pelo código (para reconhecer um cashback já criado). */
 export async function findShopifyCashbackDiscountByCode(code: string): Promise<{ id: string; title: string; amount: number } | null> {
   try {

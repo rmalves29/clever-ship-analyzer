@@ -2,6 +2,9 @@ import type { AutomationEventContext } from "./whatsapp-automation-context";
 
 export const CASHBACK_AUTOMATION_SEGMENT_TYPE = "cashback_expiring";
 
+/** Cashback abaixo disso não recebe lembrete: avisar "crédito de R$ 0,13" soa mal e gasta envio à toa. */
+export const CASHBACK_REMINDER_MIN_AMOUNT = 10;
+
 export type CashbackScheduleAnchor = "cashback_starts_at" | "cashback_ends_at";
 
 export type CashbackSendSchedule = {

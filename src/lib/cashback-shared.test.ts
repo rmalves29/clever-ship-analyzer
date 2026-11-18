@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCashbackCode,
   buildCashbackDates,
+  endOfBrazilDay,
   calculateCashback,
   calculateCashbackAmount,
   calculateMinimumPurchase,
@@ -47,7 +48,18 @@ describe("datas e limites", () => {
   it("libera 3 dias depois e expira no dia configurado", () => {
     const { startsAt, endsAt } = buildCashbackDates("2026-03-01T12:00:00.000Z", 30);
     expect(startsAt).toBe("2026-03-04T12:00:00.000Z");
-    expect(endsAt).toBe("2026-03-31T12:00:00.000Z");
+    // vence no fim do dia 31/03 (23:59:59 de Brasília), não na hora da compra
+    expect(endsAt).toBe("2026-04-01T02:59:59.000Z");
+  });
+
+  it("endOfBrazilDay respeita o dia de Brasília, não o UTC", () => {
+    // 01:34 em Brasília ainda é o mesmo dia 18/11, mesmo sendo 04:34 UTC
+    expect(endOfBrazilDay(new Date("2026-11-18T04:34:33.000Z")).toISOString()).toBe("2026-11-19T02:59:59.000Z");
+    // 23:30 em Brasília de 17/11 (02:30 UTC de 18/11) fecha em 17/11
+    expect(endOfBrazilDay(new Date("2026-11-18T02:30:00.000Z")).toISOString()).toBe("2026-11-18T02:59:59.000Z");
+    // idempotente: aplicar de novo no resultado não muda nada
+    const once = endOfBrazilDay(new Date("2026-11-18T04:34:33.000Z"));
+    expect(endOfBrazilDay(once).toISOString()).toBe(once.toISOString());
   });
 
   it("força o mínimo de 4 dias para não vencer antes da liberação", () => {
@@ -59,7 +71,7 @@ describe("datas e limites", () => {
   it("respeita um prazo de liberação customizado", () => {
     const { startsAt, endsAt } = buildCashbackDates("2026-03-01T12:00:00.000Z", 30, 7);
     expect(startsAt).toBe("2026-03-08T12:00:00.000Z");
-    expect(endsAt).toBe("2026-03-31T12:00:00.000Z");
+    expect(endsAt).toBe("2026-04-01T02:59:59.000Z");
   });
 
   it("recalcula o mínimo de validade a partir do prazo de liberação customizado", () => {

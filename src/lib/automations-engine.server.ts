@@ -9,6 +9,7 @@ import { alignToSendTime, parseCampaignTag, parseSendTime, parseStepAudience, ty
 import { parseEventTrigger, type EventTrigger } from "./automation-events";
 import type { EventTarget } from "./automation-events.server";
 import {
+  CASHBACK_REMINDER_MIN_AMOUNT,
   parseCashbackSendSchedule,
   pickInitialCashbackStep,
   pickNextCashbackStep,
@@ -395,6 +396,7 @@ async function enrollCashbackCustomers(automation: any, steps: AutomationStep[])
       .in("status", ["pending", "active"])
       .not("customer_row_id", "is", null)
       .gt("ends_at", now.toISOString())
+      .gte("cashback_amount", CASHBACK_REMINDER_MIN_AMOUNT)
       .order("id", { ascending: true })
       .range(page * SPECIAL_QUERY_PAGE_SIZE, page * SPECIAL_QUERY_PAGE_SIZE + SPECIAL_QUERY_PAGE_SIZE - 1);
     if (error) throw new Error(`Erro ao carregar cashbacks para lembrete: ${error.message}`);
@@ -583,6 +585,7 @@ async function cleanupCashbackRuns(automation: any): Promise<number> {
         .select("id, status, ends_at")
         .in("id", couponIds.slice(start, start + 200))
         .in("status", ["pending", "active"])
+        .gte("cashback_amount", CASHBACK_REMINDER_MIN_AMOUNT)
         .gt("ends_at", new Date().toISOString());
       for (const coupon of data ?? []) openIds.add(Number(coupon.id));
     }
@@ -593,7 +596,7 @@ async function cleanupCashbackRuns(automation: any): Promise<number> {
       return couponId === null || !openIds.has(couponId);
     })
     .map((run: any) => String(run.id));
-  return markRunsExited(staleIds, "Cashback utilizado, cancelado ou expirado.");
+  return markRunsExited(staleIds, "Cashback utilizado, cancelado, expirado ou abaixo do valor mínimo para lembrete.");
 }
 
 async function cleanupLifecycleRuns(automation: any): Promise<number> {

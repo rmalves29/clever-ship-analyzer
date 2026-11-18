@@ -83,6 +83,17 @@ function addDays(base: Date, days: number): Date {
   return new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
+const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * Fim do dia (23:59:59, Brasília) do dia em que `instant` cai. O cashback vence no fim do último dia, e não na
+ * hora exata da compra: as mensagens só citam a data, então a cliente nunca perde o cupom no meio do dia.
+ */
+export function endOfBrazilDay(instant: Date): Date {
+  const local = new Date(instant.getTime() - BRT_OFFSET_MS);
+  return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), 23, 59, 59) + BRT_OFFSET_MS);
+}
+
 /** Datas determinísticas: mesma compra + mesma configuração => sempre os mesmos ISO. */
 export function buildCashbackDates(
   purchasedAt: string | Date,
@@ -95,7 +106,7 @@ export function buildCashbackDates(
   const days = normalizeExpirationDays(expirationDays, delay);
   return {
     startsAt: addDays(safeBase, delay).toISOString(),
-    endsAt: addDays(safeBase, days).toISOString(),
+    endsAt: endOfBrazilDay(addDays(safeBase, days)).toISOString(),
   };
 }
 

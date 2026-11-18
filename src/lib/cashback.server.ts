@@ -7,6 +7,7 @@ import {
   buildCashbackCode,
   calculateCashback,
   DEFAULT_CASHBACK_SETTINGS,
+  endOfBrazilDay,
   extractCashbackOrderDiscountCodes,
   isOrderEligibleForCashback,
   normalizeCashbackCode,
@@ -171,6 +172,71 @@ export async function reconcileCashbackUsageViaShopify(): Promise<{ checked: num
   }
 
   return { checked: open.length, used };
+}
+
+/** Leva o vencimento dos cashbacks em aberto para 23:59:59 (Brasília) do último dia, na Shopify e no banco.
+ *  Idempotente e em lotes: cupom que já termina às 23:59:59 é ignorado, então cada sincronização só mexe no que falta.
+ *  A Shopify é atualizada primeiro; se falhar, o banco continua como estava e tenta de novo na próxima vez. */
+export async function alignCashbackExpirations(batchSize = 60): Promise<{ checked: number; aligned: number; failed: number }> {
+  const db = await admin();
+  const { data, error } = await db
+    .from("cashback_coupons")
+    .select("id, shopify_discount_id, ends_at")
+    .in("status", ["pending", "active"])
+    .gt("ends_at", new Date().toISOString())
+    .not("shopify_discount_id", "is", null)
+    .order("ends_at", { ascending: true })
+    .limit(1000);
+  if (error) throw new Error(`Erro ao carregar cashbacks para alinhar o vencimento: ${error.message}`);
+
+  const todo = ((data ?? []) as { id: number; shopify_discount_id: string; ends_at: string }[])
+    .map((row) => ({ row, target: endOfBrazilDay(new Date(row.ends_at)).toISOString() }))
+    .filter(({ row, target }) => new Date(row.ends_at).toISOString() !== target)
+    .slice(0, batchSize);
+  if (todo.length === 0) return { checked: 0, aligned: 0, failed: 0 };
+
+  const { updateShopifyDiscountEndsAt } = await import("./shopify.server");
+  let aligned = 0;
+  let failed = 0;
+  for (const { row, target } of todo) {
+    const result = await updateShopifyDiscountEndsAt(row.shopify_discount_id, target);
+    if (!result.success) {
+      failed++;
+      console.error(`Alinhar vencimento do cashback ${row.id} falhou:`, result.error);
+      continue;
+    }
+    const { error: updateError } = await db.from("cashback_coupons").update({ ends_at: target }).eq("id", row.id);
+    if (updateError) {
+      failed++;
+      console.error(`Alinhar vencimento do cashback ${row.id}: Shopify atualizada, banco falhou:`, updateError.message);
+    } else {
+      aligned++;
+      await shiftOpenReminderRuns(db, row.id, new Date(row.ends_at).getTime(), new Date(target).getTime());
+    }
+  }
+  return { checked: todo.length, aligned, failed };
+}
+
+/** Os lembretes já agendados guardam o vencimento antigo (contexto congelado e horário do próximo envio).
+ *  Acompanha a mudança: o horário do próximo lembrete anda junto com o vencimento e o contexto passa a ter a data nova.
+ *  O aviso de "cashback liberado" não depende do vencimento e fica como está. */
+async function shiftOpenReminderRuns(db: any, couponId: number, oldEndsAtMs: number, newEndsAtMs: number): Promise<void> {
+  const delta = newEndsAtMs - oldEndsAtMs;
+  if (!Number.isFinite(delta) || delta === 0) return;
+  const { data: runs } = await db
+    .from("whatsapp_automation_runs")
+    .select("id, current_step_id, next_run_at, event_context")
+    .eq("enrollment_key", `cashback:${couponId}`)
+    .in("status", ["pending_approval", "active", "waiting_send"]);
+  for (const run of (runs ?? []) as any[]) {
+    const context = run.event_context && typeof run.event_context === "object" ? run.event_context : null;
+    const nextContext = context?.cashback ? { ...context, cashback: { ...context.cashback, endsAt: new Date(newEndsAtMs).toISOString() } } : context;
+    const patch: Record<string, unknown> = { event_context: nextContext };
+    if (run.current_step_id !== "cashback-liberado" && run.next_run_at) {
+      patch["next_run_at"] = new Date(new Date(run.next_run_at).getTime() + delta).toISOString();
+    }
+    await db.from("whatsapp_automation_runs").update(patch).eq("id", run.id);
+  }
 }
 
 export async function loadCashbackSettings(): Promise<CashbackSettings> {
